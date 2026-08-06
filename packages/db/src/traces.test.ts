@@ -1,0 +1,193 @@
+// Trace repo tests (M5, ROADMAP #36, SPEC §14) — PGlite, zero services.
+// Covers: idempotent ingest on (org,trace,span), session-window reads,
+// waterfall order, retention purge (delete N days) + redaction (0 = metadata
+// only), clustering read model (first message + tool sequence), loop
+// detection thresholds, migration 0015 idempotency, orgs.trace_retention_days
+// default.
+import { describe, expect, it } from 'vitest';
+import {
+  createDb,
+  deleteSpansOlderThan,
+  detectLoopSignals,
+  getOrgTraceRetentionDays,
+  insertTraceSpans,
+  listOrgIdsWithSpans,
+  listOrgTraceSpans,
+  listSpansForTrace,
+  listTracesForClustering,
+  migrate,
+  redactSpanAttrs,
+  setOrgTraceRetentionDays,
+  type DbHandle,
+  type NewTraceSpan,
+} from './index.js';
+import { orgs } from './schema.js';
+
+async function migratedDb(orgId = 'org_traces'): Promise<DbHandle> {
+  const handle = await createDb(); // PGlite: zero services
+  await migrate(handle.db);
+  await handle.db.insert(orgs).values({ id: orgId, name: 'Traces Org' });
+  return handle;
+}
+
+function span(over: Partial<NewTraceSpan> = {}): NewTraceSpan {
+  return {
+    orgId: 'org_traces',
+    traceId: 'tr_a',
+    spanId: 'sp_1',
+    name: 'agent.root',
+    model: 'mock-cheap',
+    usage: { input_tokens: 100, output_tokens: 50 },
+    costUsd: 0.001,
+    attrs: { 'gen_ai.prompt': 'Summarize the outage postmortem' },
+    ts: new Date('2026-08-06T10:00:00Z'),
+    ...over,
+  };
+}
+
+describe('trace_spans repo (M5 #36)', () => {
+  it('ingest is idempotent on (org, trace, span): re-posts count as duplicates', async () => {
+    const h = await migratedDb();
+    const batch = [span(), span({ spanId: 'sp_2', name: 'tool.search' })];
+    const first = await insertTraceSpans(h.db, batch);
+    expect(first).toEqual({ accepted: 2, duplicates: 0 });
+    const second = await insertTraceSpans(h.db, batch);
+    expect(second).toEqual({ accepted: 0, duplicates: 2 });
+    // Overlapping batch: one new span + one repeat.
+    const third = await insertTraceSpans(h.db, [batch[0]!, span({ spanId: 'sp_3' })]);
+    expect(third).toEqual({ accepted: 1, duplicates: 1 });
+    const all = await listOrgTraceSpans(h.db, 'org_traces');
+    expect(all).toHaveLength(3);
+  });
+
+  it('window filter + waterfall order (ts, then spanId)', async () => {
+    const h = await migratedDb();
+    await insertTraceSpans(h.db, [
+      span({ spanId: 'sp_b', ts: new Date('2026-08-06T10:02:00Z') }),
+      span({ spanId: 'sp_a', ts: new Date('2026-08-06T10:01:00Z') }),
+      span({ spanId: 'sp_c', ts: new Date('2026-08-05T09:00:00Z') }),
+    ]);
+    const waterfall = await listSpansForTrace(h.db, 'org_traces', 'tr_a');
+    expect(waterfall.map((s) => s.spanId)).toEqual(['sp_c', 'sp_a', 'sp_b']);
+    const window = await listOrgTraceSpans(h.db, 'org_traces', {
+      from: new Date('2026-08-06T00:00:00Z'),
+    });
+    expect(window.map((s) => s.spanId).sort()).toEqual(['sp_a', 'sp_b']);
+  });
+
+  it('retention: purge deletes spans older than the cutoff', async () => {
+    const h = await migratedDb();
+    await insertTraceSpans(h.db, [
+      span({ spanId: 'sp_old', ts: new Date('2026-07-01T00:00:00Z') }),
+      span({ spanId: 'sp_new', ts: new Date('2026-08-05T00:00:00Z') }),
+    ]);
+    const deleted = await deleteSpansOlderThan(h.db, 'org_traces', new Date('2026-08-01T00:00:00Z'));
+    expect(deleted).toBe(1);
+    const remaining = await listOrgTraceSpans(h.db, 'org_traces');
+    expect(remaining.map((s) => s.spanId)).toEqual(['sp_new']);
+  });
+
+  it('retention=0 (metadata only): attrs redacted, metadata kept, idempotent', async () => {
+    const h = await migratedDb();
+    await insertTraceSpans(h.db, [span()]);
+    const redacted = await redactSpanAttrs(h.db, 'org_traces');
+    expect(redacted).toBe(1);
+    const rows = await listOrgTraceSpans(h.db, 'org_traces');
+    expect(rows[0]!.attrs).toEqual({});
+    // Metadata survives: model, usage, cost, ts, name.
+    expect(rows[0]!.model).toBe('mock-cheap');
+    expect(rows[0]!.usage).toEqual({ input_tokens: 100, output_tokens: 50 });
+    expect(rows[0]!.costUsd).toBe(0.001);
+    expect(rows[0]!.name).toBe('agent.root');
+    // Second pass redacts nothing (attrs already empty).
+    expect(await redactSpanAttrs(h.db, 'org_traces')).toBe(0);
+  });
+
+  it('orgs.trace_retention_days defaults to 30 and updates round-trip', async () => {
+    const h = await migratedDb();
+    expect(await getOrgTraceRetentionDays(h.db, 'org_traces')).toBe(30);
+    expect(await getOrgTraceRetentionDays(h.db, 'org_missing')).toBeNull();
+    expect(await setOrgTraceRetentionDays(h.db, 'org_traces', 0)).toBe(true);
+    expect(await getOrgTraceRetentionDays(h.db, 'org_traces')).toBe(0);
+    expect(await setOrgTraceRetentionDays(h.db, 'org_missing', 7)).toBe(false);
+  });
+
+  it('listOrgIdsWithSpans fans the purge job out per org', async () => {
+    const h = await migratedDb('org_a');
+    await h.db.insert(orgs).values({ id: 'org_b', name: 'B' });
+    await insertTraceSpans(h.db, [span({ orgId: 'org_a' }), span({ orgId: 'org_b', traceId: 'tr_b' })]);
+    const ids = await listOrgIdsWithSpans(h.db);
+    expect(ids.sort()).toEqual(['org_a', 'org_b']);
+  });
+
+  it('clustering read model: first message + ordered tool sequence per trace', async () => {
+    const h = await migratedDb();
+    await insertTraceSpans(h.db, [
+      span({ spanId: 'sp_1', name: 'agent.root', ts: new Date('2026-08-06T10:00:00Z') }),
+      span({
+        spanId: 'sp_2',
+        name: 'tool.search',
+        attrs: { 'gen_ai.operation.name': 'execute_tool' },
+        ts: new Date('2026-08-06T10:01:00Z'),
+      }),
+      span({
+        spanId: 'sp_3',
+        name: 'tool.write',
+        attrs: { 'gen_ai.operation.name': 'execute_tool' },
+        ts: new Date('2026-08-06T10:02:00Z'),
+      }),
+      span({
+        spanId: 'sp_4',
+        traceId: 'tr_b',
+        name: 'agent.root',
+        attrs: { 'gen_ai.prompt': 'Retry the failed invoices' },
+        ts: new Date('2026-08-06T11:00:00Z'),
+      }),
+    ]);
+    const sources = await listTracesForClustering(h.db);
+    expect(sources).toHaveLength(2);
+    const a = sources.find((s) => s.traceId === 'tr_a')!;
+    expect(a.firstMessage).toBe('Summarize the outage postmortem');
+    expect(a.toolSequence).toEqual(['search', 'write']);
+    expect(a.spanCount).toBe(3);
+    expect(a.totalCostUsd).toBeCloseTo(0.003, 9);
+    const b = sources.find((s) => s.traceId === 'tr_b')!;
+    expect(b.toolSequence).toEqual([]);
+    expect(b.firstMessage).toBe('Retry the failed invoices');
+  });
+
+  it('loop detection: ≥3 identical tool signatures flag; differing args do not', async () => {
+    const mk = (q: string) => ({
+      name: 'tool.search',
+      attrs: { 'gen_ai.operation.name': 'execute_tool', query: q },
+    });
+    const loops = detectLoopSignals([mk('x'), mk('x'), mk('x'), mk('y')]);
+    expect(loops).toHaveLength(1);
+    expect(loops[0]!.count).toBe(3);
+    expect(loops[0]!.signature).toContain('tool.search');
+    // 2 repeats is below threshold; non-tool spans never participate.
+    expect(
+      detectLoopSignals([
+        mk('x'),
+        mk('x'),
+        { name: 'agent.think', attrs: { note: 'x' } },
+        { name: 'agent.think', attrs: { note: 'x' } },
+        { name: 'agent.think', attrs: { note: 'x' } },
+      ]),
+    ).toEqual([]);
+    // Attr key order is irrelevant (canonical stringify).
+    expect(
+      detectLoopSignals([
+        { name: 'tool.a', attrs: { 'gen_ai.operation.name': 'execute_tool', p: 1, q: 2 } },
+        { name: 'tool.a', attrs: { q: 2, 'gen_ai.operation.name': 'execute_tool', p: 1 } },
+        { name: 'tool.a', attrs: { 'gen_ai.operation.name': 'execute_tool', p: 1, q: 2 } },
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it('migration 0015_traces is idempotent', async () => {
+    const h = await createDb();
+    await expect(migrate(h.db)).resolves.toContain('0015_traces.sql');
+    await expect(migrate(h.db)).resolves.toContain('0015_traces.sql');
+  });
+});

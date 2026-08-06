@@ -1,0 +1,30 @@
+{
+  "name": "@potion/harness",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gen:simulated-suites": "tsx scripts/gen-simulated-suites.ts",
+    "ingest": "tsx src/ingest/cli.ts",
+    "staleness": "tsx src/staleness-cli.ts"
+  },
+  "dependencies": {
+    "@potion/core": "workspace:*",
+    "@potion/db": "workspace:*",
+    "@potion/providers": "workspace:*",
+    "@potion/strategies": "workspace:*",
+    "zod": "^3.23.8",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.2",
+    "vitest": "^2.0.5",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,75 @@
+# CI (ROADMAP #29, SPEC §12.9). Single matrix-free job:
+#   checkout → node 22 → corepack pnpm 9.15.9 → install (frozen lockfile) →
+#   build → typecheck → lint → test (all workspace packages, incl.
+#   tests/chaos) → dependency audit gate → CycloneDX SBOM artifact.
+# Plus the M2-security gates that already lived here (gitleaks secrets scan).
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Cancel superseded runs on the same ref (saves runner minutes on rapid pushes).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for the gitleaks git scan
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # pnpm via corepack, pinned to the version the repo was built with.
+      - name: Enable pnpm 9.15.9 (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+
+      # pnpm store cache (keyed on the lockfile; restored across runs).
+      - name: pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      # M2-security: secrets gate — scan working tree + full git history.
+      - name: Secrets scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: false
+          GITLEAKS_ENABLE_SUMMARY: false
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+      # Supply-chain gate (M2-security, re-triaged M3 #29): fail on any NEW
+      # high/critical production advisory; accepted ones live in
+      # scripts/security/audit-allowlist.json (currently EMPTY — re-triage
+      # after the next/drizzle-orm bumps). --registry pins the official
+      # registry because some mirrors lack an audit endpoint (gate fails CLOSED).
+      - name: Dependency audit gate (prod, high+)
+        run: node scripts/security/audit-gate.mjs --audit-level=high --registry=https://registry.npmjs.org
+
+      # CycloneDX SBOM for release provenance (cdxgen pinned via scripts/sbom.sh).
+      - name: Generate SBOM (CycloneDX)
+        run: bash scripts/sbom.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: artifacts/sbom.cyclonedx.json

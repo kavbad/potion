@@ -1,0 +1,18 @@
+{
+  "suiteId": "code-gen-humaneval-js-v1",
+  "clusterId": "code-gen",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "HumanEval-style JS originals (Potion-authored)",
+    "license": "Proprietary (Potion-authored; HumanEval-format-compatible)",
+    "uri": "https://github.com/openai/human-eval"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "code-exec"
+    ]
+  },
+  "createdAt": "2026-08-04T00:57:20.260Z"
+}

@@ -1,0 +1,62 @@
+# CD skeleton (ROADMAP #29, SPEC §12.9) — DOCUMENTED PLACEHOLDER, no real
+# deploy target. What IS real here: the Docker build (repo-root Dockerfile,
+# ROADMAP #27) and the pipeline shape. What is intentionally NOT wired:
+# registry push and the deploy step — both are gated on the REGISTRY secret
+# being configured; until then the push line stays commented and the deploy
+# step only echoes what it would do.
+#
+# Triggers: manual workflow_dispatch (any ref) + push to master (gated: the
+# job runs the build, the push/deploy placeholders stay inert without the
+# REGISTRY secret).
+name: deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false # never cancel a deploy mid-flight
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    # Only master pushes and manual dispatches reach this job.
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build the server image (Dockerfile at repo root — node 20 slim,
+      # corepack pnpm 9.15.9, workspace build, apps/server runtime).
+      - name: Build image
+        run: docker build -t potion:${{ github.sha }} .
+
+      # Push placeholder — uncomment once the REGISTRY secret is configured:
+      # configure REGISTRY secret to enable
+      # - name: Push image
+      #   run: |
+      #     docker tag potion:${{ github.sha }} ${{ secrets.REGISTRY }}/potion:${{ github.sha }}
+      #     docker push ${{ secrets.REGISTRY }}/potion:${{ github.sha }}
+      - name: Push image (placeholder)
+        env:
+          IMAGE: potion:${{ github.sha }}
+        run: |
+          echo "SKIPPED: registry push is a placeholder for $IMAGE."
+          echo "Configure the REGISTRY secret to enable:"
+          echo '  docker push "$REGISTRY/$IMAGE"   # REGISTRY from secrets — never a literal'
+
+  deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    environment: production # environment protection rules/secrets apply here
+    steps:
+      # Deploy placeholder — point this at the real target (compose pull on
+      # the host, k8s rollout, fly deploy, …) once infrastructure exists.
+      - name: Deploy (placeholder)
+        run: |
+          echo "SKIPPED: no deploy target configured."
+          echo "Would deploy image potion:${{ github.sha }} to environment 'production'."
+          echo "Runtime env comes from GitHub environment secrets (DATABASE_URL, REDIS_URL, OPENROUTER_API_KEY, …) — never from the repo."

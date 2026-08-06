@@ -1,0 +1,17 @@
+{
+  "suiteId": "extraction-authored-v1",
+  "clusterId": "extraction",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion extraction suite (repackaged from suites/extraction.jsonl)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "field-match"
+    ]
+  },
+  "createdAt": "2026-08-04T00:58:04.877Z"
+}

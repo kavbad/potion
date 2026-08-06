@@ -1,0 +1,37 @@
+# gitleaks configuration (ROADMAP §19, M2-security). CI step runs
+# `gitleaks git` (history) and releases scan the working tree. Default rule
+# set plus Potion-specific provider-key patterns below.
+title = "Potion gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "openrouter-api-key"
+description = "OpenRouter API key (sk-or-...)"
+regex = '''sk-or-[A-Za-z0-9_-]{20,}'''
+
+[[rules]]
+id = "generic-provider-key-env"
+description = "Provider API key assigned in code/docs (*_API_KEY = real value)"
+regex = '''(?i)(ANTHROPIC|OPENAI|GOOGLE|OPENROUTER)_API_KEY\s*=\s*["']?(sk|AIza|gsk)_[A-Za-z0-9_-]{16,}'''
+
+[allowlist]
+description = "Known non-secrets: gitignored build/dependency output and the sanctioned local secret file. NOTE: CI scans git history (tracked content only), so these paths can never hide a COMMITTED secret — they only keep local `gitleaks dir` runs noise-free."
+paths = [
+  '''node_modules''',
+  '''dist''',
+  '''\.tsbuildinfo''',
+  '''artifacts/''',
+  '''\.next/''',        # dashboard build output: content hashes trip generic-api-key
+  '''(^|/)\.env$''',    # sanctioned local secret location (gitignored, never committed)
+  '''coverage/''',
+  '''invoices/''',
+]
+regexes = [
+  # Documented placeholders, not real keys (docs/M1B-RUNBOOK.md etc.)
+  '''sk-or-\.\.\.''',
+  # Deliberate TEST FIXTURE (apps/server/test/server.test.ts keys-masking
+  # tests): a fake key that exists to assert we never store it unmasked.
+  '''sk-test-1234567890abcdef''',
+]

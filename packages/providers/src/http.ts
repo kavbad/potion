@@ -1,0 +1,171 @@
+// Shared retry/timeout wrapper for all live provider transports (SPEC §2).
+// - Exponential backoff: 250ms base, ×2 per attempt, ±20% jitter.
+// - Retries ONLY on HTTP 429, HTTP 5xx, and network errors (fetch throw).
+//   Never retries other 4xx (401/403 → ProviderAuthError immediately).
+// - Per-attempt timeout via AbortController (default 60s) → ProviderTimeoutError.
+// Raw `fetch` only — no vendor SDKs. Tests inject fetch/sleep/jitter (no network).
+import type { ProviderId } from '@potion/core';
+import {
+  ProviderAuthError,
+  ProviderError,
+  ProviderRateLimitError,
+  ProviderTimeoutError,
+} from './errors.js';
+
+export interface RetryOptions {
+  /** Retries after the initial attempt (total attempts = 1 + maxRetries). Default 3. */
+  maxRetries?: number;
+  /** Per-attempt timeout in ms. Default 60_000. */
+  timeoutMs?: number;
+  /** Backoff base in ms (doubles each retry). Default 250. */
+  baseDelayMs?: number;
+  /** Jitter fraction (±). Default 0.2. */
+  jitter?: number;
+  /** Injectable for tests; defaults to globalThis.fetch. */
+  fetchFn?: typeof fetch;
+  /** Injectable for tests; defaults to setTimeout-based sleep. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Injectable random source in [0,1) for jitter; defaults to Math.random. */
+  rand?: () => number;
+}
+
+export interface HttpJsonRequest {
+  url: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+
+export interface HttpJsonResponse<T> {
+  status: number;
+  json: T;
+}
+
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_BASE_DELAY_MS = 250;
+const DEFAULT_JITTER = 0.2;
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Backoff delay before retry `attempt` (1-based): base × 2^(attempt-1), ± jitter. */
+export function backoffDelayMs(
+  attempt: number,
+  baseDelayMs: number = DEFAULT_BASE_DELAY_MS,
+  jitter: number = DEFAULT_JITTER,
+  rand: () => number = Math.random,
+): number {
+  const exponential = baseDelayMs * 2 ** (attempt - 1);
+  const factor = 1 + jitter * (2 * rand() - 1); // in [1-jitter, 1+jitter)
+  return Math.round(exponential * factor);
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+/** Extract a short error message from a provider error body, best-effort. */
+export function errorBodyMessage(json: unknown): string {
+  if (json !== null && typeof json === 'object') {
+    const err = (json as { error?: unknown }).error;
+    if (typeof err === 'string') return err;
+    if (err !== null && typeof err === 'object') {
+      const msg = (err as { message?: unknown }).message;
+      if (typeof msg === 'string') return msg;
+    }
+    const msg = (json as { message?: unknown }).message;
+    if (typeof msg === 'string') return msg;
+  }
+  return '';
+}
+
+/**
+ * POST a JSON body with retry + per-attempt timeout. Parses the response as
+ * JSON regardless of status. Throws typed ProviderError subclasses; never
+ * throws raw fetch/HTTP errors.
+ */
+export async function postJsonWithRetry<T = unknown>(
+  provider: ProviderId,
+  req: HttpJsonRequest,
+  opts: RetryOptions = {},
+): Promise<HttpJsonResponse<T>> {
+  const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const baseDelayMs = opts.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+  const jitter = opts.jitter ?? DEFAULT_JITTER;
+  const fetchFn = opts.fetchFn ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args));
+  const sleep = opts.sleep ?? defaultSleep;
+  const rand = opts.rand ?? Math.random;
+
+  let rateLimitedAttempts = 0;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      await sleep(backoffDelayMs(attempt, baseDelayMs, jitter, rand));
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetchFn(req.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...req.headers },
+        body: JSON.stringify(req.body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new ProviderTimeoutError(provider, timeoutMs, { cause: err });
+      }
+      // Network error (DNS, reset, TLS, …): retryable.
+      if (attempt < maxRetries) continue;
+      throw new ProviderError(
+        provider,
+        `provider '${provider}': network error after ${maxRetries} retries: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        { cause: err, kind: 'network' },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const json = (await res.json().catch(() => undefined)) as T;
+    if (res.ok) return { status: res.status, json };
+
+    const detail = errorBodyMessage(json);
+    const suffix = detail ? `: ${detail}` : ` (HTTP ${res.status})`;
+
+    if (res.status === 401 || res.status === 403) {
+      throw new ProviderAuthError(provider, `provider '${provider}': authentication failed${suffix}`, {
+        status: res.status,
+      });
+    }
+    if (res.status === 429) {
+      rateLimitedAttempts++;
+      if (attempt < maxRetries) continue;
+      throw new ProviderRateLimitError(
+        provider,
+        `provider '${provider}': rate limited (429) after ${rateLimitedAttempts} attempts${suffix}`,
+        rateLimitedAttempts,
+        { status: res.status },
+      );
+    }
+    if (isRetryableStatus(res.status)) {
+      if (attempt < maxRetries) continue;
+      throw new ProviderError(
+        provider,
+        `provider '${provider}': server error persisted after ${maxRetries} retries${suffix}`,
+        { status: res.status },
+      );
+    }
+    // Other 4xx: never retried.
+    throw new ProviderError(provider, `provider '${provider}': request failed${suffix}`, {
+      status: res.status,
+    });
+  }
+  // Unreachable: the loop always returns or throws.
+  throw new ProviderError(provider, `provider '${provider}': exhausted retries`);
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@potion/queue",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5.81.3",
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "@types/ioredis-mock": "^8.2.8",
+    "fengari": "^0.1.5",
+    "fengari-interop": "^0.1.4",
+    "ioredis-mock": "^8.13.1",
+    "msgpackr": "^2.0.5",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

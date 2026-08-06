@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "potion-ai"
+version = "0.1.0"
+description = "Potion SDK — thin OpenAI-compatible client with per-request policy override (X-Potion-Policy) and x-frontier-trace introspection."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = ["openai>=1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["potion_ai"]

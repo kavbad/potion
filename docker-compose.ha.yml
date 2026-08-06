@@ -1,0 +1,83 @@
+# HA deployment (SPEC §12.8, ROADMAP #27): 2× potion server replicas behind
+# nginx round-robin, backed by a shared postgres + redis (same images as
+# docker-compose.yml). The replicas are stateless: the per-org provider cache
+# is kept coherent across them by redis pub/sub invalidation
+# (channel `potion:invalidate:keys`), and each replica's /readyz drives the
+# container healthcheck so a degraded replica is marked unhealthy.
+#
+#   POTION_MASTER_KEY=$(openssl rand -hex 32) \
+#     docker compose -f docker-compose.ha.yml up --build
+#
+# Entry point: http://localhost:3000 (nginx → round-robin server-a/server-b).
+
+x-potion-server: &potion-server
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    DATABASE_URL: postgres://potion:potion@postgres:5432/potion
+    REDIS_URL: redis://redis:6379
+    POTION_MASTER_KEY: ${POTION_MASTER_KEY:?set POTION_MASTER_KEY (64 hex, e.g. `openssl rand -hex 32`)}
+    PORT: "3000"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  healthcheck:
+    # /readyz (NOT /healthz): db ping + queue/redis ping + breaker summary.
+    test:
+      - CMD-SHELL
+      - node -e "fetch('http://localhost:3000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 30s
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: potion
+      POSTGRES_PASSWORD: potion
+      POSTGRES_DB: potion
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U potion -d potion"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  server-a:
+    <<: *potion-server
+
+  server-b:
+    <<: *potion-server
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      server-a:
+        condition: service_started
+      server-b:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:

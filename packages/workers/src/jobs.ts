@@ -1,0 +1,190 @@
+// Worker job kinds + payloads (SPEC §12.2). Payloads travel through the queue
+// as plain JSON; orgId is carried on every job enqueued via the server so job
+// reads stay org-scoped (the worker itself is org-agnostic).
+import type { Policy, StrategyConfig } from '@potion/core';
+import type { AlertEvent } from '@potion/db';
+
+export type JobKind =
+  | 'eval:run'
+  | 'sweep:run'
+  | 'staleness:scan'
+  | 'shadow:judge'
+  | 'guarantee:evaluate'
+  | 'alerts:dispatch'
+  | 'budget:evaluate'
+  // ---- M4b #37 autoresearcher (SPEC §15.2/§15.3) ----
+  | 'research:scan'
+  | 'research:cycle'
+  // ---- M5 #36 agent workloads (SPEC §14.2/§14.3) ----
+  | 'traces:cluster'
+  | 'traces:purge';
+
+export const JOB_KINDS: readonly JobKind[] = [
+  'eval:run',
+  'sweep:run',
+  'staleness:scan',
+  'shadow:judge',
+  'guarantee:evaluate',
+  'alerts:dispatch',
+  'budget:evaluate',
+  'research:scan',
+  'research:cycle',
+  'traces:cluster',
+  'traces:purge',
+] as const;
+
+export interface EvalRunPayload {
+  suiteIds: string[];
+  /** strategy_configs hashes; configs are loaded from the db at run time. */
+  strategyHashes: string[];
+  /** Budget cap in USD (harness preflight-enforced). Default: 10. */
+  capUsd?: number;
+  /** Org that enqueued the job (scoping metadata; server-injected). */
+  orgId?: string;
+}
+
+export interface SweepRunPayload {
+  suiteIds: string[];
+  strategies: StrategyConfig[];
+  capUsd: number;
+  orgId?: string;
+}
+
+export interface StalenessScanPayload {
+  orgId?: string;
+}
+
+export interface ShadowJudgePayload {
+  shadowResultId: string;
+  orgId?: string;
+}
+
+/**
+ * Quality-guarantee evaluation (M3 #22, SPEC §12.5) — ADDITIVE JobKind.
+ * Two modes:
+ *   per-sample — orgId + clusterId + strategyHash + policy + sample: the
+ *     worker deterministically scores the SERVED answer, inserts the
+ *     quality_samples row, then evaluates the rolling breach window.
+ *   sweep — fields absent: the worker re-evaluates every guarantee-carrying
+ *     policy against its org's recently sampled strategies (clusters are
+ *     recovered from the current frontier's points; the quality_samples
+ *     contract schema deliberately has no cluster column).
+ */
+export interface GuaranteeEvaluatePayload {
+  orgId?: string;
+  clusterId?: string;
+  strategyHash?: string;
+  /** The governing policy (carries the guarantee config); sweep mode loads
+   * guarantee-carrying policies from the db instead. */
+  policy?: Policy;
+  /** An UNSCORED served answer: the worker scores it deterministically,
+   * inserts the sample, then evaluates. */
+  sample?: { requestId?: string; promptText: string; answerText: string };
+}
+
+export interface JobPayloads {
+  'eval:run': EvalRunPayload;
+  'sweep:run': SweepRunPayload;
+  'staleness:scan': StalenessScanPayload;
+  'shadow:judge': ShadowJudgePayload;
+  'guarantee:evaluate': GuaranteeEvaluatePayload;
+  'alerts:dispatch': AlertsDispatchPayload;
+  'budget:evaluate': BudgetEvaluatePayload;
+  'research:scan': ResearchScanPayload;
+  'research:cycle': ResearchCyclePayload;
+  // ---- M5 #36 agent workloads (SPEC §14) ----
+  'traces:cluster': TracesClusterPayload;
+  'traces:purge': TracesPurgePayload;
+}
+
+/**
+ * Agent-session clustering (M5 #36, SPEC §14.2): embed first-user-messages
+ * (redacted), bucket by tool-graph signature, greedy-cosine into `agent-*`
+ * clusters, register them (+ exemplars) so the SAME frontier pipeline can
+ * serve them, synthesize redacted replay suites, and run the first mock
+ * sweep per new cluster. Nightly + on-demand (POST /api/traces/cluster).
+ */
+export interface TracesClusterPayload {
+  /** Restrict to one org (default: all orgs with spans in the window). */
+  orgId?: string;
+  /** Lookback window in days (default 7). */
+  sinceDays?: number;
+  /** Max sessions to cluster (default 500). */
+  limit?: number;
+}
+
+/**
+ * Trace retention purge (M5 #36, SPEC §14.3): nightly. Per org:
+ * trace_retention_days > 0 → delete spans older than N days; 0 → redact
+ * attrs (metadata only). Idempotent.
+ */
+export interface TracesPurgePayload {
+  /** Restrict to one org (default: every org holding spans). */
+  orgId?: string;
+}
+
+/**
+ * Alert dispatch (M4 #33, SPEC §13.5) — one job per emitted alert EVENT.
+ * The handler resolves the org's ENABLED rules subscribed to `event` and
+ * POSTs each one (webhook JSON / slack {text}); per-rule outcomes land in
+ * alert_deliveries (target_url NEVER copied — query strings redacted in
+ * errors).
+ */
+export interface AlertsDispatchPayload {
+  orgId: string;
+  event: AlertEvent;
+  /** Event detail (incident detail / budget numbers / breaker key). */
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * Budget evaluation (M4 #35, SPEC §13.7) — the nightly autopilot sweep.
+ * Per org with a budget row: last-7-day vs trailing-30-day z-score anomaly,
+ * MTD linear forecast vs cap, warn_pct crossing, cap exceeded. Deduped per
+ * (org, kind, UTC day) via the budget_events ledger; emits alerts:dispatch
+ * jobs for fresh events. orgId set → that org only.
+ */
+export interface BudgetEvaluatePayload {
+  orgId?: string;
+}
+
+/**
+ * New-model detection (M4b #37, SPEC §15.2): diff a provider's /models
+ * listing against the prices.json registry, append new entries (per-token
+ * pricing × 1e6), then enqueue one research:cycle per new alias (cap 3 per
+ * scan). 'mock' (default) reads the deterministic mockModels() fixture —
+ * zero network, CI-safe; 'openrouter' does a live GET /models and needs
+ * OPENROUTER_API_KEY in the worker's env.
+ */
+export interface ResearchScanPayload {
+  source?: 'mock' | 'openrouter';
+  orgId?: string;
+}
+
+/**
+ * One autoresearcher cycle (M4b #37, SPEC §15.3): generate candidates
+ * (template grammar × class-pruned registry, ≤20), sweep them over the
+ * standard v2 suite set into the content-addressed eval cache, then run the
+ * §15.4 promotion gate per cluster. Live cycles (POTION_RESEARCH_PROVIDER=
+ * live, operator-enabled) are budget-capped at capUsd (default $5.00) with
+ * spend ledgered on the cycle row — the research ledger is SEPARATE from
+ * the M1b cap. Mock cycles are uncapped and can SHORTLIST (candidate state)
+ * but never PROMOTE (promotion is live-provenance only, §15.4).
+ */
+export interface ResearchCyclePayload {
+  /** New-model alias a scan-triggered cycle focuses on. */
+  focusAlias?: string;
+  /** v2 suite ids to sweep; default RESEARCH_V2_SUITE_IDS. */
+  suiteV2Ids?: string[];
+  /** Live-cycle spend cap (default $5.00, SPEC §15.3). */
+  capUsd?: number;
+  /** Narrow the cycle to ONE registered strategy_configs hash
+   * (POST /api/recipes/:hash/evaluate). */
+  recipeHash?: string;
+  /** Origin recorded on the cycle row (default 'manual'). */
+  trigger?: 'scan' | 'manual' | 'schedule';
+  /** mulberry32 seed for the promotion-gate bootstrap (recorded on the row;
+   * random when omitted). */
+  seed?: number;
+  orgId?: string;
+}

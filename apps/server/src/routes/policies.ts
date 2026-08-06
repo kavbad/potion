@@ -1,0 +1,68 @@
+// GET/POST /v1/policies (SPEC §8) — per-key policy management.
+//
+// A policy is stored PER API KEY: every POST inserts a fresh policies row
+// (validated against the core PolicySchema) and binds it to the
+// authenticated key (api_keys.policy_id → policies.id). Keys never share
+// policy rows, so one customer's re-bind can never affect another key.
+import { randomUUID } from 'node:crypto';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { PolicySchema } from '@potion/core';
+import { insertPolicy, updateApiKeyPolicy } from '@potion/db';
+import { authenticate, bearerToken, openAiError } from '../auth.js';
+import type { PotionContext } from '../context.js';
+
+/** Body: Policy fields + optional display name. Unknown fields stripped. */
+const PostPolicyBodySchema = z
+  .object({ name: z.string().min(1).max(200).optional() })
+  .passthrough();
+
+async function requireAuth(ctx: PotionContext, authorization: string | undefined) {
+  return authenticate(ctx.db.db, bearerToken(authorization));
+}
+
+export function registerPolicyRoutes(app: FastifyInstance, ctx: PotionContext): void {
+  /** Current policy bound to the authenticated key. */
+  app.get('/v1/policies', async (req, reply) => {
+    const auth = await requireAuth(ctx, req.headers.authorization);
+    if (!auth) {
+      return reply
+        .code(401)
+        .send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+    }
+    if (!auth.policy || !auth.policyId) {
+      return reply.send({ policy: null });
+    }
+    return reply.send({ policy: { id: auth.policyId, config: auth.policy } });
+  });
+
+  /** Create + bind a policy for the authenticated key. */
+  app.post('/v1/policies', async (req, reply) => {
+    const auth = await requireAuth(ctx, req.headers.authorization);
+    if (!auth) {
+      return reply
+        .code(401)
+        .send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+    }
+    const bodyParsed = PostPolicyBodySchema.safeParse(req.body ?? {});
+    if (!bodyParsed.success) {
+      return reply.code(400).send(openAiError(bodyParsed.error.message, 'invalid_request_error'));
+    }
+    const { name, ...policyFields } = bodyParsed.data;
+    const policyParsed = PolicySchema.safeParse(policyFields);
+    if (!policyParsed.success) {
+      const message = policyParsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('; ');
+      return reply.code(400).send(openAiError(message, 'invalid_request_error'));
+    }
+    const policy = policyParsed.data;
+    const id = `pol-${randomUUID().slice(0, 8)}`;
+    const policyName = name ?? `${policy.type}-${id.slice(4)}`;
+    // Tenant scope (M2 #13): the new policy row lives in the caller's org and
+    // the re-bind is org-scoped — one org's keys/policies never cross.
+    await insertPolicy(ctx.db.db, { id, orgId: auth.org.orgId, name: policyName, config: policy });
+    await updateApiKeyPolicy(ctx.db.db, auth.org.orgId, auth.key.id, id);
+    return reply.code(201).send({ policy: { id, name: policyName, config: policy } });
+  });
+}

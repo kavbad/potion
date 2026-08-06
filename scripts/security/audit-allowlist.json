@@ -1,0 +1,4 @@
+{
+  "$comment": "Accepted advisories for the CI audit gate (scripts/security/audit-gate.mjs). Every entry needs a reason and is matched by advisory id + module. Re-triaged 2026-08-05 (m3-cicd-chaos, ROADMAP #29): the 16 previously-accepted advisories are ALL CLEARED by dependency fixes — next 15.1.8→15.5.22 (13 next advisories), drizzle-orm ^0.36.0→^0.45.2 (1116251), and scoped pnpm overrides for the transitive leftovers postcss@8.4.31→^8.5.18 + sharp@0.34.5→^0.35.0 (next-pinned) and glob@10.4.5→^10.5.0 (via @opentelemetry gcp detector; 1109842). `pnpm audit --prod` now reports 0 high/critical advisories, so the allowlist is intentionally EMPTY. Do not add entries without a reason.",
+  "allowlist": []
+}

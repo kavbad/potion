@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+coverage/
+.next/
+.pglite/
+tmp/
+invoices/
+/artifacts/

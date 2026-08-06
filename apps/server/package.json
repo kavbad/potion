@@ -1,0 +1,57 @@
+{
+  "name": "@potion/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js"
+    },
+    "./seed": {
+      "types": "./dist/seed.d.ts",
+      "import": "./dist/seed.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "loadtest": "tsx test/load.ts",
+    "aggregate": "tsx src/jobs/aggregate-usage.ts",
+    "invoice": "tsx src/billing/cli.ts"
+  },
+  "dependencies": {
+    "@potion/artifacts": "workspace:^",
+    "@potion/cluster": "workspace:*",
+    "@potion/core": "workspace:*",
+    "@potion/db": "workspace:*",
+    "@potion/harness": "workspace:*",
+    "@potion/observability": "workspace:*",
+    "@potion/pareto": "workspace:*",
+    "@potion/providers": "workspace:*",
+    "@potion/queue": "workspace:^",
+    "@potion/strategies": "workspace:*",
+    "@potion/workers": "workspace:^",
+    "fastify": "^5.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "drizzle-orm": "^0.45.2",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

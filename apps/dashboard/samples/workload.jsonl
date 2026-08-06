@@ -1,0 +1,40 @@
+{"prompt": "Write a Python function that reverses a string"}
+{"prompt": "Implement a debounce function in TypeScript with tests"}
+{"prompt": "Write a SQL query that finds the top 10 customers by revenue"}
+{"prompt": "Fix the bug in this Python script that reads CSV files"}
+{"prompt": "Implement a binary search algorithm in JavaScript"}
+{"prompt": "Write a bash one-liner that counts lines in all log files"}
+{"prompt": "Create a React component that renders a sortable table"}
+{"prompt": "Review this pull request for potential race conditions"}
+{"prompt": "Here is a diff of my auth middleware — look over the session handling"}
+{"prompt": "Critique this Python function for readability and edge cases"}
+{"prompt": "Suggest refactors for this legacy Express route"}
+{"prompt": "Review this TypeScript diff and flag any type-unsafe changes"}
+{"prompt": "Take a look at this PR feedback and tell me what to fix first"}
+{"prompt": "Extract all invoice fields as JSON from this receipt text"}
+{"prompt": "Parse this resume and return JSON with name, email, and skills"}
+{"prompt": "Extract every date and amount from this contract as JSON"}
+{"prompt": "Pull the company names and job titles from this page into JSON"}
+{"prompt": "Extract the tracking numbers from these shipping emails"}
+{"prompt": "Scrape the product prices from this HTML snippet into JSON"}
+{"prompt": "Extract entities — people, orgs, locations — from this news article"}
+{"prompt": "Summarize this meeting transcript in three bullet points"}
+{"prompt": "Give me a tl;dr of this 4000-word blog post"}
+{"prompt": "Condense this quarterly report into a one-paragraph summary"}
+{"prompt": "Summarize the key decisions from these Slack messages"}
+{"prompt": "Write a two-sentence recap of this earnings call"}
+{"prompt": "Digest this research paper into plain language takeaways"}
+{"prompt": "Summarize this thread for someone who skipped standup"}
+{"prompt": "Classify this support ticket as billing, technical, or feature request"}
+{"prompt": "Label each customer comment as positive, negative, or mixed sentiment"}
+{"prompt": "Categorize these transactions into spending categories"}
+{"prompt": "Is this message spam? Answer yes or no."}
+{"prompt": "Rate this customer's sentiment from 1 to 5 based on their message"}
+{"prompt": "Tag these incoming emails by urgency"}
+{"prompt": "Detect the toxicity level of this forum comment"}
+{"prompt": "Write a short story about a lighthouse keeper who hates the sea"}
+{"prompt": "Compose a haiku about morning coffee"}
+{"prompt": "Write a poem in the style of a sea shanty about Mondays"}
+{"prompt": "Invent a villain monologue for a space opera"}
+{"prompt": "Write the opening paragraph of a mystery novel"}
+{"prompt": "Create a slogan for a robot-run bakery"}
