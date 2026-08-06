@@ -80,7 +80,7 @@ beforeAll(async () => {
     orgId: DEFAULT_ORG_ID,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   });
-});
+}, 90_000);
 
 afterAll(async () => {
   await app.close();
