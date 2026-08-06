@@ -1,55 +1,116 @@
 # Potion — Claude Code project context
 
-Potion is an OpenAI-API-compatible inference router: it clusters incoming
-prompts into workloads, benchmarks models AND model compositions (single,
-cascade, best-of-n, draft-verify) per cluster, computes the quality/cost
-Pareto frontier, and routes each request per the org's policy. pnpm monorepo;
-Fastify server (`apps/server`), Next dashboard (`apps/dashboard`), packages
-for providers/strategies/harness/cluster/pareto/db/workers/etc.
+Potion sells a QUALITY GUARANTEE behind an OpenAI-API-compatible endpoint:
+a customer supplies real traffic; we build a quality/cost Pareto frontier
+for THEIR workload over models AND compositions (single, cascade, best-of-n,
+draft-verify, …); they set a policy floor ("quality ≥ 0.9, then minimize
+cost"); we serve, continuously measure rolling quality, and treat breaches
+as first-class incidents. pnpm monorepo; Fastify server (`apps/server`),
+Next dashboard (`apps/dashboard`), packages for providers/strategies/
+harness/cluster/pareto/db/workers/etc. Repo: `~/Projects/potion` (git;
+history starts at the M1b-complete baseline commit).
 
-## State as of 2026-08-06 (audited)
+## Positioning (2026-08-06)
 
-- 546 tests green across 14 packages + chaos suite + python SDK.
-- M1b live eval complete (Gate-3 + 8-suite sweep, OpenRouter, $3.88 spent).
-  Ledger + full execution report: `tasks/todo.md`. Artifacts: `artifacts/`.
-- Four defects were found and fixed during M1b (all with regression tests):
-  `--provider` CLI flag, env-var API-key fallback in the provider factory,
-  code-exec markdown-fence stripping (sonnet scored 0.000 without it —
-  pre-fix code-exec numbers for fence-emitting models are INVALID, treat as
-  unmeasured), and `--resume` passthrough in `scripts/m1b-sweep.ts`.
+Potion is a quality guarantee, not a router. Generic selection is a free
+incumbent's game: OpenRouter's Auto Beta (task classification + cost-quality
+dial on community-popularity signals) and coding "Pareto Router" (third-party
+benchmark percentiles) ship at 100T tokens/month scale. We do not compete
+there. We sell what they structurally lean away from:
+
+1. First-party MEASURED quality — they route on popularity and benchmark
+   proxies; we score real outputs and put a number in the contract.
+2. Per-customer workload measurement — nothing of theirs evaluates on the
+   customer's actual traffic; our frontier is built from it.
+3. Compositions — every OpenRouter router picks ONE model per request; the
+   M1b sweep shows compositions creating frontier points no single model
+   reaches (agentic-tool-use: cascade 0.943 @ $6.85/1K vs sonnet 0.957 @
+   $19.31/1K — 98.5% of the quality at 35% of the cost).
+
+Product loop: customer traffic in → per-customer frontier over models AND
+compositions → policy floor (`min_cost(qualityFloor)` is the flagship shape,
+already implemented in core/select.ts) → OpenAI-compatible endpoint →
+continuous rolling quality measurement → breach ⇒ first-class incident.
+Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
+(Stripe deliberately absent).
+
+## State as of 2026-08-06
+
+- 875 pnpm tests green (13 packages 559 + server 305 + chaos 11) + TS SDK 14
+  + python SDK 13. M1b live eval complete (Gate-3 + 8-suite sweep,
+  OpenRouter, $3.88 spent). Ledger + execution report: `tasks/todo.md`.
+  Committed M1b evidence: `artifacts/` (regression-test fixture).
+- Cost estimator fixed (commit c248d74): projections now DOMINATE actuals by
+  construction — max_tokens enforced on every live transport, protocol calls
+  capped at PROTOCOL_MAX_TOKENS, per-suite output ceilings
+  (SUITE_OUTPUT_CEILINGS), domination regression-tested against the recorded
+  M1b sweep ($12.99 projected vs $3.37 actual).
 - Honest-stub convention: unbuilt paths throw loudly or self-label
   (Stripe backend, SMTP, cloud-KMS, python scorer). Preserve this. Never
   add a silent fallback or a mock that impersonates live output.
 
-## Known defects / debt (verified in audit)
+## Known defects / debt (verified 2026-08-06 exploration)
 
-1. `apps/server` (~8.9K LOC) has ZERO tests. Every M1b bug lived in
-   unexercised paths; assume more of the same class here.
-2. Cost estimator undercounts actuals ~2.3× (sweep: projected $1.44,
-   actual $3.37; per-suite actuals consistently exceed "worst-case"
-   projections). Preflight refusal must dominate actuals or it is theater.
-3. Eval suites are n=12–14 per cluster — frontier is directional, not
+1. **The guarantee's quality metric is a stub**: `serveQualityScore` =
+   token-set Jaccard of answer vs PROMPT (`apps/server/src/guarantee.ts`,
+   `packages/workers/src/handlers.ts`); no judge model anywhere in the
+   guarantee path; `shadow:judge` is `{stub:true}`. Breach statistics are a
+   plain mean over ≥5 samples, success-path-only sampling, samples keyed
+   (org, strategy) while incidents key by cluster. Serving API keys hold
+   role `admin` and can resolve incidents (lift their own rollback).
+2. Frontiers/clusters/eval evidence are GLOBAL by design contract
+   (db/schema.ts:33-38) — no org dimension; nightly traces:cluster pools all
+   orgs; synthesized agent suites are mock-evaluated only and can never
+   serve live (provenance guard, correctly).
+3. Trace ingestion stores `gen_ai.prompt` verbatim; redaction (3 regexes) is
+   late (clustering hop only) and thin; derived suites live on worker-local
+   disk with no lifecycle.
+4. Eval suites are n=12–14 per cluster — frontier is directional, not
    statistical.
-4. 8 pre-existing lint errors (unused imports, not ours) block `pnpm verify`.
-5. Rate limiting + assignment cache are per-replica in-memory (Redis store
+5. 8 pre-existing lint errors (unused imports) block `pnpm verify`.
+6. Rate limiting + assignment cache are per-replica in-memory (Redis store
    is a designed seam, `apps/server/src/middleware/ratelimit.ts`).
-6. Gate-2 live embeddings path never run (needs OPENAI_API_KEY).
+7. Gate-2 live embeddings path never run (needs OPENAI_API_KEY).
+8. Server has 305 tests but the serving hot path has gaps: guarantee
+   override query runs on EVERY request ungated; pre-auth failures logged
+   under org_demo; per-request jsonb-path incident queries unindexed.
 
-## Roadmap (owner-ordered: product truth first, Stripe LAST)
+## Roadmap (guarantee product; owner-ordered)
 
-- **Phase 1 — make the core claim true:** (1) fix cost estimator so
-  projections dominate actuals; (2) scale suites to 50–100+ items/cluster
-  + run Gate-2 live; (3) wire continuous re-eval loop (researcher pkg);
-  (4) automated model catalog + price ingestion (replace hand-kept
-  `prices.json`).
-- **Phase 2 — survive real traffic:** (5) server test suite; (6) Redis
-  rate limiting + shared caches; (7) cloud-KMS custody; (8) HA verification
-  + CI gating (fix the 8 lint errors, `pnpm verify` gates merges).
-- **Phase 3 — front door:** (9) SMTP magic links; (10) landing + API docs
-  portal + public model/pricing page; (11) publish SDKs (npm/PyPI);
-  (12) signup abuse controls; (13) legal review (operator-side).
-- **Phase 4 — money:** (14) Stripe + prepaid credit ledger + fraud
-  screening. Deliberately last.
+- **Phase G0 — make the measurement real** (a guarantee on a fake metric is
+  fraud, not debt): (1) real judge scoring in the guarantee sampling path —
+  live judge, protocol-capped, spend metered against org budgets; replace
+  the Jaccard stub; (2) judge trust: calibration against reference-scored
+  items + agreement reporting, per-workload; (3) contract-grade breach
+  statistics — CI-lower-bound decisions (reuse researcher gate.ts
+  bootstrap), stratified sampling incl. error-path, cluster-correct sample
+  attribution; (4) [DONE 2026-08-06] cost estimator dominates actuals
+  (commit c248d74); (5) Gate-2 live embeddings + suites to 50–100+
+  items/cluster.
+- **Phase G1 — per-customer workload pipeline:** (6) ingest-time PII
+  redaction (real pass, not 3 regexes; raw prompts never at rest) +
+  org-scoped trace clustering; (7) derived-suite storage with lifecycle
+  (Postgres/artifact store, deletion, retention) + replay fidelity
+  (reference answers, tool results, multi-turn); (8) automated scorer
+  construction: per-cluster rubric generation + calibration on customer
+  suites; (9) per-org frontiers [ARCHITECTURE: org_id NULL=platform +
+  fallback-to-global; ~7 loadCurrentFrontier sites; org-scoped recompute];
+  (10) live capped evals of customer suites; (11) researcher loop → per-org
+  refresh (thread suiteV2Ids/suitesV2Dir/org through cycles; gate
+  unchanged).
+- **Phase G2 — guarantee as product surface:** (12) customer-visible
+  guarantee report (quality time series; completion-id column on
+  request_logs so quality joins spend/latency); (13) incident SLAs — alert
+  on the in-process breach path, breach→notification bound, auto-restore
+  semantics, serving keys must NOT resolve incidents (role split);
+  (14) targeted server tests on the serving hot path; (15) Redis rate
+  limiting + shared caches; (16) compound policy: quality floor + latency
+  bound in one policy (none exists today); (17) operator onboarding:
+  org-creation route + hand-issued key runbook (invoice CLI exists).
+- **DEMOTED indefinitely:** public model/pricing page, catalog breadth,
+  self-serve signup funnel, SDK publishing, cloud-KMS custody (BYOK works),
+  SMTP (dev-link hand-delivery suffices for partners), Stripe (LAST;
+  invoiced billing already works — `pnpm --filter @potion/server invoice`).
 
 ## Working conventions (owner's rules)
 
@@ -74,7 +135,7 @@ for providers/strategies/harness/cluster/pareto/db/workers/etc.
   pre-existing lint) · server: `pnpm --filter @potion/server dev`
   (PGlite + demo seed when DATABASE_URL unset; demo key in
   `apps/server/src/seed.ts`) · evals: `pnpm harness -- --suite-v2 <id>
-  --provider <mock|live> --cap <usd> --resume` · sweep:
-  `pnpm tsx scripts/m1b-sweep.ts --cap <usd> --resume`
+  --provider <mock|live> --cap <usd> --resume [--max-output-tokens <n>]` ·
+  sweep: `pnpm tsx scripts/m1b-sweep.ts --cap <usd> --resume`
 - Live runs read `OPENROUTER_API_KEY` (etc.) from env/`.env`; persistent
   results: `DATABASE_URL=pglite://<abs-path>` + `--resume`.

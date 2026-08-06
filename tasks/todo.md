@@ -537,3 +537,102 @@ research $5/cycle) are now effectively stricter; re-size deliberately if live ru
 | date | run | projected | actual | cumulative |
 |---|---|---|---|---|
 | 2026-08-06 | estimator fix session — no live calls (regression vs recorded artifacts only) | $0.00 | $0.00 | $3.879 / $50.00 |
+
+---
+
+## Repositioning — guarantee product (2026-08-06, plan approved)
+
+OpenRouter ships free generic routing (Auto Beta; coding Pareto Router) at 100T tok/mo —
+we exit generic selection. Product = quality guarantee on the customer's own workload over
+models AND compositions (M1b: cascade 0.943 @ $6.85/1K vs sonnet 0.957 @ $19.31/1K on
+agentic-tool-use). Design-partner-first, hand-issued keys, invoiced. Full positioning +
+roadmap: CLAUDE.md.
+
+**Pressure-test verdicts (3 deep code explorations):** the guarantee loop's machinery
+(windows/incidents/rollback/alerts, org-isolated) is real, but its quality signal is a
+Jaccard-vs-prompt STUB — no judge anywhere in the path; breach stats are a bare mean (n≥5,
+no CI, success-path sampling, cluster misattribution); serving keys can resolve their own
+incidents. Frontiers/clusters/eval evidence are global by design contract — per-org
+frontiers are an architecture change (schema + ~7 call sites + racy versioning + publisher
+rules). Chat path retains no content; traffic enters via /v1/traces which stores prompts
+verbatim (redaction is 3 regexes, late); derived suites sit on worker-local disk with no
+lifecycle; replays have no reference answers; judge calibration is mock-hardwired.
+Researcher gate.ts (paired bootstrap) is pure and reusable for breach CIs. Invoiced
+billing + key minting exist; org-creation route and SMTP do not (dev-link workaround).
+CLAUDE.md's old defect #1 ("server has ZERO tests") was stale — 305 tests exist; item
+re-scoped to hot-path gaps.
+
+### Phase G0 — make the measurement real
+- [ ] G0.1 Judge-scored guarantee samples: replace serveQualityScore Jaccard with a real
+      llm-judge call (protocol-capped, PROTOCOL_MAX_TOKENS), sampled per GuaranteeConfig;
+      spend recorded per org and visible to budgets; queue payloads carry no raw content
+      at rest longer than needed. Mock mode keeps a deterministic mock JUDGE (labeled),
+      never Jaccard. [M]
+- [ ] G0.2 Judge trust: extend runJudgeCalibration beyond hard-wired mock judges — real
+      judge pair on reference-scored items, Pearson + flag <0.8, per workload; store the
+      calibration record with the frontier evidence. [M]
+- [ ] G0.3 Contract-grade breach stats: CI-lower-bound breach decision (reuse gate.ts
+      paired-bootstrap machinery), configurable min-samples (floor 5 → raise), stratified
+      sampling incl. error path, samples keyed (org, policy, cluster, strategy). [M]
+- [x] G0.4 Cost estimator dominates actuals (c248d74; regression-tested vs recorded M1b)
+- [ ] G0.5 Gate-2 live embeddings run + suites scaled 50–100/cluster (needs OPENAI key +
+      small ledgered budget). [M]
+
+### Phase G1 — per-customer workload pipeline
+- [ ] G1.1 Ingest-time redaction: real PII pass at POST /v1/traces before rows are written
+      (names/phones/addresses/ids; documented residual risk), raw prompt never at rest;
+      re-redact existing rows via migration job. [M]
+- [ ] G1.2 Org-scoped trace clustering: org predicate in listTracesForClustering SQL,
+      per-org cluster ids (agent-<org>-<slug>), org column on db-registered clusters +
+      exemplars; X-Potion-Cluster validates org ownership. [M]
+- [ ] G1.3 Derived suites out of worker-local disk: Postgres or artifact store with
+      retention/deletion tied to trace retention; suite provenance rows. [M]
+- [ ] G1.4 Replay fidelity: capture reference answer + tool results + multi-turn context
+      in synthesized items (ingestion contract addition); judge anchors on reference. [L]
+- [ ] G1.5 Automated scorer construction: rubric generation per cluster from exemplars +
+      G0.2 calibration on the result; customer-visible rubric review step. [M]
+- [ ] G1.6 Per-org frontiers [ARCHITECTURE]: org_id (NULL=platform) on frontiers/
+      frontier_points/eval_runs/eval_results, unique (org,cluster,version) fixing the
+      read-then-insert race, fallback-to-global reads, thread org through ~7
+      loadCurrentFrontier sites (share links + leaderboard stay platform-only), org-scoped
+      recompute + provenance rules (live-evidence-only serving stands). [L]
+- [ ] G1.7 Live capped evals of customer suites (estimator now honest): live sweep of the
+      per-org frontier under --cap with ledger rows; mock-derived frontiers remain
+      demo-only. [M]
+- [ ] G1.8 Researcher per-org refresh: thread suiteV2Ids + suitesV2Dir + org through
+      researchCycleHandler; gate.ts unchanged; per-org cycle trigger route. [S]
+
+### Phase G2 — guarantee as product surface
+- [ ] G2.1 Guarantee report: quality time series per policy/cluster (persisted samples +
+      request_logs join via new completion-id column); exportable monthly report next to
+      the invoice. [M]
+- [ ] G2.2 Incident SLAs: emitAlert on the in-process breach path (parity with worker),
+      measured breach→notification latency, auto-restore-on-recovery option, cooldown
+      that re-fires on worsening. [M]
+- [ ] G2.3 Key role split: serving keys lose incident-resolve and other admin mutations;
+      explicit admin scope for humans. [S]
+- [ ] G2.4 Targeted server hot-path tests: guarantee override gating, pre-auth log
+      attribution, policy override, provenance guard branches. [M]
+- [ ] G2.5 Redis rate limiting + shared caches (RateLimiterStore seam exists). [M]
+- [ ] G2.6 Compound policy: quality floor + latency bound in one policy (schema + select +
+      routes + dashboard picker). [S/M]
+- [ ] G2.7 Operator onboarding: org-creation route (operator credential, not self-serve),
+      README runbook: create org → policy → hand-issue key → invoice. [S]
+
+DEMOTED (parked): public pricing page, catalog breadth, self-serve funnel, SDK publishing,
+SMTP, cloud-KMS, Stripe.
+
+### Design-partner readiness (≥$10K/month behind a guarantee)
+Minimum bar: judge-scored rolling quality live + metered + calibration record (G0.1-2);
+CI-based breach + stratified sampling (G0.3); ingest redaction + org-scoped clustering +
+suite lifecycle (G1.1-3); partner frontier from THEIR traffic live-evaluated under
+ledgered caps (G1.6-7; single-tenant deploy is acceptable interim isolation);
+min_cost(qualityFloor)+guarantee verified in staging; serving key cannot resolve incidents
+(G2.3) + alerts on both breach paths (G2.2); estimator-capped preflight (done);
+onboarding runbook executed once end-to-end (G2.7).
+Pilot measurements: rolling quality vs floor per cluster (CI not mean); breach count /
+time-to-detect / time-to-notify; judge↔human agreement on their traffic; realized $/1K vs
+incumbent single-model baseline; sampling coverage; frontier drift across refreshes.
+Disclosed as not built: SLA credits/remedies; human ground truth (judge-based); HA posture
+(per-replica limits until G2.5); compound latency policies (G2.6); Stripe (invoiced);
+workload leaderboards; automated rubric review (human-in-the-loop until G1.5).
