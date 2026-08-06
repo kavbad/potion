@@ -4,7 +4,7 @@
 // decision ('escalate' | 'accept'). Usage/cost aggregated across ALL calls,
 // including self-report probes.
 import type { ChatMessage, StrategyConfig, Usage } from '@potion/core';
-import { lastAnchoredValue, wrapUntrustedData } from '@potion/core';
+import { lastAnchoredValue, PROTOCOL_MAX_TOKENS, wrapUntrustedData } from '@potion/core';
 import { addUsage, baseSeedOf, callModel, zeroUsage } from './helpers.js';
 import type { ExecContext, StageTrace, StrategyResult } from './types.js';
 
@@ -77,7 +77,9 @@ async function selfReportConfidence(
   total: Usage,
   note?: string,
 ): Promise<number> {
-  const probe = await callModel(model, buildSelfReportMessages(messages, draft), ctx, seed);
+  const probe = await callModel(model, buildSelfReportMessages(messages, draft), ctx, seed, {
+    maxTokens: PROTOCOL_MAX_TOKENS,
+  });
   addUsage(total, probe.usage);
   // Strictened (M2-security): LAST line-anchored CONFIDENCE wins; the value
   // pattern is bounded to [0, 1] so an injected "CONFIDENCE: 99" never parses.

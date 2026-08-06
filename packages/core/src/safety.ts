@@ -19,6 +19,18 @@
 // SCORE line. These controls guarantee the PARSER cannot be confused by
 // injected text; they do not guarantee the judge is not persuaded.
 
+/**
+ * Output cap for one-line-protocol calls — judge scoring ("SCORE: <x>"),
+ * best-of-n / fusion judges ("PICK: <i>"), self-report probes
+ * ("CONFIDENCE: <x>"). These calls are instructed to answer with exactly one
+ * final line; 128 tokens leaves ~6× headroom for preamble-prone models while
+ * making their spend boundable by the preflight cost estimator (which cannot
+ * dominate actuals if any call's output is unbounded). A judge that rambles
+ * past the cap truncates before its final line and the strict last-line
+ * parser fails LOUDLY — never a silently wrong score.
+ */
+export const PROTOCOL_MAX_TOKENS = 128;
+
 /** Opening delimiter for an untrusted-data block. */
 export const UNTRUSTED_DATA_BEGIN = '<<<UNTRUSTED_DATA_BEGIN>>>';
 /** Closing delimiter for an untrusted-data block. */

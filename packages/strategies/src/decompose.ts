@@ -4,6 +4,7 @@
 // execute each with `single`; fuse results via FusionConfig if provided, else
 // concatenate with headers. Trace records subtasks + routing decisions.
 import type { ChatMessage, StrategyConfig } from '@potion/core';
+import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import {
   addUsage,
   baseSeedOf,
@@ -147,6 +148,7 @@ export async function runDecompose(
       buildJudgeMessages(messages, results, judge.rubric),
       ctx,
       baseSeed + 1 + subtasks.length,
+      { maxTokens: PROTOCOL_MAX_TOKENS },
     );
     addUsage(total, judgeOutcome.usage);
     const { index, parsed } = parsePick(judgeOutcome.text, results.length);

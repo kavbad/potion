@@ -468,3 +468,72 @@ timeout-bounded passes; per-item inserts bank results across interruptions.
 
 Runbook Step 4 (commit): repo zip contained no .git — commit must happen operator-side.
 Key revocation per ledger policy: M1b live runs complete; revoke unless Step 3 is wanted.
+
+---
+
+## Phase 1, item 1 — Cost estimator must dominate actuals (session 2026-08-06, plan approved)
+
+**Baseline verified first**: 546 tests across 13 packages + server 305 + chaos 11 + TS SDK 14 +
+py SDK 13 — all green. Two baseline fixes required: (a) root `vitest.config.ts` added — stray
+`~/Downloads/vite(st).config.ts` files from another project hijacked vitest's upward config
+search and broke every package in this environment; (b) `apps/server/test/traces.test.ts` was
+the only buildServer test missing the repo-convention `90_000` beforeAll timeout and timed out
+under full-suite load.
+
+**Root cause (verified against artifacts/m1b-sweep-2026-08-06T05-16-58-387Z.json, 672 results):**
+1. OpenAI-shaped live transport (used by ALL M1b OpenRouter traffic) never sends `max_tokens` —
+   `DEFAULT_MAX_TOKENS=1024` is computed then ignored (`openai.ts:53`); recorded outputs reach
+   1501 tokens. Anthropic/Google transports DO enforce it. Unbounded output ⇒ no finite
+   projection can dominate.
+2. `OUTPUT_TOKENS_PER_CALL=80` was calibrated to mock answers; live p95 is 595–1137 out-tokens.
+3. Judge/probe prompts embed full answers but are modeled at 80 tokens; judge/probe outputs are
+   themselves unbounded (no maxTokens on any judge/probe call).
+4. Fan-out under-counts: decompose models 3 subtasks vs MAX_SUBTASKS=8 (and prices at
+   routing[0], not the priciest route); cascade probe missed for logprob-fallback.
+5. No test encodes projection ≥ actual.
+
+**Fix (bounds by construction, no fudge multiplier):**
+- [x] A. `openai.ts`: always send `max_tokens = sampling.maxTokens` (mirrors anthropic/google)
+- [x] B. `PROTOCOL_MAX_TOKENS = 128` in @potion/core; optional params passthrough in
+      strategies `callModel`; set on the 6 one-line-protocol call sites (llm-judge scorer,
+      cascade probe, best-of-n judge, ensemble judge, decompose fusion judge, composite probe)
+- [x] C. Rewrite `estimate.ts` token model: answer output = DEFAULT_MAX_TOKENS, protocol
+      output = PROTOCOL_MAX_TOKENS, embedded answers = DEFAULT_MAX_TOKENS, judge scaffolding
+      measured from `buildJudgeScoreMessages`, cascade probe for any confidenceMethod,
+      decompose = MAX_SUBTASKS × priciest routed model
+- [x] D. NEW regression test (harness): recorded M1b sweep replay — assert projection ≥ actual
+      per-run, per-(suite×strategy) cell, and total; providers test for always-sent max_tokens;
+      protocol-cap tests; update hand-computed expectations in existing tests
+- [x] E. Full verify: providers/strategies/harness suites, then all-package re-run
+      (final counts in the commit message; sweep script 12/12; --dry-run preflight re-printed)
+- [x] F. Docs: ledger row (no live spend); CLAUDE.md defect #2 update deferred to the
+      repositioning re-plan (CLAUDE.md is being rewritten there anyway)
+- [x] G. TRUNCATION RESOLUTION (owner review finding): the enforced 1024 cap is itself a
+      behavior change — recorded M1b answers exceeded it. Analysis of the recorded sweep
+      (336 single-strategy results): 12 answers certainly >1024 tokens, ALL in
+      agentic-tool-use (or-gpt-full / or-sonnet, max 1501), and those long answers score
+      HIGHER than the suite mean (0.942 vs 0.828) — a silent cap would truncate the BEST
+      answers on the suite where compositions matter most. Resolution: per-run configurable
+      `maxOutputTokens` (RunOptions → ExecContext → every answer call incl. single's direct
+      path; CLI `--max-output-tokens`), per-suite config `SUITE_OUTPUT_CEILINGS` in
+      harness/suites.ts (agentic-tool-use: 2048, evidence-driven), and the estimator BINDS
+      to the configured value (projection scales with the ceiling — a bound achieved by
+      truncating output is not a fix). Summarization/creative/rewrite-edit stayed under
+      1024 in recorded data (near-cap band: 4 results in 900–1034, code-review +
+      agentic-tool-use — watch on next live run). Protocol calls stay at
+      PROTOCOL_MAX_TOKENS regardless.
+
+**Final numbers (rebuilt --dry-run preflight, ceilings applied)**: sweep projects **$12.99**
+vs $3.37 recorded actual (old estimator: $1.44, 2.3× UNDER) — dominates every suite and every
+(suite × strategy) cell (regression-tested), agentic-tool-use projected at its 2048 ceiling
+($3.02), and the sweep still fits the $15 cap. Item-level domination is impossible against
+PRE-fix data: 16/672 recorded results were produced before max_tokens enforcement (max 1501)
+— documented in estimate-m1b-regression.test.ts.
+
+**Owner flag — cap sizing**: projections are now honest worst cases (~3.5× typical actuals).
+Existing caps sized against the old under-counting estimator (workers DEFAULT_EVAL_CAP_USD=10,
+research $5/cycle) are now effectively stricter; re-size deliberately if live runs refuse.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | estimator fix session — no live calls (regression vs recorded artifacts only) | $0.00 | $0.00 | $3.879 / $50.00 |

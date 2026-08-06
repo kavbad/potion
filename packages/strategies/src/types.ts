@@ -39,6 +39,16 @@ export interface ExecContext {
   prices: PriceTable;
   resolve(model: string): { provider: Provider; entry: PriceEntry }; // alias → provider+price
   seed?: number;
+  /**
+   * Output ceiling for ANSWER calls (maps to provider max_tokens). Unset →
+   * the provider layer's DEFAULT_MAX_TOKENS applies on live paths. The eval
+   * harness sets this per run (workloads with long answers configure a
+   * higher ceiling — see harness SUITE_OUTPUT_CEILINGS) and the preflight
+   * cost estimator binds its projection to the SAME value, so the bound is
+   * enforced, never assumed. Protocol calls (judges/probes) override with
+   * PROTOCOL_MAX_TOKENS regardless.
+   */
+  maxOutputTokens?: number;
   // stream honored by 'single' and 'composite' (M3 #23, SPEC §12.6) only.
   stream?: (token: string) => void;
   /** Tool-calling passthrough (M3 #25; 'single' only): forwarded UNMODIFIED

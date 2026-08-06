@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatMessage, PriceTable, StrategyConfig } from '@potion/core';
+import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import { createProviders } from '@potion/providers';
 import { createResolver, execute, type ExecContext } from './index.js';
 
@@ -99,5 +100,86 @@ describe('createResolver', () => {
     expect(resolve('mock-cheap').provider.id).toBe('mock');
     expect(resolve('mock-cheap-v1').entry.alias).toBe('mock-cheap');
     expect(() => resolve('no-such-model')).toThrow(/unknown model/);
+  });
+});
+
+// One-line-protocol calls (judge PICK / self-report CONFIDENCE) must carry
+// maxTokens: PROTOCOL_MAX_TOKENS — the preflight cost estimator's bound on
+// judge/probe output is only real if the calls enforce it. Answer calls stay
+// uncapped at this layer (provider DEFAULT_MAX_TOKENS applies on live paths).
+describe('protocol-call output caps (estimator bound)', () => {
+  function capturingCtx(seed: number) {
+    const providers = createProviders({ prices: PRICES });
+    const calls: Array<{ model: string; maxTokens: number | undefined }> = [];
+    const base = createResolver(providers, PRICES);
+    const resolve: ExecContext['resolve'] = (model) => {
+      const r = base(model);
+      return {
+        ...r,
+        provider: {
+          ...r.provider,
+          complete: (req: Parameters<typeof r.provider.complete>[0]) => {
+            calls.push({ model: req.model, maxTokens: req.params?.maxTokens });
+            return r.provider.complete(req);
+          },
+        },
+      };
+    };
+    return { ctx: { providers, prices: PRICES, resolve, seed } satisfies ExecContext, calls };
+  }
+
+  it('best-of-n: n uncapped candidates + one capped judge', async () => {
+    const { ctx, calls } = capturingCtx(11);
+    await execute(
+      { type: 'best-of-n', model: 'mock-cheap', n: 3, judge: { model: 'mock-frontier', rubric: 'r' } },
+      MESSAGES,
+      ctx,
+    );
+    expect(calls.map((c) => c.maxTokens)).toEqual([undefined, undefined, undefined, PROTOCOL_MAX_TOKENS]);
+  });
+
+  it('cascade self-report probe is capped; stage answers are not', async () => {
+    const { ctx, calls } = capturingCtx(11);
+    await execute(
+      {
+        type: 'cascade',
+        stages: [{ model: 'mock-cheap', escalateIf: { confidenceBelow: 0.99 } }, { model: 'mock-frontier' }],
+        confidenceMethod: 'self-report-calibrated',
+      },
+      MESSAGES,
+      ctx,
+    );
+    const probes = calls.filter((c) => c.maxTokens !== undefined);
+    expect(probes.length).toBeGreaterThanOrEqual(1);
+    for (const p of probes) expect(p.maxTokens).toBe(PROTOCOL_MAX_TOKENS);
+    expect(calls[0]!.maxTokens).toBeUndefined(); // stage-0 answer uncapped
+  });
+
+  it('ctx.maxOutputTokens caps answer calls; protocol calls still use PROTOCOL_MAX_TOKENS', async () => {
+    const { ctx, calls } = capturingCtx(11);
+    await execute(
+      { type: 'best-of-n', model: 'mock-cheap', n: 2, judge: { model: 'mock-frontier', rubric: 'r' } },
+      MESSAGES,
+      { ...ctx, maxOutputTokens: 2048 },
+    );
+    expect(calls.map((c) => c.maxTokens)).toEqual([2048, 2048, PROTOCOL_MAX_TOKENS]);
+    // single (direct provider path, not callModel) honors it too
+    const single = capturingCtx(11);
+    await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, { ...single.ctx, maxOutputTokens: 2048 });
+    expect(single.calls.map((c) => c.maxTokens)).toEqual([2048]);
+  });
+
+  it('ensemble judge-pick fusion judge is capped', async () => {
+    const { ctx, calls } = capturingCtx(11);
+    await execute(
+      {
+        type: 'ensemble',
+        models: ['mock-cheap', 'mock-frontier'],
+        fusion: { method: 'judge-pick', judge: { model: 'mock-frontier', rubric: 'r' } },
+      },
+      MESSAGES,
+      ctx,
+    );
+    expect(calls.map((c) => c.maxTokens)).toEqual([undefined, undefined, PROTOCOL_MAX_TOKENS]);
   });
 });

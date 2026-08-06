@@ -3,7 +3,7 @@
 // (text/usage/modelVersion), alias resolution, and logprobConfidence math.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PriceTable } from '@potion/core';
-import { createProviders, type CompleteRequest } from './index.js';
+import { createProviders, DEFAULT_MAX_TOKENS, type CompleteRequest } from './index.js';
 
 const PRICES: PriceTable = {
   version: '2026-08-04',
@@ -129,6 +129,19 @@ describe('openai transport', () => {
     const res = await p.openai.complete({ model: 'gpt-mini-class', messages: MESSAGES });
     expect(res.logprobConfidence).toBeUndefined();
     expect('logprobConfidence' in res).toBe(false);
+  });
+
+  it('always sends max_tokens — DEFAULT_MAX_TOKENS when params omit it (estimator bound)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        model: 'gpt-4.1-mini-2025-04-14',
+        choices: [{ message: { content: 'OK' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    );
+    const p = createProviders({ prices: PRICES, apiKeys: { ...KEYS } });
+    await p.openai.complete({ model: 'gpt-mini-class', messages: MESSAGES });
+    expect(lastCall().body.max_tokens).toBe(DEFAULT_MAX_TOKENS);
   });
 
   // M3 #25 (OpenAI parity): tools/tool_choice forwarded UNMODIFIED; recorded

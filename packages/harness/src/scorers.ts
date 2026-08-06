@@ -7,7 +7,7 @@
 //                 timeout + terminate, 32MB heap cap, stripped globals;
 //                 M2-security — was in-process node:vm).
 //   llm-judge   — judge model answers `SCORE: <x>` in rubric scale; normalized 0..1.
-import { costUsd, lastAnchoredValue, roundCost, UNTRUSTED_DATA_FRAME, wrapUntrustedData, type EvalItem, type PriceTable, type ProviderId, type ScoringMethod, type Usage } from '@potion/core';
+import { costUsd, lastAnchoredValue, PROTOCOL_MAX_TOKENS, roundCost, UNTRUSTED_DATA_FRAME, wrapUntrustedData, type EvalItem, type PriceTable, type ProviderId, type ScoringMethod, type Usage } from '@potion/core';
 import { hashString, type Provider } from '@potion/providers';
 import { scoreCodeExec } from './code-exec-sandbox.js';
 
@@ -226,7 +226,10 @@ export async function scoreLlmJudge(
   const response = await provider.complete({
     model: scoring.judgeModel,
     messages: buildJudgeScoreMessages(item, answer, scoring),
-    params: { seed },
+    // One-line protocol ("SCORE: <x>") → bounded output, so the preflight
+    // estimator can bound judge spend. Truncation past the cap makes the
+    // strict last-line parse fail loudly, never a silently wrong score.
+    params: { seed, maxTokens: PROTOCOL_MAX_TOKENS },
   });
   const usage: Usage = {
     inputTokens: response.usage.inputTokens,

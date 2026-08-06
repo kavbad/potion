@@ -21,6 +21,7 @@ export async function runSingle(
   // tool semantics because it never transforms the prompt.
   const params: CompleteRequest['params'] = {
     ...(ctx.seed !== undefined ? { seed: ctx.seed } : {}),
+    ...(ctx.maxOutputTokens !== undefined ? { maxTokens: ctx.maxOutputTokens } : {}),
     ...(ctx.params?.tools !== undefined ? { tools: ctx.params.tools } : {}),
     ...(ctx.params?.toolChoice !== undefined ? { tool_choice: ctx.params.toolChoice } : {}),
   };

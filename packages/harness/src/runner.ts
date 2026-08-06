@@ -64,6 +64,15 @@ export interface RunOptions {
   /** Explicit provenance override (tests). Default: detected from the
    * provider set via detectProviderMode. */
   providerModeOverride?: ProviderMode;
+  /**
+   * Output ceiling for answer calls (provider max_tokens), threaded into the
+   * strategy ExecContext AND the preflight projection so the bound is
+   * enforced, never assumed. Default: the provider layer's
+   * DEFAULT_MAX_TOKENS. Raise for long-output workloads (M1b evidence:
+   * agentic-tool-use answers reached 1501 tokens at quality 0.94 — a silent
+   * default cap would truncate the BEST answers; see SUITE_OUTPUT_CEILINGS).
+   */
+  maxOutputTokens?: number;
 }
 
 /** Injectable seams for tests/CLI (all optional). */
@@ -219,14 +228,20 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   }
 
   // ---- preflight: refuse over-budget runs BEFORE any execution ----
-  const projectedSpendUsd = projectRunCostUsd(opts.strategies, items, prices);
+  // The projection binds to the SAME output ceiling the run executes with.
+  const projectedSpendUsd = projectRunCostUsd(opts.strategies, items, prices, opts.maxOutputTokens);
   if (projectedSpendUsd > opts.budgetCapUsd) {
     throw new BudgetCapError(projectedSpendUsd, opts.budgetCapUsd);
   }
 
   const providers = createRunProviders(opts.provider ?? 'mock', prices);
   const providerMode = opts.providerModeOverride ?? detectProviderMode(providers);
-  const ctx = { providers, prices, resolve: createResolver(providers, prices) };
+  const ctx = {
+    providers,
+    prices,
+    resolve: createResolver(providers, prices),
+    ...(opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {}),
+  };
 
   const ownHandle = deps.db ? null : await createDb();
   const handle = deps.db ?? ownHandle!;

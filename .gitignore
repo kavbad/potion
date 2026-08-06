@@ -7,4 +7,9 @@ coverage/
 .pglite/
 tmp/
 invoices/
-/artifacts/
+# artifacts/ is generated EXCEPT the committed M1b live-eval evidence, which
+# estimate-m1b-regression.test.ts replays (projection must dominate actuals).
+/artifacts/*
+!/artifacts/m1b-gate3-live.log
+!/artifacts/m1b-sweep.log
+!/artifacts/m1b-sweep-2026-08-06T05-16-58-387Z.json

@@ -34,6 +34,7 @@ import {
   projectRunCostUsd,
   runEval,
   strategyLabel,
+  SUITE_OUTPUT_CEILINGS,
   type RunSummary,
 } from '@potion/harness';
 
@@ -114,25 +115,36 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
-/** Preflight projection for ONE suite across all sweep strategies. */
+/** Preflight projection for ONE suite across all sweep strategies — bound to
+ * the suite's configured output ceiling (SUITE_OUTPUT_CEILINGS), exactly as
+ * the run will execute. */
 export function projectSuiteCostUsd(
   strategies: StrategyConfig[],
   items: EvalItem[],
   prices: PriceTable,
+  maxOutputTokens?: number,
 ): number {
-  return projectRunCostUsd(strategies, items, prices);
+  return projectRunCostUsd(strategies, items, prices, maxOutputTokens);
 }
 
-/** Preflight projection for the WHOLE sweep (all suites × strategies). */
+/** Preflight projection for the WHOLE sweep (all suites × strategies).
+ * suiteIds (parallel to itemsBySuite) select each suite's output ceiling. */
 export function projectSweepCostUsd(
   strategies: StrategyConfig[],
   itemsBySuite: ReadonlyArray<EvalItem[]>,
   prices: PriceTable,
+  suiteIds: ReadonlyArray<string> = [],
 ): number {
   return itemsBySuite.reduce(
-    (total, items) => total + projectSuiteCostUsd(strategies, items, prices),
+    (total, items, i) =>
+      total + projectSuiteCostUsd(strategies, items, prices, ceilingFor(suiteIds[i])),
     0,
   );
+}
+
+/** The suite's configured answer-output ceiling (undefined → provider default). */
+export function ceilingFor(suiteId: string | undefined): number | undefined {
+  return suiteId === undefined ? undefined : SUITE_OUTPUT_CEILINGS[suiteId];
 }
 
 /** Graceful-stop gate: true when the next suite's projection fits the
@@ -245,7 +257,7 @@ export async function runSweepLoop(input: SweepLoopInput): Promise<SweepOutcome>
     const suiteId = input.suiteIds[i]!;
     const items = input.itemsBySuite[i]!;
     const remaining = input.capUsd - totalSpendUsd;
-    const projected = projectSuiteCostUsd(input.strategies, items, input.prices);
+    const projected = projectSuiteCostUsd(input.strategies, items, input.prices, ceilingFor(suiteId));
     if (!fitsBudget(projected, remaining)) {
       stoppedEarly = true;
       stopReason =
@@ -261,6 +273,7 @@ export async function runSweepLoop(input: SweepLoopInput): Promise<SweepOutcome>
         budgetCapUsd: remaining,
         provider: input.provider,
         ...(input.resume ? { resume: true } : {}),
+        ...(ceilingFor(suiteId) !== undefined ? { maxOutputTokens: ceilingFor(suiteId) } : {}),
       },
       {},
     );
@@ -317,8 +330,8 @@ async function main(argv: string[]): Promise<number> {
   }
 
   // ---- PREFLIGHT: projected spend across ALL suites × strategies ----------
-  const perSuiteProjections = itemsBySuite.map((items) =>
-    projectSuiteCostUsd(SWEEP_STRATEGIES, items, prices),
+  const perSuiteProjections = itemsBySuite.map((items, i) =>
+    projectSuiteCostUsd(SWEEP_STRATEGIES, items, prices, ceilingFor(SWEEP_SUITES[i])),
   );
   const totalProjection = perSuiteProjections.reduce((a, b) => a + b, 0);
   console.log('\npreflight projection (harness worst-case estimator):');

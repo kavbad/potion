@@ -30,7 +30,7 @@
 //
 // Cost: sum of stage costs via prices — start always, self-report probe when
 // needed, upgrade only when triggered. Usage/cost aggregated across ALL calls.
-import { lastAnchoredValue, wrapUntrustedData } from '@potion/core';
+import { lastAnchoredValue, PROTOCOL_MAX_TOKENS, wrapUntrustedData } from '@potion/core';
 import type { ChatMessage, StrategyConfig } from '@potion/core';
 import { SELF_REPORT_FALLBACK_RAW, buildSelfReportMessages, calibrateSelfReport } from './cascade.js';
 import { addUsage, baseSeedOf, callModel, zeroUsage } from './helpers.js';
@@ -95,6 +95,7 @@ export async function runComposite(
       buildSelfReportMessages(messages, start.text),
       ctx,
       baseSeed + callOffset++,
+      { maxTokens: PROTOCOL_MAX_TOKENS },
     );
     addUsage(total, probe.usage);
     const v = lastAnchoredValue(probe.text, 'CONFIDENCE', CONFIDENCE_VALUE_PATTERN);

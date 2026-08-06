@@ -83,3 +83,21 @@ export function loadSuite(suiteId: string, dir: string = SUITES_DIR): EvalItem[]
 export function loadSuites(suiteIds: string[], dir: string = SUITES_DIR): EvalItem[] {
   return suiteIds.flatMap((id) => loadSuite(id, dir));
 }
+
+/**
+ * Per-suite ANSWER output ceilings (RunOptions.maxOutputTokens) for suites
+ * whose measured answers exceed the provider-layer default. Evidence-driven
+ * (recorded M1b sweep, artifacts/m1b-sweep-*.json): agentic-tool-use answers
+ * from or-gpt-full / or-sonnet reached 1501 output tokens at MEAN QUALITY
+ * 0.94 vs 0.83 suite-wide — capping them at the 1024 default would truncate
+ * the BEST answers and silently degrade measured quality. The preflight
+ * estimator binds to the same configured value (runner threads it through),
+ * so raising a ceiling honestly raises that suite's projection.
+ *
+ * Suites absent from this map run at the provider default. Add an entry only
+ * with measured evidence (recorded outputs above ~90% of the current
+ * ceiling), and re-check domination in estimate-m1b-regression.test.ts.
+ */
+export const SUITE_OUTPUT_CEILINGS: Readonly<Record<string, number>> = {
+  'agentic-tool-use': 2048,
+};

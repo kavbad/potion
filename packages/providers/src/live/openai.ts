@@ -50,7 +50,10 @@ export async function openAiCompatibleComplete(
   };
   if (sampling.temperature !== undefined) body.temperature = sampling.temperature;
   if (sampling.seed !== undefined) body.seed = sampling.seed;
-  if (req.params?.maxTokens !== undefined) body.max_tokens = req.params.maxTokens;
+  // Always sent (DEFAULT_MAX_TOKENS when params.maxTokens is absent), like the
+  // anthropic/google transports: the preflight cost projection's per-call
+  // output bound is only real if every live path enforces it.
+  body.max_tokens = sampling.maxTokens;
   if (sampling.logprobs) body.logprobs = true;
   // M3 #25: tool-calling passthrough — forwarded UNMODIFIED.
   if (req.params?.tools !== undefined) body.tools = req.params.tools;

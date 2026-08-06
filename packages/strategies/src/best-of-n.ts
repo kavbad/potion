@@ -4,6 +4,7 @@
 // records all candidates + the judge pick. Usage/cost aggregated across all
 // calls; candidate fan-out latency = max (parallel), judge adds sequentially.
 import type { ChatMessage, StrategyConfig } from '@potion/core';
+import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import {
   addUsage,
   addUsageParallel,
@@ -49,6 +50,7 @@ export async function runBestOfN(
     buildJudgeMessages(messages, candidates.map((c) => c.text), strategy.judge.rubric),
     ctx,
     baseSeed + strategy.n,
+    { maxTokens: PROTOCOL_MAX_TOKENS },
   );
   addUsage(total, judgeOutcome.usage);
   const { index, parsed } = parsePick(judgeOutcome.text, strategy.n);

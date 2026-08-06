@@ -5,7 +5,8 @@
 //   pnpm exec vitest run scripts
 import { describe, expect, it } from 'vitest';
 import type { EvalItem, PriceTable, StrategyConfig } from '@potion/core';
-import { projectRunCostUsd } from '@potion/harness';
+import {
+  ANSWER_OUTPUT_TOKENS, projectRunCostUsd } from '@potion/harness';
 import {
   fitsBudget,
   parseArgs,
@@ -99,11 +100,18 @@ describe('preflight projection math', () => {
     expect(projectSweepCostUsd(strategies, [suiteA, suiteB], PRICES)).toBeCloseTo(perA + perB, 12);
   });
 
-  it('hand-checks the estimator: ceil(chars/4) in, 80 out, per-1M pricing', () => {
+  it('hand-checks the estimator: ceil(chars/4) in, ENFORCED output ceiling out, per-1M pricing', () => {
     // promptChars = 'user'(4) + 1 + 400 = 405 → inputTokens = ceil(405/4) = 102.
-    // single m-cheap: (102·$1 + 80·$2) / 1e6 = $0.000262 per item.
+    // single m-cheap: (102·$1 + ANSWER_OUTPUT_TOKENS·$2) / 1e6 — the output
+    // side is the provider-enforced max_tokens ceiling, not a typical-answer
+    // guess (M1b estimator fix: projections must dominate actuals).
     expect(projectSuiteCostUsd([SINGLE_CHEAP], [item('x', 400)], PRICES)).toBeCloseTo(
-      (102 * 1.0 + 80 * 2.0) / 1_000_000,
+      (102 * 1.0 + ANSWER_OUTPUT_TOKENS * 2.0) / 1_000_000,
+      12,
+    );
+    // a configured per-suite ceiling raises the bound accordingly
+    expect(projectSuiteCostUsd([SINGLE_CHEAP], [item('x', 400)], PRICES, 2048)).toBeCloseTo(
+      (102 * 1.0 + 2048 * 2.0) / 1_000_000,
       12,
     );
   });

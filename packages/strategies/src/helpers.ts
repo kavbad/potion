@@ -50,15 +50,29 @@ export interface CallOutcome {
   modelVersion: string;
 }
 
-/** One provider call with cost accounting (SPEC §3: costUsd per stage via prices). */
+/**
+ * One provider call with cost accounting (SPEC §3: costUsd per stage via
+ * prices). One-line-protocol calls (judges/probes) pass
+ * `{ maxTokens: PROTOCOL_MAX_TOKENS }` so their output — and therefore their
+ * cost — is bounded; answer calls omit params and run at the provider-layer
+ * DEFAULT_MAX_TOKENS. The mock provider ignores maxTokens (seed/tools only).
+ */
 export async function callModel(
   model: string,
   messages: ChatMessage[],
   ctx: ExecContext,
   seed: number,
+  params?: { maxTokens?: number },
 ): Promise<CallOutcome> {
   const { provider, entry } = ctx.resolve(model);
-  const response = await provider.complete({ model, messages, params: { seed } });
+  // Explicit per-call cap (protocol calls) wins; else the run-level answer
+  // ceiling; else the provider default applies.
+  const maxTokens = params?.maxTokens ?? ctx.maxOutputTokens;
+  const response = await provider.complete({
+    model,
+    messages,
+    params: { seed, ...(maxTokens !== undefined ? { maxTokens } : {}) },
+  });
   const usage: Usage = {
     inputTokens: response.usage.inputTokens,
     outputTokens: response.usage.outputTokens,

@@ -25,3 +25,6 @@ export {
 export type { EvalCorpusTask, EvalTaskKind, EvalFieldType } from './mock/eval-corpus.js';
 export { hashString, mulberry32 } from './mock/rng.js';
 export * from './scan.js';
+// Enforced on every live transport (anthropic/google natively; openai-shaped
+// always sends it) — the harness cost estimator's per-call output bound.
+export { DEFAULT_MAX_TOKENS } from './live/common.js';

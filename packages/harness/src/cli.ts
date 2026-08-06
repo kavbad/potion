@@ -43,10 +43,12 @@ interface CliArgs {
   calibrate: boolean;
   resume: boolean;
   simulatedOk: boolean;
+  /** Answer output ceiling (RunOptions.maxOutputTokens); undefined → provider default. */
+  maxOutputTokens: number | undefined;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false };
+  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--') continue; // pnpm forwards the script separator literally
@@ -85,6 +87,12 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--simulated-ok':
         args.simulatedOk = true;
         break;
+      case '--max-output-tokens': {
+        const v = Number(next());
+        if (!Number.isInteger(v) || v <= 0) throw new Error('--max-output-tokens must be a positive integer');
+        args.maxOutputTokens = v;
+        break;
+      }
       default:
         throw new Error(`unknown flag '${a}'`);
     }
@@ -167,6 +175,7 @@ export async function main(argv: string[]): Promise<number> {
         provider: args.provider,
         resume: args.resume,
         simulatedOk: args.simulatedOk,
+        ...(args.maxOutputTokens !== undefined ? { maxOutputTokens: args.maxOutputTokens } : {}),
       },
       {},
     );

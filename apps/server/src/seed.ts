@@ -76,7 +76,15 @@ export const SEED_STRATEGIES: StrategyConfig[] = [
   },
 ];
 
-export const SEED_BUDGET_CAP_USD = 5;
+/**
+ * Preflight cap for the demo-seed eval. The seed runs on the MOCK provider
+ * (zero real spend) but with PRICED aliases so demo frontiers show non-zero
+ * costs — the cap only exercises the preflight gate. Re-sized $5 → $15 when
+ * the estimator became an honest worst-case bound (M1b fix: answer output at
+ * the enforced max_tokens ceiling instead of an 80-token guess; the seed's
+ * projection is ~$10.49).
+ */
+export const SEED_BUDGET_CAP_USD = 15;
 
 /**
  * Seed the demo dataset when (and only when) the demo org has no api keys

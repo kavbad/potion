@@ -1,0 +1,169 @@
+── Potion M1b: ten-cluster frontier sweep ──────────────────────
+mode          : LIVE (OpenRouter)
+prices        : v2026-08-04-or2 (22 aliases)
+suites        : 8 authored breadth suites × 6 strategies
+budget cap    : $15.00 (total, preflight-enforced)
+
+preflight projection (harness worst-case estimator):
+  code-review            14 items  $0.2043
+  summarization          14 items  $0.2665
+  classification         14 items  $0.1014
+  multi-step-reasoning   14 items  $0.0968
+  creative               14 items  $0.1866
+  rewrite-edit           14 items  $0.2199
+  rag-answer             14 items  $0.1112
+  agentic-tool-use       14 items  $0.2574
+  TOTAL                           $1.4442  (cap $15.00)
+
+┌─ suite 'code-review' — run run-221f06da (projected $0.2043, spend $0.6450, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+code-review  single:or-gpt-mini                         0.986 ± 0.028           14     $3.47     2810     5392
+code-review  single:or-gpt-full                         0.914 ± 0.141           14     $7.92     2842     7925
+code-review  single:or-sonnet                           0.929 ± 0.140           14    $10.16     6107     7442
+code-review  cascade:or-gpt-mini→or-sonnet              0.979 ± 0.030           14     $3.72     3532     7527
+code-review  best-of-3:or-gpt-mini+or-judge             0.979 ± 0.030           14    $11.96    11266    16969
+code-review  draft-verify:or-gpt-mini→or-sonnet         0.929 ± 0.140           14     $8.83     7640    14603
+└─ running spend $0.6450 / cap $15.00 — remaining $14.3550
+
+┌─ suite 'summarization' — run run-48281837 (projected $0.2665, spend $0.3890, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+summarization single:or-gpt-mini                         0.907 ± 0.066           14     $2.36     1657     2632
+summarization single:or-gpt-full                         0.936 ± 0.033           14     $3.20     1295     6114
+summarization single:or-sonnet                           0.914 ± 0.068           14     $4.32     3391     4501
+summarization cascade:or-gpt-mini→or-sonnet              0.879 ± 0.066           14     $2.65     2312     6680
+summarization best-of-3:or-gpt-mini+or-judge             0.921 ± 0.059           14    $10.21     9824    13416
+summarization draft-verify:or-gpt-mini→or-sonnet         0.943 ± 0.057           14     $5.05     4247    10097
+└─ running spend $1.0340 / cap $15.00 — remaining $13.9660
+
+┌─ suite 'classification' — run run-54c3ee6a (projected $0.1014, spend $0.0305, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+classification single:or-gpt-mini                         1.000 ± 0.000           14     $0.03      705     1128
+classification single:or-gpt-full                         1.000 ± 0.000           14     $0.15      545     1501
+classification single:or-sonnet                           1.000 ± 0.000           14     $0.28     1698     4427
+classification cascade:or-gpt-mini→or-sonnet              1.000 ± 0.000           14     $0.10     1492     3054
+classification best-of-3:or-gpt-mini+or-judge             1.000 ± 0.000           14     $1.20     2864     4789
+classification draft-verify:or-gpt-mini→or-sonnet         1.000 ± 0.000           14     $0.42     2508     7148
+└─ running spend $1.0645 / cap $15.00 — remaining $13.9355
+
+┌─ suite 'multi-step-reasoning' — run run-d7bdf4be (projected $0.0968, spend $0.1614, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+multi-step-reasoning single:or-gpt-mini                         0.143 ± 0.190           14     $0.12     1299     2205
+multi-step-reasoning single:or-gpt-full                         0.786 ± 0.223           14     $0.17      580     1330
+multi-step-reasoning single:or-sonnet                           0.143 ± 0.190           14     $2.47     3251     5066
+multi-step-reasoning cascade:or-gpt-mini→or-sonnet              0.214 ± 0.223           14     $0.22     2542     3456
+multi-step-reasoning best-of-3:or-gpt-mini+or-judge             0.214 ± 0.223           14     $5.91     7990    16195
+multi-step-reasoning draft-verify:or-gpt-mini→or-sonnet         0.143 ± 0.190           14     $2.63     4846     7596
+└─ running spend $1.2259 / cap $15.00 — remaining $13.7741
+
+┌─ suite 'creative' — run run-0e87d962 (projected $0.1866, spend $0.6285, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+creative     single:or-gpt-mini                         0.807 ± 0.086           14     $4.80     2257     5742
+creative     single:or-gpt-full                         0.814 ± 0.104           14     $6.28     2149     5680
+creative     single:or-sonnet                           0.900 ± 0.041           14     $7.36     5052     8315
+creative     cascade:or-gpt-mini→or-sonnet              0.807 ± 0.102           14     $4.79     3242    10556
+creative     best-of-3:or-gpt-mini+or-judge             0.850 ± 0.089           14    $14.29    12865    26332
+creative     draft-verify:or-gpt-mini→or-sonnet         0.814 ± 0.102           14     $7.37     4824    10143
+└─ running spend $1.8544 / cap $15.00 — remaining $13.1456
+
+┌─ suite 'rewrite-edit' — run run-43769eaf (projected $0.2199, spend $0.3740, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+rewrite-edit single:or-gpt-mini                         0.900 ± 0.058           14     $2.54     1461     2278
+rewrite-edit single:or-gpt-full                         0.879 ± 0.075           14     $3.01     1271     1787
+rewrite-edit single:or-sonnet                           0.879 ± 0.072           14     $4.45     3509     5422
+rewrite-edit cascade:or-gpt-mini→or-sonnet              0.821 ± 0.092           14     $2.65     2411     5406
+rewrite-edit best-of-3:or-gpt-mini+or-judge             0.843 ± 0.079           14    $10.20    10543    13197
+rewrite-edit draft-verify:or-gpt-mini→or-sonnet         0.921 ± 0.042           14     $3.86     4068     5279
+└─ running spend $2.2283 / cap $15.00 — remaining $12.7717
+
+┌─ suite 'rag-answer' — run run-3247f0d5 (projected $0.1112, spend $0.0475, 0 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+rag-answer   single:or-gpt-mini                         0.643 ± 0.260           14     $0.05      685      979
+rag-answer   single:or-gpt-full                         0.786 ± 0.223           14     $0.25      573    12879
+rag-answer   single:or-sonnet                           0.786 ± 0.223           14     $0.49     1517     2767
+rag-answer   cascade:or-gpt-mini→or-sonnet              0.643 ± 0.260           14     $0.15     1438     3063
+rag-answer   best-of-3:or-gpt-mini+or-judge             0.714 ± 0.246           14     $1.77     2960     5531
+rag-answer   draft-verify:or-gpt-mini→or-sonnet         0.786 ± 0.223           14     $0.68     2442     3266
+└─ running spend $2.2758 / cap $15.00 — remaining $12.7242
+
+┌─ suite 'agentic-tool-use' — run run-1d49662a (projected $0.2574, spend $1.0972, 15 executed, 0 skipped)
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+agentic-tool-use single:or-gpt-mini                         0.900 ± 0.058           14     $6.71     3135    11236
+agentic-tool-use single:or-gpt-full                         0.957 ± 0.034           14    $12.71     5940    10829
+agentic-tool-use single:or-sonnet                           0.957 ± 0.045           14    $19.31    13324    20642
+agentic-tool-use cascade:or-gpt-mini→or-sonnet              0.943 ± 0.034           14     $6.85     4544     8495
+agentic-tool-use best-of-3:or-gpt-mini+or-judge             0.914 ± 0.068           14    $18.25    14669    20408
+agentic-tool-use draft-verify:or-gpt-mini→or-sonnet         0.957 ± 0.034           14    $14.55    11313    16443
+note: spend and $/1K include llm-judge scoring cost — judge calls this run: $0.0874
+└─ running spend $3.3730 / cap $15.00 — remaining $11.6270
+
+══ COMBINED SUMMARY — per cluster × per strategy ══════════════
+suite        strategy                                   quality (mean ± CI95)    n  $/1K req   p50 ms   p95 ms
+--------------------------------------------------------------------------------------------------------------
+code-review  single:or-gpt-mini                         0.986 ± 0.028           14     $3.47     2810     5392
+code-review  single:or-gpt-full                         0.914 ± 0.141           14     $7.92     2842     7925
+code-review  single:or-sonnet                           0.929 ± 0.140           14    $10.16     6107     7442
+code-review  cascade:or-gpt-mini→or-sonnet              0.979 ± 0.030           14     $3.72     3532     7527
+code-review  best-of-3:or-gpt-mini+or-judge             0.979 ± 0.030           14    $11.96    11266    16969
+code-review  draft-verify:or-gpt-mini→or-sonnet         0.929 ± 0.140           14     $8.83     7640    14603
+summarization single:or-gpt-mini                         0.907 ± 0.066           14     $2.36     1657     2632
+summarization single:or-gpt-full                         0.936 ± 0.033           14     $3.20     1295     6114
+summarization single:or-sonnet                           0.914 ± 0.068           14     $4.32     3391     4501
+summarization cascade:or-gpt-mini→or-sonnet              0.879 ± 0.066           14     $2.65     2312     6680
+summarization best-of-3:or-gpt-mini+or-judge             0.921 ± 0.059           14    $10.21     9824    13416
+summarization draft-verify:or-gpt-mini→or-sonnet         0.943 ± 0.057           14     $5.05     4247    10097
+classification single:or-gpt-mini                         1.000 ± 0.000           14     $0.03      705     1128
+classification single:or-gpt-full                         1.000 ± 0.000           14     $0.15      545     1501
+classification single:or-sonnet                           1.000 ± 0.000           14     $0.28     1698     4427
+classification cascade:or-gpt-mini→or-sonnet              1.000 ± 0.000           14     $0.10     1492     3054
+classification best-of-3:or-gpt-mini+or-judge             1.000 ± 0.000           14     $1.20     2864     4789
+classification draft-verify:or-gpt-mini→or-sonnet         1.000 ± 0.000           14     $0.42     2508     7148
+multi-step-reasoning single:or-gpt-mini                         0.143 ± 0.190           14     $0.12     1299     2205
+multi-step-reasoning single:or-gpt-full                         0.786 ± 0.223           14     $0.17      580     1330
+multi-step-reasoning single:or-sonnet                           0.143 ± 0.190           14     $2.47     3251     5066
+multi-step-reasoning cascade:or-gpt-mini→or-sonnet              0.214 ± 0.223           14     $0.22     2542     3456
+multi-step-reasoning best-of-3:or-gpt-mini+or-judge             0.214 ± 0.223           14     $5.91     7990    16195
+multi-step-reasoning draft-verify:or-gpt-mini→or-sonnet         0.143 ± 0.190           14     $2.63     4846     7596
+creative     single:or-gpt-mini                         0.807 ± 0.086           14     $4.80     2257     5742
+creative     single:or-gpt-full                         0.814 ± 0.104           14     $6.28     2149     5680
+creative     single:or-sonnet                           0.900 ± 0.041           14     $7.36     5052     8315
+creative     cascade:or-gpt-mini→or-sonnet              0.807 ± 0.102           14     $4.79     3242    10556
+creative     best-of-3:or-gpt-mini+or-judge             0.850 ± 0.089           14    $14.29    12865    26332
+creative     draft-verify:or-gpt-mini→or-sonnet         0.814 ± 0.102           14     $7.37     4824    10143
+rewrite-edit single:or-gpt-mini                         0.900 ± 0.058           14     $2.54     1461     2278
+rewrite-edit single:or-gpt-full                         0.879 ± 0.075           14     $3.01     1271     1787
+rewrite-edit single:or-sonnet                           0.879 ± 0.072           14     $4.45     3509     5422
+rewrite-edit cascade:or-gpt-mini→or-sonnet              0.821 ± 0.092           14     $2.65     2411     5406
+rewrite-edit best-of-3:or-gpt-mini+or-judge             0.843 ± 0.079           14    $10.20    10543    13197
+rewrite-edit draft-verify:or-gpt-mini→or-sonnet         0.921 ± 0.042           14     $3.86     4068     5279
+rag-answer   single:or-gpt-mini                         0.643 ± 0.260           14     $0.05      685      979
+rag-answer   single:or-gpt-full                         0.786 ± 0.223           14     $0.25      573    12879
+rag-answer   single:or-sonnet                           0.786 ± 0.223           14     $0.49     1517     2767
+rag-answer   cascade:or-gpt-mini→or-sonnet              0.643 ± 0.260           14     $0.15     1438     3063
+rag-answer   best-of-3:or-gpt-mini+or-judge             0.714 ± 0.246           14     $1.77     2960     5531
+rag-answer   draft-verify:or-gpt-mini→or-sonnet         0.786 ± 0.223           14     $0.68     2442     3266
+agentic-tool-use single:or-gpt-mini                         0.900 ± 0.058           14     $6.71     3135    11236
+agentic-tool-use single:or-gpt-full                         0.957 ± 0.034           14    $12.71     5940    10829
+agentic-tool-use single:or-sonnet                           0.957 ± 0.045           14    $19.31    13324    20642
+agentic-tool-use cascade:or-gpt-mini→or-sonnet              0.943 ± 0.034           14     $6.85     4544     8495
+agentic-tool-use best-of-3:or-gpt-mini+or-judge             0.914 ± 0.068           14    $18.25    14669    20408
+agentic-tool-use draft-verify:or-gpt-mini→or-sonnet         0.957 ± 0.034           14    $14.55    11313    16443
+note: spend and $/1K include llm-judge scoring cost — judge calls this run: $0.0874
+
+strategies:
+  single:or-gpt-mini
+  single:or-gpt-full
+  single:or-sonnet
+  cascade:or-gpt-mini→or-sonnet
+  best-of-3:or-gpt-mini+or-judge
+  draft-verify:or-gpt-mini→or-sonnet
+
+artifact      : /home/claude/potion/potion/artifacts/m1b-sweep-2026-08-06T05-16-58-387Z.json
+TOTAL SPEND $3.3730 — remaining cap $11.6270 of $15.00 (--cap). Paste projected $1.4442 / actual $3.3730 into the tasks/todo.md ledger.

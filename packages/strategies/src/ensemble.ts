@@ -6,6 +6,7 @@
 //                     candidates are concatenated in ranked order with headers.
 // Usage/cost aggregated across all calls; candidate fan-out latency = max.
 import type { ChatMessage, StrategyConfig } from '@potion/core';
+import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import {
   addUsage,
   addUsageParallel,
@@ -52,6 +53,7 @@ export async function runEnsemble(
       buildJudgeMessages(messages, candidates.map((c) => c.text), judge.rubric),
       ctx,
       baseSeed + strategy.models.length,
+      { maxTokens: PROTOCOL_MAX_TOKENS },
     );
     addUsage(total, judgeOutcome.usage);
     const { index, parsed } = parsePick(judgeOutcome.text, candidates.length);

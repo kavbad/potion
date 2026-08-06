@@ -6,7 +6,7 @@ export { runCascade, calibrateSelfReport, SELF_REPORT_CALIBRATION } from './casc
 export { runBestOfN } from './best-of-n.js';
 export { runDraftVerify } from './draft-verify.js';
 export { runEnsemble } from './ensemble.js';
-export { runDecompose, parseSubtasks, DECOMPOSE_INSTRUCTION } from './decompose.js';
+export { runDecompose, parseSubtasks, DECOMPOSE_INSTRUCTION, MAX_SUBTASKS } from './decompose.js';
 // M3 #23 composite streaming (SPEC §12.6).
 export {
   runComposite,

@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import type { EvalItem, PriceTable, ProviderId } from '@potion/core';
+import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import {
   corruptAnswer,
   createMockProvider,
@@ -170,6 +171,23 @@ describe('llm-judge scorerUsage (M1b: judge spend is counted)', () => {
     expect(u!.costUsd).toBeCloseTo((u!.inputTokens * 3 + u!.outputTokens * 15) / 1e6, 12);
     // 'priced-judge' → mid latency profile (900ms); latency IS captured here.
     expect(u!.latencyMs).toBe(900);
+  });
+
+  it('sends maxTokens: PROTOCOL_MAX_TOKENS on the judge call (estimator bound)', async () => {
+    const deps = pricedJudgeDeps();
+    const seen: Array<number | undefined> = [];
+    const wrapped: Provider = {
+      ...deps.providers.mock,
+      complete: (req) => {
+        seen.push(req.params?.maxTokens);
+        return deps.providers.mock.complete(req);
+      },
+    };
+    await scoreAnswer(item, prose.reference, {
+      ...deps,
+      providers: { anthropic: wrapped, openai: wrapped, google: wrapped, openrouter: wrapped, mock: wrapped },
+    });
+    expect(seen).toEqual([PROTOCOL_MAX_TOKENS]);
   });
 
   it('is undefined for deterministic scorers (exact / field-match / code-exec)', async () => {
