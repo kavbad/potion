@@ -1,4 +1,4 @@
-// Quality-guarantee sampler + operating-point override (M3, ROADMAP #22,
+// Quality-guarantee sampler + operating-point override (M3 #22 → G0.1,
 // SPEC §12.5).
 //
 // When the served policy carries a `guarantee` config, a per-request sample
@@ -7,17 +7,24 @@
 // route fires `void runGuaranteeSample(...)` with a catch-all; this module
 // NEVER throws into the serving path and NEVER blocks a response.
 //
-//   · SCORING — mock world: the deterministic in-process scorer
-//     (serveQualityScore, token-set Jaccard of the answer against its
-//     prompt, reusing the shadow scorer contract). Live mode with a job
-//     queue on ctx (ROADMAP #28): a `guarantee:evaluate` job is enqueued
-//     instead; the worker scores, inserts the sample, and evaluates the
-//     breach window (packages/workers).
+//   · SCORING (G0.1) — a REAL llm-judge call, in-process, mock AND live:
+//     scoreServedAnswer (@potion/harness serve-judge) reuses the hardened
+//     scoreLlmJudge path (UNTRUSTED_DATA framing, PROTOCOL_MAX_TOKENS cap,
+//     strict last-line SCORE parse). Judge model: guarantee.judgeModel or
+//     the platform default (judge-class live / mock-judge mock — the mock
+//     judge fixture is deterministic and labeled; the old Jaccard-vs-prompt
+//     stub is retired). Judge spend is REAL org-attributable cost: recorded
+//     on the quality_samples evidence row AND metered as a
+//     status='guarantee_judge' request_logs row (the usage rollup counts it
+//     toward org cost — budgets/invoices see it — never toward served
+//     request/token counts).
 //   · EVALUATION — the rolling-mean/min-evidence/cooldown/action decision
-//     lives in ONE place: evaluateGuarantee in @potion/db (shared with the
-//     worker's periodic guarantee:evaluate sweep). A breach increments the
-//     potion_guarantee_breaches_total metric via the optional
-//     observeGuaranteeBreach meter method.
+//     lives in ONE place: evaluateGuarantee in @potion/db. With a queue on
+//     ctx the server enqueues a CONTENT-FREE per-target guarantee:evaluate
+//     job (org/cluster/strategy/policy only — raw prompts and answers never
+//     transit the queue; G0.1) and the worker evaluates + emits alerts.
+//     Queue-less deployments evaluate in-process (metric via
+//     observeGuaranteeBreach).
 //   · OVERRIDE — the LATEST UNRESOLVED kind='rollback' incident for
 //     (org, cluster) IS the org's operating point for that cluster:
 //     resolveGuaranteeOverride maps detail.toStrategy back to a
@@ -37,15 +44,20 @@ import {
   evaluateGuarantee,
   getStrategyConfigs,
   insertQualitySample,
+  insertRequestLog,
   latestActiveRollback,
   type GuaranteeEvaluation,
 } from '@potion/db';
-import type { PotionContext } from './context.js';
-import { shadowScore } from './shadow.js';
+import { defaultServeJudgeModel, scoreServedAnswer } from '@potion/harness';
+import type { OrgProviders, PotionContext } from './context.js';
 
-/** Job name enqueued for queue-backed scoring + evaluation (ROADMAP #28
- * workers consume it). */
+/** Job name enqueued for queue-backed window evaluation (ROADMAP #28
+ * workers consume it; G0.1: per-target mode only — never carries content). */
 export const GUARANTEE_EVALUATE_JOB = 'guarantee:evaluate';
+
+/** request_logs.status for judge-scoring spend rows (G0.1): counted toward
+ * org COST by the usage rollup, never toward served request/token counts. */
+export const GUARANTEE_JUDGE_LOG_STATUS = 'guarantee_judge';
 
 /** Per-request sampling decision (chat route calls this for EVERY request
  * whose policy carries a guarantee config). */
@@ -54,18 +66,6 @@ export function shouldSampleGuarantee(
   rand: () => number = Math.random,
 ): boolean {
   return rand() < guarantee.sampleRate;
-}
-
-/**
- * Deterministic served-answer quality scorer (mock world, SPEC §12.5):
- * token-set Jaccard of the SERVED answer against its prompt — the same
- * deterministic-scorer contract as the shadow scorer (the serving path has
- * no reference answer; the prompt is the available anchor). 1 = identical
- * token sets, 0 = disjoint. The worker's serveQualityScore reimplements
- * this math for the queued path (packages cannot import apps).
- */
-export function serveQualityScore(promptText: string, answerText: string): number {
-  return shadowScore(promptText, answerText);
 }
 
 /** Queue duck-type (same structural detection as shadow.ts — compiles and
@@ -78,31 +78,31 @@ function queueOf(ctx: PotionContext): QueueLike | undefined {
   return (ctx as unknown as { queue?: QueueLike }).queue;
 }
 
-/** The prompt anchor for scoring: concatenated user contents (all contents
- * when no user role exists) — the same rule the chat route uses for cluster
- * assignment. */
-export function promptTextOf(messages: ChatMessage[]): string {
-  const user = messages.filter((m) => m.role === 'user').map((m) => m.content);
-  return (user.length > 0 ? user : messages.map((m) => m.content)).join('\n');
-}
-
 export interface GuaranteeSampleParams {
   orgId: string;
-  /** Chat completion id (chatcmpl-…) — the quality_samples.request_id label. */
+  /** Chat completion id (chatcmpl-…) — the quality_samples.request_id label
+   * AND the judge's deterministic seed component. */
   requestId: string;
   clusterId: string;
   messages: ChatMessage[];
   /** The governing policy (MUST carry a guarantee config — caller gates). */
   policy: Policy;
+  /** The policy ROW id that served the request (request_logs correlation). */
+  policyId: string | null;
+  /** The request's resolved provider set (BYOK-aware, resilient, metered) —
+   * the judge call runs on the same providers that served the org. */
+  orgProviders: OrgProviders;
   /** The served answer: serving strategy hash + answer text. */
   served: { hash: string; text: string };
 }
 
 /**
- * Score + persist + evaluate one SAMPLED served request. NEVER throws:
- * every failure is caught and warned (a broken guarantee pipeline can never
- * affect a served response). Returns the evaluation when it ran in-process,
- * null when the work was handed to the queue (or nothing was done).
+ * Judge-score + persist + evaluate one SAMPLED served request. NEVER
+ * throws: every failure is caught and warned (a broken guarantee pipeline
+ * can never affect a served response; a failed judge call drops the sample
+ * LOUDLY rather than recording a fake score). Returns the evaluation when
+ * it ran in-process, null when evaluation was handed to the queue (or the
+ * sample was dropped).
  */
 export async function runGuaranteeSample(
   ctx: PotionContext,
@@ -112,32 +112,52 @@ export async function runGuaranteeSample(
   const guarantee = params.policy.guarantee;
   if (!guarantee) return null;
   try {
-    const promptText = promptTextOf(params.messages);
+    const judgeModel = guarantee.judgeModel ?? defaultServeJudgeModel(ctx.providerMode);
+    const score = await scoreServedAnswer(
+      {
+        requestId: params.requestId,
+        clusterId: params.clusterId,
+        messages: params.messages,
+        answerText: params.served.text,
+        judgeModel,
+      },
+      { providers: params.orgProviders.providers, prices: ctx.prices },
+    );
+    await insertQualitySample(ctx.db.db, {
+      orgId: params.orgId,
+      requestId: params.requestId,
+      strategyHash: params.served.hash,
+      quality: score.quality,
+      scorer: score.scorer,
+      judgeModel,
+      judgeCostUsd: score.usage.costUsd,
+    });
+    // Judge spend meter row (G0.1): org-attributable cost for budgets +
+    // invoices. strategyHash = the SERVED strategy the sample evaluates.
+    await insertRequestLog(ctx.db.db, {
+      orgId: params.orgId,
+      clusterId: params.clusterId,
+      strategyHash: params.served.hash,
+      policyType: params.policy.type,
+      policyId: params.policyId,
+      model: judgeModel,
+      usage: score.usage,
+      latencyMs: score.usage.latencyMs,
+      status: GUARANTEE_JUDGE_LOG_STATUS,
+    });
+
     const queue = queueOf(ctx);
-    if (ctx.providerMode === 'live' && queue) {
-      // Live + queue present: the worker scores + inserts + evaluates
-      // asynchronously (ROADMAP #28).
+    if (queue) {
+      // Content-free per-target evaluation: the worker evaluates the rolling
+      // window and emits breach alerts (M4 #33 path).
       await queue.enqueue(GUARANTEE_EVALUATE_JOB, {
         orgId: params.orgId,
         clusterId: params.clusterId,
         strategyHash: params.served.hash,
         policy: params.policy,
-        sample: {
-          requestId: params.requestId,
-          promptText,
-          answerText: params.served.text,
-        },
       });
       return null;
     }
-    // Mock world (or no queue): deterministic in-process scorer.
-    const quality = serveQualityScore(promptText, params.served.text);
-    await insertQualitySample(ctx.db.db, {
-      orgId: params.orgId,
-      requestId: params.requestId,
-      strategyHash: params.served.hash,
-      quality,
-    });
     const evaluation = await evaluateGuarantee(ctx.db.db, {
       orgId: params.orgId,
       clusterId: params.clusterId,
@@ -162,7 +182,8 @@ export async function runGuaranteeSample(
   } catch (err) {
     warn(
       `guarantee: sample failed for request ${params.requestId}: ${(err as Error).message} — ` +
-        'swallowed (served response unaffected)',
+        'swallowed, sample DROPPED (served response unaffected; a failed judge call never ' +
+        'records a fake score)',
     );
     return null;
   }

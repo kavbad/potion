@@ -88,18 +88,25 @@ export interface UsageTotals {
 // liveUsageRollup (reads only, for the in-flight day). Status filter: only
 // 'ok' rows are billable served usage — 4xx/429/5xx rows carry no usage and
 // are excluded (they remain auditable in request_logs). Days are UTC.
+/**
+ * Rollup contract (G0.1): `requests` and token counts cover SERVED traffic
+ * only (status='ok'). Cost sums ALSO include status='guarantee_judge' rows —
+ * the guarantee's judge-scoring calls are real org-attributable spend that
+ * budgets and invoices must see, but they are scoring overhead, not served
+ * requests, so counting them as requests/tokens would misstate usage.
+ */
 function rollupQuery(range: UsageRange, orgId?: string): SQL {
   return sql`
     SELECT org_id,
            to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
            coalesce(cluster_id, 'unassigned') AS cluster_id,
-           count(*)::int AS requests,
-           coalesce(sum((usage->>'inputTokens')::numeric), 0)::int AS input_tokens,
-           coalesce(sum((usage->>'outputTokens')::numeric), 0)::int AS output_tokens,
+           count(*) FILTER (WHERE status = 'ok')::int AS requests,
+           coalesce(sum((usage->>'inputTokens')::numeric) FILTER (WHERE status = 'ok'), 0)::int AS input_tokens,
+           coalesce(sum((usage->>'outputTokens')::numeric) FILTER (WHERE status = 'ok'), 0)::int AS output_tokens,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS cost_usd,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS platform_cost_usd
     FROM request_logs
-    WHERE status = 'ok'
+    WHERE status IN ('ok', 'guarantee_judge')
       AND to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') BETWEEN ${range.fromDay} AND ${range.toDay}
       ${orgId !== undefined ? sql`AND org_id = ${orgId}` : sql``}
     GROUP BY 1, 2, 3

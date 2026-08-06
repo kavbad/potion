@@ -58,6 +58,9 @@ beforeAll(async () => {
     { ts: new Date('2026-08-03T09:00:00Z'), orgId: ORG_A, clusterId: 'code-gen', status: 'ok', usage: null },
     // org A · far-future row → outside any window 'today' can reach (was 2026-08-05T09:00Z — time-bombed when the sandbox clock reached that date)
     { ts: new Date('2027-06-15T09:00:00Z'), orgId: ORG_A, clusterId: 'code-gen', status: 'ok', usage: usage(999, 999, 9.99) },
+    // org A · 2026-08-03 · extraction: 1 guarantee_judge row (G0.1 judge
+    // scoring spend) → counts toward COST only, never requests/tokens
+    { ts: new Date('2026-08-03T10:00:00Z'), orgId: ORG_A, clusterId: 'extraction', status: 'guarantee_judge', usage: usage(40, 8, 0.004) },
     // org B · 2026-08-02 · code-gen: 1 ok row → in 1000, out 500, $0.50
     { ts: new Date('2026-08-02T10:00:00Z'), orgId: ORG_B, clusterId: 'code-gen', status: 'ok', usage: usage(1000, 500, 0.5) },
   ];
@@ -71,15 +74,21 @@ afterAll(async () => {
 describe('aggregateUsage rollup (hand-computed)', () => {
   it('rolls request_logs into usage_daily at org/day/cluster grain', async () => {
     const written = await aggregateUsage(db(), { fromDay: '2026-08-02', toDay: '2026-08-03' });
-    expect(written).toHaveLength(4); // A×(08-02 code-gen, 08-02 extraction, 08-03 code-gen) + B×08-02 code-gen
+    // A×(08-02 code-gen, 08-02 extraction, 08-03 code-gen, 08-03 extraction[judge-only]) + B×08-02 code-gen
+    expect(written).toHaveLength(5);
 
     const aRows = await listUsageDaily(db(), ORG_A, { fromDay: '2026-08-02', toDay: '2026-08-03' });
     expect(aRows.map((r) => [r.day, r.clusterId])).toEqual([
       ['2026-08-02', 'code-gen'],
       ['2026-08-02', 'extraction'],
       ['2026-08-03', 'code-gen'],
+      ['2026-08-03', 'extraction'],
     ]);
-    const [cg, ex, d3] = aRows;
+    const [cg, ex, d3, judgeOnly] = aRows;
+    // G0.1 contract: judge-scoring spend is COST, never served traffic —
+    // a judge-only (org, day, cluster) group bills $0.004 with 0 requests.
+    expect(judgeOnly).toMatchObject({ requests: 0, inputTokens: 0, outputTokens: 0 });
+    expect(judgeOnly!.costUsd).toBeCloseTo(0.004, 10);
     // hand math: code-gen 08-02 = rows 1+2 (rate_limited/error excluded)
     expect(cg).toMatchObject({ requests: 2, inputTokens: 300, outputTokens: 150 });
     expect(cg!.costUsd).toBeCloseTo(0.03, 10);
@@ -196,10 +205,12 @@ describe('CSV export', () => {
     expect(lines[0]).toBe(
       'day,cluster_id,requests,input_tokens,output_tokens,cost_usd,platform_cost_usd',
     );
-    expect(lines).toHaveLength(4); // header + 3 org-A rows (org B invisible)
+    expect(lines).toHaveLength(5); // header + 4 org-A rows (org B invisible)
     expect(lines[1]).toMatch(/^2026-08-02,code-gen,3,307,153,/);
     expect(lines[2]).toMatch(/^2026-08-02,extraction,1,10,5,/);
     expect(lines[3]).toMatch(/^2026-08-03,code-gen,1,0,0,0,0$/);
+    // G0.1: judge-scoring spend row — 0 requests/tokens, cost billed
+    expect(lines[4]).toMatch(/^2026-08-03,extraction,0,0,0,0\.004,0\.004$/);
     // org B's CSV has only its own row
     const bRes = await authedGet('/api/usage/export.csv?from=2026-08-02&to=2026-08-03', RAW_B);
     expect(bRes.body.trim().split('\n')).toHaveLength(2);

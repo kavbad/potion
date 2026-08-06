@@ -60,15 +60,15 @@ export interface ShadowJudgePayload {
 }
 
 /**
- * Quality-guarantee evaluation (M3 #22, SPEC §12.5) — ADDITIVE JobKind.
- * Two modes:
- *   per-sample — orgId + clusterId + strategyHash + policy + sample: the
- *     worker deterministically scores the SERVED answer, inserts the
- *     quality_samples row, then evaluates the rolling breach window.
- *   sweep — fields absent: the worker re-evaluates every guarantee-carrying
- *     policy against its org's recently sampled strategies (clusters are
- *     recovered from the current frontier's points; the quality_samples
- *     contract schema deliberately has no cluster column).
+ * Quality-guarantee evaluation (M3 #22 → G0.1, SPEC §12.5) — ADDITIVE
+ * JobKind. Two modes, both CONTENT-FREE (G0.1: scoring happens on the
+ * server via a real llm-judge call BEFORE this job is enqueued — raw
+ * prompts/answers never transit the queue):
+ *   per-target — orgId + clusterId + strategyHash + policy: evaluate the
+ *     rolling breach window for one (org, cluster, strategy, policy).
+ *   sweep — fields absent: re-evaluate every guarantee-carrying policy
+ *     against its org's recently sampled strategies (clusters are recovered
+ *     from the current frontier's points).
  */
 export interface GuaranteeEvaluatePayload {
   orgId?: string;
@@ -77,9 +77,6 @@ export interface GuaranteeEvaluatePayload {
   /** The governing policy (carries the guarantee config); sweep mode loads
    * guarantee-carrying policies from the db instead. */
   policy?: Policy;
-  /** An UNSCORED served answer: the worker scores it deterministically,
-   * inserts the sample, then evaluates. */
-  sample?: { requestId?: string; promptText: string; answerText: string };
 }
 
 export interface JobPayloads {

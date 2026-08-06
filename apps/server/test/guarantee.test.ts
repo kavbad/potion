@@ -1,7 +1,9 @@
 // Quality guarantee tests (M3, ROADMAP #22, SPEC §12.5).
-//   · shouldSampleGuarantee / serveQualityScore (pure)
-//   · runGuaranteeSample: rows tagged with the serving strategy hash,
-//     errors swallowed (never throws into the serving path)
+//   · shouldSampleGuarantee (pure) / scoreServedAnswer (mock judge, G0.1)
+//   · runGuaranteeSample: judge-scored rows tagged with the serving strategy
+//     hash + judge evidence + a status='guarantee_judge' meter row; errors
+//     swallowed (never throws into the serving path); queue payloads are
+//     CONTENT-FREE
 //   · serving integration: sampleRate honored; fire-and-forget (response
 //     returns, rows land after); rollback integration — 5th sample breaches
 //     → operating point moves to the PREVIOUS frontier version's equivalent
@@ -30,14 +32,18 @@ import {
   insertQualitySample,
   listIncidents,
   listQualitySamples,
+  listRequestLogs,
   resolveIncident,
   DEFAULT_ORG_ID,
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
+import { scoreServedAnswer, SERVE_JUDGE_SCALE } from '@potion/harness';
+import type { OrgProviders } from '../src/context.js';
 import {
+  GUARANTEE_EVALUATE_JOB,
+  GUARANTEE_JUDGE_LOG_STATUS,
   runGuaranteeSample,
-  serveQualityScore,
   shouldSampleGuarantee,
 } from '../src/guarantee.js';
 
@@ -164,25 +170,60 @@ describe('shouldSampleGuarantee', () => {
   });
 });
 
-describe('serveQualityScore (deterministic served-answer scorer)', () => {
-  it('is 1 for identical texts, 0 for disjoint token sets, deterministic', () => {
-    expect(serveQualityScore('the quick brown fox', 'the quick brown fox')).toBe(1);
-    expect(serveQualityScore('the quick brown fox', 'completely different words')).toBe(0);
-    expect(serveQualityScore('The   QUICK fox', 'the quick fox')).toBe(1);
+/** The request's provider set as the chat route passes it (boot set — the
+ * tests run on the mock providers, so the judge is the mock-judge fixture). */
+function orgProvidersOf(): OrgProviders {
+  return {
+    providers: app.potion.providers,
+    resolve: app.potion.resolve,
+    byok: false,
+    byokProviders: [],
+  };
+}
+
+describe('scoreServedAnswer (mock judge, G0.1 — the Jaccard stub is retired)', () => {
+  it('scores via a REAL judge call: deterministic per (judge, requestId, answer), labeled, in [0,1]', async () => {
+    const params = {
+      requestId: 'chatcmpl-judge-det',
+      clusterId: 'code-gen',
+      messages: [{ role: 'user' as const, content: CODE_PROMPT }],
+      answerText: 'def reverse(s): return s[::-1]',
+      judgeModel: 'mock-judge',
+    };
+    const deps = { providers: app.potion.providers, prices: app.potion.prices };
+    const a = await scoreServedAnswer(params, deps);
+    const b = await scoreServedAnswer(params, deps);
+    expect(a.quality).toBe(b.quality); // deterministic mock judge
+    expect(a.quality).toBeGreaterThanOrEqual(0);
+    expect(a.quality).toBeLessThanOrEqual(1);
+    expect(a.scorer).toBe('llm-judge:mock-judge'); // labeled, never Jaccard
+    expect(a.usage.inputTokens).toBeGreaterThan(0); // a real provider call happened
+    expect(SERVE_JUDGE_SCALE[1]).toBeGreaterThan(SERVE_JUDGE_SCALE[0]);
+    // A verbatim prompt echo no longer scores ~1.0 by construction: the score
+    // comes from a judge, not lexical overlap with the prompt.
+    const echo = await scoreServedAnswer(
+      { ...params, requestId: 'chatcmpl-judge-echo', answerText: CODE_PROMPT },
+      deps,
+    );
+    expect(echo.scorer).toBe('llm-judge:mock-judge');
   });
 });
 
 describe('runGuaranteeSample', () => {
-  it('inserts a sample tagged with the SERVING strategy hash and returns the evaluation', async () => {
+  it('judge-scores, inserts evidence-rich sample + guarantee_judge meter row, evaluates in-process without a queue', async () => {
     const before = (await listQualitySamples(db(), ORG_B)).length;
+    // Strip the queue to exercise the in-process evaluation branch.
+    const noQueueCtx = { ...app.potion, queue: undefined } as typeof app.potion;
     const evaluation = await runGuaranteeSample(
-      app.potion,
+      noQueueCtx,
       {
         orgId: ORG_B,
         requestId: 'chatcmpl-g-unit-1',
         clusterId: 'code-gen',
         messages: [{ role: 'user', content: 'alpha beta gamma delta' }],
         policy: { type: 'max_quality', costCeilingPer1K: 100, guarantee: G_ROLLBACK },
+        policyId: 'pol-g-b',
+        orgProviders: orgProvidersOf(),
         served: { hash: H_MID, text: 'epsilon zeta eta theta' },
       },
       () => {},
@@ -190,9 +231,57 @@ describe('runGuaranteeSample', () => {
     expect(evaluation).not.toBeNull();
     const rows = await listQualitySamples(db(), ORG_B);
     expect(rows.length).toBe(before + 1);
-    expect(rows[0]!.requestId).toBe('chatcmpl-g-unit-1');
-    expect(rows[0]!.strategyHash).toBe(H_MID);
-    expect(rows[0]!.quality).toBe(0); // disjoint token sets
+    const row = rows.find((r) => r.requestId === 'chatcmpl-g-unit-1')!;
+    expect(row.strategyHash).toBe(H_MID);
+    expect(row.quality).toBeGreaterThanOrEqual(0);
+    expect(row.quality).toBeLessThanOrEqual(1);
+    // G0.1 evidence columns: which judge, labeled scorer, what it cost.
+    expect(row.scorer).toBe('llm-judge:mock-judge');
+    expect(row.judgeModel).toBe('mock-judge');
+    expect(row.judgeCostUsd).toBe(0); // mock prices are $0 — but RECORDED, not null
+    // Judge spend meter row: status='guarantee_judge', served strategy hash.
+    const logs = await listRequestLogs(db(), ORG_B);
+    const judgeLog = logs.find((l) => l.status === GUARANTEE_JUDGE_LOG_STATUS);
+    expect(judgeLog).toBeDefined();
+    expect(judgeLog!.model).toBe('mock-judge');
+    expect(judgeLog!.strategyHash).toBe(H_MID);
+    expect(judgeLog!.policyId).toBe('pol-g-b');
+    expect(judgeLog!.usage?.inputTokens).toBeGreaterThan(0);
+  });
+
+  it('with a queue: enqueues a CONTENT-FREE per-target evaluation (no prompt/answer text)', async () => {
+    const enqueued: Array<{ name: string; payload: Record<string, unknown> }> = [];
+    const fakeQueueCtx = {
+      ...app.potion,
+      queue: { enqueue: (name: string, payload: unknown) => enqueued.push({ name, payload: payload as Record<string, unknown> }) },
+    } as unknown as typeof app.potion;
+    const evaluation = await runGuaranteeSample(
+      fakeQueueCtx,
+      {
+        orgId: ORG_B,
+        requestId: 'chatcmpl-g-unit-q',
+        clusterId: 'code-gen',
+        messages: [{ role: 'user', content: 'do not leak me into the queue' }],
+        policy: { type: 'max_quality', costCeilingPer1K: 100, guarantee: G_ROLLBACK },
+        policyId: 'pol-g-b',
+        orgProviders: orgProvidersOf(),
+        served: { hash: H_MID, text: 'answer text that must not transit the queue' },
+      },
+      () => {},
+    );
+    expect(evaluation).toBeNull(); // evaluation handed to the worker
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.name).toBe(GUARANTEE_EVALUATE_JOB);
+    const payload = enqueued[0]!.payload;
+    expect(payload).toEqual({
+      orgId: ORG_B,
+      clusterId: 'code-gen',
+      strategyHash: H_MID,
+      policy: { type: 'max_quality', costCeilingPer1K: 100, guarantee: G_ROLLBACK },
+    });
+    const flat = JSON.stringify(payload);
+    expect(flat).not.toContain('leak me');
+    expect(flat).not.toContain('transit the queue');
   });
 
   it('NEVER throws: a broken db is swallowed with a warn', async () => {
@@ -206,6 +295,8 @@ describe('runGuaranteeSample', () => {
         clusterId: 'code-gen',
         messages: [{ role: 'user', content: 'x' }],
         policy: { type: 'max_quality', costCeilingPer1K: 100, guarantee: G_ROLLBACK },
+        policyId: null,
+        orgProviders: orgProvidersOf(),
         served: { hash: H_MID, text: 'y' },
       },
       (msg) => warnings.push(msg),
@@ -222,6 +313,8 @@ describe('runGuaranteeSample', () => {
       clusterId: 'code-gen',
       messages: [{ role: 'user', content: 'x' }],
       policy: { type: 'max_quality', costCeilingPer1K: 100 },
+      policyId: null,
+      orgProviders: orgProvidersOf(),
       served: { hash: H_MID, text: 'y' },
     });
     expect(result).toBeNull();

@@ -16,6 +16,7 @@ import {
   insertQualitySample,
   latestActiveRollback,
   listIncidents,
+  listQualitySamples,
   listPoliciesWithGuarantee,
   migrate,
   nextHigherQualityPoint,
@@ -105,6 +106,32 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await handle.close();
+});
+
+describe('quality_samples judge evidence (G0.1, migration 0016)', () => {
+  it('round-trips scorer / judgeModel / judgeCostUsd; stub-era rows carry NULLs', async () => {
+    const id = await insertQualitySample(db(), {
+      orgId: DEFAULT_ORG_ID,
+      requestId: 'chatcmpl-evidence-1',
+      strategyHash: H_CHEAP,
+      quality: 0.8,
+      scorer: 'llm-judge:judge-class',
+      judgeModel: 'judge-class',
+      judgeCostUsd: 0.000615,
+    });
+    expect(id).toBeTruthy();
+    const rows = await listQualitySamples(db(), DEFAULT_ORG_ID);
+    const row = rows.find((r) => r.requestId === 'chatcmpl-evidence-1')!;
+    expect(row.scorer).toBe('llm-judge:judge-class');
+    expect(row.judgeModel).toBe('judge-class');
+    expect(row.judgeCostUsd).toBeCloseTo(0.000615, 12);
+    // additive: rows inserted without evidence fields (stub era) are NULL
+    await insertQualitySample(db(), { orgId: DEFAULT_ORG_ID, strategyHash: H_CHEAP, quality: 0.5 });
+    const legacy = (await listQualitySamples(db(), DEFAULT_ORG_ID)).find((r) => r.requestId === null)!;
+    expect(legacy.scorer).toBeNull();
+    expect(legacy.judgeModel).toBeNull();
+    expect(legacy.judgeCostUsd).toBeNull();
+  });
 });
 
 describe('rollingQuality', () => {

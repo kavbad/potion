@@ -8,7 +8,6 @@ import {
   distinctSampledStrategies,
   evalRuns,
   evaluateGuarantee,
-  insertQualitySample,
   listPoliciesWithGuarantee,
   strategyConfigs,
   type DbHandle,
@@ -42,7 +41,6 @@ import {
   loadSuite,
   loadSuiteV2,
   markStale,
-  normalizeText,
   projectRunCostUsd,
   runEval,
   type RunSummary,
@@ -368,31 +366,16 @@ export const shadowJudgeHandler: WorkerHandler<'shadow:judge'> = async (
 };
 
 // ---------------------------------------------------------------------------
-// guarantee:evaluate — quality-guarantee breach evaluation (M3 #22, SPEC
-// §12.5). Per-sample mode scores the served answer (deterministic token-set
-// Jaccard against the prompt — the same mock-world scorer contract as
-// shadow.ts's shadowScore) + inserts quality_samples, then evaluates the
-// rolling window via the shared evaluator in @potion/db. Sweep mode (no
-// policy/cluster/strategy fields) re-evaluates every guarantee-carrying
-// policy against its org's recently sampled strategies.
+// guarantee:evaluate — quality-guarantee breach evaluation (M3 #22 → G0.1,
+// SPEC §12.5). SCORING no longer happens here: the server judge-scores each
+// sampled answer in-process (a real llm-judge call — see apps/server
+// guarantee.ts + @potion/harness serve-judge) and enqueues a CONTENT-FREE
+// per-target job (org/cluster/strategy/policy). This handler evaluates the
+// rolling window via the shared evaluator in @potion/db and emits breach
+// alerts. Sweep mode (no policy/cluster/strategy fields) re-evaluates every
+// guarantee-carrying policy against its org's recently sampled strategies.
+// The old Jaccard-vs-prompt sample-scoring mode is retired (G0.1).
 // ---------------------------------------------------------------------------
-
-/**
- * Deterministic served-answer scorer (mock world): token-set Jaccard of the
- * answer against its prompt — identical math to the shadow scorer
- * (apps/server/src/shadow.ts shadowScore), reimplemented here because
- * packages cannot import apps. 1 = identical token sets, 0 = disjoint.
- */
-export function serveQualityScore(promptText: string, answerText: string): number {
-  const tokens = (s: string): Set<string> => new Set(normalizeText(s).split(' ').filter(Boolean));
-  const a = tokens(promptText);
-  const b = tokens(answerText);
-  if (a.size === 0 && b.size === 0) return 1;
-  if (a.size === 0 || b.size === 0) return 0;
-  let inter = 0;
-  for (const t of a) if (b.has(t)) inter += 1;
-  return inter / (a.size + b.size - inter);
-}
 
 /** Structural meter duck-type (avoids a workers → observability dependency):
  * the server passes its observability meter when registering this handler. */
@@ -401,9 +384,7 @@ export interface GuaranteeBreachMeter {
 }
 
 export interface GuaranteeEvaluateResult {
-  /** quality_samples row id when a sample was scored + inserted. */
-  sampleId: string | null;
-  /** Rolling evaluations performed (1 per-sample; N in sweep mode). */
+  /** Rolling evaluations performed (1 per-target; N in sweep mode). */
   evaluations: GuaranteeEvaluation[];
   /** Breach incidents written this run. */
   breaches: Array<{ orgId: string; action: 'rollback' | 'alert'; incidentId: string }>;
@@ -454,21 +435,6 @@ export function createGuaranteeEvaluateHandler(opts: {
   meter?: GuaranteeBreachMeter;
 }): WorkerHandler<'guarantee:evaluate'> {
   return async (payload, ctx): Promise<GuaranteeEvaluateResult> => {
-    let sampleId: string | null = null;
-    if (payload.sample) {
-      if (!payload.orgId || !payload.strategyHash) {
-        throw new Error(
-          "guarantee:evaluate with a 'sample' requires 'orgId' and 'strategyHash'",
-        );
-      }
-      const quality = serveQualityScore(payload.sample.promptText, payload.sample.answerText);
-      sampleId = await insertQualitySample(ctx.db, {
-        orgId: payload.orgId,
-        ...(payload.sample.requestId !== undefined ? { requestId: payload.sample.requestId } : {}),
-        strategyHash: payload.strategyHash,
-        quality,
-      });
-    }
     const targets = await resolveTargets(ctx.db, payload);
     const evaluations: GuaranteeEvaluation[] = [];
     const breaches: GuaranteeEvaluateResult['breaches'] = [];
@@ -506,7 +472,7 @@ export function createGuaranteeEvaluateHandler(opts: {
         // ---- end M4 #33 alerts emission ----
       }
     }
-    return { sampleId, evaluations, breaches };
+    return { evaluations, breaches };
   };
 }
 

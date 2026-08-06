@@ -248,10 +248,11 @@ describe('guarantee:evaluate', () => {
     });
   }
 
-  it('per-sample mode: scores the served answer, inserts the sample, fires the breach + metric', async () => {
+  it('per-target mode (G0.1, content-free): evaluates the window, fires the breach + metric', async () => {
     await seedFrontierChain();
-    // 4 low samples already present; the job's sample is the 5th (breach).
-    for (let i = 0; i < 4; i++) {
+    // 5 low samples already present (G0.1: the SERVER judge-scores and
+    // inserts samples; this job only evaluates — no content in the payload).
+    for (let i = 0; i < 5; i++) {
       await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1 });
     }
     const meterCalls: Array<{ orgId: string; action: string }> = [];
@@ -275,29 +276,19 @@ describe('guarantee:evaluate', () => {
       clusterId: 'code-gen',
       strategyHash: H_MID,
       policy: POLICY,
-      sample: {
-        requestId: 'chatcmpl-worker-1',
-        promptText: 'completely disjoint vocabulary here',
-        answerText: 'nothing overlapping whatsoever', // Jaccard ≈ 0 → low quality
-      },
     });
     await queue.close();
     const status = await queue.getJob(jobId);
     expect(status?.state).toBe('completed');
     const result = status?.result as {
-      sampleId: string | null;
       evaluations: Array<{ breach: boolean; action: string | null }>;
       breaches: Array<{ orgId: string; action: string; incidentId: string }>;
     };
-    expect(result.sampleId).not.toBeNull();
     expect(result.evaluations[0]).toMatchObject({ breach: true, action: 'rollback' });
     expect(result.breaches).toHaveLength(1);
-    // sample row tagged with the SERVING strategy hash
+    // the payload carried no content and the worker inserted no sample
     const samples = await listQualitySamples(db.db, DEFAULT_ORG_ID);
     expect(samples).toHaveLength(5);
-    expect(samples[0]!.requestId).toBe('chatcmpl-worker-1');
-    expect(samples[0]!.strategyHash).toBe(H_MID);
-    expect(samples[0]!.quality).toBeLessThan(0.6);
     // rollback incident → previous version's equivalent point (cheap on v1)
     const incidents = await listIncidents(db.db, DEFAULT_ORG_ID);
     expect(incidents[0]!.kind).toBe('rollback');
@@ -328,8 +319,7 @@ describe('guarantee:evaluate', () => {
     await queue.close();
     const status = await queue.getJob(jobId);
     expect(status?.state).toBe('completed');
-    const result = status?.result as { sampleId: string | null; breaches: unknown[]; evaluations: unknown[] };
-    expect(result.sampleId).toBeNull();
+    const result = status?.result as { breaches: unknown[]; evaluations: unknown[] };
     expect(result.evaluations.length).toBeGreaterThanOrEqual(1);
     expect(result.breaches).toHaveLength(1);
     expect(await listIncidents(db.db, DEFAULT_ORG_ID)).toHaveLength(1);

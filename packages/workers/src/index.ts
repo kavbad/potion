@@ -128,7 +128,6 @@ export {
   type AgentClusterOutcome,
   ALERT_DISPATCH_ATTEMPTS,
   ALERT_DISPATCH_TIMEOUT_MS,
-  serveQualityScore,
   hashStrategy,
   DEFAULT_EVAL_CAP_USD,
   type AlertDispatchDeps,

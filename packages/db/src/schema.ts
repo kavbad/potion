@@ -443,6 +443,13 @@ export const qualitySamples = pgTable('quality_samples', {
   requestId: text('request_id'),
   strategyHash: text('strategy_hash').notNull(),
   quality: doublePrecision('quality').notNull(),
+  // G0.1 judge evidence (0016, additive; stub-era rows carry NULLs):
+  /** Scorer label, e.g. 'llm-judge:judge-class'. */
+  scorer: text('scorer'),
+  /** Judge model alias that produced the score. */
+  judgeModel: text('judge_model'),
+  /** The judge call's provider spend (also metered via request_logs). */
+  judgeCostUsd: doublePrecision('judge_cost_usd'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

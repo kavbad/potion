@@ -98,6 +98,10 @@ export const GuaranteeConfigSchema = z.object({
   windowMin: z.number().positive(),
   sampleRate: z.number().min(0).max(1),
   action: z.enum(['rollback', 'alert']),
+  /** Judge model ALIAS for sampled-answer scoring (G0.1). Absent → the
+   * platform default (judge-class live / mock-judge mock). Additive —
+   * stored policy rows without it parse unchanged. */
+  judgeModel: z.string().min(1).optional(),
 });
 
 export const PolicySchema = z.discriminatedUnion('type', [

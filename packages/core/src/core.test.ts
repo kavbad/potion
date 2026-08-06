@@ -161,6 +161,16 @@ describe('schemas', () => {
     ] as const) {
       expect(PolicySchema.parse({ ...base, guarantee: g }).guarantee).toEqual(g);
     }
+    // judgeModel (G0.1) is additive: absent stays absent, present round-trips
+    expect(PolicySchema.parse({ type: 'min_cost', qualityFloor: 0.8, guarantee: g }).guarantee)
+      .not.toHaveProperty('judgeModel');
+    expect(
+      PolicySchema.parse({
+        type: 'min_cost',
+        qualityFloor: 0.8,
+        guarantee: { ...g, judgeModel: 'judge-class' },
+      }).guarantee?.judgeModel,
+    ).toBe('judge-class');
     // guarantee composes with shadow on the same policy
     const both = PolicySchema.parse({
       type: 'min_cost',

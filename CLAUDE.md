@@ -51,13 +51,16 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
 
 ## Known defects / debt (verified 2026-08-06 exploration)
 
-1. **The guarantee's quality metric is a stub**: `serveQualityScore` =
-   token-set Jaccard of answer vs PROMPT (`apps/server/src/guarantee.ts`,
-   `packages/workers/src/handlers.ts`); no judge model anywhere in the
-   guarantee path; `shadow:judge` is `{stub:true}`. Breach statistics are a
-   plain mean over ≥5 samples, success-path-only sampling, samples keyed
-   (org, strategy) while incidents key by cluster. Serving API keys hold
-   role `admin` and can resolve incidents (lift their own rollback).
+1. Guarantee measurement: the Jaccard-vs-prompt stub is RETIRED (G0.1,
+   2026-08-06) — sampled answers are scored by a real llm-judge call
+   (serve-judge in @potion/harness; reference-free rubric, protocol-capped,
+   spend metered via status='guarantee_judge' request_logs rows; queue
+   payloads content-free). STILL OPEN: breach statistics are a plain mean
+   over ≥5 samples, success-path-only sampling, samples keyed (org,
+   strategy) while incidents key by cluster (G0.3); judge calibration
+   records (G0.2); `shadow:judge` remains `{stub:true}` and shadowScore is
+   still Jaccard-vs-primary (labeled). Serving API keys hold role `admin`
+   and can resolve incidents — lift their own rollback (G2.3).
 2. Frontiers/clusters/eval evidence are GLOBAL by design contract
    (db/schema.ts:33-38) — no org dimension; nightly traces:cluster pools all
    orgs; synthesized agent suites are mock-evaluated only and can never

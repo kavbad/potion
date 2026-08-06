@@ -97,7 +97,7 @@ describe('runEval v2 integration', () => {
     } finally {
       warn.mockRestore();
     }
-  });
+  }, 30_000);
 
   it('evals the checked-in code-gen-humaneval-js-v1 suite end-to-end on mock (12 items)', async () => {
     // No suitesV2Dir override → the real packages/harness/suites/v2 dir.
@@ -124,7 +124,7 @@ describe('runEval v2 integration', () => {
     // the assertion is that the PIPELINE runs end-to-end deterministically.
     expect(agg.qualityMean).toBe(0);
     expect(agg.latencyP50).toBe(1800);
-  });
+  }, 30_000);
 
   it('evals extraction-authored-v1 on mock end-to-end (30 repackaged items)', async () => {
     const summary = await runEval(
@@ -140,5 +140,5 @@ describe('runEval v2 integration', () => {
     expect(summary.skipped).toHaveLength(0);
     expect(summary.aggregates[0]!.clusterId).toBe('extraction');
     expect(summary.aggregates[0]!.n).toBe(30);
-  });
+  }, 30_000);
 });

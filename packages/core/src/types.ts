@@ -224,6 +224,9 @@ export interface GuaranteeConfig {
   windowMin: number; // rolling window length in minutes
   sampleRate: number; // 0..1, per-request sampling probability
   action: 'rollback' | 'alert';
+  /** Judge model alias for sampled-answer scoring (G0.1); absent → platform
+   * default (judge-class live / mock-judge mock). */
+  judgeModel?: string | undefined;
 }
 
 export type Policy =

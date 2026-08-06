@@ -563,7 +563,7 @@ CLAUDE.md's old defect #1 ("server has ZERO tests") was stale — 305 tests exis
 re-scoped to hot-path gaps.
 
 ### Phase G0 — make the measurement real
-- [ ] G0.1 Judge-scored guarantee samples: replace serveQualityScore Jaccard with a real
+- [x] G0.1 Judge-scored guarantee samples: replace serveQualityScore Jaccard with a real
       llm-judge call (protocol-capped, PROTOCOL_MAX_TOKENS), sampled per GuaranteeConfig;
       spend recorded per org and visible to budgets; queue payloads carry no raw content
       at rest longer than needed. Mock mode keeps a deterministic mock JUDGE (labeled),
@@ -636,3 +636,48 @@ incumbent single-model baseline; sampling coverage; frontier drift across refres
 Disclosed as not built: SLA credits/remedies; human ground truth (judge-based); HA posture
 (per-replica limits until G2.5); compound latency policies (G2.6); Stripe (invoiced);
 workload leaderboards; automated rubric review (human-in-the-loop until G1.5).
+
+---
+
+## G0.1 — Judge-scored guarantee samples (session 2026-08-06, plan approved)
+
+Design (full plan in the session record): judge runs IN-PROCESS on the server, always
+(mock AND live), fire-and-forget like the shadow executor — the live path stops enqueueing
+{promptText, answerText}; after scoring + inserting the sample the server enqueues
+guarantee:evaluate in per-target mode (no content), so window evaluation + alert emission
+run through the worker's existing path. Scoring reuses scoreLlmJudge wholesale via a new
+harness serve-judge module (reference-free rubric, scale [0,10], PROTOCOL_MAX_TOKENS).
+Judge spend = one request_logs row per judge call with status='guarantee_judge': cost sums
+in rollupQuery widen to include it; requests/token counts stay serving-only. Additive
+GuaranteeConfig.judgeModel (default judge-class live / mock-judge mock). quality_samples
+gains scorer/judge_model/judge_cost_usd (migration 0016). Both serveQualityScore Jaccard
+implementations deleted; shadowScore untouched (shadow's own stub, G-later).
+
+- [x] a. core: GuaranteeConfig.judgeModel (additive zod + type + test)
+- [x] b. db: 0016_guarantee_judge.sql (ADD COLUMN IF NOT EXISTS scorer/judge_model/
+      judge_cost_usd) + schema + NewQualitySample; rollupQuery cost-vs-requests contract
+      (+ usage tests)
+- [x] c. harness: serve-judge.ts (SERVE_JUDGE_RUBRIC, scale, defaults, scoreServedAnswer
+      reusing scoreLlmJudge) + tests
+- [x] d. server: rewrite runGuaranteeSample (judge call via orgProviders, evidence-rich
+      sample insert, guarantee_judge request_log, content-free enqueue | in-process eval);
+      chat.ts call sites pass orgProviders + policyId
+- [x] e. workers: delete serveQualityScore + payload.sample scoring mode; keep per-target
+      + sweep + alerts; jobs.ts payload updated
+- [x] f. tests updated across server/workers/usage/core/db; full pnpm -r green +
+      walkthrough; manual proof (sample row + judge log row + /api/usage/current)
+- [x] g. docs: CLAUDE.md defect #1 updated; ledger row ($0 — mock judge only); commit
+
+**G0.1 DONE (2026-08-06)**: proof — chat 200 → quality_sample {quality 0.58,
+scorer llm-judge:mock-judge, judgeCostUsd recorded} → status='guarantee_judge'
+request_log (280 in / 3 out tokens) → usage_daily: 1 request (judge row counts
+toward COST only, never requests/tokens). Full verify: 881 pnpm tests green
+(core 21, queue 9, dashboard 36, artifacts 5, researcher 26, providers 69,
+db 67, strategies 58, observability 29, cluster 52, harness 130, pareto 35,
+workers 27, server 306, chaos 11); walkthrough 15/15. Two load-flaky tests
+given explicit 30s timeouts (runner-v2 code-exec, workers research cycle) —
+same class as the traces.test fix. Zero live API calls.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | G0.1 session — no live calls (mock judge only) | $0.00 | $0.00 | $3.879 / $50.00 |

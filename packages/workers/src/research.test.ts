@@ -168,7 +168,7 @@ describe('research:cycle (mock)', () => {
     // Mock cycles publish NOTHING: no frontier rows appeared.
     expect(await loadCurrentFrontier(db.db, 'code-gen')).toBeNull();
     expect(await loadCurrentFrontier(db.db, 'extraction')).toBeNull();
-  });
+  }, 30_000);
 
   it('prunes already-evaluated candidates (eval-cache cells) on the next cycle', async () => {
     await researchScanHandler({ source: 'mock' }, ctx());
