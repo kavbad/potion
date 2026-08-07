@@ -635,7 +635,12 @@ capstone everything else serves.)
       attribution, policy override, provenance guard branches. Incl. the
       mock-eligibility audit: sweep EVERY provider-resolution site with the proven
       guard — live excludes mock entries, keyless live fails loudly (the fourth
-      false-live instance, G1.5's classRepresentative, made this a pattern). [M]
+      false-live instance, G1.5's classRepresentative, made this a pattern). Incl.
+      the ONE-TIME EXHAUSTIVE TENANCY SWEEP (owner, 2026-08-07): every route
+      classified org-scoped / platform-only / public, with a test asserting each
+      classification — five tenancy leaks found incidentally (G1.6 frontier detail,
+      G1.6 leaderboard iteration, G1.8 cycles listing, G1.8 recipes lineage, G1.2
+      hint oracle) means the remainder hide in routes not yet touched. [M/L]
 - [ ] G2.6 Compound policy: quality floor + latency bound in one policy (schema + select +
       routes + dashboard picker). [S/M]
 - [ ] G2.8 CAPSTONE — one real workload end-to-end: ingest → redaction → org-scoped
