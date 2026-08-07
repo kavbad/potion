@@ -36,7 +36,7 @@ Sandbox has Node 20 + pnpm 9, but no Docker/Postgres/Redis and no live provider 
 - [x] 1.3 `packages/strategies`: interpreters over declarative configs — single, cascade, best-of-N+judge,
       draft-verify, ensemble+fusion, decompose-and-route
 - [x] 1.4 Escalation confidence: logprob-based + calibrated self-report, both tested against mock
-- [ ] **GATE 1**: all 6 strategies execute against mock with seeded transcript; cost accounting matches
+- [x] **GATE 1**: all 6 strategies execute against mock with seeded transcript; cost accounting matches
       hand-computed totals to the cent; live smoke scripts present (run deferred — no keys). _Proof below._
 - [x] Gate 1 proof recorded
 
@@ -45,7 +45,7 @@ Sandbox has Node 20 + pnpm 9, but no Docker/Postgres/Redis and no live provider 
 - [x] 2.2 Embedding: provider-agnostic embedder with mock embedder for tests; exemplar centroids in pgvector (PGlite in sandbox)
 - [x] 2.3 Assignment: nearest centroid + confidence threshold → fallback `general` cluster
 - [x] 2.4 Held-out labeled set: 200 prompts (20/cluster), generator/reviewer agent pair
-- [ ] **GATE 2**: assignment accuracy ≥ 85% on held-out set; confusion matrix pasted below. _Proof below._
+- [x] **GATE 2**: assignment accuracy ≥ 85% on held-out set; confusion matrix pasted below. _Proof below._
 - [x] Gate 2 proof recorded
 
 ## Phase 3 — Eval Harness
@@ -56,7 +56,7 @@ Sandbox has Node 20 + pnpm 9, but no Docker/Postgres/Redis and no live provider 
 - [x] 3.3 Judge calibration: 30 items double-scored by second judge; agreement report; flag < 0.8
 - [x] 3.4 Runner: resumable, content-addressed cache (strategy-config hash + item id), budget cap
       (refuses runs whose projected spend > cap)
-- [ ] **GATE 3**: full eval of 3 single-model baselines + 3 composite strategies on 2 clusters —
+- [x] **GATE 3**: full eval of 3 single-model baselines + 3 composite strategies on 2 clusters —
       executed on mock provider (zero spend; live rerun script `pnpm eval:live --cap 25` ships ready);
       results table: quality mean ± CI, cost/request, p50/p95 latency. _Proof below._
 - [x] Gate 3 proof recorded
@@ -66,7 +66,7 @@ Sandbox has Node 20 + pnpm 9, but no Docker/Postgres/Redis and no live provider 
 - [x] 4.2 Frontier diffing: appeared / vanished / dominated-by narrative between two versions
 - [x] 4.3 Recompute job: new model in prices.json → enqueue solo + shortlist combos (cheap cascade stage,
       judge, draft) → recompute affected frontiers (queue-driver based)
-- [ ] **GATE 4**: with Phase 3 results + one deliberately dominated strategy, engine excludes dominated
+- [x] **GATE 4**: with Phase 3 results + one deliberately dominated strategy, engine excludes dominated
       point; diff correctly narrates a simulated "new model release" on mock data. _Proof below._
 - [x] Gate 4 proof recorded
 
@@ -314,10 +314,11 @@ _(appended as workstreams land)_
 Sandbox egress blocks OpenAI/Anthropic/Google (403/000) and OpenRouter's region for those
 families; DeepSeek-class only reachable. M1b live runs therefore execute on the OPERATOR's
 machine via docs/M1B-RUNBOOK.md (one command, capped), results committed back for analysis.
-- [ ] Operator: Gate-3 live rerun on v2 suites (--cap 25) → commit artifacts
-- [ ] Operator: Gate-2 rerun on OpenAI embeddings (needs OPENAI_API_KEY locally) → commit
-- [ ] Operator: 10-cluster frontier sweeps (--cap 15) → commit
-- [ ] Orchestrator: analysis + frontier publication + ledger reconciliation ($50 hard cap)
+- [x] Operator: Gate-3 live rerun on v2 suites (--cap 25) → commit artifacts
+- [x] Operator: Gate-2 rerun on OpenAI embeddings (needs OPENAI_API_KEY locally) → commit
+- [x] Operator: 10-cluster frontier sweeps (--cap 15) → commit
+- [x] Orchestrator: analysis + frontier publication + ledger reconciliation ($50 hard cap)
+(all four superseded/completed — M1b live runs finished 2026-08-06; artifacts + ledger on record)
 
 ## M2 — Safe to sell (dispatched 2026-08-04, COMPLETE 2026-08-05)
 Wave 1 (foundation):
@@ -589,7 +590,7 @@ re-scoped to hot-path gaps.
       retention/deletion tied to trace retention; suite provenance rows. [M]
 - [x] G1.4 Replay fidelity: capture reference answer + tool results + multi-turn context
       in synthesized items (ingestion contract addition); judge anchors on reference. [L]
-- [ ] G1.5 Automated scorer construction: rubric generation per cluster from exemplars +
+- [x] G1.5 Automated scorer construction: rubric generation per cluster from exemplars +
       G0.2 calibration on the result; customer-visible rubric review step. [M]
 - [ ] G1.6 Per-org frontiers [ARCHITECTURE]: org_id (NULL=platform) on frontiers/
       frontier_points/eval_runs/eval_results, unique (org,cluster,version) fixing the
@@ -603,21 +604,40 @@ re-scoped to hot-path gaps.
       researchCycleHandler; gate.ts unchanged; per-org cycle trigger route. [S]
 
 ### Phase G2 — guarantee as product surface
+(owner-reordered 2026-08-07 — queue of record: G2.7 → G2.1 → G2.2 → G2.3 → G2.4 →
+G2.6 → G2.8 → G2.5. Onboarding lands FIRST so a real org's traffic accumulates while
+the rest of G2 is built — guarantee report and incident SLAs get developed against real
+data, not walkthrough spans. Redis is DEFERRED to last: in-memory limiting is only
+incorrect across replicas and initial deployment is single-instance. G2.8 is the
+capstone everything else serves.)
+- [ ] G2.7 Operator onboarding: org-creation route (operator credential, not self-serve),
+      README runbook: create org → policy → hand-issue key → invoice. [S]
 - [ ] G2.1 Guarantee report: quality time series per policy/cluster (persisted samples +
       request_logs join via new completion-id column); exportable monthly report next to
-      the invoice. [M]
+      the invoice. Incl. the serve-path judgeMaxTokens budget on GuaranteeConfig
+      (G1.4-filed stray: verbose judges truncate at PROTOCOL_MAX_TOKENS on the serve
+      path today). [M]
 - [ ] G2.2 Incident SLAs: emitAlert on the in-process breach path (parity with worker),
       measured breach→notification latency, auto-restore-on-recovery option, cooldown
       that re-fires on worsening. [M]
 - [ ] G2.3 Key role split: serving keys lose incident-resolve and other admin mutations;
       explicit admin scope for humans. [S]
 - [ ] G2.4 Targeted server hot-path tests: guarantee override gating, pre-auth log
-      attribution, policy override, provenance guard branches. [M]
-- [ ] G2.5 Redis rate limiting + shared caches (RateLimiterStore seam exists). [M]
+      attribution, policy override, provenance guard branches. Incl. the
+      mock-eligibility audit: sweep EVERY provider-resolution site with the proven
+      guard — live excludes mock entries, keyless live fails loudly (the fourth
+      false-live instance, G1.5's classRepresentative, made this a pattern). [M]
 - [ ] G2.6 Compound policy: quality floor + latency bound in one policy (schema + select +
       routes + dashboard picker). [S/M]
-- [ ] G2.7 Operator onboarding: org-creation route (operator credential, not self-serve),
-      README runbook: create org → policy → hand-issue key → invoice. [S]
+- [ ] G2.8 CAPSTONE — one real workload end-to-end: ingest → redaction → org-scoped
+      clustering → derived suite with references → per-cluster rubric → per-org
+      frontier → live capped eval → guarantee verdict → customer-visible report, as a
+      single demonstrated, committed run with a ledger row. The integration proof of
+      everything in G1+G2 and the demo for a first external customer. The specific
+      workload is chosen at this item's check-in — not assumed before. [L]
+- [ ] G2.5 DEFERRED TO LAST (post-capstone): Redis rate limiting + shared caches —
+      build when deployment reality demands multi-replica correctness; the
+      RateLimiterStore seam (apps/server/src/middleware/ratelimit.ts) stays documented. [M]
 
 DEMOTED (parked): public pricing page, catalog breadth, self-serve funnel, SDK publishing,
 SMTP, cloud-KMS, Stripe.

@@ -153,15 +153,22 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   (10) live capped evals of customer suites; (11) researcher loop → per-org
   refresh (thread suiteV2Ids/suitesV2Dir/org through cycles; gate
   unchanged).
-- **Phase G2 — guarantee as product surface:** (12) customer-visible
-  guarantee report (quality time series; completion-id column on
-  request_logs so quality joins spend/latency); (13) incident SLAs — alert
-  on the in-process breach path, breach→notification bound, auto-restore
-  semantics, serving keys must NOT resolve incidents (role split);
-  (14) targeted server tests on the serving hot path; (15) Redis rate
-  limiting + shared caches; (16) compound policy: quality floor + latency
-  bound in one policy (none exists today); (17) operator onboarding:
-  org-creation route + hand-issued key runbook (invoice CLI exists).
+- **Phase G2 — guarantee as product surface** (owner-reordered 2026-08-07;
+  queue of record G2.7 → G2.1 → G2.2 → G2.3 → G2.4 → G2.6 → G2.8 → G2.5):
+  (17-FIRST) operator onboarding: org-creation route + hand-issued key
+  runbook — lands first so real traffic accumulates for the rest of G2;
+  (12) customer-visible guarantee report (quality time series;
+  completion-id column on request_logs; incl. serve-path judgeMaxTokens
+  budget stray); (13) incident SLAs — alert on the in-process breach path,
+  breach→notification bound, auto-restore semantics, serving keys must NOT
+  resolve incidents (role split); (14) targeted server tests on the serving
+  hot path incl. the mock-eligibility audit of every provider-resolution
+  site; (16) compound policy: quality floor + latency bound in one policy;
+  (G2.8 CAPSTONE) one real workload end-to-end through the whole pipeline
+  — ingest to customer-visible guarantee report — as a single committed,
+  ledgered run (workload chosen at its check-in); (15-LAST, deferred)
+  Redis rate limiting + shared caches — only incorrect across replicas,
+  build when deployment demands it (seam documented).
 - **DEMOTED indefinitely:** public model/pricing page, catalog breadth,
   self-serve signup funnel, SDK publishing, cloud-KMS custody (BYOK works),
   SMTP (dev-link hand-delivery suffices for partners), Stripe (LAST;
