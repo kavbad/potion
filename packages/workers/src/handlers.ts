@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import {
   redactPii, strategyHash, type Policy, type StrategyConfig } from '@potion/core';
 import {
+  purgeDerivedSuiteItems,
+  upsertDerivedSuite,
   backfillRedactSpans,
   distinctSampledTargets,
   evalRuns,
@@ -72,8 +74,6 @@ import {
 } from '@potion/researcher';
 // ---- M5 #36 agent workloads (SPEC §14) ----
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { SUITES_V2_DIR } from '@potion/harness';
 import {
   clusterExemplars,
@@ -98,7 +98,6 @@ import {
 } from '@potion/db';
 import {
   highestQualityPoint,
-  type EvalItem,
   type FrontierPoint,
   type ProviderMode,
 } from '@potion/core';
@@ -1534,64 +1533,56 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
         .set({ exemplarCount: totalExemplars })
         .where(eq(clusters.id, clusterId));
 
-      // ---- synthesize the replay suite (merge; item ids are trace-keyed) ----
-      const suiteDir = path.join(suitesV2Dir, suiteId);
-      mkdirSync(suiteDir, { recursive: true });
-      const itemsPath = path.join(suiteDir, 'items.jsonl');
-      const manifestPath = path.join(suiteDir, 'manifest.json');
-      const existingItems: EvalItem[] = existsSync(itemsPath)
-        ? readFileSync(itemsPath, 'utf8')
-            .split('\n')
-            .filter((l) => l.trim().length > 0)
-            .map((l) => JSON.parse(l) as EvalItem)
-        : [];
-      const existingIds = new Set(existingItems.map((it) => it.id));
+      // ---- synthesize the replay suite (G1.3: governed DB storage — no
+      // worker-local files; org-attributed provenance row + time-windowed
+      // items so trace retention governs the lifecycle). Merge/cap/version
+      // semantics unchanged. NOTE: suite version is NOT part of the eval
+      // cache key — per-item cache keys already make appends incremental.
       const rubric =
         `Score how well the assistant's response completes the user's request. The ` +
         `original session was an agent workflow` +
         `${toolSequence.length > 0 ? ` using tools: ${toolSequence.join(' → ')}` : ''}. ` +
         `Judge task completion and correctness only; ignore style.`;
-      const newItems: EvalItem[] = [];
-      for (const m of members) {
-        const itemId = `${suiteId}-${sha1Hex(m.traceId).slice(0, 8)}`;
-        if (existingIds.has(itemId)) continue;
+      const candidates = members.map((m) => {
         const srcIdx = sources.indexOf(m);
-        newItems.push({
-          id: itemId,
+        return {
+          id: `${suiteId}-${sha1Hex(m.traceId).slice(0, 8)}`,
           clusterId,
-          prompt: [{ role: 'user', content: texts[srcIdx]! }],
-          scoring: { kind: 'llm-judge', rubric, judgeModel: judgeAlias, scale: [0, 1] },
-        });
-      }
-      const items = [...existingItems, ...newItems]
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .slice(0, AGENT_SUITE_ITEM_CAP);
-      // Bump the patch version when items change so cached eval rows stay
-      // attributable to the suite version that produced them.
-      let version = '1.0.0';
-      if (existsSync(manifestPath)) {
-        const prev = JSON.parse(readFileSync(manifestPath, 'utf8')) as SuiteManifest;
-        version = prev.version;
-        if (newItems.length > 0 || items.length !== existingItems.length) {
-          const [major, minor, patchN] = version.split('.').map(Number);
-          version = `${major}.${minor}.${(patchN ?? 0) + 1}`;
-        }
-      }
+          prompt: [{ role: 'user' as const, content: texts[srcIdx]! }],
+          scoring: {
+            kind: 'llm-judge' as const,
+            rubric,
+            judgeModel: judgeAlias,
+            scale: [0, 1] as [number, number],
+          },
+          sourceTraceId: m.traceId,
+        };
+      });
       const manifest: SuiteManifest = {
         suiteId,
         clusterId,
-        version,
+        version: '1.0.0',
         source: {
           kind: 'authored',
           name: 'Potion trace-synthesized session replays (payloads redacted)',
           license: 'Proprietary (customer-derived, redacted) — M5 #36',
         },
+        // 'items.jsonl' is the schema's file-pointer literal; in db storage
+        // the real items live in derived_suite_items (this manifest is the
+        // jsonb provenance record).
         items: 'items.jsonl',
         scoring: { allowed: ['llm-judge'] },
         createdAt: new Date().toISOString(),
       };
-      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-      writeFileSync(itemsPath, `${items.map((it) => JSON.stringify(it)).join('\n')}\n`);
+      const upsert = await upsertDerivedSuite(ctx.db, {
+        suiteId,
+        clusterId,
+        orgId,
+        manifest: manifest as unknown as Record<string, unknown>, // jsonb provenance record
+        items: candidates,
+        itemCap: AGENT_SUITE_ITEM_CAP,
+      });
+      const newItems = { length: upsert.itemsAdded };
 
       // ---- sweep new/extended suites on mock → first/updated frontier ----
       let evalRunId: string | null = null;
@@ -1646,7 +1637,7 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
         toolSequence,
         created,
         suiteId,
-        suiteVersion: version,
+        suiteVersion: upsert.version,
         itemsAdded: newItems.length,
         evalRunId,
       });
@@ -1665,7 +1656,17 @@ export interface TracesPurgeResult {
   orgs: number;
   redacted: number;
   deleted: number;
-  perOrg: { orgId: string; retentionDays: number; redacted: number; deleted: number }[];
+  /** G1.3: derived-suite items purged under the same retention. */
+  derivedItemsDeleted: number;
+  derivedSuitesEmptied: number;
+  perOrg: {
+    orgId: string;
+    retentionDays: number;
+    redacted: number;
+    deleted: number;
+    itemsDeleted: number;
+    suitesEmptied: number;
+  }[];
 }
 
 /** G1.1: PII-redaction backfill over existing trace_spans (idempotent). */
@@ -1680,25 +1681,39 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
 ): Promise<TracesPurgeResult> => {
   const orgIds =
     payload.orgId !== undefined ? [payload.orgId] : await listOrgIdsWithSpans(ctx.db);
-  const result: TracesPurgeResult = { orgs: 0, redacted: 0, deleted: 0, perOrg: [] };
+  const result: TracesPurgeResult = {
+    orgs: 0,
+    redacted: 0,
+    deleted: 0,
+    derivedItemsDeleted: 0,
+    derivedSuitesEmptied: 0,
+    perOrg: [],
+  };
   for (const orgId of orgIds) {
     const days = await getOrgTraceRetentionDays(ctx.db, orgId);
     if (days === null) continue; // org vanished between fan-out and purge
     let redacted = 0;
     let deleted = 0;
+    // G1.3: derived suites follow the SAME retention as spans — days=0
+    // ("metadata only") empties the org's replay items but keeps the
+    // provenance rows; days>0 purges items past the same cutoff. Frontiers/
+    // eval_results built from purged items are NOT cascade-deleted (mock-only
+    // + provenance-guarded; retirement policy is a recorded G1.6 decision).
+    let derived: { itemsDeleted: number; suitesEmptied: number };
     if (days === 0) {
       redacted = await redactSpanAttrs(ctx.db, orgId);
+      derived = await purgeDerivedSuiteItems(ctx.db, orgId, 'all');
     } else {
-      deleted = await deleteSpansOlderThan(
-        ctx.db,
-        orgId,
-        new Date(Date.now() - days * 86_400_000),
-      );
+      const cutoff = new Date(Date.now() - days * 86_400_000);
+      deleted = await deleteSpansOlderThan(ctx.db, orgId, cutoff);
+      derived = await purgeDerivedSuiteItems(ctx.db, orgId, cutoff);
     }
     result.orgs += 1;
     result.redacted += redacted;
     result.deleted += deleted;
-    result.perOrg.push({ orgId, retentionDays: days, redacted, deleted });
+    result.derivedItemsDeleted += derived.itemsDeleted;
+    result.derivedSuitesEmptied += derived.suitesEmptied;
+    result.perOrg.push({ orgId, retentionDays: days, redacted, deleted, ...derived });
   }
   return result;
 };

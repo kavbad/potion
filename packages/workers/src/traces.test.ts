@@ -10,6 +10,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  listDerivedSuites,
+  loadDerivedSuite,
   clusters,
   clusterExemplars,
   createDb,
@@ -191,21 +193,19 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     expect(ex).toHaveLength(2);
     expect(ex[0]!.text).toContain('billing retry loop');
 
-    // Synthesized replay suites (v2 layout) with llm-judge scoring.
-    for (const suiteId of [`${billingId}-replays-v1`, `${chatId}-replays-v1`]) {
-      const manifest = JSON.parse(
-        readFileSync(path.join(suitesV2Dir, suiteId, 'manifest.json'), 'utf8'),
-      ) as { version: string; clusterId: string; scoring: { allowed: string[] } };
-      expect(manifest.version).toBe('1.0.0');
-      expect(manifest.clusterId).toBe(suiteId.replace(/-replays-v1$/, ''));
-      expect(manifest.scoring.allowed).toEqual(['llm-judge']);
-      const items = readFileSync(path.join(suitesV2Dir, suiteId, 'items.jsonl'), 'utf8')
-        .split('\n')
-        .filter((l) => l.trim().length > 0)
-        .map((l) => JSON.parse(l) as { id: string; clusterId: string; scoring: { kind: string } });
-      expect(items.length).toBeGreaterThan(0);
-      expect(items.every((it) => it.clusterId === manifest.clusterId)).toBe(true);
-      expect(items.every((it) => it.scoring.kind === 'llm-judge')).toBe(true);
+    // Synthesized replay suites live in GOVERNED DB STORAGE (G1.3) with
+    // org-attributed provenance rows + llm-judge items.
+    for (const [suiteId, wantOrg] of [
+      [`${billingId}-replays-v1`, 'org_a'],
+      [`${chatId}-replays-v1`, 'org_b'],
+    ] as const) {
+      const loaded = (await loadDerivedSuite(db.db, suiteId))!;
+      expect(loaded.suite.version).toBe('1.0.0');
+      expect(loaded.suite.orgId).toBe(wantOrg); // provenance the disk never had
+      expect(loaded.suite.clusterId).toBe(suiteId.replace(/-replays-v1$/, ''));
+      expect(loaded.items.length).toBeGreaterThan(0);
+      expect(loaded.items.every((it) => it.clusterId === loaded.suite.clusterId)).toBe(true);
+      expect(loaded.items.every((it) => it.scoring.kind === 'llm-judge')).toBe(true);
     }
 
     // Eval runs recorded; agent clusters have a first (mock) frontier.
@@ -233,10 +233,7 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     expect(second.clustersUpdated).toBe(0);
     expect(second.clusters[0]!.itemsAdded).toBe(0);
     expect(second.clusters[0]!.evalRunId).toBeNull();
-    let manifest = JSON.parse(
-      readFileSync(path.join(suitesV2Dir, suiteId, 'manifest.json'), 'utf8'),
-    ) as { version: string };
-    expect(manifest.version).toBe('1.0.0');
+    expect((await loadDerivedSuite(db.db, suiteId))!.suite.version).toBe('1.0.0');
 
     // A NEW session (same message family) extends the suite + bumps version.
     await seedSession('org_a', 'tr_b2', 'Refactor the billing retry loop for receipts', 'search');
@@ -245,14 +242,9 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     expect(third.clustersUpdated).toBe(1);
     expect(third.clusters[0]!.itemsAdded).toBe(1);
     expect(third.clusters[0]!.evalRunId).not.toBeNull();
-    manifest = JSON.parse(
-      readFileSync(path.join(suitesV2Dir, suiteId, 'manifest.json'), 'utf8'),
-    ) as { version: string };
-    expect(manifest.version).toBe('1.0.1');
-    const items = readFileSync(path.join(suitesV2Dir, suiteId, 'items.jsonl'), 'utf8')
-      .split('\n')
-      .filter((l) => l.trim().length > 0);
-    expect(items).toHaveLength(2);
+    const bumped = (await loadDerivedSuite(db.db, suiteId))!;
+    expect(bumped.suite.version).toBe('1.0.1');
+    expect(bumped.items).toHaveLength(2);
     // Frontier recomputed (still v1 lineage from the same pipeline).
     const frontier = await loadCurrentFrontier(db.db, `agent-${slug}`);
     expect(frontier).not.toBeNull();
@@ -265,7 +257,8 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     expect(res.sessionsSeen).toBe(1);
     expect(res.clustersCreated).toBe(1);
     const suiteId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}-replays-v1`;
-    const itemsText = readFileSync(path.join(suitesV2Dir, suiteId, 'items.jsonl'), 'utf8');
+    const loaded = (await loadDerivedSuite(db.db, suiteId))!;
+    const itemsText = JSON.stringify(loaded.items);
     expect(itemsText).not.toContain('cfo@acme.io');
     expect(itemsText).not.toContain('99887766');
     expect(itemsText).toContain('<email>');
@@ -302,10 +295,22 @@ describe('traces:purge (M5 #36, SPEC §14.3)', () => {
     await seedSession('org_b', 'tr_old', 'Ancient session', 'search', '2026-06-01T10:00:00Z');
     await seedSession('org_b', 'tr_new', 'Recent session', null);
 
+    // G1.3: derived suites follow the same retention — cluster org_a first
+    // so it HAS replay items, then purge (org_a retention 0 → items emptied,
+    // provenance row kept).
+    await tracesClusterHandler({ orgId: 'org_a' }, ctx());
+    const aSuites = await listDerivedSuites(db.db, { orgId: 'org_a' });
+    expect(aSuites.length).toBeGreaterThanOrEqual(1);
+
     const res = await tracesPurgeHandler({}, ctx());
     expect(res.orgs).toBe(2);
     expect(res.redacted).toBe(2); // org_a root + tool span
     expect(res.deleted).toBe(2); // org_b ancient root + tool span
+    expect(res.derivedItemsDeleted).toBeGreaterThanOrEqual(1);
+    expect(res.derivedSuitesEmptied).toBeGreaterThanOrEqual(1);
+    const emptied = (await loadDerivedSuite(db.db, aSuites[0]!.suiteId))!;
+    expect(emptied.items).toEqual([]); // replay payloads gone
+    expect(emptied.suite.orgId).toBe('org_a'); // provenance stub remains
 
     // org_a: rows kept, attrs gone.
     const a = await listSpansForTrace(db.db, 'org_a', 'tr_a1');

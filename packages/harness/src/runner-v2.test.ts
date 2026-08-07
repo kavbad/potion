@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EvalItem } from '@potion/core';
-import { createDb, type DbHandle } from '@potion/db';
+import {
+  createOrg,
+  upsertDerivedSuite, createDb, createOrg, migrate, type DbHandle } from '@potion/db';
 import { runEval, unrunnableReason, type RunDeps } from './runner.js';
 
 const PRICES_PATH = fileURLToPath(new URL('../../../prices.json', import.meta.url));
@@ -141,4 +143,68 @@ describe('runEval v2 integration', () => {
     expect(summary.aggregates[0]!.clusterId).toBe('extraction');
     expect(summary.aggregates[0]!.n).toBe(30);
   }, 30_000);
+});
+
+describe('derived-suite db loading (G1.3)', () => {
+  it('agent-* suite ids load from db storage through the crossCheckItem gate', async () => {
+    const handle = await createDb();
+    await migrate(handle.db);
+    await createOrg(handle.db, { id: 'org_g13', name: 'G13' });
+    const suiteId = 'agent-aaaaaa-bbbbbb-replays-v1';
+    await upsertDerivedSuite(handle.db, {
+      suiteId,
+      clusterId: 'agent-aaaaaa-bbbbbb',
+      orgId: 'org_g13',
+      manifest: { suiteId, clusterId: 'agent-aaaaaa-bbbbbb', scoring: { allowed: ['llm-judge'] } },
+      items: [
+        {
+          id: `${suiteId}-item1`,
+          clusterId: 'agent-aaaaaa-bbbbbb',
+          prompt: [{ role: 'user', content: 'replayed request' }],
+          scoring: { kind: 'llm-judge', rubric: 'r', judgeModel: 'mock-judge', scale: [0, 1] },
+        },
+      ],
+      itemCap: 25,
+    });
+    const summary = await runEval(
+      {
+        suiteIds: [],
+        suiteV2Ids: [suiteId],
+        strategies: [{ type: 'single', model: 'mock-cheap' }],
+        budgetCapUsd: 1,
+      },
+      { db: handle, pricesPath: PRICES_PATH },
+    );
+    expect(summary.executed).toBe(1);
+    expect(summary.results[0]!.clusterId).toBe('agent-aaaaaa-bbbbbb');
+    await handle.close();
+  });
+
+  it('agent-* without a db handle fails with a clear error; unknown derived suite too', async () => {
+    await expect(
+      runEval(
+        {
+          suiteIds: [],
+          suiteV2Ids: ['agent-aaaaaa-bbbbbb-replays-v1'],
+          strategies: [{ type: 'single', model: 'mock-cheap' }],
+          budgetCapUsd: 1,
+        },
+        { pricesPath: PRICES_PATH },
+      ),
+    ).rejects.toThrow(/db storage/);
+    const handle = await createDb();
+    await migrate(handle.db);
+    await expect(
+      runEval(
+        {
+          suiteIds: [],
+          suiteV2Ids: ['agent-cccccc-dddddd-replays-v1'],
+          strategies: [{ type: 'single', model: 'mock-cheap' }],
+          budgetCapUsd: 1,
+        },
+        { db: handle, pricesPath: PRICES_PATH },
+      ),
+    ).rejects.toThrow(/not found in db storage/);
+    await handle.close();
+  });
 });

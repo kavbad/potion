@@ -585,7 +585,7 @@ re-scoped to hot-path gaps.
 - [x] G1.2 Org-scoped trace clustering: org predicate in listTracesForClustering SQL,
       per-org cluster ids (agent-<org>-<slug>), org column on db-registered clusters +
       exemplars; X-Potion-Cluster validates org ownership. [M]
-- [ ] G1.3 Derived suites out of worker-local disk: Postgres or artifact store with
+- [x] G1.3 Derived suites out of worker-local disk: Postgres or artifact store with
       retention/deletion tied to trace retention; suite provenance rows. [M]
 - [ ] G1.4 Replay fidelity: capture reference answer + tool results + multi-turn context
       in synthesized items (ingestion contract addition); judge anchors on reference. [L]
@@ -971,3 +971,40 @@ rows grandfather as platform (demo artifacts; operators may delete). The old wor
 encoded the pooling as intended behavior — rewritten. 916 pnpm tests green (db 77,
 workers 28, server 308), walkthrough 15/15 (org-hashed id visible: agent-26a426-bc5772).
 Zero live API calls. Per-org FRONTIERS proper remain G1.6; suite lifecycle is G1.3 (next).
+
+---
+
+## G1.3 — Derived-suite db storage + retention (session 2026-08-06, plan approved)
+
+Storage decision: DATABASE (artifact store has no get/delete/list; db gives read-back-
+merge, org attribution, transactional version bumps, retention deletes). Discriminator:
+agent- prefix (authored suites stay repo files). derived_suites provenance rows carry the
+org id disk manifests never had; derived_suite_items carry source_trace_id + created_at
+so retention can purge by time window. Purge: days>0 deletes items past cutoff; days=0
+empties items, keeps provenance stub. STANDING DECISION (recorded, deferred to G1.6):
+frontiers/eval_results built from purged items are NOT cascade-deleted — mock-only +
+provenance-guarded today; evidence-retirement policy belongs to the per-org frontier
+rework. Dead eval_items table noted, untouched. Cache-key/version comment corrected
+(per-item keys already make appends incremental).
+
+- [x] a. db: 0021 + derived_suites/derived_suite_items + repo (upsert/load/list/purge)
+      + tests (merge/cap/version/purge-window/cascade)
+- [x] b. harness: runner loader split (agent-* from db via crossCheckItem, authored from
+      files, clear error without db) + tests
+- [x] c. workers: cluster write path → repo upsert; purge hook (+result counts); tests
+      file-assertions → db queries
+- [x] d. server test env cleanup + walkthrough copy removal + full sweep + proof + docs
+      + commit
+
+**G1.3 DONE (2026-08-06)** — derived suites in governed db storage (0021):
+org-attributed provenance rows (the disk manifests never carried an org),
+time-windowed items (source_trace_id/created_at), merge/cap/version semantics
+preserved exactly. Retention: purge deletes items past the span cutoff;
+retention-0 empties items but keeps the provenance stub. Runner loads agent-*
+ids from db through the same crossCheckItem gate; authored suites stay repo
+files. Walkthrough's suites-copy protection removed (no file writes remain).
+STANDING DECISION (deferred to G1.6, recorded): frontiers/eval_results built
+from purged items are NOT cascade-deleted — mock-only + provenance-guarded
+today; evidence-retirement policy belongs to the per-org frontier rework.
+Dead eval_items table noted, untouched. 921 pnpm tests green (db 80, harness
+140, workers 28), walkthrough 15/15. Zero live API calls.

@@ -16,7 +16,8 @@ import {
   type StrategyConfig,
   type Usage,
 } from '@potion/core';
-import { createDb, getEvalResultByCacheKey, insertEvalResult, migrate, type DbHandle } from '@potion/db';
+import {
+  loadDerivedSuite, createDb, getEvalResultByCacheKey, insertEvalResult, migrate, type DbHandle } from '@potion/db';
 import {
   createMockProvider,
   createProviders,
@@ -27,6 +28,7 @@ import { createResolver, execute } from '@potion/strategies';
 import { aggregateResults } from './aggregate.js';
 import { BudgetCapError, projectRunCostUsd } from './estimate.js';
 import { loadSuitesV2 } from './ingest/suite-v2.js';
+import { crossCheckItem, type SuiteManifest } from './ingest/manifest.js';
 import { scoreAnswer } from './scorers.js';
 import { loadSuiteFile, resolveSuite } from './suites.js';
 
@@ -210,8 +212,40 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   }
   const simulated = simulatedIds.length > 0;
   const flatItems = resolved.flatMap((r) => loadSuiteFile(r.path, r.suiteId));
-  const v2Suites = loadSuitesV2(opts.suiteV2Ids ?? [], deps.suitesV2Dir);
-  const allItems = [...flatItems, ...v2Suites.flatMap((s) => s.items)];
+  // G1.3: DERIVED suites (agent-* — trace-synthesized customer data) load
+  // from governed db storage; authored suites stay repo files. Db-loaded
+  // items pass the SAME crossCheckItem gate as file suites.
+  const v2Ids = opts.suiteV2Ids ?? [];
+  const derivedIds = v2Ids.filter((id) => id.startsWith('agent-'));
+  const authoredIds = v2Ids.filter((id) => !id.startsWith('agent-'));
+  const v2Suites = loadSuitesV2(authoredIds, deps.suitesV2Dir);
+  const derivedItems: EvalItem[] = [];
+  if (derivedIds.length > 0) {
+    if (!deps.db) {
+      throw new Error(
+        `derived suite(s) ${derivedIds.join(', ')} live in db storage (G1.3) — ` +
+          'runEval needs a db handle (deps.db) to load them',
+      );
+    }
+    for (const suiteId of derivedIds) {
+      const loaded = await loadDerivedSuite(deps.db.db, suiteId);
+      if (!loaded) throw new Error(`derived suite '${suiteId}' not found in db storage`);
+      const manifest = loaded.suite.manifest as Partial<SuiteManifest>;
+      const gate: Pick<SuiteManifest, 'suiteId' | 'clusterId' | 'scoring'> = {
+        suiteId,
+        clusterId: manifest.clusterId ?? loaded.suite.clusterId,
+        scoring: manifest.scoring ?? {},
+      };
+      loaded.items.forEach((item, idx) => {
+        const problems = crossCheckItem(gate, item, idx);
+        if (problems.length > 0) {
+          throw new Error(`derived suite '${suiteId}': ${problems.join('; ')}`);
+        }
+        derivedItems.push(item);
+      });
+    }
+  }
+  const allItems = [...flatItems, ...v2Suites.flatMap((s) => s.items), ...derivedItems];
 
   // Skip unrunnable items (currently: python code-exec) with a clear warning
   // instead of failing the whole run or silently scoring 0.

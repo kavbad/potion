@@ -21,7 +21,6 @@ import { DEMO_API_KEY } from '../src/seed.js';
 
 let app: FastifyInstance;
 let root: string;
-let tmpSuites: string;
 
 const ADMIN = { cookie: 'potion_session=ps_t_admin' };
 const VIEWER = { cookie: 'potion_session=ps_t_viewer' };
@@ -57,9 +56,8 @@ function agentSpan(over: Record<string, unknown> = {}): Record<string, unknown> 
 
 beforeAll(async () => {
   root = mkdtempSync(path.join(tmpdir(), 'potion-server-traces-'));
-  tmpSuites = path.join(root, 'suites-v2');
-  // traces:cluster WRITES synthesized replay suites — target a tmp dir.
-  process.env.POTION_SUITES_V2_DIR = tmpSuites;
+  // G1.3: derived suites live in db storage — no POTION_SUITES_V2_DIR tmp
+  // dir needed; the worker writes no files.
   app = await buildServer(); // seeded: org_demo + DEMO_API_KEY + frontiers
 
   await createUser(app.potion.db.db, { id: 'usr_t_admin', email: 'admin@t.dev', name: 'admin' });
@@ -84,7 +82,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  delete process.env.POTION_SUITES_V2_DIR;
   rmSync(root, { recursive: true, force: true });
 });
 

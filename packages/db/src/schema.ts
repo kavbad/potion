@@ -885,3 +885,42 @@ export const judgeCalibrations = pgTable('judge_calibrations', {
 
 export type JudgeCalibrationRow = typeof judgeCalibrations.$inferSelect;
 export type NewJudgeCalibration = typeof judgeCalibrations.$inferInsert;
+
+// ---- derived suites (G1.3, migration 0021) ----
+// Trace-synthesized suites in governed storage: org-attributed provenance
+// rows + time-windowed items (source_trace_id/created_at) so trace retention
+// governs their lifecycle. Authored suites stay repo files (agent- prefix is
+// the discriminator).
+export const derivedSuites = pgTable('derived_suites', {
+  suiteId: text('suite_id').primaryKey(),
+  clusterId: text('cluster_id').notNull(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  manifest: jsonb('manifest').notNull(),
+  version: text('version').notNull().default('1.0.0'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const derivedSuiteItems = pgTable(
+  'derived_suite_items',
+  {
+    suiteId: text('suite_id')
+      .notNull()
+      .references(() => derivedSuites.suiteId, { onDelete: 'cascade' }),
+    itemId: text('item_id').notNull(),
+    clusterId: text('cluster_id').notNull(),
+    prompt: jsonb('prompt').$type<ChatMessage[]>().notNull(),
+    reference: jsonb('reference'),
+    scoring: jsonb('scoring').$type<ScoringMethod>().notNull(),
+    sourceTraceId: text('source_trace_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.suiteId, t.itemId] })],
+);
+
+export type DerivedSuiteRow = typeof derivedSuites.$inferSelect;
+export type NewDerivedSuite = typeof derivedSuites.$inferInsert;
+export type DerivedSuiteItemRow = typeof derivedSuiteItems.$inferSelect;
+export type NewDerivedSuiteItem = typeof derivedSuiteItems.$inferInsert;

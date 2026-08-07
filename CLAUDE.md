@@ -77,8 +77,9 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    agent-<orgHash6>-<slug> partition agent frontiers/suites for free,
    clusters.org_id ownership checks (hint + /api/frontiers). Synthesized
    agent suites are still mock-evaluated only and can never serve live
-   (provenance guard, correctly) and still live on worker-local disk
-   (G1.3).
+   (provenance guard, correctly). Derived suites moved to governed db
+   storage with retention tied to trace retention (G1.3, 2026-08-06);
+   evidence-retirement on purge is a recorded G1.6 decision.
 3. Trace ingestion (G1.1, 2026-08-06): PII redacted AT INGEST via the
    platform redactor (@potion/core redact.ts — card+Luhn/SSN/IBAN/phone/
    JWT/etc., deterministic+idempotent); raw prompts never at rest; backfill

@@ -10,6 +10,7 @@ export * from './repos/usage.js';
 export * from './repos/shadow.js';
 export * from './repos/guarantee.js';
 export * from './repos/judge-calibrations.js';
+export * from './repos/derived-suites.js';
 export * from './repos/alerts.js';
 export * from './repos/budgets.js';
 export * from './repos/api-keys.js';

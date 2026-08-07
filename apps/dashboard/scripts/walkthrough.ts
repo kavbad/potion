@@ -18,7 +18,7 @@
 //   13. M5: trace ingest (idempotent) → session rollup with LOOP badge →
 //       waterfall → traces:cluster job → agent-* frontier → X-Potion-Cluster
 //       chat → retention 0 purge redacts attrs. Synthesized replay suites
-//       target a tmp suites copy (POTION_SUITES_V2_DIR), never the repo dir.
+//       write derived suites to DB storage (G1.3) — the repo dir is never touched.
 // Each step prints PASS + elapsed; the run prints a total and must finish
 // well under 5 minutes (expected ~1 min).
 //
@@ -32,7 +32,7 @@
 //   (requires `pnpm build` first — the walkthrough runs dist/ + .next/)
 // Env: WALK_API_PORT (default 3100), WALK_DASH_PORT (default 3101).
 import { spawn, type ChildProcess } from 'node:child_process';
-import { copyFile, cp, mkdtemp, readFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,7 +56,6 @@ let tmpPricesPath = '';
 /** M5 #36: the traces:cluster worker SYNTHESIZES agent replay suites into the
  * suites v2 dir — point the server at a throwaway copy so the walkthrough
  * never mutates the repo suites. */
-let tmpSuitesPath = '';
 
 /** Session cookie acquired in step 0 (M2 #14) — rides every dashboard call. */
 let sessionCookie = '';
@@ -136,14 +135,11 @@ async function main(): Promise<void> {
     const tmp = await mkdtemp(path.join(tmpdir(), 'potion-walk-'));
     tmpPricesPath = path.join(tmp, 'prices.json');
     await copyFile(path.join(REPO_ROOT, 'prices.json'), tmpPricesPath);
-    tmpSuitesPath = path.join(tmp, 'suites-v2');
-    await cp(path.join(REPO_ROOT, 'packages', 'harness', 'suites', 'v2'), tmpSuitesPath, {
-      recursive: true,
-    });
+    // G1.3: derived suites live in db storage — the worker writes no files,
+    // so the suites/v2 tmp copy that protected the repo dir is gone.
     boot('node', ['apps/server/dist/index.js'], REPO_ROOT, {
       PORT: String(API_PORT),
       POTION_PRICES_PATH: tmpPricesPath,
-      POTION_SUITES_V2_DIR: tmpSuitesPath,
     });
     await waitFor(`${API}/healthz`, 120_000, 'api');
     const health = (await (await fetch(`${API}/healthz`)).json()) as { seeded?: boolean };
