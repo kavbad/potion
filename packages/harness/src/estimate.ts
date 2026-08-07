@@ -219,13 +219,16 @@ export function estimateCallCostUsd(call: CallEstimate, prices: PriceTable): num
 export function estimateJudgeScoringCall(
   item: EvalItem,
   answerOutputTokens: number = ANSWER_OUTPUT_TOKENS,
+  judgeOutputTokens: number = PROTOCOL_OUTPUT_TOKENS,
 ): CallEstimate | null {
   if (item.scoring.kind !== 'llm-judge') return null;
   const scaffolding = buildJudgeScoreMessages(item, '', item.scoring);
   return {
     model: item.scoring.judgeModel,
     inputTokens: Math.ceil(promptCharsOf(scaffolding) / 4) + answerOutputTokens,
-    outputTokens: PROTOCOL_OUTPUT_TOKENS,
+    // G1.7: the projection binds to the CONFIGURED judge budget (G0.5/G1.1
+    // lesson — enforcement caps are config; dependent calculations follow).
+    outputTokens: judgeOutputTokens,
   };
 }
 
@@ -237,8 +240,9 @@ export function estimateItemJudgeCostUsd(
   item: EvalItem,
   prices: PriceTable,
   answerOutputTokens: number = ANSWER_OUTPUT_TOKENS,
+  judgeOutputTokens: number = PROTOCOL_OUTPUT_TOKENS,
 ): number {
-  const call = estimateJudgeScoringCall(item, answerOutputTokens);
+  const call = estimateJudgeScoringCall(item, answerOutputTokens, judgeOutputTokens);
   return call === null ? 0 : estimateCallCostUsd(call, prices);
 }
 
@@ -247,6 +251,7 @@ export function estimateItemCostUsd(
   item: EvalItem,
   prices: PriceTable,
   answerOutputTokens: number = ANSWER_OUTPUT_TOKENS,
+  judgeOutputTokens: number = PROTOCOL_OUTPUT_TOKENS,
 ): number {
   const base = inputTokensOf(item);
   const strategyCost = estimateCalls(strategy, base, answerOutputTokens).reduce(
@@ -255,7 +260,7 @@ export function estimateItemCostUsd(
   );
   // llm-judge items are scored once per (strategy × item) → one judge call
   // each; preflight must project that spend (M1b — previously omitted).
-  return strategyCost + estimateItemJudgeCostUsd(item, prices, answerOutputTokens);
+  return strategyCost + estimateItemJudgeCostUsd(item, prices, answerOutputTokens, judgeOutputTokens);
 }
 
 /** Preflight projection: Σ over (item × strategy) of estimated cost, INCLUDING llm-judge scoring calls. */
@@ -264,11 +269,12 @@ export function projectRunCostUsd(
   items: EvalItem[],
   prices: PriceTable,
   answerOutputTokens: number = ANSWER_OUTPUT_TOKENS,
+  judgeOutputTokens: number = PROTOCOL_OUTPUT_TOKENS,
 ): number {
   let total = 0;
   for (const strategy of strategies) {
     for (const item of items) {
-      total += estimateItemCostUsd(strategy, item, prices, answerOutputTokens);
+      total += estimateItemCostUsd(strategy, item, prices, answerOutputTokens, judgeOutputTokens);
     }
   }
   return total;

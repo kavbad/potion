@@ -67,8 +67,19 @@ export interface RunOptions {
    * provider set via detectProviderMode. */
   providerModeOverride?: ProviderMode;
   /** Tenant attribution (G1.6): stamped onto every eval_results row and the
-   * eval run. Absent = platform evidence. */
+   * eval run. Absent = platform evidence. Also a cache-key component (G1.7)
+   * — org evidence never cache-crosses tenants. */
   orgId?: string;
+  /** G1.7: judge completion budget for llm-judge scoring (default the
+   * 128-token protocol cap). Verbose live judges (sonnet-class) truncate
+   * below ~768 → parse-fail → quality 0 (G1.1 finding). The preflight
+   * projection binds to the SAME value. */
+  judgeMaxTokens?: number;
+  /** G1.7: replace every llm-judge item's judgeModel before projection and
+   * scoring (derived suites bake the nightly mock judge alias; live sweeps
+   * override to a real judge class). Flows into the cache key + scorer
+   * label naturally via the item transform. */
+  judgeModelOverride?: string;
   /**
    * Output ceiling for answer calls (provider max_tokens), threaded into the
    * strategy ExecContext AND the preflight projection so the bound is
@@ -201,13 +212,45 @@ function judgeVersionOf(scoring: ScoringMethod, prices: PriceTable): string {
   return `${resolved}|rubric:${sha256(scoring.rubric).slice(0, 16)}`;
 }
 
+/**
+ * Content-addressed eval cache key. G1.7 components (owner-mandated,
+ * resolving the recorded G1.6 flag): `|org:<orgId>` is appended when the
+ * run is org-attributed and `|live` when providerMode is live — in that
+ * fixed order. Platform-mock keys stay byte-identical to pre-G1.7 values;
+ * live evidence can never cache-hit a mock row (previously a live re-run
+ * over mock-evaluated items was a silent no-op under resume or a silent
+ * skip-write without it), and one org's paid evidence can never serve
+ * another org as a free cache hit. KNOWN one-time effect: G1.6-era ORG-mock
+ * rows get new keys → next nightly re-executes them (mock, $0,
+ * deterministic — identical content; lingering old-key rows duplicate
+ * aggregate samples with identical values, means unchanged).
+ */
 export function cacheKeyOf(
   sh: string,
   item: EvalItem,
   scoring: ScoringMethod,
   prices: PriceTable,
+  opts: { orgId?: string; providerMode?: ProviderMode } = {},
 ): string {
-  return sha256(`${sh}|${item.id}|${judgeVersionOf(scoring, prices)}|${prices.version}`);
+  const orgPart = opts.orgId !== undefined ? `|org:${opts.orgId}` : '';
+  const livePart = opts.providerMode === 'live' ? '|live' : '';
+  return sha256(
+    `${sh}|${item.id}|${judgeVersionOf(scoring, prices)}|${prices.version}${orgPart}${livePart}`,
+  );
+}
+
+/** G1.7: a run declared 'live' must never execute against mock-provider
+ * aliases — the provider set still contains a real mock behind 'mock:', so
+ * a mock alias would silently mock while the rows get stamped 'live' (the
+ * false-live pattern; fourth instance made it a guard). */
+export class MockAliasInLiveRunError extends Error {
+  constructor(readonly aliases: string[]) {
+    super(
+      `live run refused: alias(es) [${aliases.join(', ')}] resolve to the mock provider — ` +
+        'a live run over mock aliases would stamp mock output as live evidence',
+    );
+    this.name = 'MockAliasInLiveRunError';
+  }
 }
 
 export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<RunSummary> {
@@ -269,9 +312,52 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
     }
   }
 
+  // ---- G1.7: judge-model override as an ITEM TRANSFORM ----
+  // Remapping scoring.judgeModel here means judgeVersionOf/cacheKeyOf, the
+  // projection, and scoreAnswer all pick the override up with no extra
+  // plumbing. Validated against the price table (preflight house style).
+  let runItems = items;
+  if (opts.judgeModelOverride !== undefined) {
+    const override = opts.judgeModelOverride;
+    if (!prices.entries.some((e) => e.alias === override || e.model === override)) {
+      throw new Error(`judgeModelOverride '${override}' is not in the price table`);
+    }
+    runItems = items.map((item) =>
+      item.scoring.kind === 'llm-judge'
+        ? { ...item, scoring: { ...item.scoring, judgeModel: override } }
+        : item,
+    );
+  }
+
+  // ---- G1.7: false-live guard ----
+  if ((opts.provider ?? 'mock') === 'live') {
+    const mockAliases = new Set(
+      prices.entries.filter((e) => e.provider === 'mock').map((e) => e.alias),
+    );
+    const offending = new Set<string>();
+    for (const strategy of opts.strategies) {
+      for (const alias of strategyModels(strategy)) {
+        if (mockAliases.has(alias)) offending.add(alias);
+      }
+    }
+    for (const item of runItems) {
+      if (item.scoring.kind === 'llm-judge' && mockAliases.has(item.scoring.judgeModel)) {
+        offending.add(item.scoring.judgeModel);
+      }
+    }
+    if (offending.size > 0) throw new MockAliasInLiveRunError([...offending].sort());
+  }
+
   // ---- preflight: refuse over-budget runs BEFORE any execution ----
-  // The projection binds to the SAME output ceiling the run executes with.
-  const projectedSpendUsd = projectRunCostUsd(opts.strategies, items, prices, opts.maxOutputTokens);
+  // The projection binds to the SAME output ceilings the run executes with
+  // (answers AND judge completions).
+  const projectedSpendUsd = projectRunCostUsd(
+    opts.strategies,
+    runItems,
+    prices,
+    opts.maxOutputTokens,
+    opts.judgeMaxTokens,
+  );
   if (projectedSpendUsd > opts.budgetCapUsd) {
     throw new BudgetCapError(projectedSpendUsd, opts.budgetCapUsd);
   }
@@ -299,11 +385,16 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
     for (const strategy of opts.strategies) {
       const sh = strategyHash(strategy);
       const modelVersions = modelVersionsFor(strategy, prices);
-      for (const item of items) {
-        const cacheKey = cacheKeyOf(sh, item, item.scoring, prices);
+      for (const item of runItems) {
+        const cacheKey = cacheKeyOf(sh, item, item.scoring, prices, {
+          ...(opts.orgId !== undefined ? { orgId: opts.orgId } : {}),
+          providerMode,
+        });
         // Content-addressed cache: resume reuses hits; without resume we
-        // recompute but never overwrite an existing row (mock world is
-        // deterministic, so the stored content is identical anyway).
+        // recompute but never overwrite an existing row. Mock-world rows are
+        // deterministic (identical content); live rows now live under
+        // distinct |live keys, so a live run can neither cache-hit mock
+        // evidence nor silently skip persisting its own (G1.7).
         const cached = await getEvalResultByCacheKey(handle.db, cacheKey);
         if (cached && opts.resume) {
           cacheHits++;
@@ -311,10 +402,12 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           continue;
         }
         const outcome = await execute(strategy, item.prompt, ctx);
-        const { quality, scorer, scorerUsage } = await scoreAnswer(item, outcome.text, {
-          providers,
-          prices,
-        });
+        const { quality, scorer, scorerUsage } = await scoreAnswer(
+          item,
+          outcome.text,
+          { providers, prices },
+          opts.judgeMaxTokens,
+        );
         // usage = strategy usage + scoring overhead (llm-judge call), summed
         // over tokens and cost — the judge call is real provider spend and
         // MUST count against budget/spend (M1b fix: it was previously

@@ -279,6 +279,7 @@ export async function scoreAnswer(
   item: EvalItem,
   answer: string,
   deps?: ScorerDeps,
+  judgeMaxTokens?: number,
 ): Promise<ScoreOutcome> {
   const scoring = item.scoring;
   switch (scoring.kind) {
@@ -292,7 +293,10 @@ export async function scoreAnswer(
     }
     case 'llm-judge': {
       if (!deps) throw new Error('llm-judge scoring requires ScorerDeps (providers + prices)');
-      const judged = await scoreLlmJudge(item, answer, scoring, deps);
+      // G1.7: judge completion budget (verbose live judges truncate at the
+      // 128-token protocol default — G1.1 finding); the runner binds the
+      // projection to the SAME value.
+      const judged = await scoreLlmJudge(item, answer, scoring, deps, judgeMaxTokens);
       return {
         quality: judged.quality,
         scorer: `llm-judge:${scoring.judgeModel}`,

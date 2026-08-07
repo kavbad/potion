@@ -12,7 +12,7 @@ import { createDb, createOrg, evalResults, frontierPoints, insertEvalResult, mig
 import { markStale } from '@potion/harness';
 import { aggregateToPoint, computeFrontier } from './dominance.js';
 import { loadCurrentFrontier, saveFrontier } from './persistence.js';
-import { aggregatesFromEvalResults } from './recompute.js';
+import { aggregatesFromEvalResults, hasLiveEvidence } from './recompute.js';
 
 const STRAT_A = { type: 'single', model: 'mock-mid' } as const;
 const STRAT_B = { type: 'single', model: 'mock-cheap' } as const;
@@ -271,5 +271,38 @@ describe('G1.6 org-scoped aggregation', () => {
     expect(org).toHaveLength(1);
     expect(org[0]!.qualityMean).toBeCloseTo(0.2, 10);
     expect(org[0]!.evidence?.cacheKeys).toEqual(['iso-org-1']);
+  });
+});
+
+describe('G1.7 provenance-pure aggregation', () => {
+  let handle: DbHandle;
+  beforeAll(async () => {
+    handle = await createDb('pglite://');
+    await migrate(handle.db);
+    await createOrg(handle.db, { id: 'org_pm', name: 'PM' });
+  });
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  it('providerMode filter isolates mixed mock+live rows; hasLiveEvidence flips; org isolation', async () => {
+    await insertEvalResult(handle.db, evalRow('pm-mock-1', { quality: 0.4, providerMode: 'mock', orgId: 'org_pm' }));
+    expect(await hasLiveEvidence(handle.db, 'code-gen', 'org_pm')).toBe(false);
+    await insertEvalResult(handle.db, evalRow('pm-live-1', { quality: 0.9, providerMode: 'live', orgId: 'org_pm' }));
+    expect(await hasLiveEvidence(handle.db, 'code-gen', 'org_pm')).toBe(true);
+    // another org is unaffected
+    expect(await hasLiveEvidence(handle.db, 'code-gen', 'org_other')).toBe(false);
+
+    // unfiltered org aggregation mixes modes → providerMode absent (tainted)
+    const mixed = await aggregatesFromEvalResults(handle.db, 'code-gen', [STRAT_A], 'v2', { orgId: 'org_pm' });
+    expect(mixed[0]!.providerMode).toBeUndefined();
+    // live-only aggregation is provenance-pure
+    const live = await aggregatesFromEvalResults(handle.db, 'code-gen', [STRAT_A], 'v2', {
+      orgId: 'org_pm',
+      providerMode: 'live',
+    });
+    expect(live[0]!.providerMode).toBe('live');
+    expect(live[0]!.qualityMean).toBeCloseTo(0.9, 10);
+    expect(live[0]!.evidence?.cacheKeys).toEqual(['pm-live-1']);
   });
 });

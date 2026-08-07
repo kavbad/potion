@@ -64,6 +64,9 @@ beforeAll(async () => {
     // org A · 2026-08-03 · extraction: 1 rubric_gen row (G1.5 rubric
     // generation spend) → same contract: COST only
     { ts: new Date('2026-08-03T10:30:00Z'), orgId: ORG_A, clusterId: 'extraction', status: 'rubric_gen', usage: usage(500, 200, 0.002) },
+    // org A · 2026-08-03 · extraction: 1 eval_live row (G1.7 live eval-sweep
+    // spend) → same contract: COST only
+    { ts: new Date('2026-08-03T11:00:00Z'), orgId: ORG_A, clusterId: 'extraction', status: 'eval_live', usage: usage(0, 0, 0.003) },
     // org B · 2026-08-02 · code-gen: 1 ok row → in 1000, out 500, $0.50
     { ts: new Date('2026-08-02T10:00:00Z'), orgId: ORG_B, clusterId: 'code-gen', status: 'ok', usage: usage(1000, 500, 0.5) },
   ];
@@ -90,9 +93,10 @@ describe('aggregateUsage rollup (hand-computed)', () => {
     const [cg, ex, d3, judgeOnly] = aRows;
     // G0.1 contract: judge-scoring spend is COST, never served traffic —
     // a judge-only (org, day, cluster) group bills with 0 requests. G1.5
-    // rubric_gen follows the same rule: $0.004 + $0.002 = $0.006, 0 requests.
+    // rubric_gen + G1.7 eval_live follow the same rule:
+    // $0.004 + $0.002 + $0.003 = $0.009, 0 requests.
     expect(judgeOnly).toMatchObject({ requests: 0, inputTokens: 0, outputTokens: 0 });
-    expect(judgeOnly!.costUsd).toBeCloseTo(0.006, 10);
+    expect(judgeOnly!.costUsd).toBeCloseTo(0.009, 10);
     // hand math: code-gen 08-02 = rows 1+2 (rate_limited/error excluded)
     expect(cg).toMatchObject({ requests: 2, inputTokens: 300, outputTokens: 150 });
     expect(cg!.costUsd).toBeCloseTo(0.03, 10);
@@ -214,7 +218,7 @@ describe('CSV export', () => {
     expect(lines[2]).toMatch(/^2026-08-02,extraction,1,10,5,/);
     expect(lines[3]).toMatch(/^2026-08-03,code-gen,1,0,0,0,0$/);
     // G0.1: judge-scoring spend row — 0 requests/tokens, cost billed
-    expect(lines[4]).toMatch(/^2026-08-03,extraction,0,0,0,0\.006,0\.006$/);
+    expect(lines[4]).toMatch(/^2026-08-03,extraction,0,0,0,0\.009,0\.009$/);
     // org B's CSV has only its own row
     const bRes = await authedGet('/api/usage/export.csv?from=2026-08-02&to=2026-08-03', RAW_B);
     expect(bRes.body.trim().split('\n')).toHaveLength(2);

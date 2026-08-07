@@ -57,10 +57,13 @@ interface CliArgs {
   judgeMaxTokens: number | undefined;
   /** G1.4: reference-anchored calibration (replay-judging parity). */
   referenceAnchored: boolean;
+  /** G1.7: judge-model override for the RUN path (derived suites bake the
+   * nightly judge alias). */
+  judgeModel: string | undefined;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30, judgeMaxTokens: undefined, referenceAnchored: false };
+  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30, judgeMaxTokens: undefined, referenceAnchored: false, judgeModel: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--') continue; // pnpm forwards the script separator literally
@@ -104,6 +107,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case '--answerer':
         args.calibrateAnswerer = next();
+        break;
+      case '--judge-model':
+        args.judgeModel = next();
         break;
       case '--reference-anchored':
         args.referenceAnchored = true;
@@ -211,6 +217,9 @@ export async function main(argv: string[]): Promise<number> {
         resume: args.resume,
         simulatedOk: args.simulatedOk,
         ...(args.maxOutputTokens !== undefined ? { maxOutputTokens: args.maxOutputTokens } : {}),
+        // G1.7: judge budget + judge override reach the RUN path too.
+        ...(args.judgeMaxTokens !== undefined ? { judgeMaxTokens: args.judgeMaxTokens } : {}),
+        ...(args.judgeModel !== undefined ? { judgeModelOverride: args.judgeModel } : {}),
       },
       {},
     );

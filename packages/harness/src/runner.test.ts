@@ -9,7 +9,7 @@ import { roundCost, type EvalItem, type ScoringMethod, sha256 } from '@potion/co
 import { createDb, getEvalResultByCacheKey, type DbHandle } from '@potion/db';
 import { createMockProvider, evalTaskById, hashString } from '@potion/providers';
 import { BudgetCapError, estimateItemCostUsd } from './estimate.js';
-import { SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
+import { MockAliasInLiveRunError, SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
 import { buildJudgeScoreMessages } from './scorers.js';
 import { loadPrices } from '@potion/providers';
 import { strategyHash } from '@potion/core';
@@ -131,6 +131,98 @@ describe('runEval', () => {
     expect(cacheKeyOf(sh, det, det.scoring, prices)).toBe(
       sha256(`${sh}|${det.id}|none|${prices.version}`),
     );
+  });
+
+  it('G1.7: cache key gains |org and |live suffixes — compat grid + judge override', () => {
+    const sh = strategyHash({ type: 'single', model: 'mock-frontier' });
+    const det = suiteItem('ex-01');
+    // COMPAT: platform-mock key is byte-identical to the pre-G1.7 base form
+    expect(cacheKeyOf(sh, det, det.scoring, prices)).toBe(
+      sha256(`${sh}|${det.id}|none|${prices.version}`),
+    );
+    expect(cacheKeyOf(sh, det, det.scoring, prices, { providerMode: 'mock' })).toBe(
+      cacheKeyOf(sh, det, det.scoring, prices),
+    );
+    // 2×2 grid (org × live): all four distinct
+    const grid = [
+      cacheKeyOf(sh, det, det.scoring, prices),
+      cacheKeyOf(sh, det, det.scoring, prices, { providerMode: 'live' }),
+      cacheKeyOf(sh, det, det.scoring, prices, { orgId: 'org_x' }),
+      cacheKeyOf(sh, det, det.scoring, prices, { orgId: 'org_x', providerMode: 'live' }),
+    ];
+    expect(new Set(grid).size).toBe(4);
+    // two orgs → distinct
+    expect(cacheKeyOf(sh, det, det.scoring, prices, { orgId: 'org_y' })).not.toBe(grid[2]);
+  });
+
+  it('G1.7: mock and live rows COEXIST — live never cache-hits mock, and persists its own row', async () => {
+    const strategies = [{ type: 'single', model: 'mock-mid' } as const];
+    // mock run seeds the cache
+    const first = await runEval(
+      { suiteIds: ['extraction'], strategies, budgetCapUsd: 25, resume: true },
+      deps(),
+    );
+    expect(first.executed).toBe(2);
+    // "live" run (providerModeOverride — mock transport, live-stamped keys):
+    // resume must NOT cache-hit the mock rows, and must persist live rows
+    const live = await runEval(
+      {
+        suiteIds: ['extraction'],
+        strategies,
+        budgetCapUsd: 25,
+        resume: true,
+        providerModeOverride: 'live',
+        orgId: 'org_demo',
+      },
+      deps(),
+    );
+    expect(live.cacheHits).toBe(0);
+    expect(live.executed).toBe(2);
+    // both row sets exist under distinct keys
+    const sh = strategyHash(strategies[0]!);
+    const item = suiteItem('ex-01');
+    const mockKey = cacheKeyOf(sh, item, item.scoring, prices);
+    const liveKey = cacheKeyOf(sh, item, item.scoring, prices, { orgId: 'org_demo', providerMode: 'live' });
+    expect(await getEvalResultByCacheKey(handle.db, mockKey)).not.toBeNull();
+    expect(await getEvalResultByCacheKey(handle.db, liveKey)).not.toBeNull();
+    // and a re-run of the live coordinates cache-hits its OWN rows
+    const again = await runEval(
+      {
+        suiteIds: ['extraction'],
+        strategies,
+        budgetCapUsd: 25,
+        resume: true,
+        providerModeOverride: 'live',
+        orgId: 'org_demo',
+      },
+      deps(),
+    );
+    expect(again.cacheHits).toBe(2);
+  });
+
+  it('G1.7: MockAliasInLiveRunError refuses live runs over mock aliases before any call', async () => {
+    await expect(
+      runEval(
+        {
+          suiteIds: ['extraction'],
+          strategies: [{ type: 'single', model: 'mock-mid' } as const],
+          budgetCapUsd: 25,
+          provider: 'live',
+        },
+        deps(),
+      ),
+    ).rejects.toThrow(MockAliasInLiveRunError);
+    await expect(
+      runEval(
+        {
+          suiteIds: ['extraction'],
+          strategies: [{ type: 'single', model: 'mock-mid' } as const],
+          budgetCapUsd: 25,
+          provider: 'live',
+        },
+        deps(),
+      ),
+    ).rejects.toThrow(/mock-mid/);
   });
 
   it('resume skips cache hits and reproduces identical aggregates', async () => {

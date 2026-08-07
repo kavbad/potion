@@ -597,7 +597,7 @@ re-scoped to hot-path gaps.
       read-then-insert race, fallback-to-global reads, thread org through ~7
       loadCurrentFrontier sites (share links + leaderboard stay platform-only), org-scoped
       recompute + provenance rules (live-evidence-only serving stands). [L]
-- [ ] G1.7 Live capped evals of customer suites (estimator now honest): live sweep of the
+- [x] G1.7 Live capped evals of customer suites (estimator now honest): live sweep of the
       per-org frontier under --cap with ledger rows; mock-derived frontiers remain
       demo-only. [M]
 - [ ] G1.8 Researcher per-org refresh: thread suiteV2Ids + suitesV2Dir + org through
@@ -1232,10 +1232,10 @@ saves an empty version and serving falls back to platform.
 
 Evidence org-tagging: RunOptions.orgId stamps eval_results/eval_runs
 (eval_runs.org_id is a real column now, not an options-jsonb smuggle);
-aggregatesFromEvalResults isolates org vs platform both ways. G1.7 FLAG
-(recorded): the eval cache key needs an org component if orgs ever eval
-SHARED suites (safe today — org evidence only comes from org-partitioned
-agent item ids). 954 keyless tests green (+11); walkthrough 15/15 (fresh-org
+aggregatesFromEvalResults isolates org vs platform both ways. G1.7 FLAG —
+RESOLVED IN G1.7 (2026-08-07): cacheKeyOf gained backward-compatible
+`|org:<orgId>` and `|live` suffixes (platform-mock keys byte-identical;
+G1.6-era org-mock keys changed once — $0 deterministic re-execution). 954 keyless tests green (+11); walkthrough 15/15 (fresh-org
 platform fallback is load-bearing and exercised by steps 3/6/share). NO
 live leg — every G1.6 writer is mock until G1.7; $0 spend.
 
@@ -1245,3 +1245,86 @@ cacheKeys, historical frontiers stay explainable). ORG-LEVEL DATA DELETION
 (offboarding / legal erasure) = TRUE CASCADE — evidence rows AND tombstones
 included, historical explainability knowingly sacrificed. The org-deletion
 route lands in G2.7 scope (see the G2.7 item).
+
+---
+
+## G1.7 — Live capped evals of customer suites (session 2026-08-07, plan approved)
+
+Turn an org's frontier LIVE: capped, admin-triggered, fail-CLOSED-budget-checked live
+sweep of the org's derived replay suite → all-live org frontier → servable via the
+G1.6 org-preferred read + provenance guard. Owner-mandated scope: eval cache key
+gains an ORG component (resolves the recorded G1.6 flag; backward-compatible
+`|org:`/`|live` suffixes — G1.6-era org-mock keys change once, $0 deterministic
+re-execution, documented); per-org SPEND ATTRIBUTION first-class (new request_logs
+status 'eval_live' through the single rollup chokepoint — budgets, hard-stops,
+forecasts, invoices all inherit). Runner gains judgeMaxTokens (live judge-class
+truncates at the 128 protocol cap — G1.1 lesson, projection-bound) +
+judgeModelOverride (derived suites bake mock-judge) + MockAliasInLiveRunError (the
+false-live guard for ALL live runs). Taint rules: once live, never regress — nightly
+mock recompute SKIPS the save when live evidence exists; purge retirement still
+saves but aggregates live-only. Platform keys now; custody-into-workers is the BYOK
+follow-up. G1.8 (researcher) untouched.
+
+- [x] a. harness: cacheKeyOf org/live suffixes + judgeModelOverride item transform +
+      judgeMaxTokens (scoring + projection) + MockAliasInLiveRunError + CLI + tests
+- [x] b. pareto+db: aggregatesFromEvalResults providerMode filter + hasLiveEvidence +
+      rollupQuery 'eval_live' + tests
+- [x] c. workers+server: frontier:live-sweep (env gate, ownership, fail-closed budget
+      refusal, live class reps, eval_live metering, live-only aggregate → org
+      frontier) + nightly skip-save + purge live-only + POST /api/frontiers/live-sweep
+      + tests incl. the taint regression
+- [x] d. full sweep + walkthrough + LIVE leg (g17-live-sweep.ts, cap $3, ledger) +
+      docs (flag resolution + follow-ups) + commit
+
+**G1.7 DONE (2026-08-07)** — live capped evals of customer suites; org frontiers
+turn LIVE and servable. Cache-key identity (owner mandate, resolves the G1.6
+flag): `|org:<orgId>` + `|live` suffixes, backward-compatible — platform-mock
+keys byte-identical; live evidence can never cache-hit mock rows (previously a
+silent no-op under resume or a silent skip-write); one org's paid evidence can
+never serve another as a free cache hit. Runner: judgeMaxTokens (768 default on
+sweeps — live judge-class truncates at the 128 protocol cap, G1.1 lesson,
+projection-bound with an exact-delta test), judgeModelOverride as an item
+transform (derived suites bake mock-judge; the override flows into cache key +
+scorer label + projection with zero signature churn), MockAliasInLiveRunError
+(false-live guard for ALL live runs), answer ceiling 1600 on sweeps.
+frontier:live-sweep job: env-gated (POTION_EVAL_PROVIDER=live — REFUSES,
+never degrades), ownership re-verified in-job, ORG-BUDGET REFUSAL FAIL-CLOSED
+before any spend (net-new precedent: serving's hard-stop stays fail-open for
+availability; spend jobs are the opposite), key-availability-filtered live
+class representatives (live-leg finding #1: gemini-pro rep with no GOOGLE key
+→ ProviderAuthError AFTER partial nano spend — reps now filter to providers
+with env keys, OpenRouter equivalents cover every class), eval spend metered
+as ONE request_logs 'eval_live' aggregate row through the rollup chokepoint
+(budgets/hard-stops/forecasts/invoices all inherit — verified: mtdSpendUsd
+includes it), provenance-pure live aggregation → all-live org frontier with
+full evidence. Taint rules ("once live, never regress"): nightly mock
+recompute SKIPS the save when live evidence exists (counter on the result;
+regression-tested); purge retirement still saves but aggregates live-only.
+Route: POST /api/frontiers/live-sweep (admin, ownership 404 incl. platform
+clusters, org forced from auth). 965 keyless tests green (+11); walkthrough
+15/15.
+
+**LIVE LEG (cap $3, actual $0.205)** — scripts/g17-live-sweep.ts, db
+.pglite/livesweep-g17: 5-session export-support cluster → mock frontier v1 →
+live sweep: 15 live calls (3 strategies × 5 items, judge-class @768), spend
+$0.205 vs projection $0.425 (domination holds), org frontier v2 with 2
+all-live points each carrying evidence (n=5, 5 cacheKeys); live cache keys
+DISJOINT from mock rows; one eval_live row exactly equal to run spend; org
+MTD spend includes it; nightly re-run left v2 serving. Notable and honest:
+live answer quality came in LOW (0.20/0.26) — reference-anchored judging
+correctly scores generic answers hard against session-specific references;
+replay suites are discriminative, which is what a guarantee needs. Finding #2
+observed live: the pre-fix failed attempt spent ~<$0.01 (nano) with NO
+eval_live row — the documented metering gap (provider error mid-run);
+operator-reconciled in this ledger.
+
+FOLLOW-UPS (recorded): custody-into-workers (BYOK orgs' eval spend on their
+own keys — G1.7 uses platform keys, org pays via invoice); invoice relabel of
+cost-only clusters (G2.1); serve-path judgeMaxTokens (G2.1); mid-run metering
+seam in RunDeps if the gap ever matters beyond ledger reconciliation.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-07 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $5.4078 (ledger said $5.3870; ~$0.02 delayed-accounting drift) | — | — | $5.4078 / $50.00 (OpenRouter) |
+| 2026-08-07 | G1.7 live leg ×2 attempts (attempt 1: ProviderAuthError on unreachable gemini rep after partial nano spend ~<$0.01 OpenAI-side, unmetered — the documented gap; attempt 2 SUCCESS: 15 calls, $0.205 total = OpenRouter judge+answers $0.148 + OpenAI answers ~$0.057; before usage $5.4078 → after $5.5556) | $3.00 cap, $0.425 harness projection | $0.1478 (authoritative OpenRouter delta) | $5.5556 / $50.00 (OpenRouter) |
+| 2026-08-07 | same run, OpenAI side (nano/gpt answers, usage-priced) | — | ~$0.06 | ~$0.30 (OpenAI key) |

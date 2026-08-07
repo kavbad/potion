@@ -25,7 +25,10 @@ const LIVE_FACTORIES: Record<Exclude<ProviderId, 'mock'>, LiveFactory> = {
 /** Env-var fallback per provider (the error message below has always promised
  * this; explicit opts.apiKeys still wins). Read lazily at first call, not at
  * import, so tests can set/unset env freely. */
-const ENV_VAR_BY_PROVIDER: Record<Exclude<ProviderId, 'mock'>, string> = {
+/** Env var per live provider (exported for G1.7 key-availability
+ * preflights — a live sweep must pick class representatives whose
+ * providers are actually reachable, m1b-sweep precedent). */
+export const ENV_VAR_BY_PROVIDER: Record<Exclude<ProviderId, 'mock'>, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   google: 'GOOGLE_API_KEY',

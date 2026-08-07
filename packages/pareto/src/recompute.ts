@@ -202,7 +202,7 @@ export async function aggregatesFromEvalResults(
   clusterId: ClusterId,
   strategies: StrategyConfig[],
   pricesVersion: string,
-  opts: { includeStale?: boolean; orgId?: string } = {},
+  opts: { includeStale?: boolean; orgId?: string; providerMode?: 'live' | 'mock' } = {},
 ): Promise<StrategyAggregate[]> {
   const hashes = strategies.map((s) => strategyHash(s));
   if (hashes.length === 0) return [];
@@ -218,6 +218,13 @@ export async function aggregatesFromEvalResults(
         // default (orgId absent → IS NULL) keeps every pre-G1.6 caller and
         // fixture reading exactly what it read before.
         opts.orgId !== undefined ? eq(evalResults.orgId, opts.orgId) : isNull(evalResults.orgId),
+        // G1.7: provenance-pure aggregation — post-live-sweep clusters hold
+        // BOTH mock and live rows at the same coordinates; mixing them
+        // yields providerMode 'unknown' aggregates that taint the whole
+        // frontier under the live-serving guard.
+        ...(opts.providerMode !== undefined
+          ? [eq(evalResults.providerMode, opts.providerMode)]
+          : []),
         ...(opts.includeStale ? [] : [eq(evalResults.stale, false)]),
       ),
     );
@@ -404,3 +411,29 @@ export async function runRecompute(opts: RunRecomputeOptions): Promise<RunRecomp
 
 /** Test-only alias (G1.6 provenance tests exercise the carried-point path). */
 export const carriedPointToAggregateForTest = carriedPointToAggregate;
+
+/**
+ * True when any non-stale LIVE eval evidence exists for (cluster, org) —
+ * the "once live, never regress" switch (G1.7): the nightly mock recompute
+ * SKIPS its frontier save, and the purge-retirement recompute aggregates
+ * live-only, so a live frontier is never clobbered by mock aggregates.
+ */
+export async function hasLiveEvidence(
+  db: PotionDb,
+  clusterId: ClusterId,
+  orgId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ cacheKey: evalResults.cacheKey })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.clusterId, clusterId),
+        eq(evalResults.orgId, orgId),
+        eq(evalResults.providerMode, 'live'),
+        eq(evalResults.stale, false),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}

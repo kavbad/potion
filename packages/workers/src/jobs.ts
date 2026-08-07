@@ -20,7 +20,9 @@ export type JobKind =
   | 'traces:purge'
   | 'traces:redact'
   // ---- G1.5 automated scorer construction ----
-  | 'rubric:generate';
+  | 'rubric:generate'
+  // ---- G1.7 live capped org evals ----
+  | 'frontier:live-sweep';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -36,6 +38,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'traces:purge',
   'traces:redact',
   'rubric:generate',
+  'frontier:live-sweep',
 ] as const;
 
 export interface EvalRunPayload {
@@ -101,6 +104,7 @@ export interface JobPayloads {
   'traces:purge': TracesPurgePayload;
   'traces:redact': TracesRedactPayload;
   'rubric:generate': RubricGeneratePayload;
+  'frontier:live-sweep': FrontierLiveSweepPayload;
 }
 
 /**
@@ -218,5 +222,27 @@ export interface RubricGeneratePayload {
   /** Live spend cap (default $1.00). */
   capUsd?: number;
   /** Probe-derangement seed (default: derived from the suite id). */
+  seed?: number;
+}
+
+/**
+ * Live capped eval sweep of one org's derived replay suite (G1.7):
+ * env-gated (POTION_EVAL_PROVIDER=live — REFUSES otherwise, never degrades
+ * to mock: a "live sweep" that mocks is the false-live pattern), org-budget
+ * hard-stop checked FAIL-CLOSED before any spend, strategies/judge = live
+ * class representatives (mock excluded), spend metered as request_logs
+ * status='eval_live' (customer-attributable via the usage rollup), and the
+ * resulting all-live org frontier becomes servable through the G1.6
+ * org-preferred read + provenance guard. Admin-triggered only.
+ */
+export interface FrontierLiveSweepPayload {
+  orgId: string;
+  clusterId: string;
+  /** Live spend cap (default $5). */
+  capUsd?: number;
+  /** Judge completion budget (default 768 — G1.1 finding). */
+  judgeMaxTokens?: number;
+  /** Answer output ceiling (default 1600 — G1.1: best answers hit 1501). */
+  maxOutputTokens?: number;
   seed?: number;
 }

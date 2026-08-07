@@ -81,9 +81,16 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    ci95, suite id+version, approved rubricHash, calibrationId), carried
    points keep originals verbatim, public DTOs strip it. Evidence
    retirement on purge RESOLVED: stale-never-delete + immediate recompute,
-   empty frontier → platform fallback. G1.7 FLAG: eval cache key needs an
-   org component if orgs ever eval shared suites. Trace clustering has
-   been org-scoped since G1.2
+   empty frontier → platform fallback. Live org evals (G1.7, 2026-08-07):
+   frontier:live-sweep — env-gated, ownership-checked, org-budget-refused
+   FAIL-CLOSED before spend, key-availability-filtered live class reps,
+   spend metered as request_logs 'eval_live' (budgets/invoices inherit via
+   the rollup chokepoint); cache key gained `|org:`/`|live` suffixes
+   (resolved flag — live never cache-hits mock, orgs never share evidence);
+   runner gained judgeMaxTokens/judgeModelOverride/MockAliasInLiveRunError;
+   "once live, never regress" taint rules at both recompute sites. Live org
+   frontiers are servable via the org-preferred read + provenance guard.
+   Trace clustering has been org-scoped since G1.2
    (2026-08-06): per-org nightly loop, (org,trace) grouping, cluster ids
    agent-<orgHash6>-<slug> partition agent frontiers/suites for free,
    clusters.org_id ownership checks (hint + /api/frontiers). Synthesized

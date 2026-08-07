@@ -96,6 +96,11 @@ export interface UsageTotals {
  * requests, so counting them as requests/tokens would misstate usage.
  * status='rubric_gen' (G1.5) follows the same rule: rubric-generation and
  * probe-calibration LLM calls are org-attributable overhead spend.
+ * status='eval_live' (G1.7) likewise: live eval-sweep spend on customer
+ * suites — customer-attributable, flows into budgets/hard-stops/forecasts/
+ * invoices via this single chokepoint. (Invoice wart, pre-existing: cost-
+ * only clusters render quantity-0 lines labeled "routed requests" — the
+ * relabel is G2.1 scope.)
  */
 function rollupQuery(range: UsageRange, orgId?: string): SQL {
   return sql`
@@ -108,7 +113,7 @@ function rollupQuery(range: UsageRange, orgId?: string): SQL {
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS cost_usd,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS platform_cost_usd
     FROM request_logs
-    WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen')
+    WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen', 'eval_live')
       AND to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') BETWEEN ${range.fromDay} AND ${range.toDay}
       ${orgId !== undefined ? sql`AND org_id = ${orgId}` : sql``}
     GROUP BY 1, 2, 3

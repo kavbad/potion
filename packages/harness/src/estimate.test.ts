@@ -176,6 +176,28 @@ describe('llm-judge scoring cost in the projection (M1b)', () => {
     expect(anchored.outputTokens).toBe(bare.outputTokens);
   });
 
+  it('G1.7: judgeOutputTokens binds the projection to the configured judge budget', () => {
+    const base = estimateItemCostUsd({ type: 'single', model: 'frontier-class' }, judgeItem, prices);
+    const raised = estimateItemCostUsd(
+      { type: 'single', model: 'frontier-class' },
+      judgeItem,
+      prices,
+      ANSWER_OUTPUT_TOKENS,
+      768,
+    );
+    // judge-class output $15/1M: exactly (768 - PROTOCOL default) extra tokens
+    expect(raised - base).toBeCloseTo(((768 - PROTOCOL_OUTPUT_TOKENS) * 15) / 1e6, 12);
+    const projBase = projectRunCostUsd([{ type: 'single', model: 'frontier-class' }], [judgeItem], prices);
+    const projRaised = projectRunCostUsd(
+      [{ type: 'single', model: 'frontier-class' }],
+      [judgeItem],
+      prices,
+      ANSWER_OUTPUT_TOKENS,
+      768,
+    );
+    expect(projRaised - projBase).toBeCloseTo(((768 - PROTOCOL_OUTPUT_TOKENS) * 15) / 1e6, 12);
+  });
+
   it('item cost = strategy cost + judge cost, hand-computed', () => {
     const call = estimateJudgeScoringCall(judgeItem)!;
     // judge-class $3/$15 per 1M:

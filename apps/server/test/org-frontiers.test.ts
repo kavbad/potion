@@ -118,6 +118,57 @@ describe('G1.6 per-org frontier surfaces', () => {
     expect(entries.some((e) => e.clusterId === AGENT_CLUSTER)).toBe(false);
   });
 
+  it('G1.7 live-sweep route: viewer 403, cross-org/platform 404, owned 202 with auth-forced org', async () => {
+    // viewer session for org_demo
+    const db = app.potion.db.db;
+    await createUser(db, { id: 'usr_of_v', email: 'ofv@t.dev', name: 'v' });
+    await createMembership(db, { orgId: DEFAULT_ORG_ID, userId: 'usr_of_v', role: 'viewer' });
+    await createSession(db, {
+      id: 'ses_of_v',
+      userId: 'usr_of_v',
+      tokenHash: sha256('ps_of_v'),
+      orgId: DEFAULT_ORG_ID,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const VIEWER = { cookie: 'potion_session=ps_of_v' };
+
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/api/frontiers/live-sweep',
+      headers: { ...VIEWER, 'content-type': 'application/json' },
+      payload: { clusterId: AGENT_CLUSTER },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    // other org's cluster and platform clusters both 404 (live sweeps are
+    // for org-owned agent clusters only)
+    const cross = await app.inject({
+      method: 'POST',
+      url: '/api/frontiers/live-sweep',
+      headers: { ...B_ADMIN, 'content-type': 'application/json' },
+      payload: { clusterId: AGENT_CLUSTER },
+    });
+    expect(cross.statusCode).toBe(404);
+    const platform = await app.inject({
+      method: 'POST',
+      url: '/api/frontiers/live-sweep',
+      headers: { ...ADMIN, 'content-type': 'application/json' },
+      payload: { clusterId: 'code-gen' },
+    });
+    expect(platform.statusCode).toBe(404);
+
+    // owner admin → 202 (the job itself will refuse without the live env
+    // gate — the route's contract is enqueue-with-forced-org)
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/frontiers/live-sweep',
+      headers: { ...ADMIN, 'content-type': 'application/json' },
+      payload: { clusterId: AGENT_CLUSTER, capUsd: 2 },
+    });
+    expect(ok.statusCode).toBe(202);
+    expect((ok.json() as { jobId: string }).jobId).toBeTruthy();
+  });
+
   it('share mint on a cluster with BOTH frontiers serves the PLATFORM one; public DTO has no evidence', async () => {
     const db = app.potion.db.db;
     // give code-gen an ORG frontier too — share must still serve platform

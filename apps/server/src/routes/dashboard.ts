@@ -263,6 +263,59 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
    * marked dominated=false — frontier points are non-dominated by
    * construction and we verify it), plus the customer's current operating
    * point when a policy exists. */
+  /** G1.7: launch a live capped eval sweep of one of the caller's agent
+   * clusters (admin). The job re-verifies ownership, env gate, and the
+   * org's hard-stop budget FAIL-CLOSED before any spend; spend is metered
+   * as request_logs 'eval_live' (customer-attributable). */
+  app.post('/api/frontiers/live-sweep', async (req, reply) => {
+    const org = req.potionOrg!;
+    if (org.role !== 'admin') {
+      return reply
+        .code(403)
+        .send(
+          openAiError(
+            `role '${org.role}' may not launch live sweeps — requires 'admin'`,
+            'invalid_request_error',
+            'insufficient_role',
+          ),
+        );
+    }
+    const body = z
+      .object({
+        clusterId: z.string().min(1),
+        capUsd: z.number().positive().max(50).optional(),
+        judgeMaxTokens: z.number().int().positive().max(4096).optional(),
+        maxOutputTokens: z.number().int().positive().max(8192).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_body',
+        message: body.error.issues.map((i) => i.message).join('; '),
+      });
+    }
+    // Ownership: unknown and unowned cluster ids get the SAME 404.
+    const cluster = await getClusterByIdForOrg(db, body.data.clusterId, org.orgId);
+    if (!cluster || cluster.orgId === null) {
+      return reply
+        .code(404)
+        .send(openAiError('cluster not found', 'invalid_request_error', 'cluster_not_found'));
+    }
+    if (!ctx.queue) {
+      return reply
+        .code(503)
+        .send(openAiError('job queue unavailable', 'server_error', 'queue_unavailable'));
+    }
+    const jobId = await ctx.queue.enqueue('frontier:live-sweep', {
+      orgId: org.orgId,
+      clusterId: body.data.clusterId,
+      ...(body.data.capUsd !== undefined ? { capUsd: body.data.capUsd } : {}),
+      ...(body.data.judgeMaxTokens !== undefined ? { judgeMaxTokens: body.data.judgeMaxTokens } : {}),
+      ...(body.data.maxOutputTokens !== undefined ? { maxOutputTokens: body.data.maxOutputTokens } : {}),
+    });
+    return reply.code(202).send({ jobId });
+  });
+
   app.get('/api/frontiers/:clusterId', async (req, reply) => {
     const { clusterId } = req.params as { clusterId: string };
     // G1.6: ownership FIRST — another org's agent-cluster id gets the SAME

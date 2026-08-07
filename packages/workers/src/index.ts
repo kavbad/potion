@@ -123,6 +123,13 @@ export {
   orgHashOf,
   // ---- G1.5 automated scorer construction ----
   rubricGenerateHandler,
+  // ---- G1.7 live capped org evals ----
+  frontierLiveSweepHandler,
+  OrgBudgetRefusalError,
+  DEFAULT_LIVE_SWEEP_CAP_USD,
+  LIVE_SWEEP_JUDGE_MAX_TOKENS,
+  LIVE_SWEEP_ANSWER_MAX_TOKENS,
+  type FrontierLiveSweepResult,
   rubricTemplateFor,
   validateGeneratedRubric,
   buildRubricGenerationMessages,

@@ -3,7 +3,8 @@
 // live-provider sweeps stay an operator-run script affair (scripts/m1b-sweep).
 import { fileURLToPath } from 'node:url';
 import {
-  redactPii, seedFromString, sha256, strategyHash, wrapUntrustedData,
+  redactPii,
+  type ProviderId, seedFromString, sha256, strategyHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
   type ChatMessage, type Policy, type StrategyConfig, type Usage } from '@potion/core';
 import {
@@ -61,7 +62,7 @@ import {
   type RunSummary,
   type StaleCounts,
 } from '@potion/harness';
-import { createProviders, loadPrices } from '@potion/providers';
+import { createProviders, ENV_VAR_BY_PROVIDER, loadPrices } from '@potion/providers';
 // ---- M4b #37 autoresearcher (SPEC §15) ----
 import { writeFileSync } from 'node:fs';
 import {
@@ -72,6 +73,7 @@ import {
 import {
   aggregatesFromEvalResults,
   computeFrontier,
+  hasLiveEvidence,
   loadCurrentFrontier,
   mergePriceEntry,
   saveFrontier,
@@ -98,7 +100,7 @@ import {
   type TraceClusterSource,
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
-import type { RubricGeneratePayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type { FrontierLiveSweepPayload, RubricGeneratePayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
 // ---- end M5 #36 imports ----
 import {
   alertRules,
@@ -1408,6 +1410,9 @@ export interface TracesClusterResult {
   clustersCreated: number;
   clustersUpdated: number;
   spendUsd: number;
+  /** G1.7: nightly mock frontier saves skipped because live evidence exists
+   * ("once live, never regress"). */
+  liveFrontierSavesSkipped: number;
   clusters: AgentClusterOutcome[];
 }
 
@@ -1443,6 +1448,7 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
     clustersCreated: 0,
     clustersUpdated: 0,
     spendUsd: 0,
+    liveFrontierSavesSkipped: 0,
     clusters: [],
   };
   if (sources.length === 0) return result;
@@ -1665,33 +1671,43 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
           spendUsd: summary.spendUsd,
           orgId,
         });
-        const aggregates = await aggregatesFromEvalResults(
-          ctx.db,
-          clusterId,
-          strategies,
-          prices.version,
-          { orgId },
-        );
-        if (aggregates.length > 0) {
-          const points = computeFrontier(aggregates);
-          // G1.6: the org frontier, with schema-level provenance stamped on
-          // every point (owner rule) — the approved rubric + its calibration
-          // are already in scope from the synthesis step above.
-          await saveFrontier(ctx.db, clusterId, points, 'recompute', prices.version, {
-            orgId,
-            provenance: {
-              suiteId,
-              suiteVersion: upsert.version,
-              ...(approvedRubric !== null
-                ? {
-                    rubricHash: approvedRubric.rubricHash,
-                    ...(approvedRubric.calibrationId !== null
-                      ? { calibrationId: approvedRubric.calibrationId }
-                      : {}),
-                  }
-                : {}),
-            },
-          });
+        // G1.7 "once live, never regress": when LIVE evidence exists for
+        // this (org, cluster), the nightly MOCK recompute must not save a
+        // frontier over it — a mock-provenance version would clobber the
+        // servable live one. The mock eval run above still executes ($0,
+        // keeps the mock cache warm); new items get live coverage at the
+        // next live sweep.
+        if (await hasLiveEvidence(ctx.db, clusterId, orgId)) {
+          result.liveFrontierSavesSkipped += 1;
+        } else {
+          const aggregates = await aggregatesFromEvalResults(
+            ctx.db,
+            clusterId,
+            strategies,
+            prices.version,
+            { orgId },
+          );
+          if (aggregates.length > 0) {
+            const points = computeFrontier(aggregates);
+            // G1.6: the org frontier, with schema-level provenance stamped on
+            // every point (owner rule) — the approved rubric + its calibration
+            // are already in scope from the synthesis step above.
+            await saveFrontier(ctx.db, clusterId, points, 'recompute', prices.version, {
+              orgId,
+              provenance: {
+                suiteId,
+                suiteVersion: upsert.version,
+                ...(approvedRubric !== null
+                  ? {
+                      rubricHash: approvedRubric.rubricHash,
+                      ...(approvedRubric.calibrationId !== null
+                        ? { calibrationId: approvedRubric.calibrationId }
+                        : {}),
+                    }
+                  : {}),
+              },
+            });
+          }
         }
       }
 
@@ -1808,12 +1824,17 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
           .filter((e): e is NonNullable<typeof e> => e !== null && e !== undefined)
           .map((e) => ({ type: 'single', model: e.alias }) as StrategyConfig);
         for (const clusterId of affectedClusters) {
+          // G1.7: retirement recompute STILL SAVES (retirement correctness
+          // beats coverage) but aggregates provenance-pure — live-only when
+          // live evidence survives, so a live frontier is never regressed
+          // to mixed/mock provenance by a purge.
+          const liveOnly = await hasLiveEvidence(ctx.db, clusterId, orgId);
           const aggregates = await aggregatesFromEvalResults(
             ctx.db,
             clusterId,
             strategies,
             prices.version,
-            { orgId },
+            { orgId, ...(liveOnly ? { providerMode: 'live' as const } : {}) },
           );
           const points = aggregates.length > 0 ? computeFrontier(aggregates) : [];
           const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
@@ -2169,6 +2190,205 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
   };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G1.7 — live capped eval sweep of one org's derived replay suite.
+//
+// This is where an org's frontier turns LIVE (and therefore servable via
+// the G1.6 org-preferred read + provenance guard), and where live eval
+// spend becomes CUSTOMER-ATTRIBUTABLE: metered as request_logs
+// status='eval_live' through the usage-rollup chokepoint (budgets,
+// hard-stops, forecasts, invoices all inherit). Fail-closed by design:
+// no env gate → refuse; org hard-stop budget would be exceeded → refuse;
+// mock alias anywhere → refuse (MockAliasInLiveRunError in the runner).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DEFAULT_LIVE_SWEEP_CAP_USD = 5;
+export const LIVE_SWEEP_JUDGE_MAX_TOKENS = 768;
+export const LIVE_SWEEP_ANSWER_MAX_TOKENS = 1600;
+
+export class OrgBudgetRefusalError extends Error {
+  constructor(orgId: string, mtdUsd: number, capUsd: number, monthlyCapUsd: number) {
+    super(
+      `live sweep refused: org '${orgId}' hard-stop budget would be exceeded ` +
+        `(MTD $${mtdUsd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly cap $${monthlyCapUsd.toFixed(2)}). ` +
+        'No spend occurred.',
+    );
+    this.name = 'OrgBudgetRefusalError';
+  }
+}
+
+export interface FrontierLiveSweepResult {
+  runId: string;
+  spendUsd: number;
+  projectedSpendUsd: number;
+  executed: number;
+  cacheHits: number;
+  frontierId: string | null;
+  frontierVersion: number | null;
+  points: number;
+}
+
+export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = async (
+  payload: FrontierLiveSweepPayload,
+  ctx: JobContext,
+): Promise<FrontierLiveSweepResult> => {
+  // 1. Env gate — REFUSE, never degrade (a "live sweep" that mocks would
+  // stamp mock output as live evidence: the false-live pattern).
+  if (process.env.POTION_EVAL_PROVIDER !== 'live') {
+    throw new Error(
+      'frontier:live-sweep requires POTION_EVAL_PROVIDER=live — this job never runs mock',
+    );
+  }
+  // 2. Ownership inside the job (route re-verifies too).
+  const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
+  const cluster = clusterRows[0];
+  if (!cluster) throw new Error(`unknown cluster '${payload.clusterId}'`);
+  if (cluster.orgId !== payload.orgId) {
+    throw new Error(`cluster '${payload.clusterId}' does not belong to org '${payload.orgId}'`);
+  }
+  const suiteId = `${payload.clusterId}-replays-v1`;
+  const loaded = await loadDerivedSuite(ctx.db, suiteId);
+  if (!loaded || loaded.items.length === 0) {
+    throw new Error(`derived suite '${suiteId}' is empty — nothing to evaluate live`);
+  }
+  const capUsd = payload.capUsd ?? DEFAULT_LIVE_SWEEP_CAP_USD;
+
+  // 3. Org-budget refusal, FAIL-CLOSED, before any spend. (Serving's
+  // hard-stop is fail-open with a cache — availability; spend jobs are the
+  // opposite: any doubt means no spend.)
+  const budget = await getBudget(ctx.db, payload.orgId);
+  if (budget !== null && budget.hardStop) {
+    const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
+    if (mtd + capUsd > budget.monthlyCapUsd) {
+      throw new OrgBudgetRefusalError(payload.orgId, mtd, capUsd, budget.monthlyCapUsd);
+    }
+  }
+
+  // 4. LIVE class representatives — mock excluded (the proven G1.5 guard)
+  // AND key-availability filtered (m1b-sweep precedent: a rep whose
+  // provider has no env key would ProviderAuthError mid-run AFTER partial
+  // spend — G1.7 live-leg finding). The registry carries OpenRouter-routed
+  // equivalents for every class, so one key can cover the sweep. The
+  // runner's MockAliasInLiveRunError backstops the mock exclusion.
+  const { table: prices } = loadPrices(ctx.pricesPath);
+  const reachable = (p: string): boolean =>
+    p !== 'mock' &&
+    process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
+  const registry = buildRegistry(prices).filter((e) => reachable(e.provider));
+  if (registry.length === 0) {
+    throw new Error(
+      'live sweep refused: no provider API keys in env (set OPENROUTER_API_KEY or peers) — no spend occurred',
+    );
+  }
+  const liveStrategies = (['cheap', 'mid', 'strong'] as const)
+    .map((cls) => classRepresentative(registry, cls))
+    .filter((e): e is NonNullable<typeof e> => e !== null && e !== undefined)
+    .map((e) => ({ type: 'single', model: e.alias }) as StrategyConfig);
+  const byHash = new Map<string, StrategyConfig>();
+  for (const cfg of liveStrategies) byHash.set(strategyHash(cfg), cfg);
+  const strategies = [...byHash.values()];
+  if (strategies.length === 0) throw new Error('no reachable live strategy representatives in the registry');
+  const judgeEntry = classRepresentative(registry, 'judge');
+  if (!judgeEntry) throw new Error('no reachable live judge-class model in the registry');
+  for (const [hash, config] of byHash) {
+    await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
+  }
+
+  // 5. The live run — org-attributed, |org/|live cache keys, judge budget +
+  // answer ceiling projection-bound.
+  const summary: RunSummary = await runEval(
+    {
+      suiteIds: [],
+      suiteV2Ids: [suiteId],
+      strategies,
+      budgetCapUsd: capUsd,
+      provider: 'live',
+      resume: true,
+      orgId: payload.orgId,
+      judgeModelOverride: judgeEntry.alias,
+      judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
+      maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
+    },
+    { db: ctx.dbHandle, pricesPath: ctx.pricesPath },
+  );
+
+  // 6. Run row (provider 'live', org-attributed).
+  await ctx.db.insert(evalRuns).values({
+    id: summary.runId,
+    options: {
+      suiteIds: [],
+      suiteV2Ids: [suiteId],
+      strategyHashes: [...byHash.keys()],
+      agentCluster: payload.clusterId,
+    },
+    budgetCapUsd: capUsd,
+    provider: 'live',
+    status: 'completed',
+    spendUsd: summary.spendUsd,
+    orgId: payload.orgId,
+  });
+
+  // 7. Customer-attributable metering: ONE aggregate eval_live row (model
+  // label neutral — three models spent). KNOWN GAP (documented): a provider
+  // error mid-run can spend without reaching this line; the operator ledger
+  // reconciles.
+  await insertRequestLog(ctx.db, {
+    orgId: payload.orgId,
+    clusterId: payload.clusterId,
+    model: 'eval-sweep',
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: summary.spendUsd,
+      latencyMs: 0,
+    } as Usage,
+    latencyMs: 0,
+    status: 'eval_live',
+  });
+
+  // 8. Provenance-pure LIVE aggregation → the servable org frontier.
+  const aggregates = await aggregatesFromEvalResults(ctx.db, payload.clusterId, strategies, prices.version, {
+    orgId: payload.orgId,
+    providerMode: 'live',
+  });
+  let frontierId: string | null = null;
+  let frontierVersion: number | null = null;
+  let points = 0;
+  if (aggregates.length > 0) {
+    const computed = computeFrontier(aggregates);
+    const approvedRubric = await approvedRubricForCluster(ctx.db, payload.clusterId);
+    const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
+      orgId: payload.orgId,
+      provenance: {
+        suiteId,
+        suiteVersion: loaded.suite.version,
+        ...(approvedRubric !== null
+          ? {
+              rubricHash: approvedRubric.rubricHash,
+              ...(approvedRubric.calibrationId !== null
+                ? { calibrationId: approvedRubric.calibrationId }
+                : {}),
+            }
+          : {}),
+      },
+    });
+    frontierId = saved.id;
+    frontierVersion = saved.version;
+    points = saved.points.length;
+  }
+
+  return {
+    runId: summary.runId,
+    spendUsd: summary.spendUsd,
+    projectedSpendUsd: summary.projectedSpendUsd,
+    executed: summary.executed,
+    cacheHits: summary.cacheHits,
+    frontierId,
+    frontierVersion,
+    points,
+  };
+};
+
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'eval:run': evalRunHandler,
   'sweep:run': sweepRunHandler,
@@ -2186,6 +2406,8 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'traces:redact': tracesRedactHandler,
   // ---- G1.5 automated scorer construction ----
   'rubric:generate': rubricGenerateHandler,
+  // ---- G1.7 live capped org evals ----
+  'frontier:live-sweep': frontierLiveSweepHandler,
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,
