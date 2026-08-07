@@ -67,6 +67,32 @@ export function pearson(xs: number[], ys: number[]): number {
   return sxy / Math.sqrt(sxx * syy);
 }
 
+/** Average-tie ranks (Spearman support). */
+function ranksOf(xs: number[]): number[] {
+  const idx = xs.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
+  const out = new Array<number>(xs.length);
+  let i = 0;
+  while (i < idx.length) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1]![0] === idx[i]![0]) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) out[idx[k]![1]] = avg;
+    i = j + 1;
+  }
+  return out;
+}
+
+/**
+ * Spearman rank correlation = Pearson over average-tie ranks. Robust to a
+ * judge whose scale is compressed/shifted but MONOTONE with truth — the
+ * rank view separates "ranks correctly on a distorted scale" (recoverable
+ * via monotone recalibration) from "cannot rank" (untrustworthy).
+ */
+export function spearman(xs: number[], ys: number[]): number {
+  if (xs.length !== ys.length || xs.length < 2) return 0;
+  return pearson(ranksOf(xs), ranksOf(ys));
+}
+
 export interface CalibrationPair {
   itemId: string;
   /** Deterministic ground-truth quality of the answer (0..1). */
@@ -87,6 +113,10 @@ export interface JudgeTruthStats {
    * that aces the corpus produces no correlation signal) — indeterminate,
    * not measurable. */
   pearsonVsTruth: number | null;
+  /** Rank correlation vs truth (same nullability). A large spearman-pearson
+   * gap means the judge RANKS correctly on a distorted scale — monotone
+   * recalibration territory, not untrustworthiness. */
+  spearmanVsTruth: number | null;
   meanAbsErr: number;
   /** No truth variance → the corpus cannot calibrate this judge; pick a
    * harder suite or a weaker answerer. Conservatively still flagged. */
@@ -288,16 +318,19 @@ export async function runJudgeCalibration(
         judgeModel: judge,
         resolvedModel: resolvedModelOf(prices, judge),
         pearsonVsTruth: null,
+        spearmanVsTruth: null,
         meanAbsErr,
         indeterminate: true,
         flagged: true,
       };
     }
     const r = pearson(judgeScores, truths);
+    const rho = spearman(judgeScores, truths);
     return {
       judgeModel: judge,
       resolvedModel: resolvedModelOf(prices, judge),
       pearsonVsTruth: r,
+      spearmanVsTruth: rho,
       meanAbsErr,
       indeterminate: false,
       flagged: r < CALIBRATION_FLAG_BELOW,

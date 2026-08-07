@@ -868,6 +868,9 @@ export const judgeCalibrations = pgTable('judge_calibrations', {
   providerMode: text('provider_mode').notNull().default('unknown'),
   n: integer('n').notNull(),
   pearsonVsTruth: doublePrecision('pearson_vs_truth'),
+  /** Rank correlation (0019): large spearman-pearson gap = monotone-scale
+   * distortion, recoverable by recalibration; NULL on pre-0019 rows. */
+  spearmanVsTruth: doublePrecision('spearman_vs_truth'),
   judgeAgreement: doublePrecision('judge_agreement'),
   meanAbsErr: doublePrecision('mean_abs_err'),
   flagged: boolean('flagged').notNull(),

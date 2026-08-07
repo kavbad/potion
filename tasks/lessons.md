@@ -31,3 +31,24 @@ baseline → fix history required stash/restore gymnastics (possible only
 because the zip still existed). **Pattern**: on first contact with any repo
 that has no .git, `git init` + baseline commit BEFORE touching anything —
 a reviewable diff is part of the deliverable, not an afterthought.
+
+## 2026-08-06 — a judge verdict is a joint property of the whole harness
+
+Calibrating judge-class produced three successive damning verdicts (r=0.05, mAE 0.88;
+then r=0.16; then "best judge measured" r=0.54) — and every jump came from fixing the
+HARNESS, not the judge: an all-or-nothing rubric mismatched to graded truth, then a
+token budget that truncated the judge's reasoning before its verdict line, then a
+ceiling-compressed truth distribution that suppressed the correlation itself. At each
+step the tempting conclusion was "this judge is untrustworthy"; the true conclusion
+twice was "the harness starved or miswired the judge," and once "the corpus can't ask
+the question."
+
+**Pattern**: before concluding a MODEL is bad, vary the harness and probe raw outputs —
+one direct call showing the actual response text beats ten aggregate scores. A measured
+verdict is a joint property of (model × rubric × budget × parser × corpus
+distribution); a calibration record that doesn't pin all five is not reproducible
+evidence. Check score DISTRIBUTIONS (not just means/correlations) before finalizing:
+ceiling/floor compression silently caps any correlation, and rank (Spearman) vs linear
+(Pearson) agreement separates "monotone scale distortion, recoverable" from "cannot
+rank, real." Expect run-to-run variance from live judges — attach CIs before letting a
+verdict carry contractual weight.

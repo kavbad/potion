@@ -8,6 +8,7 @@ import {
   pearson,
   projectCalibrationCostUsd,
   runJudgeCalibration,
+  spearman,
   withCalibrationJudges,
 } from './calibrate.js';
 import { loadSuite, SIMULATED_SUITES_DIR } from './suites.js';
@@ -20,6 +21,20 @@ describe('pearson', () => {
     expect(pearson([1, 2, 3], [6, 4, 2])).toBeCloseTo(-1, 10);
     expect(pearson([1, 1, 1], [1, 1, 1])).toBe(1); // constant-equal degenerate
     expect(pearson([1], [2])).toBe(0); // too few points
+  });
+});
+
+describe('spearman', () => {
+  it('rank correlation: perfect for any monotone map, ties averaged', () => {
+    // compressed monotone scale: pearson < 1, spearman = 1
+    const truth = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0];
+    const compressed = [0.90, 0.92, 0.93, 0.95, 0.98, 1.0];
+    expect(spearman(compressed, truth)).toBeCloseTo(1, 10);
+    expect(pearson(compressed, truth)).toBeLessThan(1);
+    // anti-monotone → -1; ties handled
+    expect(spearman([3, 2, 1], [1, 2, 3])).toBeCloseTo(-1, 10);
+    expect(spearman([1, 1, 2], [1, 1, 2])).toBeCloseTo(1, 10);
+    expect(spearman([1], [2])).toBe(0);
   });
 });
 
@@ -46,6 +61,7 @@ describe('runJudgeCalibration', () => {
     expect(report.truth).toHaveLength(2);
     for (const t of report.truth) {
       expect(t.pearsonVsTruth).toBeGreaterThanOrEqual(0.8);
+      expect(t.spearmanVsTruth).toBeGreaterThanOrEqual(0.6); // ranks track truth
       expect(t.flagged).toBe(false);
       expect(t.resolvedModel).toBe(`${t.judgeModel}-v1`);
       expect(t.meanAbsErr).toBeGreaterThanOrEqual(0);

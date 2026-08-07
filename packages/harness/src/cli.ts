@@ -272,7 +272,7 @@ export async function main(argv: string[]): Promise<number> {
       const pearsonLabel =
         t.pearsonVsTruth === null
           ? 'INDETERMINATE (constant truth — harder suite or weaker answerer needed)'
-          : `pearson-vs-truth = ${t.pearsonVsTruth.toFixed(3)}`;
+          : `pearson-vs-truth = ${t.pearsonVsTruth.toFixed(3)}, spearman = ${(t.spearmanVsTruth ?? 0).toFixed(3)}`;
       console.log(
         `  ${t.judgeModel} (${t.resolvedModel}): ${pearsonLabel}, ` +
           `meanAbsErr = ${t.meanAbsErr.toFixed(3)} ${t.flagged ? 'FLAGGED ⚠' : 'OK'}`,
@@ -299,6 +299,7 @@ export async function main(argv: string[]): Promise<number> {
           providerMode: args.provider,
           n: report.n,
           pearsonVsTruth: t.pearsonVsTruth,
+          spearmanVsTruth: t.spearmanVsTruth,
           judgeAgreement: report.judges.length > 1 ? report.pearson : null,
           meanAbsErr: t.meanAbsErr,
           flagged: t.flagged,

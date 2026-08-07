@@ -906,3 +906,33 @@ reduced-risk, not risk-free. OPERATOR RUNBOOK: run POST /api/traces/redact once 
 after deploying G1.1 (covers pre-G1.1 rows). 914 pnpm tests green (core 32, workers 28,
 server 308), walkthrough 15/15 (loop detection verified on ingest-redacted spans). No
 live calls (leg 1 $0).
+
+---
+
+## Judge-verdict robustness check (owner-directed, 2026-08-06)
+
+Re-ran the extraction-v2 calibration (persistent db, spearman now a permanent report
+field + 0019 column). Findings that FINALIZE the verdict:
+1. **Truth distribution is ceiling-compressed**: 34/50 items at exactly 1.0, the rest in
+   [0.67, 0.89]; mean 0.944, sd 0.093, 8 distinct values. Correlations are computed on a
+   narrow top band — measured r/ρ understate ranking ability on a broader-difficulty
+   corpus, and the corpus's discriminative band needs widening (harder items or weaker
+   answerers) before the 0.8 bar is a fair test.
+2. **Spearman ≈ Pearson** (sonnet ρ=0.676 vs r=0.637; mini ρ=0.600 vs r=0.590): NO
+   monotone-scale-distortion gap — recalibrating the judge's scale would not rescue it.
+   Within the fine [0.67–1.0] band the judge genuinely mis-ranks (gives 1.0 to
+   truth-0.70 items, 0.75 to truth-0.89 items; its outputs are coarse {0.75, 0.875, 1}).
+3. **Run-to-run variance is material**: sonnet r moved 0.544→0.637 across identical
+   live runs (judge non-determinism at n=50) — single-run correlations carry ±0.1-scale
+   error. FOLLOW-UP: bootstrap CI on the correlation itself (bootstrapMeanCi machinery
+   exists) before any contract-facing use of these numbers.
+4. **FINAL VERDICT (nuanced, evidence-backed)**: judge-class is a good LEVEL estimator
+   (mAE 0.036) but a weak FINE-GRAINED ranker on a ceiling-compressed corpus — unfit,
+   as configured, to detect the small (~0.05) quality drops a guarantee floor exists to
+   catch. Correctly flagged below 0.8. Paths forward remain G1.4/G1.5, now plus corpus
+   difficulty-widening (G0.5 follow-on) and correlation CIs.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | verdict-robustness re-run (sonnet+mini judges, persistent db; before $45.3997 → after $45.0294 remaining) | $2.00 cap | $0.3703 (OpenRouter share) | $4.9706 / $50.00 (OpenRouter) |
+| 2026-08-06 | same run, OpenAI side (nano answerer + mini judge) | — | ~$0.03 | ~$0.22 (OpenAI key) |
