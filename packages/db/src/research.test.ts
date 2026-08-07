@@ -4,6 +4,10 @@
 // idempotency, and the trigger/status CHECK constraints.
 import { describe, expect, it } from 'vitest';
 import {
+  createOrg,
+  clusters,
+  listClusters,
+  getClusterByIdForOrg,
   createDb,
   getRecipeStatusByHashes,
   getResearchCycle,
@@ -22,6 +26,34 @@ async function migratedDb(): Promise<DbHandle> {
   await migrate(handle.db);
   return handle;
 }
+
+describe('cluster org scoping (G1.2)', () => {
+  it('listClusters({orgId}) = platform (NULL) + own; getClusterByIdForOrg hides other tenants', async () => {
+    const h = await migratedDb();
+    try {
+      await createOrg(h.db, { id: 'org_x', name: 'X' });
+      await createOrg(h.db, { id: 'org_y', name: 'Y' });
+      await h.db.insert(clusters).values([
+        { id: 'platform-c', name: 'p', description: 'd' },
+        { id: 'agent-xxxxxx-aaaaaa', name: 'x', description: 'd', orgId: 'org_x' },
+        { id: 'agent-yyyyyy-bbbbbb', name: 'y', description: 'd', orgId: 'org_y' },
+      ]);
+      const forX = await listClusters(h.db, { orgId: 'org_x' });
+      const ids = forX.map((c) => c.id).sort();
+      expect(ids).toContain('platform-c');
+      expect(ids).toContain('agent-xxxxxx-aaaaaa');
+      expect(ids).not.toContain('agent-yyyyyy-bbbbbb');
+      // ownership lookup: platform visible to all, own visible, other tenant null
+      expect((await getClusterByIdForOrg(h.db, 'platform-c', 'org_x'))?.id).toBe('platform-c');
+      expect((await getClusterByIdForOrg(h.db, 'agent-xxxxxx-aaaaaa', 'org_x'))?.id).toBe('agent-xxxxxx-aaaaaa');
+      expect(await getClusterByIdForOrg(h.db, 'agent-yyyyyy-bbbbbb', 'org_x')).toBeNull();
+      // unfiltered stays global (public leaderboard path)
+      expect((await listClusters(h.db)).map((c) => c.id)).toContain('agent-yyyyyy-bbbbbb');
+    } finally {
+      await h.close();
+    }
+  });
+});
 
 describe('research_cycles repo (M4b #37)', () => {
   it('insert → get → update lifecycle (queued → completed) with spend + seed', async () => {

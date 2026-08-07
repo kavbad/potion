@@ -35,7 +35,7 @@ import {
   type ToolCall,
   type Usage,
 } from '@potion/core';
-import { DEFAULT_ORG_ID, getClusterById, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
+import { DEFAULT_ORG_ID, getClusterByIdForOrg, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
@@ -413,7 +413,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const clusterHintRaw = Array.isArray(clusterHeader) ? clusterHeader[0] : clusterHeader;
     let hintedClusterId: string | null = null;
     if (clusterHintRaw !== undefined && clusterHintRaw.trim() !== '') {
-      const clusterRow = await getClusterById(ctx.db.db, clusterHintRaw.trim());
+      // G1.2: ownership-checked — platform clusters resolve for everyone,
+      // tenant clusters only for their owner. Cross-org ids get the SAME
+      // 400 as unknown ids (never a 403 existence oracle).
+      const clusterRow = await getClusterByIdForOrg(ctx.db.db, clusterHintRaw.trim(), auth.org.orgId);
       if (!clusterRow) {
         await logRequest({ ...logBase, status: 'cluster_not_found', latencyMs: elapsed() });
         return reply

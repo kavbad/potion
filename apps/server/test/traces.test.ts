@@ -316,5 +316,44 @@ describe('agent clustering + X-Potion-Cluster hint (M5 #36, SPEC §14.2)', () =>
     expect(unknown.statusCode).toBe(400);
     expect((unknown.json() as { error: { code: string; param: string } }).error.code).toBe('cluster_not_found');
     expect((unknown.json() as { error: { param: string } }).error.param).toBe('X-Potion-Cluster');
+
+    // G1.2: ANOTHER org's hint on this cluster id → the SAME 400 (no
+    // existence oracle, no cross-tenant pinning).
+    const { createOrg: mkOrg, insertApiKey: mkKey, insertPolicy: mkPol } = await import('@potion/db');
+    const { sha256: h } = await import('@potion/core');
+    await mkOrg(app.potion.db.db, { id: 'org_g12_b', name: 'G12B' });
+    await mkPol(app.potion.db.db, {
+      id: 'pol-g12-b',
+      orgId: 'org_g12_b',
+      name: 'g12b',
+      config: { type: 'max_quality', costCeilingPer1K: 100 },
+    });
+    await mkKey(app.potion.db.db, {
+      id: 'key-g12-b',
+      keyHash: h('pk_g12_b'),
+      name: 'g12b',
+      orgId: 'org_g12_b',
+      policyId: 'pol-g12-b',
+    });
+    const crossOrg = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: {
+        authorization: 'Bearer pk_g12_b',
+        'content-type': 'application/json',
+        'x-potion-cluster': agentCluster!.clusterId,
+      },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'hi' }] },
+    });
+    expect(crossOrg.statusCode).toBe(400);
+    expect(crossOrg.json().error.code).toBe('cluster_not_found');
+    // and org B's frontier list does NOT include org A's agent cluster
+    const bFront = await app.inject({
+      method: 'GET',
+      url: '/api/frontiers',
+      headers: { authorization: 'Bearer pk_g12_b' },
+    });
+    const bListed = (bFront.json() as { clusters: { clusterId: string }[] }).clusters;
+    expect(bListed.some((c) => c.clusterId === agentCluster!.clusterId)).toBe(false);
   }, 240_000);
 });

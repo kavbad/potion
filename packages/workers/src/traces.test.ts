@@ -26,6 +26,7 @@ import {
 import { loadCurrentFrontier } from '@potion/pareto';
 import { eq } from 'drizzle-orm';
 import {
+  orgHashOf,
   redactTraceText,
   toolSignatureSlug,
   tracesClusterHandler,
@@ -150,11 +151,11 @@ describe('M5 #36 helpers', () => {
 });
 
 describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
-  it('clusters sessions by signature+embedding → cluster row, exemplars, suite, eval, frontier', async () => {
-    // Two similar billing sessions (same tool seq), one outlier (different
-    // message, same tool seq → second cluster in the same slug bucket), one
-    // chat session in ANOTHER org (pooled after redaction — frontiers are
-    // platform-global).
+  it('clusters sessions PER ORG by signature+embedding → cluster row, exemplars, suite, eval, frontier', async () => {
+    // Two similar billing sessions + one outlier in org_a (same tool seq →
+    // same org bucket, outlier splits on cosine); one chat session in
+    // org_b. G1.2: orgs NEVER pool — org_b gets its own cluster id under
+    // its own org hash, even in the nightly {} run.
     await seedSession('org_a', 'tr_b1', 'Refactor the billing retry loop for invoices', 'search');
     await seedSession('org_a', 'tr_b2', 'Refactor the billing retry loop for receipts', 'search');
     await seedSession('org_a', 'tr_o1', 'Write a haiku about the autumn sea', 'search');
@@ -165,9 +166,11 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     expect(res.clustersCreated).toBe(3);
 
     const searchSlug = toolSignatureSlug(['search']);
-    const billingId = `agent-${searchSlug}`;
-    const outlierId = `agent-${searchSlug}-2`;
-    const chatId = 'agent-chat';
+    const aHash = orgHashOf('org_a');
+    const bHash = orgHashOf('org_b');
+    const billingId = `agent-${aHash}-${searchSlug}`;
+    const outlierId = `agent-${aHash}-${searchSlug}-2`;
+    const chatId = `agent-${bHash}-chat`;
 
     // Cluster rows registered with deterministic ids.
     const rows = await db.db.select().from(clusters);
@@ -176,6 +179,9 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     const billing = rows.find((r) => r.id === billingId)!;
     expect(billing.name).toContain('search');
     expect(billing.exemplarCount).toBe(2);
+    // G1.2: ownership column set per org.
+    expect(billing.orgId).toBe('org_a');
+    expect(rows.find((r) => r.id === chatId)!.orgId).toBe('org_b');
 
     // Exemplars carry REDACTED text + 384-dim embeddings.
     const ex = await db.db
@@ -218,7 +224,7 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     await seedSession('org_a', 'tr_b1', 'Refactor the billing retry loop for invoices', 'search');
     const first = await tracesClusterHandler({}, ctx());
     expect(first.clustersCreated).toBe(1);
-    const slug = toolSignatureSlug(['search']);
+    const slug = `${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
     const suiteId = `agent-${slug}-replays-v1`;
 
     // Identical re-run: nothing new.
@@ -258,7 +264,7 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     const res = await tracesClusterHandler({ orgId: 'org_a' }, ctx());
     expect(res.sessionsSeen).toBe(1);
     expect(res.clustersCreated).toBe(1);
-    const suiteId = `agent-${toolSignatureSlug(['search'])}-replays-v1`;
+    const suiteId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}-replays-v1`;
     const itemsText = readFileSync(path.join(suitesV2Dir, suiteId, 'items.jsonl'), 'utf8');
     expect(itemsText).not.toContain('cfo@acme.io');
     expect(itemsText).not.toContain('99887766');

@@ -179,7 +179,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
    * simulated (provider_mode 'mock'/'unknown').
    * Frontiers/clusters/taxonomy are shared-global by design (ROADMAP #13) —
    * this endpoint intentionally takes NO org scope. */
-  app.get('/api/frontiers', async (_req, reply) => {
+  app.get('/api/frontiers', async (req, reply) => {
     const taxonomy = loadTaxonomy();
     const clusters: Array<{
       clusterId: string;
@@ -209,9 +209,13 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
       }
     };
     for (const c of taxonomy.clusters) await pushIfFrontier(c.id);
-    // M5 #36: db-registered clusters (agent-<slug> from traces:cluster) are
-    // NOT in the static taxonomy — merge them so agent frontiers list too.
-    for (const c of await listClusters(db)) await pushIfFrontier(c.id);
+    // M5 #36: db-registered clusters (agent-* from traces:cluster) are NOT
+    // in the static taxonomy — merge them so agent frontiers list too.
+    // G1.2: scoped — platform clusters (org_id NULL) + the caller's OWN;
+    // other tenants' agent clusters are invisible.
+    for (const c of await listClusters(db, { orgId: req.potionOrg!.orgId })) {
+      await pushIfFrontier(c.id);
+    }
     return reply.send({ clusters });
   });
 

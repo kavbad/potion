@@ -582,7 +582,7 @@ re-scoped to hot-path gaps.
 - [x] G1.1 Ingest-time redaction: real PII pass at POST /v1/traces before rows are written
       (names/phones/addresses/ids; documented residual risk), raw prompt never at rest;
       re-redact existing rows via migration job. [M]
-- [ ] G1.2 Org-scoped trace clustering: org predicate in listTracesForClustering SQL,
+- [x] G1.2 Org-scoped trace clustering: org predicate in listTracesForClustering SQL,
       per-org cluster ids (agent-<org>-<slug>), org column on db-registered clusters +
       exemplars; X-Potion-Cluster validates org ownership. [M]
 - [ ] G1.3 Derived suites out of worker-local disk: Postgres or artifact store with
@@ -936,3 +936,38 @@ field + 0019 column). Findings that FINALIZE the verdict:
 |---|---|---|---|---|
 | 2026-08-06 | verdict-robustness re-run (sonnet+mini judges, persistent db; before $45.3997 → after $45.0294 remaining) | $2.00 cap | $0.3703 (OpenRouter share) | $4.9706 / $50.00 (OpenRouter) |
 | 2026-08-06 | same run, OpenAI side (nano answerer + mini judge) | — | ~$0.03 | ~$0.22 (OpenAI key) |
+
+---
+
+## G1.2 — Org-scoped trace clustering (session 2026-08-06, plan approved)
+
+Hybrid design: cluster id = agent-<orgHash6>-<slug6>[-N] (sha1(orgId)[:6] — SUITE_ID_RE-
+clean, fixed-arity, non-identifying on public surfaces; prefix partitions frontiers/eval
+evidence/suite dirs with zero schema change on those tables) + clusters.org_id NULL
+column (0020; NULL = platform/taxonomy) for ownership checks that never parse ids.
+Fixes bundled: (org,trace) grouping kills the cross-org trace-id merge; SQL org predicate
+kills the 500-trace starvation; nightly {} run loops distinct orgs (no pooling);
+exemplar top-up + exemplarCount update on existing clusters; X-Potion-Cluster cross-org
+→ same 400 cluster_not_found (no existence oracle); /api/frontiers stops listing other
+tenants' clusters. Pre-G1.2 agent-* rows grandfather as NULL (demo artifacts; operators
+may delete). Per-org FRONTIERS proper remain G1.6.
+
+- [x] a. db: 0020 + clusters.org_id; listTracesForClustering org predicate + (org,trace)
+      grouping; listClusters({orgId?}) + getClusterByIdForOrg; tests
+- [x] b. workers: per-org nightly loop, (org,slug) buckets, hashed ids, exemplar top-up;
+      e2e rewrite (the old test encoded the pooling defect as intended)
+- [x] c. server: hint ownership check (contract-preserving 400), /api/frontiers scoping;
+      tests incl. cross-org matrix
+- [x] d. full sweep + walkthrough + two-org manual proof + docs + commit
+
+**G1.2 DONE (2026-08-06)** — clusters are tenant data now: (org,trace) grouping kills the
+cross-org trace-id merge; SQL org predicate + per-org nightly loop kill starvation and
+pooling; cluster ids agent-<orgHash6>-<slug6> partition frontiers/eval evidence/suite
+dirs for free (SUITE_ID_RE-clean, non-identifying publicly); clusters.org_id (0020)
+backs ownership checks — X-Potion-Cluster cross-org returns the same 400 as unknown (no
+existence oracle), /api/frontiers lists platform + own only. Exemplar top-up bug fixed
+(pre-G1.2: exemplars written only at creation, count never updated). Pre-G1.2 agent-*
+rows grandfather as platform (demo artifacts; operators may delete). The old workers e2e
+encoded the pooling as intended behavior — rewritten. 916 pnpm tests green (db 77,
+workers 28, server 308), walkthrough 15/15 (org-hashed id visible: agent-26a426-bc5772).
+Zero live API calls. Per-org FRONTIERS proper remain G1.6; suite lifecycle is G1.3 (next).

@@ -14,6 +14,7 @@ import {
   listOrgIdsWithSpans,
   listOrgTraceSpans,
   listSpansForTrace,
+  createOrg,
   listTracesForClustering,
   migrate,
   redactSpanAttrs,
@@ -146,6 +147,17 @@ describe('trace_spans repo (M5 #36)', () => {
     ]);
     const sources = await listTracesForClustering(h.db);
     expect(sources).toHaveLength(2);
+    // G1.2: identical trace ids in TWO orgs never merge — (org, trace) key.
+    await createOrg(h.db, { id: 'org_g12', name: 'G12' });
+    await insertTraceSpans(h.db, [
+      span({ orgId: 'org_g12', spanId: 'sp_x1', attrs: { 'gen_ai.prompt': 'other tenant same trace id' } }),
+    ]);
+    const keyed = await listTracesForClustering(h.db);
+    expect(keyed.filter((s0) => s0.traceId === 'tr_a')).toHaveLength(2);
+    // org predicate applies IN SQL
+    const scoped = await listTracesForClustering(h.db, { orgId: 'org_g12' });
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0]!.orgId).toBe('org_g12');
     const a = sources.find((s) => s.traceId === 'tr_a')!;
     expect(a.firstMessage).toBe('Summarize the outage postmortem');
     expect(a.toolSequence).toEqual(['search', 'write']);

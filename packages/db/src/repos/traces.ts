@@ -82,9 +82,12 @@ export async function setOrgTraceRetentionDays(
 }
 
 /** Org ids that currently hold any spans (purge job fan-out). */
-export async function listOrgIdsWithSpans(db: PotionDb): Promise<string[]> {
-  const rows = await db.selectDistinct({ orgId: traceSpans.orgId }).from(traceSpans);
-  return rows.map((r) => r.orgId);
+export async function listOrgIdsWithSpans(db: PotionDb, since?: Date): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ orgId: traceSpans.orgId })
+    .from(traceSpans)
+    .where(since !== undefined ? gte(traceSpans.ts, since) : undefined);
+  return rows.map((r) => r.orgId).sort();
 }
 
 /** SPEC §14.3 retention>0: delete spans older than the cutoff. Returns the
@@ -163,25 +166,36 @@ export interface TraceClusterSource {
 
 export async function listTracesForClustering(
   db: PotionDb,
-  opts: { since?: Date | undefined; limit?: number | undefined } = {},
+  opts: { orgId?: string | undefined; since?: Date | undefined; limit?: number | undefined } = {},
 ): Promise<TraceClusterSource[]> {
   const limit = opts.limit ?? 500;
+  // G1.2: org predicate IN SQL — an org-scoped run can never be starved by
+  // other tenants' volume filling the scan window.
   const rows = await db
     .select()
     .from(traceSpans)
-    .where(opts.since !== undefined ? gte(traceSpans.ts, opts.since) : undefined)
-    .orderBy(asc(traceSpans.traceId), asc(traceSpans.ts), asc(traceSpans.spanId))
+    .where(
+      and(
+        opts.orgId !== undefined ? eq(traceSpans.orgId, opts.orgId) : undefined,
+        opts.since !== undefined ? gte(traceSpans.ts, opts.since) : undefined,
+      ),
+    )
+    .orderBy(asc(traceSpans.orgId), asc(traceSpans.traceId), asc(traceSpans.ts), asc(traceSpans.spanId))
     .limit(50_000);
 
+  // G1.2: group key is (org, trace) — customer-supplied trace ids are only
+  // unique per org, and two orgs' identical ids must never merge.
   const byTrace = new Map<string, TraceSpanRow[]>();
   for (const r of rows) {
-    const list = byTrace.get(r.traceId) ?? [];
+    const key = `${r.orgId}\u0000${r.traceId}`;
+    const list = byTrace.get(key) ?? [];
     list.push(r);
-    byTrace.set(r.traceId, list);
+    byTrace.set(key, list);
   }
   const out: TraceClusterSource[] = [];
-  for (const [traceId, spans] of byTrace) {
+  for (const [, spans] of byTrace) {
     if (spans.length === 0) continue;
+    const traceId = spans[0]!.traceId;
     const first = spans.find((s) => {
       const attrs = s.attrs as Record<string, unknown>;
       return typeof attrs['gen_ai.prompt'] === 'string' && attrs['gen_ai.prompt'].length > 0;

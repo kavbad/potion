@@ -130,6 +130,10 @@ export const clusters = pgTable('clusters', {
   name: text('name').notNull(),
   description: text('description').notNull(),
   exemplarCount: integer('exemplar_count').notNull().default(0),
+  /** G1.2 (0020): NULL = platform (taxonomy + grandfathered pre-G1.2 agent
+   * rows); non-NULL = the owning org. Ownership checks read this column;
+   * new agent clusters are also id-partitioned (agent-<orgHash6>-<slug>). */
+  orgId: text('org_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

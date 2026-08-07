@@ -2,7 +2,7 @@
 // Both tables are platform-GLOBAL (no org scoping — the autoresearcher is a
 // platform capability: recipes it verifies publish frontier versions all orgs
 // inherit; per-org private research is a documented follow-up in SPEC §15).
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   clusters,
@@ -143,8 +143,45 @@ export async function listEvalLineageRows(db: PotionDb): Promise<EvalLineageRow[
 }
 
 /** Every seeded cluster (leaderboard iterates these), newest first. */
-export async function listClusters(db: PotionDb): Promise<ClusterRow[]> {
-  return db.select().from(clusters).orderBy(desc(clusters.createdAt));
+/**
+ * List clusters. With `opts.orgId`, returns PLATFORM clusters (org_id NULL —
+ * static taxonomy + grandfathered pre-G1.2 agent rows) plus the org's OWN;
+ * other tenants' clusters are invisible (G1.2). Without opts: global (the
+ * public leaderboard keeps this — agent clusters are mock-only and excluded
+ * by the live-evidence gate, and org-hash ids are non-identifying).
+ */
+export async function listClusters(
+  db: PotionDb,
+  opts: { orgId?: string } = {},
+): Promise<ClusterRow[]> {
+  return db
+    .select()
+    .from(clusters)
+    .where(
+      opts.orgId !== undefined
+        ? or(isNull(clusters.orgId), eq(clusters.orgId, opts.orgId))
+        : undefined,
+    )
+    .orderBy(desc(clusters.createdAt));
+}
+
+/**
+ * Ownership-checked cluster lookup (G1.2): platform clusters (org_id NULL)
+ * resolve for every org; tenant clusters only for their owner. Returns null
+ * for other tenants' ids — callers surface the SAME not-found error as for
+ * unknown ids (no existence oracle).
+ */
+export async function getClusterByIdForOrg(
+  db: PotionDb,
+  id: string,
+  orgId: string,
+): Promise<ClusterRow | null> {
+  const rows = await db
+    .select()
+    .from(clusters)
+    .where(and(eq(clusters.id, id), or(isNull(clusters.orgId), eq(clusters.orgId, orgId))))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /** One cluster by id (null when unknown) — X-Potion-Cluster hint validation

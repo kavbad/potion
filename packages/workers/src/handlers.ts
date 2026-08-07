@@ -1341,6 +1341,12 @@ function sha1Hex(s: string): string {
   return createHash('sha1').update(s).digest('hex');
 }
 
+/** Org partition slug (G1.2): 6 hex of sha1(orgId) — SUITE_ID_RE-clean,
+ * fixed-arity inside cluster ids, non-identifying on public surfaces. */
+export function orgHashOf(orgId: string): string {
+  return sha1Hex(orgId).slice(0, 6);
+}
+
 /** Tool-graph signature slug (SPEC §14.2): hash of the ORDERED tool-name
  * sequence; tool-free sessions share the 'chat' bucket. */
 export function toolSignatureSlug(toolSequence: string[]): string {
@@ -1401,11 +1407,22 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
   }
   const sinceDays = payload.sinceDays ?? TRACES_CLUSTER_DEFAULT_SINCE_DAYS;
   const since = new Date(Date.now() - sinceDays * 86_400_000);
-  let sources = await listTracesForClustering(ctx.db, {
-    since,
-    limit: payload.limit ?? TRACES_CLUSTER_DEFAULT_LIMIT,
-  });
-  if (payload.orgId !== undefined) sources = sources.filter((s) => s.orgId === payload.orgId);
+  // G1.2: clustering is PER-ORG everywhere. An explicit orgId fetches with
+  // the SQL predicate (no cross-tenant starvation of the scan window); the
+  // nightly {} run loops distinct orgs so no tenant's volume starves another
+  // and nothing ever pools.
+  const orgIds =
+    payload.orgId !== undefined ? [payload.orgId] : await listOrgIdsWithSpans(ctx.db, since);
+  const sources: TraceClusterSource[] = [];
+  for (const orgId of orgIds) {
+    sources.push(
+      ...(await listTracesForClustering(ctx.db, {
+        orgId,
+        since,
+        limit: payload.limit ?? TRACES_CLUSTER_DEFAULT_LIMIT,
+      })),
+    );
+  }
 
   const result: TracesClusterResult = {
     sessionsSeen: sources.length,
@@ -1420,10 +1437,11 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
   const texts = sources.map((s) => redactTraceText(s.firstMessage ?? `session ${s.traceId}`));
   const vectors = await embedder.embed(texts);
 
-  // Bucket by tool-graph signature (sorted for deterministic cluster ids).
+  // Bucket by (org, tool-graph signature) — sorted for deterministic ids;
+  // two tenants sharing a tool sequence NEVER share a bucket (G1.2).
   const bySlug = new Map<string, number[]>();
   sources.forEach((s, i) => {
-    const slug = toolSignatureSlug(s.toolSequence);
+    const slug = `${orgHashOf(s.orgId)}-${toolSignatureSlug(s.toolSequence)}`;
     const list = bySlug.get(slug) ?? [];
     list.push(i);
     bySlug.set(slug, list);
@@ -1466,8 +1484,12 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
     }
 
     for (const [gi, g] of groups.entries()) {
+      // slug is already `<orgHash6>-<sigSlug>` (G1.2): the id partitions
+      // frontiers/eval evidence/suite dirs for free, is SUITE_ID_RE-clean,
+      // and carries no org identity on public surfaces.
       const clusterId = gi === 0 ? `agent-${slug}` : `agent-${slug}-${gi + 1}`;
       const members = g.members.map((m) => sources[m]!);
+      const orgId = members[0]!.orgId; // one org per bucket by construction
       const toolSequence = members[0]!.toolSequence; // same slug ⇒ same sequence
       const suiteId = `${clusterId}-replays-v1`;
       const name = `agent: ${toolSequence.join(' → ') || 'chat'} (${slug})`;
@@ -1487,15 +1509,30 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
               'Synthesized from traced agent sessions (redacted session replays) — ' +
               'M5 #36, SPEC §14.2. First-message embeddings + tool-graph signature.',
             exemplarCount: members.length,
+            orgId,
           })
           .onConflictDoNothing();
-        for (const m of members.slice(0, AGENT_EXEMPLAR_CAP)) {
-          const srcIdx = sources.indexOf(m);
-          await ctx.db
-            .insert(clusterExemplars)
-            .values({ clusterId, text: texts[srcIdx]!, embedding: vectors[srcIdx]! });
-        }
       }
+      // Exemplars: top up to the cap on EVERY run (pre-G1.2 they were only
+      // written at creation and exemplarCount never updated — growth bug).
+      const existingExemplars = await ctx.db
+        .select({ id: clusterExemplars.id })
+        .from(clusterExemplars)
+        .where(eq(clusterExemplars.clusterId, clusterId));
+      let room = AGENT_EXEMPLAR_CAP - existingExemplars.length;
+      for (const m of members) {
+        if (room <= 0) break;
+        const srcIdx = sources.indexOf(m);
+        await ctx.db
+          .insert(clusterExemplars)
+          .values({ clusterId, text: texts[srcIdx]!, embedding: vectors[srcIdx]! });
+        room -= 1;
+      }
+      const totalExemplars = AGENT_EXEMPLAR_CAP - Math.max(0, room);
+      await ctx.db
+        .update(clusters)
+        .set({ exemplarCount: totalExemplars })
+        .where(eq(clusters.id, clusterId));
 
       // ---- synthesize the replay suite (merge; item ids are trace-keyed) ----
       const suiteDir = path.join(suitesV2Dir, suiteId);

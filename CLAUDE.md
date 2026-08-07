@@ -71,10 +71,14 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    guarantee wiring; sampling is uniform (no per-stratum quotas); no serving
    gate on calibration state (surfaced only). Serving API keys hold role
    `admin` and can resolve incidents — lift their own rollback (G2.3).
-2. Frontiers/clusters/eval evidence are GLOBAL by design contract
-   (db/schema.ts:33-38) — no org dimension; nightly traces:cluster pools all
-   orgs; synthesized agent suites are mock-evaluated only and can never
-   serve live (provenance guard, correctly).
+2. Frontiers/eval evidence remain GLOBAL by design contract (per-org
+   frontiers = G1.6). Trace clustering is org-scoped as of G1.2
+   (2026-08-06): per-org nightly loop, (org,trace) grouping, cluster ids
+   agent-<orgHash6>-<slug> partition agent frontiers/suites for free,
+   clusters.org_id ownership checks (hint + /api/frontiers). Synthesized
+   agent suites are still mock-evaluated only and can never serve live
+   (provenance guard, correctly) and still live on worker-local disk
+   (G1.3).
 3. Trace ingestion (G1.1, 2026-08-06): PII redacted AT INGEST via the
    platform redactor (@potion/core redact.ts — card+Luhn/SSN/IBAN/phone/
    JWT/etc., deterministic+idempotent); raw prompts never at rest; backfill
