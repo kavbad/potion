@@ -1,36 +1,40 @@
-// Judge calibration (SPEC §5): two judge variants (mock-judge-a / mock-judge-b
-// — INDEPENDENT noise seeds) double-score the same 30 answers; report the
-// Pearson agreement on normalized 0..1 scores; flag < 0.8.
+// Judge calibration (SPEC §5 → G0.2): measure whether a judge can be
+// TRUSTED by calibrating it against deterministic ground truth.
 //
-// The answers being judged come from a fixed weak answerer (mock-cheap single),
-// so the double-scored set is a realistic mix of clean (~55%) and corrupted
-// (~45%) answers. Both judges derive their base score from corpus ground truth
-// and add independent seeded noise (±0.08 of scale), so their agreement
-// measures exactly the noise-induced divergence — the calibration story.
+// The corpus is reference-scored items ONLY (exact / field-match /
+// code-exec): each item is answered once by a fixed answerer, the answer's
+// TRUE quality comes from the deterministic scorer ($0, no model), and each
+// judge re-scores the same answer through the hardened llm-judge path. Per
+// judge: Pearson(judge, truth) + mean absolute error + flag < 0.8. With ≥2
+// judges the pairwise agreement (the original SPEC §5 story) is reported
+// too. llm-judge items carry no ground truth and are REJECTED — they cannot
+// calibrate anything.
+//
+// Spend honesty (G0.2): answerer + judge usage is real provider spend on
+// live runs — summed into the report and preflight-capped
+// (projectCalibrationCostUsd → BudgetCapError) BEFORE any call is made.
+// Mock mode stays fully deterministic and $0: the mock judges' base scores
+// are corpus-truth-correlated with independent seeded noise, so
+// pearsonVsTruth is high by construction — which is exactly the assertion.
 import type { Provider } from '@potion/providers';
-import type { EvalItem, PriceEntry, PriceTable, ProviderId } from '@potion/core';
+import type { EvalItem, PriceEntry, PriceTable, ProviderId, ScoringMethod, Usage } from '@potion/core';
 import { createMockProvider, loadPrices } from '@potion/providers';
 import { createResolver, execute } from '@potion/strategies';
-import { scoreLlmJudge, type ScorerDeps } from './scorers.js';
+import {
+  BudgetCapError,
+  estimateCallCostUsd,
+  estimateCalls,
+  estimateJudgeScoringCall,
+} from './estimate.js';
+import { scoreAnswer, scoreLlmJudge, type ScorerDeps } from './scorers.js';
+import { unrunnableReason } from './runner.js';
 
 export const CALIBRATION_JUDGES = ['mock-judge-a', 'mock-judge-b'] as const;
 export const CALIBRATION_ANSWERER = 'mock-cheap';
 export const CALIBRATION_FLAG_BELOW = 0.8;
-
-export interface CalibrationPair {
-  itemId: string;
-  scoreA: number;
-  scoreB: number;
-}
-
-export interface CalibrationReport {
-  n: number;
-  judgeA: string;
-  judgeB: string;
-  pearson: number;
-  flagged: boolean; // pearson < CALIBRATION_FLAG_BELOW
-  pairs: CalibrationPair[];
-}
+export const CALIBRATION_RUBRIC =
+  'Score the answer for correctness against the task: full credit only when it is completely correct.';
+export const CALIBRATION_SCALE: [number, number] = [0, 4];
 
 /** Pearson product-moment correlation; 1 when both vectors are constant-equal, 0 on degenerate input. */
 export function pearson(xs: number[], ys: number[]): number {
@@ -48,8 +52,60 @@ export function pearson(xs: number[], ys: number[]): number {
     sxx += dx * dx;
     syy += dy * dy;
   }
-  if (sxx === 0 || syy === 0) return sxx === syy && sxy === sxx ? 1 : 0;
+  // Degenerate (constant) vectors: equal constants agree perfectly; a
+  // constant vs anything else has no measurable correlation. (Live G0.2
+  // finding: the old sxy===sxx check reported two DIFFERENT constants as 1.)
+  if (sxx === 0 || syy === 0) return sxx === 0 && syy === 0 && mx === my ? 1 : 0;
   return sxy / Math.sqrt(sxx * syy);
+}
+
+export interface CalibrationPair {
+  itemId: string;
+  /** Deterministic ground-truth quality of the answer (0..1). */
+  truth: number;
+  /** Normalized judge scores keyed by judge alias. */
+  scores: Record<string, number>;
+  /** Legacy 2-judge accessors (first/second judge). */
+  scoreA: number;
+  scoreB: number;
+}
+
+export interface JudgeTruthStats {
+  judgeModel: string;
+  /** Prices-resolved provider-native id — the eval cache key's judgeVersion
+   * resolution, so calibration records stale in lockstep with eval rows. */
+  resolvedModel: string;
+  /** null when the truth vector is CONSTANT (live G0.2 finding: an answerer
+   * that aces the corpus produces no correlation signal) — indeterminate,
+   * not measurable. */
+  pearsonVsTruth: number | null;
+  meanAbsErr: number;
+  /** No truth variance → the corpus cannot calibrate this judge; pick a
+   * harder suite or a weaker answerer. Conservatively still flagged. */
+  indeterminate: boolean;
+  flagged: boolean; // pearsonVsTruth < CALIBRATION_FLAG_BELOW, or indeterminate
+}
+
+export interface CalibrationReport {
+  n: number;
+  judges: string[];
+  /** Legacy 2-judge fields (first two judges). */
+  judgeA: string;
+  judgeB: string;
+  /** Pairwise judge agreement (first two judges); NaN-free: 0 when <2. */
+  pearson: number;
+  /** True when ANY judge's pearsonVsTruth is below the flag line (or, with
+   * ≥2 judges, when their agreement is). */
+  flagged: boolean;
+  pairs: CalibrationPair[];
+  /** Per-judge trust stats vs deterministic ground truth (G0.2). */
+  truth: JudgeTruthStats[];
+  /** Real provider spend: answerer + all judge calls. */
+  spendUsd: number;
+  pricesVersion: string;
+  answererModel: string;
+  /** Items skipped (python code-exec etc.), with reasons. */
+  skipped: Array<{ itemId: string; reason: string }>;
 }
 
 /** Judge-variant price entries (runtime extension of the table; mock judges, $0). */
@@ -68,23 +124,98 @@ export function withCalibrationJudges(prices: PriceTable): PriceTable {
   };
 }
 
+/** The synthetic llm-judge scoring view of a deterministic item — the judge
+ * re-scores the answer through the REAL judge prompt builder. */
+function judgeViewScoring(judgeModel: string): Extract<ScoringMethod, { kind: 'llm-judge' }> {
+  return { kind: 'llm-judge', rubric: CALIBRATION_RUBRIC, judgeModel, scale: CALIBRATION_SCALE };
+}
+
+/**
+ * Worst-case calibration projection: one answerer call per item + one judge
+ * call per (item × judge), each at its enforced output ceiling. Uses the
+ * synthetic llm-judge view so estimateJudgeScoringCall measures the REAL
+ * prompt scaffolding.
+ */
+export function projectCalibrationCostUsd(
+  items: EvalItem[],
+  judgeModels: string[],
+  answererModel: string,
+  prices: PriceTable,
+): number {
+  let total = 0;
+  for (const item of items) {
+    for (const call of estimateCalls({ type: 'single', model: answererModel }, inputTokensOfItem(item))) {
+      total += estimateCallCostUsd(call, prices);
+    }
+    for (const judge of judgeModels) {
+      const view: EvalItem = { ...item, scoring: judgeViewScoring(judge) };
+      const call = estimateJudgeScoringCall(view);
+      if (call) total += estimateCallCostUsd(call, prices);
+    }
+  }
+  return total;
+}
+
+function inputTokensOfItem(item: EvalItem): number {
+  const chars = item.prompt.reduce((a, m) => a + m.role.length + 1 + m.content.length, 0);
+  return Math.ceil(chars / 4);
+}
+
 export interface CalibrationDeps {
   prices?: PriceTable;
   providers?: Record<ProviderId, Provider>;
   answererModel?: string;
+  /** Judge aliases to calibrate. Default: the deterministic mock pair. */
+  judgeModels?: string[];
+  /** Preflight cap (USD): projection above this throws BudgetCapError
+   * BEFORE any provider call. Default 0 — free (mock) calibrations pass,
+   * anything priced refuses until a cap is set deliberately. */
+  budgetCapUsd?: number;
+}
+
+function resolvedModelOf(prices: PriceTable, alias: string): string {
+  return prices.entries.find((e) => e.alias === alias || e.model === alias)?.model ?? alias;
+}
+
+function addUsage(total: { spendUsd: number }, usage: Usage | undefined): void {
+  if (usage) total.spendUsd += usage.costUsd;
 }
 
 /**
- * Double-score `items` (pass 30 for the gate report) with both judge variants.
- * Each item is answered once by the weak answerer (deterministic), then judged
- * twice. Deterministic end-to-end: the answerer is seeded by the prompt hash
- * (strategy default), each judge by hash(judgeModel | itemId | answer).
+ * Calibrate judges against deterministic ground truth (G0.2). Items with
+ * llm-judge scoring throw (no truth exists); unrunnable items (python
+ * code-exec) are skipped with reasons. Deterministic end-to-end in mock
+ * mode: answerer seeded by prompt hash, judges by
+ * hash(judgeModel | itemId | answer).
  */
 export async function runJudgeCalibration(
   items: EvalItem[],
   deps: CalibrationDeps = {},
 ): Promise<CalibrationReport> {
   const prices = withCalibrationJudges(deps.prices ?? loadPrices().table);
+  const judges = deps.judgeModels ?? [...CALIBRATION_JUDGES];
+  if (judges.length === 0) throw new Error('calibration requires at least one judge model');
+  const answerer = deps.answererModel ?? CALIBRATION_ANSWERER;
+
+  const disqualified = items.filter((i) => i.scoring.kind === 'llm-judge');
+  if (disqualified.length > 0) {
+    throw new Error(
+      `calibration requires DETERMINISTIC ground truth — ${disqualified.length} llm-judge ` +
+        `item(s) (e.g. '${disqualified[0]!.id}') carry no reference and cannot calibrate a judge`,
+    );
+  }
+  const skipped: CalibrationReport['skipped'] = [];
+  const runnable = items.filter((i) => {
+    const reason = unrunnableReason(i);
+    if (reason) skipped.push({ itemId: i.id, reason });
+    return !reason;
+  });
+
+  // Preflight: refuse over-budget calibrations BEFORE any provider call.
+  const cap = deps.budgetCapUsd ?? 0;
+  const projected = projectCalibrationCostUsd(runnable, judges, answerer, prices);
+  if (projected > cap) throw new BudgetCapError(projected, cap);
+
   const mock = createMockProvider(prices);
   const providers: Record<ProviderId, Provider> = deps.providers ?? {
     anthropic: mock,
@@ -95,43 +226,81 @@ export async function runJudgeCalibration(
   };
   const ctx = { providers, prices, resolve: createResolver(providers, prices) };
   const scorerDeps: ScorerDeps = { providers, prices };
-  const answerer = deps.answererModel ?? CALIBRATION_ANSWERER;
+  const totals = { spendUsd: 0 };
 
   const pairs: CalibrationPair[] = [];
-  for (const item of items) {
+  for (const item of runnable) {
     const outcome = await execute({ type: 'single', model: answerer }, item.prompt, ctx);
+    totals.spendUsd += outcome.usage.costUsd;
     const answer = outcome.text;
-    const scores: number[] = [];
-    for (const judge of CALIBRATION_JUDGES) {
-      const judged = await scoreLlmJudge(
-        item,
-        answer,
-        {
-          kind: 'llm-judge',
-          rubric:
-            'Score the answer for correctness against the task: full credit only when it is completely correct.',
-          judgeModel: judge,
-          scale: [0, 4],
-        },
-        scorerDeps,
-      );
-      // Calibration reports agreement only; judge-call usage (mock judges, $0)
-      // is intentionally not part of the calibration artifact.
-      scores.push(judged.quality);
+    const truthOutcome = await scoreAnswer(item, answer, scorerDeps);
+    const scores: Record<string, number> = {};
+    for (const judge of judges) {
+      const judged = await scoreLlmJudge(item, answer, judgeViewScoring(judge), scorerDeps);
+      addUsage(totals, judged.usage);
+      scores[judge] = judged.quality;
     }
-    pairs.push({ itemId: item.id, scoreA: scores[0]!, scoreB: scores[1]! });
+    pairs.push({
+      itemId: item.id,
+      truth: truthOutcome.quality,
+      scores,
+      scoreA: scores[judges[0]!]!,
+      scoreB: judges.length > 1 ? scores[judges[1]!]! : scores[judges[0]!]!,
+    });
   }
 
-  const r = pearson(
-    pairs.map((p) => p.scoreA),
-    pairs.map((p) => p.scoreB),
-  );
+  const truths = pairs.map((p) => p.truth);
+  const truthIsConstant = truths.length > 0 && truths.every((t) => t === truths[0]);
+  const truth: JudgeTruthStats[] = judges.map((judge) => {
+    const judgeScores = pairs.map((p) => p.scores[judge]!);
+    const meanAbsErr =
+      pairs.length > 0
+        ? pairs.reduce((a, p) => a + Math.abs(p.scores[judge]! - p.truth), 0) / pairs.length
+        : 0;
+    if (truthIsConstant) {
+      // No variance in ground truth → correlation is undefined; the corpus
+      // cannot calibrate this judge (harder suite / weaker answerer needed).
+      return {
+        judgeModel: judge,
+        resolvedModel: resolvedModelOf(prices, judge),
+        pearsonVsTruth: null,
+        meanAbsErr,
+        indeterminate: true,
+        flagged: true,
+      };
+    }
+    const r = pearson(judgeScores, truths);
+    return {
+      judgeModel: judge,
+      resolvedModel: resolvedModelOf(prices, judge),
+      pearsonVsTruth: r,
+      meanAbsErr,
+      indeterminate: false,
+      flagged: r < CALIBRATION_FLAG_BELOW,
+    };
+  });
+
+  const agreement =
+    judges.length > 1
+      ? pearson(
+          pairs.map((p) => p.scores[judges[0]!]!),
+          pairs.map((p) => p.scores[judges[1]!]!),
+        )
+      : 0;
+
   return {
     n: pairs.length,
-    judgeA: CALIBRATION_JUDGES[0],
-    judgeB: CALIBRATION_JUDGES[1],
-    pearson: r,
-    flagged: r < CALIBRATION_FLAG_BELOW,
+    judges,
+    judgeA: judges[0]!,
+    judgeB: judges[1] ?? judges[0]!,
+    pearson: agreement,
+    flagged:
+      truth.some((t) => t.flagged) || (judges.length > 1 && agreement < CALIBRATION_FLAG_BELOW),
     pairs,
+    truth,
+    spendUsd: totals.spendUsd,
+    pricesVersion: prices.version,
+    answererModel: answerer,
+    skipped,
   };
 }

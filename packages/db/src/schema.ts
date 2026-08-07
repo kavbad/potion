@@ -845,3 +845,36 @@ export type RecipeStatusRow = typeof recipeStatus.$inferSelect;
 export type NewRecipeStatus = typeof recipeStatus.$inferInsert;
 export type TraceSpanRow = typeof traceSpans.$inferSelect;
 export type NewTraceSpan = typeof traceSpans.$inferInsert;
+
+// ---- judge calibrations (G0.2, migration 0018) ----
+// Judge-trust evidence: one row per calibration of ONE judge against
+// deterministic ground truth. judge_resolved_model uses the eval cache key's
+// judgeVersion resolution so records stale in lockstep with eval rows.
+/** Content-free calibration pair: item, truth score, per-judge scores. */
+export interface CalibrationPairEvidence {
+  itemId: string;
+  truth: number;
+  scores: Record<string, number>;
+}
+
+export const judgeCalibrations = pgTable('judge_calibrations', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  clusterId: text('cluster_id'),
+  suiteId: text('suite_id'),
+  judgeModel: text('judge_model').notNull(),
+  judgeResolvedModel: text('judge_resolved_model').notNull(),
+  answererModel: text('answerer_model').notNull(),
+  pricesVersion: text('prices_version').notNull(),
+  providerMode: text('provider_mode').notNull().default('unknown'),
+  n: integer('n').notNull(),
+  pearsonVsTruth: doublePrecision('pearson_vs_truth'),
+  judgeAgreement: doublePrecision('judge_agreement'),
+  meanAbsErr: doublePrecision('mean_abs_err'),
+  flagged: boolean('flagged').notNull(),
+  spendUsd: doublePrecision('spend_usd').notNull().default(0),
+  pairs: jsonb('pairs').$type<CalibrationPairEvidence[]>().notNull().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JudgeCalibrationRow = typeof judgeCalibrations.$inferSelect;
+export type NewJudgeCalibration = typeof judgeCalibrations.$inferInsert;

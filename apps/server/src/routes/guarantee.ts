@@ -22,12 +22,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { GuaranteeConfig } from '@potion/core';
 import {
+  latestJudgeCalibration,
   listIncidents,
   listPoliciesWithGuarantee,
   resolveIncident,
   rollingQualityForPolicy,
   type IncidentRow,
 } from '@potion/db';
+import { defaultServeJudgeModel } from '@potion/harness';
 import { openAiError, roleAtLeast } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -39,12 +41,26 @@ export interface IncidentDto {
   resolvedAt: string | null;
 }
 
+/** Judge-trust evidence surfaced per policy (G0.2) — the latest calibration
+ * record for the policy's EFFECTIVE judge, matched to the serving provider
+ * mode (a mock calibration never presents as live trust evidence). */
+export interface JudgeCalibrationDto {
+  judgeModel: string;
+  pearsonVsTruth: number | null;
+  n: number;
+  flagged: boolean;
+  providerMode: string;
+  createdAt: string;
+}
+
 export interface GuaranteePolicyStatus {
   policyId: string;
   guarantee: GuaranteeConfig;
   rollingQuality: number | null;
   samples: number;
   breaches: IncidentDto[];
+  /** null = this judge has never been calibrated (itself a trust signal). */
+  judgeCalibration: JudgeCalibrationDto | null;
 }
 
 export interface GuaranteeStatus {
@@ -86,12 +102,29 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
           policyId: p.id,
           windowMin: guarantee.windowMin,
         });
+        // G0.2: the policy's effective judge + its latest calibration for
+        // THIS provider mode. null = never calibrated — a trust signal.
+        const judgeModel = guarantee.judgeModel ?? defaultServeJudgeModel(ctx.providerMode);
+        const calibration = await latestJudgeCalibration(ctx.db.db, {
+          judgeModel,
+          providerMode: ctx.providerMode,
+        });
         return {
           policyId: p.id,
           guarantee,
           rollingQuality: rolling.mean,
           samples: rolling.samples,
           breaches,
+          judgeCalibration: calibration
+            ? {
+                judgeModel,
+                pearsonVsTruth: calibration.pearsonVsTruth,
+                n: calibration.n,
+                flagged: calibration.flagged,
+                providerMode: calibration.providerMode,
+                createdAt: calibration.createdAt.toISOString(),
+              }
+            : null,
         };
       }),
     );

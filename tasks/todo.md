@@ -568,7 +568,7 @@ re-scoped to hot-path gaps.
       spend recorded per org and visible to budgets; queue payloads carry no raw content
       at rest longer than needed. Mock mode keeps a deterministic mock JUDGE (labeled),
       never Jaccard. [M]
-- [ ] G0.2 Judge trust: extend runJudgeCalibration beyond hard-wired mock judges — real
+- [x] G0.2 Judge trust: extend runJudgeCalibration beyond hard-wired mock judges — real
       judge pair on reference-scored items, Pearson + flag <0.8, per workload; store the
       calibration record with the frontier evidence. [M]
 - [x] G0.3 Contract-grade breach stats: CI-lower-bound breach decision (reuse gate.ts
@@ -727,3 +727,53 @@ errors. Zero live API calls.
 | date | run | projected | actual | cumulative |
 |---|---|---|---|---|
 | 2026-08-06 | G0.3 session — no live calls | $0.00 | $0.00 | $3.879 / $50.00 |
+
+---
+
+## G0.2 — Judge-truth calibration (session 2026-08-06, plan approved)
+
+Design: calibration becomes judge-vs-TRUTH on deterministic reference-scored items (the
+old mock-noise agreement check never computed ground truth at all): one pass answers
+each item (single answerer) → deterministic truth via scoreAnswer ($0) → each judge
+re-scores via a synthetic llm-judge view; report per-judge pearsonVsTruth + meanAbsErr +
+flag <0.8 + cross-judge agreement + REAL spend. Preflight-capped via a calibration
+projection (BudgetCapError). Persisted to new judge_calibrations (0018; platform-global,
+text keys, provider_mode CHECK, judge_resolved_model = runner's judgeVersionOf resolution
+so records stale in lockstep). Surfaced (not gated) on GET /api/guarantee/status per
+policy's effective judge. CLI --calibrate becomes standalone (v2 suites supported,
+--judge repeatable, flagged → exit 3). LIVE run: OpenAI key (custody: gitignored .env,
+chmod 600), additive oa-mini/oa-full prices aliases WITHOUT version bump (bump would
+stale-flag all M1b evidence — deliberate, documented), extraction-authored-v1 +
+code-gen-humaneval-js-v1, judge pair oa-mini + oa-full, cap $2, ledger rows.
+
+- [x] a. db: 0018_judge_calibrations + repo + tests
+- [x] b. harness: calibrate.ts truth-anchored rework + projectCalibrationCostUsd +
+      BudgetCapError + tests (truth stats, cap refusal, legacy agreement, persistence)
+- [x] c. cli: standalone --calibrate (v2 suites, --judge, exit 3 on flag)
+- [x] d. server: status route judgeCalibration field + dashboard DTO + tests
+- [x] e. mock proof + full pnpm -r + walkthrough
+- [x] f. LIVE calibration (cap $2, ledger before/after; OpenAI has no key-balance
+      endpoint — ledger records usage-priced spend)
+- [x] g. docs (CLAUDE.md defect line) + commit
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | G0.2 live calibration, OPENAI key (separate ledger; usage-priced — no balance endpoint for project keys): run 1 extraction (mini answerer, mini+gpt5 judges) $0.0546; run 2 code-gen (mini/mini) $0.0023; run 3 code-gen (nano answerer, mini+gpt5) $0.0210; one 400-rejected run pre-generation $0 | $0.2197 | $0.0779 | $0.0779 (OpenAI key) |
+
+**G0.2 DONE (2026-08-06)** — mock proof: truth-Pearson 0.955/0.941 (agreement
+0.897), persisted provider_mode=mock, exit 0. LIVE runs (3, $0.0779 total,
+capped $2 each) produced FLAGGED records — which is the machinery working:
+(1) gpt-5-as-judge is unusable under PROTOCOL_MAX_TOKENS=128 (reasoning
+consumes the completion budget → empty output → strict parse 0, mAE 0.97);
+per-judge protocol-cap override is future work if reasoning judges are wanted.
+(2) Competent answerers produce (near-)constant truth on the current n=12-30
+suites → correlation is INDETERMINATE (now honestly labeled, pearson null,
+conservatively flagged) — larger/harder suites (G0.5) are the fix, matching
+defect #4. (3) gpt-4.1-mini as judge tracks truth (mAE 0.028) but
+rubber-stamps ≈1.0 — no discrimination, correctly flagged. Two live-path
+transport/stat bugs found & fixed with tests: OpenAI-native chat requires
+max_completion_tokens (max_tokens rejected — split from the OpenRouter path);
+pearson() reported two DIFFERENT constant vectors as agreement 1.0.
+Verify: harness 133 + db 76 + providers 69 + server 18-in-file, full sweep at
+commit. Judge trust surfaced per policy on /api/guarantee/status
+(judgeCalibration; null = never calibrated, itself a signal).

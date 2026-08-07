@@ -106,7 +106,7 @@ describe('openai transport', () => {
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer sk-oai');
     expect(body.model).toBe('gpt-4.1-mini-2025-04-14');
     expect(body.logprobs).toBe(true);
-    expect(body.max_tokens).toBe(20);
+    expect(body.max_completion_tokens).toBe(20);
     expect(body.seed).toBe(7);
     expect(body.temperature).toBe(0);
     expect(body.messages).toEqual(MESSAGES); // system kept inline
@@ -141,7 +141,10 @@ describe('openai transport', () => {
     );
     const p = createProviders({ prices: PRICES, apiKeys: { ...KEYS } });
     await p.openai.complete({ model: 'gpt-mini-class', messages: MESSAGES });
-    expect(lastCall().body.max_tokens).toBe(DEFAULT_MAX_TOKENS);
+    // OpenAI-native chat rejects the deprecated 'max_tokens' — the enforced
+    // cap rides 'max_completion_tokens' there (OpenRouter keeps max_tokens).
+    expect(lastCall().body.max_completion_tokens).toBe(DEFAULT_MAX_TOKENS);
+    expect(lastCall().body.max_tokens).toBeUndefined();
   });
 
   // M3 #25 (OpenAI parity): tools/tool_choice forwarded UNMODIFIED; recorded

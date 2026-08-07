@@ -232,6 +232,16 @@ export interface GuaranteeConfigDto {
   minSamples?: number;
 }
 
+/** Judge-trust evidence per policy (G0.2). */
+export interface JudgeCalibrationDto {
+  judgeModel: string;
+  pearsonVsTruth: number | null;
+  n: number;
+  flagged: boolean;
+  providerMode: string;
+  createdAt: string;
+}
+
 export interface IncidentDto {
   id: string;
   kind: 'quality_breach' | 'rollback';
@@ -264,6 +274,7 @@ export interface GuaranteePolicyStatusDto {
   rollingQuality: number | null;
   samples: number;
   breaches: IncidentDto[];
+  judgeCalibration?: JudgeCalibrationDto | null;
 }
 
 export interface GuaranteeStatusDto {

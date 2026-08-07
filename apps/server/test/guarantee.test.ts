@@ -29,6 +29,7 @@ import {
   insertApiKey,
   insertIncident,
   insertPolicy,
+  insertJudgeCalibration,
   insertQualitySample,
   listIncidents,
   listQualitySamples,
@@ -500,6 +501,34 @@ describe('guarantee API', () => {
     expect(p.guarantee).toEqual(G_ROLLBACK);
     expect(p.samples).toBeGreaterThanOrEqual(5);
     expect(typeof p.rollingQuality).toBe('number');
+    // G0.2: no calibration record yet → null (itself a trust signal)
+    expect(p.judgeCalibration).toBeNull();
+    // insert one for the effective judge (mock mode → mock-judge) → surfaced
+    await insertJudgeCalibration(db(), {
+      judgeModel: 'mock-judge',
+      judgeResolvedModel: 'mock-judge-v1',
+      answererModel: 'mock-cheap',
+      pricesVersion: 'v',
+      providerMode: 'mock',
+      n: 30,
+      pearsonVsTruth: 0.93,
+      flagged: false,
+      spendUsd: 0,
+      pairs: [],
+    });
+    const res2 = await app.inject({
+      method: 'GET',
+      url: '/api/guarantee/status',
+      headers: { authorization: `Bearer ${KEY(ORG_RB)}` },
+    });
+    const p2 = res2.json().policies.find((x: { policyId: string }) => x.policyId === 'pol-g-rb');
+    expect(p2.judgeCalibration).toMatchObject({
+      judgeModel: 'mock-judge',
+      pearsonVsTruth: 0.93,
+      n: 30,
+      flagged: false,
+      providerMode: 'mock',
+    });
     expect(p.rollingQuality).toBeLessThan(G_ROLLBACK.minQuality);
     expect(Array.isArray(p.breaches)).toBe(true);
     expect(p.breaches[0]).toMatchObject({ kind: 'rollback' });

@@ -39,6 +39,10 @@ export async function openAiCompatibleComplete(
   extraHeaders: Record<string, string>,
   opts: LiveProviderOptions,
   req: CompleteRequest,
+  /** OpenAI-native chat models reject 'max_tokens' (deprecated) and require
+   * 'max_completion_tokens'; OpenRouter still speaks 'max_tokens'. The cap
+   * is ALWAYS sent either way (the estimator's enforced output bound). */
+  tokenParam: 'max_tokens' | 'max_completion_tokens' = 'max_tokens',
 ): Promise<CompleteResponse> {
   const started = Date.now();
   const { native } = resolveModel(opts.prices, req.model);
@@ -53,7 +57,7 @@ export async function openAiCompatibleComplete(
   // Always sent (DEFAULT_MAX_TOKENS when params.maxTokens is absent), like the
   // anthropic/google transports: the preflight cost projection's per-call
   // output bound is only real if every live path enforces it.
-  body.max_tokens = sampling.maxTokens;
+  body[tokenParam] = sampling.maxTokens;
   if (sampling.logprobs) body.logprobs = true;
   // M3 #25: tool-calling passthrough — forwarded UNMODIFIED.
   if (req.params?.tools !== undefined) body.tools = req.params.tools;
@@ -101,7 +105,8 @@ export function createOpenAiProvider(opts: LiveProviderOptions): Provider {
   return {
     id: 'openai',
 
-    complete: (req) => openAiCompatibleComplete('openai', OPENAI_CHAT_URL, {}, opts, req),
+    complete: (req) =>
+      openAiCompatibleComplete('openai', OPENAI_CHAT_URL, {}, opts, req, 'max_completion_tokens'),
 
     async embed(texts: string[]): Promise<number[][]> {
       const { json } = await postJsonWithRetry<OpenAiEmbedResponse>(

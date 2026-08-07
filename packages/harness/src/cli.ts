@@ -8,10 +8,12 @@
 //   --simulated-ok             REQUIRED to run suites from suites/simulated/
 //                              (mock-corpus-derived; CI-only provenance)
 // Prints the Gate-3 results table: strategy, quality mean±CI, $/1K req, p50/p95.
-import { MOCK_PROVIDER_DISCLAIMER } from '@potion/providers';
-import { StrategyConfigSchema, type StrategyConfig } from '@potion/core';
+import { createProviders, loadPrices, MOCK_PROVIDER_DISCLAIMER } from '@potion/providers';
+import { StrategyConfigSchema, type PriceTable, type StrategyConfig } from '@potion/core';
+import { createDb, insertJudgeCalibration, migrate } from '@potion/db';
 import { BudgetCapError } from './estimate.js';
 import { runJudgeCalibration } from './calibrate.js';
+import { loadSuiteV2 } from './ingest/suite-v2.js';
 import { SimulatedSuiteError, runEval, type RunSummary } from './runner.js';
 import { loadSuiteFile, resolveSuite } from './suites.js';
 
@@ -45,10 +47,14 @@ interface CliArgs {
   simulatedOk: boolean;
   /** Answer output ceiling (RunOptions.maxOutputTokens); undefined → provider default. */
   maxOutputTokens: number | undefined;
+  /** Judge aliases for --calibrate (repeatable); empty → mock pair default. */
+  judges: string[];
+  /** Answerer alias for --calibrate; undefined → mock-cheap default. */
+  calibrateAnswerer: string | undefined;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined };
+  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--') continue; // pnpm forwards the script separator literally
@@ -87,6 +93,12 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--simulated-ok':
         args.simulatedOk = true;
         break;
+      case '--judge':
+        args.judges.push(next());
+        break;
+      case '--answerer':
+        args.calibrateAnswerer = next();
+        break;
       case '--max-output-tokens': {
         const v = Number(next());
         if (!Number.isInteger(v) || v <= 0) throw new Error('--max-output-tokens must be a positive integer');
@@ -98,7 +110,9 @@ export function parseArgs(argv: string[]): CliArgs {
     }
   }
   if (args.suites.length === 0 && args.suitesV2.length === 0) throw new Error('at least one --suite or --suite-v2 is required');
-  if (args.strategies.length === 0) throw new Error('at least one --strategy is required');
+  // G0.2: --calibrate is a standalone mode — strategies optional (legacy
+  // eval-then-calibrate still works when strategies are given).
+  if (args.strategies.length === 0 && !args.calibrate) throw new Error('at least one --strategy is required');
   if (!Number.isFinite(args.cap) || args.cap < 0) throw new Error('--cap <usd> is required (non-negative number)');
   return args;
 }
@@ -164,9 +178,9 @@ export async function main(argv: string[]): Promise<number> {
         'prefer v2 suites with provenance manifests (--suite-v2 <id>, see packages/harness/suites/v2).',
     );
   }
-  let summary: RunSummary;
+  let summary: RunSummary | null = null;
   try {
-    summary = await runEval(
+    if (args.strategies.length > 0) summary = await runEval(
       {
         suiteIds: args.suites,
         suiteV2Ids: args.suitesV2,
@@ -179,11 +193,13 @@ export async function main(argv: string[]): Promise<number> {
       },
       {},
     );
-    if (summary.simulated) console.log(`\n${simulatedBanner(summary)}\n`);
-    console.log(`\nrun ${summary.runId} — projected $${summary.projectedSpendUsd.toFixed(4)} / cap $${args.cap.toFixed(2)} — spend $${summary.spendUsd.toFixed(4)} (${summary.executed} executed, ${summary.cacheHits} cache hits, ${summary.skipped.length} skipped)\n`);
-    for (const s of summary.skipped) console.warn(`  skipped '${s.itemId}': ${s.reason}`);
-    console.log(formatResultsTable(summary));
-    if (summary.simulated) console.log(`\n${simulatedBanner(summary)}\n`);
+    if (summary?.simulated) console.log(`\n${simulatedBanner(summary)}\n`);
+    if (summary) {
+      console.log(`\nrun ${summary.runId} — projected $${summary.projectedSpendUsd.toFixed(4)} / cap $${args.cap.toFixed(2)} — spend $${summary.spendUsd.toFixed(4)} (${summary.executed} executed, ${summary.cacheHits} cache hits, ${summary.skipped.length} skipped)\n`);
+      for (const s of summary.skipped) console.warn(`  skipped '${s.itemId}': ${s.reason}`);
+      console.log(formatResultsTable(summary));
+      if (summary.simulated) console.log(`\n${simulatedBanner(summary)}\n`);
+    }
   } catch (e) {
     if (e instanceof BudgetCapError || e instanceof SimulatedSuiteError) {
       console.error(`\nREFUSED: ${e.message}\n`);
@@ -193,18 +209,103 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   if (args.calibrate) {
-    if (args.suites.length === 0) throw new Error('--calibrate requires a flat --suite (v2 calibration not wired yet)');
-    const resolved = resolveSuite(args.suites[0]!);
-    const items = loadSuiteFile(resolved.path, resolved.suiteId).slice(0, 30);
-    const report = await runJudgeCalibration(items);
+    // G0.2: standalone judge-truth calibration — v1 AND v2 suites, real or
+    // mock judges, preflight-capped, persisted, LOUD on flag (exit 3).
+    let report;
+    let calClusterId: string | null = null;
+    try {
+      const items = (
+      args.suites.length > 0
+        ? (() => {
+            const resolved = resolveSuite(args.suites[0]!);
+            // M1a quarantine holds here too: simulated suites are CI
+            // simulations and need the same explicit acknowledgment.
+            if (resolved.simulated && !args.simulatedOk) throw new SimulatedSuiteError([resolved.suiteId]);
+            return loadSuiteFile(resolved.path, resolved.suiteId);
+          })()
+        : loadSuiteV2(args.suitesV2[0]!).items
+      ).slice(0, 30);
+      calClusterId = items[0]?.clusterId ?? null;
+      const prices = loadPrices().table;
+    const judges =
+      args.judges.length > 0
+        ? args.judges
+        : args.provider === 'live'
+          ? ['judge-class']
+          : undefined;
+      const providers = args.provider === 'live' ? createLiveCalibrationProviders(prices) : undefined;
+      report = await runJudgeCalibration(items, {
+        prices,
+        ...(judges !== undefined ? { judgeModels: judges } : {}),
+        ...(providers !== undefined ? { providers } : {}),
+        ...(args.calibrateAnswerer !== undefined ? { answererModel: args.calibrateAnswerer } : {}),
+        budgetCapUsd: args.cap,
+      });
+    } catch (e) {
+      if (e instanceof BudgetCapError || e instanceof SimulatedSuiteError) {
+        console.error(`\nREFUSED: ${e.message}\n`);
+        return 2;
+      }
+      throw e;
+    }
     console.log(
-      `\njudge calibration: ${report.judgeA} vs ${report.judgeB} on ${report.n} double-scored answers\n` +
-        `  pearson agreement = ${report.pearson.toFixed(3)} ` +
-        `${report.flagged ? 'FLAGGED (< 0.8) ⚠' : 'OK (>= 0.8)'}`,
+      `\njudge calibration vs DETERMINISTIC truth — ${report.n} items, answerer ${report.answererModel}, spend $${report.spendUsd.toFixed(4)}`,
     );
+    for (const t of report.truth) {
+      const pearsonLabel =
+        t.pearsonVsTruth === null
+          ? 'INDETERMINATE (constant truth — harder suite or weaker answerer needed)'
+          : `pearson-vs-truth = ${t.pearsonVsTruth.toFixed(3)}`;
+      console.log(
+        `  ${t.judgeModel} (${t.resolvedModel}): ${pearsonLabel}, ` +
+          `meanAbsErr = ${t.meanAbsErr.toFixed(3)} ${t.flagged ? 'FLAGGED ⚠' : 'OK'}`,
+      );
+    }
+    if (report.judges.length > 1) {
+      console.log(`  agreement ${report.judgeA} vs ${report.judgeB} = ${report.pearson.toFixed(3)}`);
+    }
+    for (const sk of report.skipped) console.warn(`  skipped '${sk.itemId}': ${sk.reason}`);
+    // Persist the evidence record (one row per judge).
+    const handle = await createDb();
+    try {
+      await migrate(handle.db);
+      const clusterId = calClusterId;
+      const suiteId = args.suites[0] ?? args.suitesV2[0] ?? null;
+      for (const t of report.truth) {
+        await insertJudgeCalibration(handle.db, {
+          clusterId,
+          suiteId,
+          judgeModel: t.judgeModel,
+          judgeResolvedModel: t.resolvedModel,
+          answererModel: report.answererModel,
+          pricesVersion: report.pricesVersion,
+          providerMode: args.provider,
+          n: report.n,
+          pearsonVsTruth: t.pearsonVsTruth,
+          judgeAgreement: report.judges.length > 1 ? report.pearson : null,
+          meanAbsErr: t.meanAbsErr,
+          flagged: t.flagged,
+          spendUsd: report.spendUsd,
+          pairs: report.pairs.map((p) => ({ itemId: p.itemId, truth: p.truth, scores: p.scores })),
+        });
+      }
+      console.log(`  persisted ${report.truth.length} judge_calibrations record(s) (provider_mode=${args.provider})`);
+    } finally {
+      await handle.close();
+    }
+    if (report.flagged) {
+      console.error('\nCALIBRATION FLAGGED — judge trust below 0.8; do not stand a guarantee on this judge.\n');
+      return 3;
+    }
   }
   console.log('');
   return 0;
+}
+
+/** Live provider set for calibration: factory env-key fallback (M1b fix)
+ * covers OPENAI_API_KEY etc.; resilient wrappers included. */
+function createLiveCalibrationProviders(prices: PriceTable) {
+  return createProviders({ prices });
 }
 
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop() ?? '');

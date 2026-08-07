@@ -57,10 +57,19 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    below the floor, on strictly-keyed (org, policy, cluster, strategy)
    evidence incl. error-path quality-0 samples; verdicts re-derivable from
    the incident detail (ci95/seed/resamples); configurable minSamples
-   (floor 5). STILL OPEN: judge calibration records (G0.2); `shadow:judge`
-   remains `{stub:true}` and shadowScore is still Jaccard-vs-primary
-   (labeled); /v1/completions parity route has NO guarantee wiring at all;
-   sampling is uniform (no per-stratum quotas). Serving API keys hold role
+   (floor 5). Judge-trust calibration (G0.2, 2026-08-06): judges calibrate
+   against DETERMINISTIC ground truth, preflight-capped, persisted to
+   judge_calibrations (staleness-correct keys), surfaced per policy on
+   /api/guarantee/status, flagged calibrations exit 3. Live G0.2 findings on
+   record: gpt-5-class REASONING judges are unusable under
+   PROTOCOL_MAX_TOKENS=128 (reasoning eats the completion budget → empty
+   output, parse 0); current n=12-30 suites yield (near-)constant truth with
+   competent answerers → INDETERMINATE calibrations (G0.5 suite scaling is
+   the fix); gpt-4.1-mini as judge rubber-stamps ≈1.0. STILL OPEN:
+   `shadow:judge` remains `{stub:true}` and shadowScore is still
+   Jaccard-vs-primary (labeled); /v1/completions parity route has NO
+   guarantee wiring; sampling is uniform (no per-stratum quotas); no serving
+   gate on calibration state (surfaced only). Serving API keys hold role
    `admin` and can resolve incidents — lift their own rollback (G2.3).
 2. Frontiers/clusters/eval evidence are GLOBAL by design contract
    (db/schema.ts:33-38) — no org dimension; nightly traces:cluster pools all
