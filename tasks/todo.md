@@ -640,7 +640,14 @@ capstone everything else serves.)
       classified org-scoped / platform-only / public, with a test asserting each
       classification — five tenancy leaks found incidentally (G1.6 frontier detail,
       G1.6 leaderboard iteration, G1.8 cycles listing, G1.8 recipes lineage, G1.2
-      hint oracle) means the remainder hide in routes not yet touched. [M/L]
+      hint oracle) means the remainder hide in routes not yet touched. BROADENED
+      (owner, 2026-08-07 post-G2.7): the sweep also flags SELF-SERVE-ERA
+      AFFORDANCES that contradict the operator-gated posture (the G2.7 finding —
+      an unauthenticated auto-provision path was live and README-advertised;
+      sweep for siblings: signup-shaped routes, dev-bypass leakage into
+      production paths, docs/dashboard copy advertising ungated flows). README
+      verified corrected as of G2.7 (dev-scoped line + operator-posture
+      paragraph). [M/L]
 - [ ] G2.6 Compound policy: quality floor + latency bound in one policy (schema + select +
       routes + dashboard picker). [S/M]
 - [ ] G2.8 CAPSTONE — one real workload end-to-end: ingest → redaction → org-scoped
