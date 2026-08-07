@@ -777,3 +777,50 @@ pearson() reported two DIFFERENT constant vectors as agreement 1.0.
 Verify: harness 133 + db 76 + providers 69 + server 18-in-file, full sweep at
 commit. Judge trust surfaced per policy on /api/guarantee/status
 (judgeCalibration; null = never calibrated, itself a signal).
+
+---
+
+## G0.5 — Gate-2 live embeddings + discriminative suite scaling (session 2026-08-06, plan approved)
+
+Findings shaping scope: evaluate.ts hardcoded the MOCK embedder (runbook's "live" Gate-2
+command would print a false proof at $0); threshold 0.62 is mock-geometry-tuned (live
+cosines compressed → sweep required; POTION_CLUSTER_THRESHOLD already the serving knob);
+no real HumanEval exists in-repo (the 12 "humaneval-js" items are Potion one-liners —
+why models ace them); v1 suites append-only-safe / v2 counts frozen by tests;
+--calibrate silently sliced to 30; extraction-authored-v1 is mock-corpus data with its
+SIMULATED quarantine stripped during v2 repackaging (superseded as evidence by the new
+authored suite; kept frozen as fixture). Deterministic-first: 5 llm-judge breadth suites
+deferred (no calibration value) — follow-up item.
+
+- [x] a. evaluate.ts: resolveEmbedder wiring + honest banner + --sweep with memoized
+      embeddings + test; mock ≥85% @0.62 reproduces through the new path
+- [x] b. LIVE Gate-2: threshold sweep 0.1–0.7, confusion matrices,
+      artifacts/m1b-gate2-live.log, recommended POTION_CLUSTER_THRESHOLD, ledger
+- [ ] c. code-gen-potion-v2: 60 tiered JS items (20E/25M/15H, ≥5 tests each), mechanical
+      self-pass gate as a permanent harness test + reviewer pass
+- [ ] d. extraction-potion-v2: 50 authored field-match items (6-10 fields, arrays,
+      absent fields, ambiguous docs) + reviewer pass + ingest lint
+- [ ] e. exact v1 appends: classification/multi-step-reasoning/rag-answer +36 each → 50
+      (new ids only; existing 14 byte-untouched; domination regression re-run green)
+- [ ] f. cli --calibrate-n (default 30, silent slice removed)
+- [ ] g. LIVE recalibration on code-gen-potion-v2 (nano answerer, mini judge, cap $2) —
+      closes G0.2 INDETERMINATE with a real pearson-vs-truth
+- [ ] h. docs (CLAUDE.md defect #4 + Gate-2), ledger rows, two commits
+
+### GATE 2 LIVE ✅ (2026-08-06, OpenAI text-embedding-3-small dims=384)
+
+**96.00% held-out accuracy (200 examples) — PASSES ≥85%, ABOVE the mock's 89.00%.**
+Full sweep (artifacts/m1b-gate2-live.log): 96.00% flat across thresholds 0.05–0.2,
+95.50% @0.25, 92.50% @0.3, 87.50% @0.35, 82.50% @0.4, 45.50% @0.5, **6.00% @0.62** —
+the mock-tuned default threshold routes nearly everything to 'general' on real
+embeddings, exactly as predicted (compressed cosine geometry). **Recommended
+POTION_CLUSTER_THRESHOLD=0.2 for live deployments**: the highest plateau threshold,
+preserving a meaningful below-threshold→general fallback (0.05 would almost never fall
+back). Mock path re-verified at 89.00% @0.62 through the NEW resolveEmbedder-wired
+evaluate.ts (the old script hardcoded the mock — a live run would have printed a false
+proof). Embedder provenance on cluster rows remains schema debt (artifact log is the
+record). Pre-G0.5 defect fixed: evaluate.ts ignored POTION_EMBEDDER entirely.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | Gate-2 LIVE sweep: 462 texts embedded once (memoized across 10 thresholds), ~16.5K tokens @ $0.02/1M | $0.01 | ~$0.0004 | $0.0783 (OpenAI key) |
