@@ -611,7 +611,10 @@ data, not walkthrough spans. Redis is DEFERRED to last: in-memory limiting is on
 incorrect across replicas and initial deployment is single-instance. G2.8 is the
 capstone everything else serves.)
 - [ ] G2.7 Operator onboarding: org-creation route (operator credential, not self-serve),
-      README runbook: create org → policy → hand-issue key → invoice. [S]
+      README runbook: create org → policy → hand-issue key → invoice. Plus org-DELETION
+      route (operator credential): TRUE CASCADE per the owner's deletion-semantics
+      carve-out (2026-08-07) — evidence rows and tombstones included, unlike the
+      operational purge's stale-never-delete; explainability knowingly sacrificed. [S/M]
 - [ ] G2.1 Guarantee report: quality time series per policy/cluster (persisted samples +
       request_logs join via new completion-id column); exportable monthly report next to
       the invoice. Incl. the serve-path judgeMaxTokens budget on GuaranteeConfig
@@ -1235,3 +1238,10 @@ SHARED suites (safe today — org evidence only comes from org-partitioned
 agent item ids). 954 keyless tests green (+11); walkthrough 15/15 (fresh-org
 platform fallback is load-bearing and exercised by steps 3/6/share). NO
 live leg — every G1.6 writer is mock until G1.7; $0 spend.
+
+STANDING DECISION (owner, 2026-08-07) — deletion-semantics carve-out:
+OPERATIONAL purge (retention) = stale-never-delete as built (tombstone
+cacheKeys, historical frontiers stay explainable). ORG-LEVEL DATA DELETION
+(offboarding / legal erasure) = TRUE CASCADE — evidence rows AND tombstones
+included, historical explainability knowingly sacrificed. The org-deletion
+route lands in G2.7 scope (see the G2.7 item).

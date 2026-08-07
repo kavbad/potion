@@ -73,3 +73,19 @@ lifecycle status, unmistakably distinguishing in-force from not-in-force, and (2
 evidence for/against it (calibration verdict, provenance, failure reason). Never delete
 or hide a rejected/failed artifact from its review surface; record WHY in a
 first-class field (status_reason), not a log line.
+
+## API-key rotation is the owner's call — don't keep reminding
+
+**What happened (2026-08-07):** After several sessions ending with "remember to
+rotate the keys," the owner ruled: both keys are spend-capped, rotation timing is
+their decision — note it once and stop reminding.
+
+**Why:** Repeated safety reminders the owner has already priced in are noise, not
+diligence. The keys' blast radius is bounded by their spend caps; the owner owns
+the rotation schedule.
+
+**How to apply:** Security-hygiene reminders get stated ONCE when the exposure is
+created, then recorded (lessons/todo) and dropped from session-end summaries.
+Applies generally: after the owner acknowledges a standing risk and takes
+ownership of it, repeating the warning each session is a correction-worthy habit,
+not thoroughness.
