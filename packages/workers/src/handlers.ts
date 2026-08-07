@@ -101,6 +101,7 @@ import {
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
 import type { FrontierLiveSweepPayload, RubricGeneratePayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import { orgDeleteHandler } from './org-delete.js';
 // ---- end M5 #36 imports ----
 import {
   alertRules,
@@ -2534,6 +2535,8 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'rubric:generate': rubricGenerateHandler,
   // ---- G1.7 live capped org evals ----
   'frontier:live-sweep': frontierLiveSweepHandler,
+  // ---- G2.7 operator org deletion ----
+  'org:delete': orgDeleteHandler,
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,

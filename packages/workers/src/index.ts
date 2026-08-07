@@ -89,6 +89,7 @@ export async function runWorker(opts: RunWorkerOptions): Promise<WorkerHandle> {
 }
 
 export * from './jobs.js';
+export { createOrgDeleteHandler, orgDeleteHandler, type OrgDeleteHandlerOpts } from './org-delete.js';
 export {
   defaultHandlers,
   evalRunHandler,

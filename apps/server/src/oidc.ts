@@ -61,7 +61,7 @@ export function oidcConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OidcCon
 export class OidcError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 401 | 502,
+    readonly status: 400 | 401 | 403 | 502,
   ) {
     super(message);
     this.name = 'OidcError';

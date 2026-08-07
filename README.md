@@ -76,11 +76,19 @@ Every customer asset hangs off an **org**; users join orgs via **memberships** w
 
 ```bash
 curl -X POST localhost:3000/auth/request-link -H 'content-type: application/json' \
-  -d '{"email":"you@company.com"}'   # first signup auto-provisions your solo org (you are admin)
+  -d '{"email":"you@company.com"}'   # dev: first signup auto-provisions a solo org (you are admin)
 open "<the link from the email>"     # GET /auth/verify → httpOnly cookie + ps_… bearer token
 curl localhost:3000/api/frontiers -H "cookie: potion_session=ps_…"     # dashboard API (session)
 curl localhost:3000/v1/chat/completions -H "authorization: Bearer pk_…" # serving stays API-KEY only
 ```
+
+**Production is operator-onboarded, not self-serve (G2.7):** auto-provisioning is
+gated by `POTION_SELF_SERVE` (default ON only in dev mode; OFF otherwise — unknown
+emails get a neutral response and no org). Orgs are created and deleted through the
+`/operator/*` surface, authenticated by the fail-closed `POTION_OPERATOR_TOKEN`
+bearer. See `docs/ONBOARDING-RUNBOOK.md` for the full create → policy → key →
+invoice → offboard flow (offboarding is a TRUE-CASCADE deletion — nothing derived
+survives).
 
 - **Routes:** `POST /auth/request-link` · `GET /auth/verify` · `POST /auth/logout` ·
   `GET /auth/me` · `POST /auth/invite` (admin-only: teammates join an existing org by invite

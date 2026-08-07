@@ -22,7 +22,9 @@ export type JobKind =
   // ---- G1.5 automated scorer construction ----
   | 'rubric:generate'
   // ---- G1.7 live capped org evals ----
-  | 'frontier:live-sweep';
+  | 'frontier:live-sweep'
+  // ---- G2.7 operator org deletion ----
+  | 'org:delete';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -39,6 +41,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'traces:redact',
   'rubric:generate',
   'frontier:live-sweep',
+  'org:delete',
 ] as const;
 
 export interface EvalRunPayload {
@@ -105,6 +108,7 @@ export interface JobPayloads {
   'traces:redact': TracesRedactPayload;
   'rubric:generate': RubricGeneratePayload;
   'frontier:live-sweep': FrontierLiveSweepPayload;
+  'org:delete': OrgDeletePayload;
 }
 
 /**
@@ -245,4 +249,15 @@ export interface FrontierLiveSweepPayload {
   /** Answer output ceiling (default 1600 — G1.1: best answers hit 1501). */
   maxOutputTokens?: number;
   seed?: number;
+}
+
+/**
+ * TRUE-CASCADE org deletion (G2.7, operator-triggered only): deletes the
+ * org and EVERYTHING derived from it — evidence rows and tombstones
+ * included, per the deletion-semantics carve-out (operational purge stays
+ * stale-never-delete; org-level deletion knowingly sacrifices
+ * explainability). Refuses org_demo. Idempotent.
+ */
+export interface OrgDeletePayload {
+  orgId: string;
 }

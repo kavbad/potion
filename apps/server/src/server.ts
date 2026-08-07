@@ -28,7 +28,9 @@ import { registerOpenAiParityRoutes } from './routes/openai-parity.js';
 // M3 #28 jobs (m3-queue-workers) — appended imports (append-only block).
 import { createArtifactStore, type ArtifactStore } from '@potion/artifacts';
 import { createQueue, type PotionQueue } from '@potion/queue';
-import { runWorker } from '@potion/workers';
+import { runWorker,
+  createOrgDeleteHandler,
+} from '@potion/workers';
 import { registerJobRoutes } from './routes/jobs.js';
 // ---- M3 #21 shadow (m3-shadow) — appended import ----
 import { registerReportRoutes } from './routes/reports.js';
@@ -55,6 +57,7 @@ import { registerResearchRoutes } from './routes/research.js';
 // ---- M5 #36 agent workloads ----
 import { registerTraceRoutes } from './routes/traces.js';
 import { registerRubricRoutes } from './routes/rubrics.js';
+import { registerOperatorRoutes } from './routes/operator.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
 import { createBudgetEvaluateHandler } from '@potion/workers';
 // ---- end M4 #33/#35 imports ----
@@ -221,6 +224,10 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
       // budget:evaluate with the observability meter attached (same pattern
       // as guarantee:evaluate above; alerts:dispatch keeps its default).
       'budget:evaluate': createBudgetEvaluateHandler({ meter: observability.meter }),
+      // ---- G2.7 org deletion: cache invalidation after the cascade (the
+      // worker is in-process; a revoked key must not keep serving for a
+      // cache TTL after its org is erased).
+      'org:delete': createOrgDeleteHandler({ onOrgDeleted: ctx.invalidateOrgProviders }),
       // ---- end M4 #35 budget handler ----
     },
     // ---- end M3 #22 guarantee handler ----
@@ -315,6 +322,9 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   registerTraceRoutes(app, ctx, { queue });
   // G1.5: per-cluster rubric review surface (generate/list/approve/reject).
   registerRubricRoutes(app, ctx, { queue });
+  // G2.7: operator surface (create/list/delete orgs + jobs mirror) —
+  // fail-closed POTION_OPERATOR_TOKEN bearer, outside the /api auth hook.
+  registerOperatorRoutes(app, ctx, { queue });
   const tracesCluster = setInterval(() => {
     queue.enqueue('traces:cluster', {}).catch((err: unknown) => {
       app.log.warn(err, 'traces cluster enqueue failed — swallowed');

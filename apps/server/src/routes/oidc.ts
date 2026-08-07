@@ -24,7 +24,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
-import { createSession } from '@potion/db';
+import { createSession,
+  getUserByEmail,
+  listMembershipsByUser,
+} from '@potion/db';
 import { openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import {
@@ -40,7 +43,7 @@ import {
   verifyIdToken,
   type OidcConfig,
 } from '../oidc.js';
-import { SESSION_TTL_MS, provisionForEmail, recordAuthEvent } from './auth.js';
+import { SESSION_TTL_MS, provisionForEmail, recordAuthEvent, selfServeEnabled } from './auth.js';
 import { SESSION_COOKIE } from '../auth.js';
 
 const OIDC_SCOPE = 'openid email profile';
@@ -118,6 +121,19 @@ export function registerOidcRoutes(
       }
 
       // SAME provisioning + session semantics as the magic-link verify.
+      // G2.7 self-serve gate: the IdP verified the email, so enumeration is
+      // moot — an unknown/membership-less identity is refused outright.
+      if (!selfServeEnabled()) {
+        const existing = await getUserByEmail(db, email);
+        const hasMembership =
+          existing !== null && (await listMembershipsByUser(db, existing.id)).length > 0;
+        if (!hasMembership) {
+          throw new OidcError(
+            'no Potion account for this identity — ask your operator to onboard the org',
+            403,
+          );
+        }
+      }
       const { userId, orgId } = await provisionForEmail(db, email);
       const sessionToken = `ps_${randomBytes(32).toString('hex')}`; // identical to magic-link minting
       const expiresAt = new Date(Date.now() + SESSION_TTL_MS);

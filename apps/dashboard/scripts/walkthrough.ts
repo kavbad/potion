@@ -43,6 +43,7 @@ const API_PORT = Number(process.env.WALK_API_PORT ?? 3100);
 const DASH_PORT = Number(process.env.WALK_DASH_PORT ?? 3101);
 const API = `http://localhost:${API_PORT}`;
 const DASH = `http://localhost:${DASH_PORT}`;
+const OPERATOR_TOKEN = 'op_walkthrough_token';
 
 const t0 = Date.now();
 const children: ChildProcess[] = [];
@@ -140,6 +141,9 @@ async function main(): Promise<void> {
     boot('node', ['apps/server/dist/index.js'], REPO_ROOT, {
       PORT: String(API_PORT),
       POTION_PRICES_PATH: tmpPricesPath,
+      // G2.7: the operator credential for step 14 (fail-closed — without it
+      // the operator surface does not exist).
+      POTION_OPERATOR_TOKEN: OPERATOR_TOKEN,
     });
     await waitFor(`${API}/healthz`, 120_000, 'api');
     const health = (await (await fetch(`${API}/healthz`)).json()) as { seeded?: boolean };
@@ -688,6 +692,141 @@ async function main(): Promise<void> {
       body: JSON.stringify({ days: 30 }),
     });
     return `7 spans ingested idempotently, loop flagged, ${clResult.clustersCreated} agent cluster(s) → frontier ${agentCluster.clusterId}, hint honored, purge redacted attrs`;
+  });
+
+  // ---- 14. G2.7: operator create → full pipeline → TRUE-CASCADE delete →
+  // NOTHING DERIVED SURVIVES (the owner's done criterion) ----
+  await step('14. operator org lifecycle (create → pipeline → delete → nothing derived survives)', async () => {
+    const OP = { authorization: `Bearer ${OPERATOR_TOKEN}` };
+    const OPJ = { ...OP, 'content-type': 'application/json' };
+    const savedCookie = sessionCookie; // demo org cookie — restored at the end
+    try {
+      // operator creates the org; the magic link comes back unconditionally
+      const create = await fetch(`${API}/operator/orgs`, {
+        method: 'POST',
+        headers: OPJ,
+        body: JSON.stringify({ id: 'org-walk14', name: 'Walkthrough Partner', adminEmail: 'partner@walk14.dev' }),
+      });
+      const created = await create.json();
+      assert(create.status === 201, `operator create → HTTP ${create.status}: ${JSON.stringify(created)}`);
+      assert(typeof created.magicLink === 'string', 'no magic link in operator create response');
+      // hand-delivered link → new-org admin session
+      const linkUrl = new URL(created.magicLink);
+      const verify = await fetch(`${API}${linkUrl.pathname}${linkUrl.search}`, { redirect: 'manual' });
+      const setCookie = verify.headers.get('set-cookie') ?? '';
+      const tok = /potion_session=([^;]+)/.exec(setCookie)?.[1];
+      assert(tok !== undefined, 'magic link did not mint a session');
+      const partnerCookie = `potion_session=${tok}`;
+      // policy + serving key in ONE call (the runbook's step 2)
+      const pol = await fetch(`${API}/api/policies`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: partnerCookie },
+        body: JSON.stringify({ policy: { type: 'max_quality', costCeilingPer1K: 5 }, createKey: true }),
+      });
+      const polBody = await pol.json();
+      assert(pol.ok && typeof polBody.apiKey === 'string', `policy+key → HTTP ${pol.status}: ${JSON.stringify(polBody)}`);
+      const partnerKey = polBody.apiKey as string;
+      // pipeline: ingest 3 sessions → cluster → rubric generate + approve
+      for (const [t, p] of [
+        ['wt14_a', 'Escalate the refund case for account 60001001'],
+        ['wt14_b', 'Escalate the refund case for account 60001002'],
+        ['wt14_c', 'Escalate the refund case for account 60001003'],
+      ] as const) {
+        const ing = await fetch(`${API}/v1/traces`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${partnerKey}` },
+          body: JSON.stringify({
+            spans: [
+              { trace_id: t, span_id: `${t}_r`, name: 'agent.root', model: 'mock-cheap', attributes: { 'gen_ai.prompt': p } },
+              { trace_id: t, span_id: `${t}_t`, name: 'tool.crm', model: 'mock-cheap', attributes: { 'gen_ai.operation.name': 'execute_tool' } },
+              { trace_id: t, span_id: `${t}_a`, name: 'chat', model: 'mock-cheap', attributes: { 'gen_ai.completion': `Refunded and closed ${t}.` } },
+            ],
+          }),
+        });
+        assert(ing.status === 202, `partner ingest → HTTP ${ing.status}`);
+      }
+      const clus = await fetch(`${API}/api/traces/cluster`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: partnerCookie },
+        body: JSON.stringify({ sinceDays: 30 }),
+      });
+      const clusBody = await clus.json();
+      assert(clus.status === 202, `partner cluster → HTTP ${clus.status}`);
+      let clusResult: { clusters?: Array<{ clusterId: string }> } = {};
+      for (let i = 0; i < 120; i++) {
+        const job = await (await fetch(`${API}/api/jobs/${clusBody.jobId}`, { headers: { cookie: partnerCookie } })).json();
+        if (job.state === 'completed') { clusResult = job.result ?? {}; break; }
+        assert(job.state !== 'failed', `partner cluster job failed: ${job.error}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      const partnerCluster = clusResult.clusters?.[0]?.clusterId;
+      assert(partnerCluster !== undefined, 'no partner cluster synthesized');
+      const rub = await fetch(`${API}/api/rubrics/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: partnerCookie },
+        body: JSON.stringify({ clusterId: partnerCluster }),
+      });
+      const rubBody = await rub.json();
+      assert(rub.status === 202, `partner rubric → HTTP ${rub.status}`);
+      let rubricId: string | undefined;
+      for (let i = 0; i < 120; i++) {
+        const job = await (await fetch(`${API}/api/jobs/${rubBody.jobId}`, { headers: { cookie: partnerCookie } })).json();
+        if (job.state === 'completed') { rubricId = (job.result ?? {}).rubricId; break; }
+        assert(job.state !== 'failed', `partner rubric job failed: ${job.error}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      assert(rubricId !== undefined, 'no rubric generated');
+      const approve = await fetch(`${API}/api/rubrics/${rubricId}/approve`, {
+        method: 'POST',
+        headers: { cookie: partnerCookie },
+      });
+      assert(approve.ok, `rubric approve → HTTP ${approve.status}`);
+      // artifacts EXIST before deletion
+      const rubList = await (await fetch(`${API}/api/rubrics`, { headers: { cookie: partnerCookie } })).json();
+      assert((rubList.rubrics ?? []).length >= 1, 'partner rubrics missing pre-delete');
+      const traceList = await (await fetch(`${API}/api/traces`, { headers: { cookie: partnerCookie } })).json();
+      assert((traceList.sessions ?? []).length === 3, 'partner traces missing pre-delete');
+
+      // TRUE-CASCADE delete
+      const del = await fetch(`${API}/operator/orgs/org-walk14`, { method: 'DELETE', headers: OP });
+      const delBody = await del.json();
+      assert(del.status === 202, `operator delete → HTTP ${del.status}: ${JSON.stringify(delBody)}`);
+      let report: { deleted?: Record<string, number> } = {};
+      for (let i = 0; i < 120; i++) {
+        const job = await (await fetch(`${API}/operator/jobs/${delBody.jobId}`, { headers: OP })).json();
+        if (job.state === 'completed') { report = job.result ?? {}; break; }
+        assert(job.state !== 'failed', `org:delete failed: ${job.error}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      assert(report.deleted?.orgs === 1, `cascade report wrong: ${JSON.stringify(report)}`);
+
+      // NOTHING DERIVED SURVIVES (HTTP surface)
+      const deadSession = await fetch(`${API}/auth/me`, { headers: { cookie: partnerCookie } });
+      assert(deadSession.status === 401, `deleted org session should 401, got ${deadSession.status}`);
+      const deadKey = await fetch(`${API}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${partnerKey}` },
+        body: JSON.stringify({ model: 'potion-auto', messages: [{ role: 'user', content: 'hi' }] }),
+      });
+      assert(deadKey.status === 401, `deleted org key should 401, got ${deadKey.status}`);
+      const delAgain = await fetch(`${API}/operator/orgs/org-walk14`, { method: 'DELETE', headers: OP });
+      assert(delAgain.status === 404, `repeat delete should 404, got ${delAgain.status}`);
+      const opList = await (await fetch(`${API}/operator/orgs`, { headers: OP })).json();
+      assert(!(opList.orgs ?? []).some((o: { id: string }) => o.id === 'org-walk14'), 'deleted org still listed');
+
+      // platform intact (demo org unaffected)
+      const platFrontier = await dashFetch('/api/frontiers/code-gen');
+      assert(platFrontier.ok, `platform frontier → HTTP ${platFrontier.status}`);
+      const lb = await fetch(`${API}/api/leaderboard`);
+      assert(lb.ok, `leaderboard → HTTP ${lb.status}`);
+      const demoTraces = await (await dashFetch('/api/traces')).json();
+      assert((demoTraces.sessions ?? []).length >= 1, 'demo traces disturbed by cascade');
+
+      const tables = Object.entries(report.deleted ?? {}).filter(([, n]) => (n as number) > 0).length;
+      return `org created via operator → 3 traces → cluster → rubric approved → TRUE-CASCADE deleted (${tables} tables touched) → session+key dead, platform intact`;
+    } finally {
+      sessionCookie = savedCookie;
+    }
   });
 
   const total = elapsed(t0);

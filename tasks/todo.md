@@ -610,7 +610,7 @@ the rest of G2 is built — guarantee report and incident SLAs get developed aga
 data, not walkthrough spans. Redis is DEFERRED to last: in-memory limiting is only
 incorrect across replicas and initial deployment is single-instance. G2.8 is the
 capstone everything else serves.)
-- [ ] G2.7 Operator onboarding: org-creation route (operator credential, not self-serve),
+- [x] G2.7 Operator onboarding: org-creation route (operator credential, not self-serve),
       README runbook: create org → policy → hand-issue key → invoice. Plus org-DELETION
       route (operator credential): TRUE CASCADE per the owner's deletion-semantics
       carve-out (2026-08-07) — evidence rows and tombstones included, unlike the
@@ -1386,3 +1386,56 @@ closed); NEW POST /api/research/cycle (admin, ownership 404, org forced);
 NO live leg — $0, no ledger movement. Tests: workers 42 (+3), server research 7 (+2),
 db 13; 970 keyless tests green total; walkthrough 15/15; platform research path
 byte-for-byte unchanged (all pre-existing tests pass untouched).
+---
+
+## G2.7 — Operator onboarding + TRUE-CASCADE org deletion (session 2026-08-07, plan approved)
+
+Owner framing: the deletion cascade is the CENTER OF GRAVITY — reaches every derived
+G1 artifact; done = walkthrough leg proving create → full pipeline → delete → nothing
+derived survives. deleteOrgCascade: snapshot-then-ordered hand-written cascade (one
+FK cascade exists in the whole schema; 24 org references block naive delete),
+explicit protection for silent-orphan tables (budget_events, clusters bare-text) and
+never-cascade platform assets (models/strategy_configs/recipe_status/NULL clusters),
+three-route judge_calibrations union, per-table deletion report (status+evidence
+rule), org_demo refusal (route AND handler), idempotent, orphaned-user erasure (zero
+remaining memberships+sessions). Operator surface: POTION_OPERATOR_TOKEN fail-CLOSED
+bearer (opposite polarity to the fail-open dev bypass), /operator/orgs CRUD + jobs
+mirror, magic link returned unconditionally (hand-delivery). SELF-SERVE GATE: the
+live unauthenticated auto-provision path (magic-link + OIDC) goes behind
+POTION_SELF_SERVE (default ON iff dev bypass; OFF in production; enumeration-safe).
+Runbook docs/ONBOARDING-RUNBOOK.md + README/ENTERPRISE edits. $0 — no live leg.
+
+- [x] a. db: deleteOrgCascade repo + report + tests (refusal, idempotency, orphans)
+- [x] b. workers: org:delete job + full-pipeline nothing-survives e2e
+- [x] c. server: operator routes (fail-closed) + self-serve gate + issueMagicLink
+      extraction + handler-factory invalidation + tests
+- [x] d. walkthrough step 14 + runbook + README/ENTERPRISE + full sweep + docs +
+      commit
+
+**G2.7 DONE (2026-08-07)** — operator onboarding + TRUE-CASCADE org deletion; the
+cascade was the center of gravity per the owner's framing. deleteOrgCascade
+(packages/db/src/repos/org-delete.ts): snapshot-then-ordered hand-written cascade
+across 26 tables (the schema had exactly ONE FK cascade; five real FK edges
+ordered; hot tables chunked at 500 outside the transaction; identity tail in one
+tx), silent-orphan tables reached (budget_events, org clusters — bare text
+columns), judge_calibrations three-route union (the rubric calibration_id route is
+load-bearing), never-cascade platform assets asserted (models/strategy_configs/
+recipe_status/NULL clusters/org_demo request logs), orphaned-user erasure (zero
+remaining memberships+sessions — users.email is UNIQUE PII), idempotent, org_demo
+refused at route AND handler, per-table deletion report as the job result
+(status+evidence rule). org:delete job via handler factory with
+onOrgDeleted → ctx.invalidateOrgProviders (in-process worker — a revoked key
+never serves through a stale cache). Operator surface: POTION_OPERATOR_TOKEN
+fail-CLOSED timing-safe bearer (opposite polarity to the fail-open dev bypass);
+POST/GET/DELETE /operator/orgs + /operator/jobs/:id mirror; magic link returned
+unconditionally (hand-delivery flow). SELF-SERVE GATE: the live unauthenticated
+auto-provision path (magic-link + OIDC — found advertised in README) is now
+behind POTION_SELF_SERVE (default ON iff dev bypass; OFF in production;
+enumeration-safe neutral responses; OIDC unknown identity → 403). Walkthrough
+step 14 IS the owner's done criterion and PASSES: operator create → magic link →
+policy+key one call → 3 traces → cluster → rubric approved → TRUE-CASCADE delete
+(16 tables touched) → session+key dead, repeat delete 404, platform intact.
+Runbook docs/ONBOARDING-RUNBOOK.md (first user-facing doc for the invoice CLI;
+carve-out quoted verbatim in the offboarding section); README self-serve
+advertisement corrected; ENTERPRISE cross-link. 978 keyless tests green (+8);
+walkthrough 16/16. $0 — no live leg.

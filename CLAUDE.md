@@ -174,8 +174,12 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   cycle/lineage surfaces tenant-scoped). PHASE G1 COMPLETE.
 - **Phase G2 — guarantee as product surface** (owner-reordered 2026-08-07;
   queue of record G2.7 → G2.1 → G2.2 → G2.3 → G2.4 → G2.6 → G2.8 → G2.5):
-  (17-FIRST) operator onboarding: org-creation route + hand-issued key
-  runbook — lands first so real traffic accumulates for the rest of G2;
+  (17-FIRST) [DONE 2026-08-07] operator onboarding + TRUE-CASCADE org
+  deletion (G2.7: fail-closed POTION_OPERATOR_TOKEN /operator/* surface,
+  self-serve auto-provision gated behind POTION_SELF_SERVE, deleteOrgCascade
+  across 26 tables with per-table report, walkthrough step 14 proves
+  create → pipeline → delete → nothing derived survives; runbook
+  docs/ONBOARDING-RUNBOOK.md);
   (12) customer-visible guarantee report (quality time series;
   completion-id column on request_logs; incl. serve-path judgeMaxTokens
   budget stray); (13) incident SLAs — alert on the in-process breach path,

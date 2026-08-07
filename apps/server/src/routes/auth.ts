@@ -194,6 +194,49 @@ export async function recordAuthEvent(
   });
 }
 
+/**
+ * Self-serve org provisioning gate (G2.7): the auto-provision path (any
+ * email → new solo org, admin) is an operator decision, not a default.
+ * POTION_SELF_SERVE=1/0 overrides explicitly; unset defaults to ON only
+ * when the dev bypass is on (walkthrough/tests), OFF otherwise — production
+ * onboarding is operator-credentialed (POST /operator/orgs).
+ */
+export function selfServeEnabled(): boolean {
+  const v = process.env.POTION_SELF_SERVE;
+  if (v === '1') return true;
+  if (v === '0') return false;
+  return devAuthBypassEnabled();
+}
+
+/**
+ * Mint + record + deliver a magic link (G2.7 extraction: the operator
+ * create-org route issues links outside this module's route closure).
+ * Returns the raw link — the CALLER decides whether to surface it (dev
+ * bypass / operator hand-delivery) or rely on the email side effect.
+ */
+export async function issueMagicLink(
+  db: PotionDb,
+  email: string,
+  orgId: string,
+  baseUrl: string,
+  sendEmail: SendEmail,
+): Promise<string> {
+  const token = newToken('ml');
+  await createMagicLink(db, {
+    tokenHash: sha256(token),
+    email,
+    orgId,
+    expiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MS),
+  });
+  const link = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+  await sendEmail({
+    to: email,
+    subject: 'Your Potion sign-in link',
+    text: `Sign in to Potion: ${link}\n(this link is single-use and expires in 15 minutes)`,
+  });
+  return link;
+}
+
 export function registerAuthRoutes(
   app: FastifyInstance,
   ctx: PotionContext,
@@ -208,22 +251,8 @@ export function registerAuthRoutes(
     await purgeExpired(db);
   });
 
-  async function deliverMagicLink(email: string, orgId: string, baseUrl: string): Promise<string> {
-    const token = newToken('ml');
-    await createMagicLink(db, {
-      tokenHash: sha256(token),
-      email,
-      orgId,
-      expiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MS),
-    });
-    const link = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
-    await sendEmail({
-      to: email,
-      subject: 'Your Potion sign-in link',
-      text: `Sign in to Potion: ${link}\n(this link is single-use and expires in 15 minutes)`,
-    });
-    return link;
-  }
+  const deliverMagicLink = (email: string, orgId: string, baseUrl: string): Promise<string> =>
+    issueMagicLink(db, email, orgId, baseUrl, sendEmail);
 
   /** Module-level provisioning shared with the OIDC callback (M4 #34). */
   const provision = (email: string) => provisionForEmail(db, email);
@@ -237,6 +266,17 @@ export function registerAuthRoutes(
         .send(openAiError('a valid email is required', 'invalid_request_error'));
     }
     const { email } = parsed.data;
+    // G2.7 self-serve gate: when OFF, only emails with an EXISTING
+    // membership get provisioned+linked; unknown emails get the SAME
+    // neutral response (no enumeration) and NO rows are written.
+    if (!selfServeEnabled()) {
+      const existing = await getUserByEmail(db, email);
+      const hasMembership =
+        existing !== null && (await listMembershipsByUser(db, existing.id)).length > 0;
+      if (!hasMembership) {
+        return reply.send({ ok: true, email });
+      }
+    }
     const { orgId } = await provision(email);
     const link = await deliverMagicLink(email, orgId, baseUrlOf(req, opts.publicBaseUrl));
     // No account enumeration: identical response either way. devLink is

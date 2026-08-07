@@ -115,6 +115,8 @@ serve-only keys get 403, same as every admin route (M2 #15 discipline).
 
 ## Related surfaces
 
+- Operator onboarding + org offboarding (TRUE-CASCADE deletion): `docs/ONBOARDING-RUNBOOK.md`.
+
 - **Alerts & integrations** (#33): webhook/Slack rules for
   `quality_breach`, `rollback`, `budget_warning`, `budget_exceeded`,
   `breaker_open` — the push complement to the audit pull. Target URLs are
