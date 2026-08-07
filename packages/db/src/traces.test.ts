@@ -147,6 +147,25 @@ describe('trace_spans repo (M5 #36)', () => {
     ]);
     const sources = await listTracesForClustering(h.db);
     expect(sources).toHaveLength(2);
+    // G1.4: multi-turn collect + last-completion-wins + tool transcript.
+    await insertTraceSpans(h.db, [
+      span({ traceId: 'tr_g14', spanId: 'g14_1', attrs: { 'gen_ai.prompt': 'first turn' }, ts: new Date('2026-08-06T12:00:00Z') }),
+      span({ traceId: 'tr_g14', spanId: 'g14_2', attrs: { 'gen_ai.completion': 'draft answer' }, ts: new Date('2026-08-06T12:01:00Z') }),
+      span({
+        traceId: 'tr_g14',
+        spanId: 'g14_3',
+        name: 'tool.lookup',
+        attrs: { 'gen_ai.operation.name': 'execute_tool', 'tool.args': 'q=x', 'tool.result': 'hit' },
+        ts: new Date('2026-08-06T12:02:00Z'),
+      }),
+      span({ traceId: 'tr_g14', spanId: 'g14_4', attrs: { 'gen_ai.prompt': 'second turn' }, ts: new Date('2026-08-06T12:03:00Z') }),
+      span({ traceId: 'tr_g14', spanId: 'g14_5', attrs: { 'gen_ai.completion': 'final answer' }, ts: new Date('2026-08-06T12:04:00Z') }),
+    ]);
+    const g14 = (await listTracesForClustering(h.db)).find((s0) => s0.traceId === 'tr_g14')!;
+    expect(g14.turns).toEqual(['first turn', 'second turn']);
+    expect(g14.firstMessage).toBe('first turn');
+    expect(g14.referenceAnswer).toBe('final answer'); // last wins
+    expect(g14.toolTranscript).toEqual([{ name: 'lookup', args: 'q=x', result: 'hit' }]);
     // G1.2: identical trace ids in TWO orgs never merge — (org, trace) key.
     await createOrg(h.db, { id: 'org_g12', name: 'G12' });
     await insertTraceSpans(h.db, [

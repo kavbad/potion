@@ -20,6 +20,7 @@ import {
   scoreAnswer,
   scoreExact,
   scoreFieldMatch,
+  scoreLlmJudge,
   type ScorerDeps,
 } from './scorers.js';
 
@@ -115,6 +116,57 @@ describe('llm-judge scorer (mock judge)', () => {
     const a = await scoreAnswer(item, prose.reference, deps);
     const b = await scoreAnswer(item, prose.reference, deps);
     expect(a.quality).toBe(b.quality);
+  });
+});
+
+describe('reference-anchored judge prompt (G1.4)', () => {
+  const scoring = {
+    kind: 'llm-judge' as const,
+    rubric: 'r',
+    judgeModel: 'mock-judge',
+    scale: [0, 1] as [number, number],
+  };
+  const baseItem: EvalItem = {
+    id: 'ref-01',
+    clusterId: 'agent-x',
+    prompt: [{ role: 'user', content: 'do the thing' }],
+    scoring,
+  };
+
+  it('REFERENCE block sits BETWEEN TASK and ANSWER, wrapped; absent without a reference', () => {
+    const withRef = buildJudgeScoreMessages({ ...baseItem, reference: 'the original answer' }, 'candidate', scoring)[0]!.content;
+    const refIdx = withRef.indexOf('REFERENCE:');
+    expect(refIdx).toBeGreaterThan(withRef.indexOf('TASK:'));
+    expect(refIdx).toBeLessThan(withRef.indexOf('ANSWER:'));
+    expect(withRef).toContain('judge the ANSWER primarily by comparison');
+    // the reference itself is untrusted-wrapped
+    const refBlock = withRef.slice(refIdx, withRef.indexOf('ANSWER:'));
+    expect(refBlock).toContain('<<<UNTRUSTED_DATA_BEGIN>>>');
+    expect(refBlock).toContain('the original answer');
+    // no reference → no block, header unchanged
+    const withoutRef = buildJudgeScoreMessages(baseItem, 'candidate', scoring)[0]!.content;
+    expect(withoutRef).not.toContain('REFERENCE:');
+    expect(withoutRef).not.toContain('comparison against it');
+  });
+
+  it('non-string references are JSON-stringified; mock extractor still parses the ANSWER', async () => {
+    const objRef = buildJudgeScoreMessages(
+      { ...baseItem, reference: { field: 'value' } },
+      'candidate',
+      scoring,
+    )[0]!.content;
+    expect(objRef).toContain('{"field":"value"}');
+    // mock judge extracts the answer correctly with a REFERENCE present
+    // (the block sits BEFORE ANSWER — a trailing block would corrupt it)
+    const deps = scorerDeps();
+    const outcome = await scoreLlmJudge(
+      { ...baseItem, reference: 'ref text' },
+      'some candidate answer',
+      scoring,
+      deps,
+    );
+    expect(outcome.quality).toBeGreaterThanOrEqual(0);
+    expect(outcome.quality).toBeLessThanOrEqual(1);
   });
 });
 

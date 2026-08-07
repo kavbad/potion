@@ -472,7 +472,7 @@ export interface GuaranteeConfig { minQuality: number; windowMin: number; sample
 ## 14. M5 contract (agent workloads, #36)
 
 ### 14.1 Trace ingestion — apps/server, packages/db
-- `POST /v1/traces` (org-scoped, batch): spans in OTel GenAI convention subset {trace_id, span_id, parent_id, name, model?, input_tokens?, output_tokens?, attributes.gen_ai.*}; stored trace_spans(id, org_id, trace_id, span_id, parent_id, name, model, usage jsonb, cost_usd, attrs jsonb, ts). Idempotent on (org_id, trace_id, span_id).
+- `POST /v1/traces` (org-scoped, batch): spans in OTel GenAI convention subset {trace_id, span_id, parent_id, name, model?, input_tokens?, output_tokens?, attributes.gen_ai.*}. Payload conventions (G1.4): `gen_ai.prompt` per user turn (multiple spans = ordered turns), `gen_ai.completion` = the session's FINAL assistant answer (last in ts order wins; becomes the replay item's reference), `tool.args`/`tool.result` on tool spans (replay context). All payload attrs are PII-redacted at ingest — replay references are redacted text and judges treat placeholders as matching any equivalent value; stored trace_spans(id, org_id, trace_id, span_id, parent_id, name, model, usage jsonb, cost_usd, attrs jsonb, ts). Idempotent on (org_id, trace_id, span_id).
 - Per-trace rollup: GET /api/traces?from&to → sessions with total cost, span count, models used, loop-detection (repeated identical tool-call signatures).
 
 ### 14.2 Agent clustering + frontier — packages/cluster, packages/pareto

@@ -112,9 +112,20 @@ async function seedSession(
   prompt: string,
   tool: string | null,
   ts = '2026-08-06T10:00:00Z',
+  completion?: string,
 ): Promise<void> {
   const spans: NewTraceSpan[] = [
-    span({ orgId, traceId, spanId: `${traceId}_root`, attrs: { 'gen_ai.prompt': prompt }, ts: new Date(ts) }),
+    span({
+      orgId,
+      traceId,
+      spanId: `${traceId}_root`,
+      attrs: {
+        'gen_ai.prompt': prompt,
+        // G1.4: the session's final answer — the replay item's reference.
+        ...(completion !== undefined ? { 'gen_ai.completion': completion } : {}),
+      },
+      ts: new Date(ts),
+    }),
   ];
   if (tool !== null) {
     spans.push(
@@ -123,7 +134,11 @@ async function seedSession(
         traceId,
         spanId: `${traceId}_tool`,
         name: `tool.${tool}`,
-        attrs: { 'gen_ai.operation.name': 'execute_tool' },
+        attrs: {
+          'gen_ai.operation.name': 'execute_tool',
+          'tool.args': 'lookup latest',
+          'tool.result': 'found 3 records',
+        },
         ts: new Date(new Date(ts).getTime() + 60_000),
       }),
     );
@@ -158,7 +173,14 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     // same org bucket, outlier splits on cosine); one chat session in
     // org_b. G1.2: orgs NEVER pool — org_b gets its own cluster id under
     // its own org hash, even in the nightly {} run.
-    await seedSession('org_a', 'tr_b1', 'Refactor the billing retry loop for invoices', 'search');
+    await seedSession(
+      'org_a',
+      'tr_b1',
+      'Refactor the billing retry loop for invoices',
+      'search',
+      '2026-08-06T10:00:00Z',
+      'Done — the retry loop now backs off for account 99887766.',
+    );
     await seedSession('org_a', 'tr_b2', 'Refactor the billing retry loop for receipts', 'search');
     await seedSession('org_a', 'tr_o1', 'Write a haiku about the autumn sea', 'search');
     await seedSession('org_b', 'tr_c1', 'Summarize the outage postmortem for the board', null);
@@ -207,6 +229,17 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
       expect(loaded.items.every((it) => it.clusterId === loaded.suite.clusterId)).toBe(true);
       expect(loaded.items.every((it) => it.scoring.kind === 'llm-judge')).toBe(true);
     }
+    // G1.4: tr_b1 carried a completion + tool payloads → its replay item has
+    // a REDACTED reference and a tool-transcript system message.
+    const billingSuite = (await loadDerivedSuite(db.db, `${billingId}-replays-v1`))!;
+    const refItem = billingSuite.items.find((it) => it.reference !== undefined)!;
+    expect(refItem).toBeDefined();
+    expect(refItem.reference).toBe('Done — the retry loop now backs off for account <num>.');
+    expect(refItem.prompt[0]!.role).toBe('system');
+    expect(refItem.prompt[0]!.content).toContain('tool activity');
+    expect(refItem.prompt[0]!.content).toContain('search(lookup latest) → found 3 records');
+    // sessions without a completion degrade gracefully (no reference)
+    expect(billingSuite.items.some((it) => it.reference === undefined)).toBe(true);
 
     // Eval runs recorded; agent clusters have a first (mock) frontier.
     const runs = await db.db.select().from(evalRuns);

@@ -157,7 +157,16 @@ export async function redactSpanAttrs(db: PotionDb, orgId: string): Promise<numb
 export interface TraceClusterSource {
   orgId: string;
   traceId: string;
+  /** turns[0] — kept for compat. */
   firstMessage: string | null;
+  /** G1.4: ALL gen_ai.prompt texts, ts asc — ordered user turns. */
+  turns: string[];
+  /** G1.4: the session's final assistant answer (LAST gen_ai.completion in
+   * ts order), redacted at ingest — the replay item's reference. */
+  referenceAnswer: string | null;
+  /** G1.4: tool activity with payloads (redacted) — replay context. The
+   * names-only toolSequence stays for signature slugging. */
+  toolTranscript: Array<{ name: string; args?: string; result?: string }>;
   toolSequence: string[];
   spanCount: number;
   totalCostUsd: number;
@@ -196,20 +205,43 @@ export async function listTracesForClustering(
   for (const [, spans] of byTrace) {
     if (spans.length === 0) continue;
     const traceId = spans[0]!.traceId;
-    const first = spans.find((s) => {
+    // G1.4: collect ALL user turns (ts asc — the scan order guarantees it),
+    // the LAST completion (the session's final answer), and the tool
+    // transcript with payloads. All values were redacted at ingest.
+    const turns: string[] = [];
+    let referenceAnswer: string | null = null;
+    const toolTranscript: Array<{ name: string; args?: string; result?: string }> = [];
+    const toolSpans = spans.filter((s) => {
       const attrs = s.attrs as Record<string, unknown>;
-      return typeof attrs['gen_ai.prompt'] === 'string' && attrs['gen_ai.prompt'].length > 0;
+      return attrs['gen_ai.operation.name'] === 'execute_tool' || s.name.startsWith('tool.');
     });
-    const toolSequence = spans
-      .filter((s) => {
-        const attrs = s.attrs as Record<string, unknown>;
-        return attrs['gen_ai.operation.name'] === 'execute_tool' || s.name.startsWith('tool.');
-      })
-      .map((s) => s.name.replace(/^tool\./, ''));
+    for (const s of spans) {
+      const attrs = s.attrs as Record<string, unknown>;
+      const prompt = attrs['gen_ai.prompt'];
+      if (typeof prompt === 'string' && prompt.length > 0) turns.push(prompt);
+      const completion = attrs['gen_ai.completion'];
+      if (typeof completion === 'string' && completion.length > 0) referenceAnswer = completion;
+    }
+    for (const s of toolSpans) {
+      const attrs = s.attrs as Record<string, unknown>;
+      const args = attrs['tool.args'];
+      const result = attrs['tool.result'];
+      toolTranscript.push({
+        name: s.name.replace(/^tool\./, ''),
+        ...(args !== undefined ? { args: typeof args === 'string' ? args : JSON.stringify(args) } : {}),
+        ...(result !== undefined
+          ? { result: typeof result === 'string' ? result : JSON.stringify(result) }
+          : {}),
+      });
+    }
+    const toolSequence = toolSpans.map((s) => s.name.replace(/^tool\./, ''));
     out.push({
       orgId: spans[0]!.orgId,
       traceId,
-      firstMessage: first ? String((first.attrs as Record<string, unknown>)['gen_ai.prompt']) : null,
+      firstMessage: turns[0] ?? null,
+      turns,
+      referenceAnswer,
+      toolTranscript,
       toolSequence,
       spanCount: spans.length,
       totalCostUsd: spans.reduce((sum, s) => sum + s.costUsd, 0),

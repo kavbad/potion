@@ -1008,3 +1008,60 @@ from purged items are NOT cascade-deleted — mock-only + provenance-guarded
 today; evidence-retirement policy belongs to the per-org frontier rework.
 Dead eval_items table noted, untouched. 921 pnpm tests green (db 80, harness
 140, workers 28), walkthrough 15/15. Zero live API calls.
+
+---
+
+## G1.4 — Replay fidelity + reference-anchored judging (session 2026-08-06, plan approved)
+
+Ingest conventions (zero schema change, documented): gen_ai.completion (final answer,
+last-wins), tool.result, multiple gen_ai.prompt spans = ordered user turns — all PII-
+redacted at ingest (judge anchors on REDACTED references; rubric says placeholders match
+equivalents). Read model gains turns/referenceAnswer/toolTranscript. Synthesis: multi-
+turn prompt + tool-transcript system message + redacted reference (graceful when absent).
+Judge builder: REFERENCE block BETWEEN TASK and ANSWER (mock extractor constraint),
+gated + wrapped; estimator picks it up automatically (measured scaffolding; M1b delta
+$0). Calibration: judgeView STRIPS reference by default (comparability with recorded
+r/ρ); --reference-anchored keeps it (replay parity). LIVE anchored calibration proof
+against the 0.54/0.44 reference-free baselines.
+
+- [x] a. harness: builder REFERENCE block + calibrate strip/anchored + CLI flag + tests
+- [x] b. db: read model (turns/reference/toolTranscript) + tests
+- [x] c. workers: synthesis (multi-turn/system transcript/reference, rubric) + fixtures
+- [x] d. server/walkthrough fixtures + SPEC §14.1 + route comment
+- [x] e. full sweep + mock proof + LIVE anchored calibration (cap $2, ledger) + docs +
+      commit
+
+**G1.4 DONE (2026-08-06)** — replay fidelity + reference-anchored judging. Ingest
+conventions (SPEC §14.1, zero schema change, all PII-redacted at ingest):
+`gen_ai.completion` = final session answer (last in ts order wins), `tool.result`
+sibling of `tool.args`, multiple `gen_ai.prompt` spans = ordered user turns. Read model
+(TraceClusterSource) gains turns/referenceAnswer/toolTranscript; synthesis builds
+multi-turn prompts + a tool-transcript system message (capped 2000 chars) + the redacted
+reference; rubric instructs comparative judging + placeholder-equivalence semantics.
+Judge builder: REFERENCE block BETWEEN TASK and ANSWER (mock-extractor constraint),
+gated on item.reference, untrusted-wrapped, non-string refs JSON-stringified; estimator
+picks the block up automatically (measured scaffolding; M1b regression delta $0 — no
+recorded item carries a reference). Calibration strips references by DEFAULT
+(comparability with recorded reference-free r/ρ); `--reference-anchored` opts in.
+Serve-path judging reference-free by construction. End-to-end: server + walkthrough
+fixtures now carry completions/tool results → derived items with references verified in
+both. 925 keyless tests green; walkthrough 15/15.
+
+**LIVE VERDICT — the anchored thesis is PROVEN** (extraction-potion-v2, n=50, answerer
+gpt-nano, judge budget 768, provider_mode=live, persisted ×2):
+- judge-class (sonnet-4.5): pearson-vs-truth **0.948**, spearman **0.967**, mAE 0.028 — OK
+- gpt-mini-class: pearson **0.843**, spearman **0.936**, mAE 0.034 — OK
+- cross-judge agreement 0.821
+vs reference-free baselines on the SAME suite: judge-class 0.544/0.676, gpt-mini 0.439.
+Reference-anchored judging clears the 0.8 contract bar — first configuration to do so.
+Both judges OK (no flag, exit 0). This is the configuration replay judging uses in
+production (replay items carry references; serve-path items don't and stay
+reference-free/uncontracted). Note: truth remains ceiling-compressed (34/50 at 1.0) —
+the anchored r is measured on the same narrow band that suppressed the reference-free
+scores, which strengthens, not weakens, the comparison.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $4.9866 (ledger said $4.9706; ~$0.016 drift) | — | — | $4.9866 / $50.00 (OpenRouter) |
+| 2026-08-06 | G1.4 anchored calibration, extraction-potion-v2 n=50 (sonnet judge via OpenRouter; before usage $4.9866 → after $5.3020) | $2.00 cap, harness projection under cap | $0.3153 (OpenRouter share of $0.3633 total) | $5.3020 / $50.00 (OpenRouter) |
+| 2026-08-06 | same run, OpenAI side (gpt-nano answerers + gpt-mini judge) | — | ~$0.048 | ~$0.24 (OpenAI key, usage-priced) |

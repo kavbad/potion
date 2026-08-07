@@ -114,7 +114,9 @@ export function registerTraceRoutes(
           : 0;
       batchCost += cost;
       // G1.1: PII-redact user-supplied attributes AT INGEST — raw prompts are
-      // never at rest. String leaves only (numbers/booleans/keys preserved);
+      // never at rest. G1.4 payload conventions (all redacted): gen_ai.prompt
+      // per user turn, gen_ai.completion = final answer (replay reference),
+      // tool.args/tool.result on tool spans. String leaves only (numbers/booleans/keys preserved);
       // the server-injected model key is added AFTER (allowlisted anyway —
       // model ids carry digit runs the generic rule would mangle).
       const attrs = redactAttrs({ ...(s.attributes ?? {}) });

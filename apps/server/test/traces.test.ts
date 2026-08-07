@@ -256,7 +256,21 @@ describe('agent clustering + X-Potion-Cluster hint (M5 #36, SPEC §14.2)', () =>
     const mk = (traceId: string, prompt: string, spanBase: string) => ({
       spans: [
         { trace_id: traceId, span_id: `${spanBase}_root`, name: 'agent.root', model: 'mock-cheap', attributes: { 'gen_ai.prompt': prompt } },
-        { trace_id: traceId, span_id: `${spanBase}_tool`, name: 'tool.search', model: 'mock-cheap', attributes: { 'gen_ai.operation.name': 'execute_tool' } },
+        {
+          trace_id: traceId,
+          span_id: `${spanBase}_tool`,
+          name: 'tool.search',
+          model: 'mock-cheap',
+          attributes: { 'gen_ai.operation.name': 'execute_tool', 'tool.args': 'invoices', 'tool.result': 'ok' },
+        },
+        // G1.4: final answer → replay reference on the derived item.
+        {
+          trace_id: traceId,
+          span_id: `${spanBase}_ans`,
+          name: 'chat',
+          model: 'mock-cheap',
+          attributes: { 'gen_ai.completion': `Refactored the retry loop (${spanBase}).` },
+        },
       ],
     });
     await app.inject({ method: 'POST', url: '/v1/traces', headers: KEY, payload: mk('tr_c1', 'Refactor the billing retry loop for invoices', 'c1') });
@@ -292,6 +306,18 @@ describe('agent clustering + X-Potion-Cluster hint (M5 #36, SPEC §14.2)', () =>
     // The billing sessions share the 'search' tool-graph signature.
     const agentCluster = listed.find((c) => c.clusterId.includes(toolSignatureSlug(['search'])));
     expect(agentCluster).toBeDefined();
+
+    // G1.4: the derived replay items carry the session's final answer as the
+    // reference, and the prompt leads with the tool-transcript system message.
+    const { loadDerivedSuite } = await import('@potion/db');
+    const derived = await loadDerivedSuite(app.potion.db.db, `${agentCluster!.clusterId}-replays-v1`);
+    expect(derived).not.toBeNull();
+    expect(derived!.items.length).toBeGreaterThanOrEqual(1);
+    for (const it of derived!.items) {
+      expect(String(it.reference)).toContain('Refactored the retry loop');
+      expect(it.prompt[0]!.role).toBe('system');
+      expect(it.prompt[0]!.content).toContain('search(invoices) → ok');
+    }
 
     // The hint pins routing to the agent cluster (x-frontier-trace).
     const chat = await app.inject({

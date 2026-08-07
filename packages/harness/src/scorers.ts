@@ -175,17 +175,35 @@ export function buildJudgeScoreMessages(
 ): { role: 'user'; content: string }[] {
   const [lo, hi] = scoring.scale;
   const task = item.prompt.map((m) => `${m.role}: ${m.content}`).join('\n');
+  // G1.4 reference anchoring: when the item carries a reference (replay items
+  // hold the ORIGINAL session answer, redacted), the judge compares rather
+  // than scoring absolutely — comparative judging is the contract-grade path
+  // (reference-free judges plateaued ~0.5-0.6 pearson-vs-truth). The block
+  // sits BETWEEN TASK and ANSWER: the mock judge fixture extracts the answer
+  // as everything between 'ANSWER:' and the final instruction line, so a
+  // trailing block would corrupt every mock score. Non-string references
+  // (field-match objects) are JSON-stringified — one explicit rule.
+  const referenceText =
+    item.reference === undefined
+      ? null
+      : typeof item.reference === 'string'
+        ? item.reference
+        : JSON.stringify(item.reference);
   return [
     {
       role: 'user',
       content: [
-        'You are an impartial judge. Score the ANSWER to the TASK using the rubric.',
+        'You are an impartial judge. Score the ANSWER to the TASK using the rubric.' +
+          (referenceText !== null
+            ? ' A REFERENCE answer is provided; judge the ANSWER primarily by comparison against it.'
+            : ''),
         `RUBRIC: ${scoring.rubric}`,
         '',
         UNTRUSTED_DATA_FRAME,
         '',
         'TASK:',
         wrapUntrustedData(task),
+        ...(referenceText !== null ? ['', 'REFERENCE:', wrapUntrustedData(referenceText)] : []),
         '',
         'ANSWER:',
         wrapUntrustedData(answer),

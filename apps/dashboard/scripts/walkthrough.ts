@@ -468,6 +468,7 @@ async function main(): Promise<void> {
       'gen_ai.operation.name': 'execute_tool',
       'tool.name': 'search',
       'tool.args': { q: 'invoice 4421' },
+      'tool.result': 'invoice 4421: pending, due Friday',
     };
     const batch = {
       spans: [
@@ -494,6 +495,8 @@ async function main(): Promise<void> {
           model: 'haiku-class',
           input_tokens: 1000,
           output_tokens: 1000,
+          // G1.4: the session's final answer — becomes the replay reference.
+          attributes: { 'gen_ai.completion': 'Invoice 4421 is pending; emailed the customer.' },
           ts: at(2),
         },
         {

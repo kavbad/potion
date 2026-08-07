@@ -2,7 +2,7 @@
 // DETERMINISTIC ground truth (+ the original pairwise-agreement story).
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { loadPrices } from '@potion/providers';
+import { createMockProvider, loadPrices } from '@potion/providers';
 import { BudgetCapError } from './estimate.js';
 import {
   pearson,
@@ -97,6 +97,36 @@ describe('runJudgeCalibration', () => {
     ).rejects.toThrow(BudgetCapError);
     // With a covering cap the same call would proceed (proven by the mock
     // suite above; live judges are exercised in the capped live run).
+  });
+
+  it('G1.4: reference-free by default (strips), anchored keeps the REFERENCE block', async () => {
+    const items = loadSuite('extraction', SIMULATED_SUITES_DIR).slice(0, 2);
+    const prices = withCalibrationJudges(loadPrices(PRICES_PATH).table);
+    const seen: string[] = [];
+    const mock = createMockProvider(prices);
+    const capture = {
+      ...mock,
+      complete: (req: Parameters<typeof mock.complete>[0]) => {
+        const text = req.messages.map((m) => m.content).join('\n');
+        if (text.includes('impartial judge')) seen.push(text);
+        return mock.complete(req);
+      },
+    };
+    const providers = { anthropic: capture, openai: capture, google: capture, openrouter: capture, mock: capture };
+    // default: reference-FREE — extraction items HAVE object references, but
+    // the judge prompt must not contain a REFERENCE block
+    await runJudgeCalibration(items, { prices, providers, judgeModels: ['mock-judge-a'] });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((t) => !t.includes('REFERENCE:'))).toBe(true);
+    // anchored: the block appears (stringified object reference)
+    seen.length = 0;
+    await runJudgeCalibration(items, {
+      prices,
+      providers,
+      judgeModels: ['mock-judge-a'],
+      referenceAnchored: true,
+    });
+    expect(seen.every((t) => t.includes('REFERENCE:'))).toBe(true);
   });
 
   it('single-judge calibration: agreement degenerates to 0, truth stats stand alone', async () => {

@@ -180,6 +180,7 @@ export function projectCalibrationCostUsd(
   answererModel: string,
   prices: PriceTable,
   judgeMaxTokens?: number,
+  referenceAnchored = false,
 ): number {
   let total = 0;
   for (const item of items) {
@@ -188,6 +189,7 @@ export function projectCalibrationCostUsd(
     }
     for (const judge of judgeModels) {
       const view: EvalItem = { ...item, scoring: judgeViewScoring(judge) };
+      if (!referenceAnchored) delete view.reference;
       const call = estimateJudgeScoringCall(view);
       if (call) {
         // The projection binds to the configured judge budget (never assume).
@@ -219,6 +221,10 @@ export interface CalibrationDeps {
    * here also raises the projection — the bound follows the config
    * (G0.5 truncation lesson, second instance). */
   judgeMaxTokens?: number;
+  /** G1.4: keep item references in the judge view (REFERENCE-ANCHORED
+   * calibration — the replay-judging configuration). Default false:
+   * reference-FREE, serve-parity, comparable with all recorded r/ρ/mAE. */
+  referenceAnchored?: boolean;
 }
 
 function resolvedModelOf(prices: PriceTable, alias: string): string {
@@ -261,7 +267,15 @@ export async function runJudgeCalibration(
 
   // Preflight: refuse over-budget calibrations BEFORE any provider call.
   const cap = deps.budgetCapUsd ?? 0;
-  const projected = projectCalibrationCostUsd(runnable, judges, answerer, prices, deps.judgeMaxTokens);
+  const anchored = deps.referenceAnchored ?? false;
+  const projected = projectCalibrationCostUsd(
+    runnable,
+    judges,
+    answerer,
+    prices,
+    deps.judgeMaxTokens,
+    anchored,
+  );
   if (projected > cap) throw new BudgetCapError(projected, cap);
 
   const mock = createMockProvider(prices);
@@ -284,8 +298,12 @@ export async function runJudgeCalibration(
     const truthOutcome = await scoreAnswer(item, answer, scorerDeps);
     const scores: Record<string, number> = {};
     for (const judge of judges) {
+      // G1.4: reference-free by default (serve parity, comparable records);
+      // anchored mode keeps the item's reference in the judge prompt.
+      const judgeItem: EvalItem = anchored ? item : { ...item, reference: undefined };
+      if (!anchored) delete judgeItem.reference;
       const judged = await scoreLlmJudge(
-        item,
+        judgeItem,
         answer,
         judgeViewScoring(judge),
         scorerDeps,

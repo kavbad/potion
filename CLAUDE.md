@@ -79,7 +79,16 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    agent suites are still mock-evaluated only and can never serve live
    (provenance guard, correctly). Derived suites moved to governed db
    storage with retention tied to trace retention (G1.3, 2026-08-06);
-   evidence-retirement on purge is a recorded G1.6 decision.
+   evidence-retirement on purge is a recorded G1.6 decision. Replay
+   fidelity (G1.4, 2026-08-06): ingest conventions gen_ai.completion
+   (final answer, last-wins) / tool.result / multi gen_ai.prompt turns
+   (SPEC §14.1, all PII-redacted at ingest); derived items carry the
+   redacted original answer as `reference`, user turns as separate
+   messages, and a tool-transcript system message; the judge prompt gains
+   a REFERENCE block (between TASK and ANSWER) and judges comparatively
+   when a reference exists. Calibration stays reference-FREE by default
+   (comparability with recorded r/ρ); --reference-anchored opts in
+   (replay parity). Serve-path judging is reference-free by construction.
 3. Trace ingestion (G1.1, 2026-08-06): PII redacted AT INGEST via the
    platform redactor (@potion/core redact.ts — card+Luhn/SSN/IBAN/phone/
    JWT/etc., deterministic+idempotent); raw prompts never at rest; backfill
@@ -92,11 +101,13 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    classification/multi-step-reasoning/rag-answer 50 each. Gate-2 LIVE:
    96.00% on OpenAI embeddings (POTION_CLUSTER_THRESHOLD=0.2 recommended;
    mock-tuned 0.62 collapses to 6% live — artifacts/m1b-gate2-live.log).
-   STILL OPEN: 5 llm-judge breadth suites remain n=14; live calibration
-   verdict: gpt-4.1-mini as reference-free judge = pearson-vs-truth 0.421,
-   below the 0.8 bar — the live serve-judge default (judge-class) is
-   UNCALIBRATED; frontier-capability outpaces authored item difficulty
-   (nano solves 56/60 incl. hard tier).
+   STILL OPEN: 5 llm-judge breadth suites remain n=14; frontier-capability
+   outpaces authored item difficulty (nano solves 56/60 incl. hard tier).
+   Judge verdicts on record (extraction-potion-v2, n=50): reference-FREE
+   judge-class r=0.544/rho=0.676 — below the 0.8 bar; reference-ANCHORED
+   (G1.4) judge-class r=0.948/rho=0.967, gpt-mini 0.843/0.936 — first
+   configuration to clear 0.8. Replay judging (items with references) is
+   contract-grade; the reference-free SERVE path remains below the bar.
 5. 8 pre-existing lint errors (unused imports) block `pnpm verify`.
 6. Rate limiting + assignment cache are per-replica in-memory (Redis store
    is a designed seam, `apps/server/src/middleware/ratelimit.ts`).
@@ -119,9 +130,9 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   items/cluster.
 - **Phase G1 — per-customer workload pipeline:** (6) ingest-time PII
   redaction (real pass, not 3 regexes; raw prompts never at rest) +
-  org-scoped trace clustering; (7) derived-suite storage with lifecycle
-  (Postgres/artifact store, deletion, retention) + replay fidelity
-  (reference answers, tool results, multi-turn); (8) automated scorer
+  org-scoped trace clustering; (7) [DONE 2026-08-06] derived-suite storage
+  with lifecycle (G1.3) + replay fidelity — reference answers, tool
+  results, multi-turn (G1.4); (8) automated scorer
   construction: per-cluster rubric generation + calibration on customer
   suites; (9) per-org frontiers [ARCHITECTURE: org_id NULL=platform +
   fallback-to-global; ~7 loadCurrentFrontier sites; org-scoped recompute];

@@ -164,6 +164,18 @@ describe('llm-judge scoring cost in the projection (M1b)', () => {
     expect(estimateItemJudgeCostUsd(itemWithContent('x'.repeat(100)), prices)).toBe(0);
   });
 
+  it('G1.4: a reference on the item raises the judge projection (measured scaffolding)', () => {
+    // itemWithContent carries a reference — strip it for the true bare baseline
+    const bareItem = { ...judgeItem };
+    delete (bareItem as { reference?: unknown }).reference;
+    const bare = estimateJudgeScoringCall(bareItem)!;
+    const anchored = estimateJudgeScoringCall({ ...bareItem, reference: 'z'.repeat(400) })!;
+    // The REFERENCE block flows through the real builder into the bound —
+    // at least the reference's own tokens beyond the bare scaffolding.
+    expect(anchored.inputTokens).toBeGreaterThan(bare.inputTokens + 100);
+    expect(anchored.outputTokens).toBe(bare.outputTokens);
+  });
+
   it('item cost = strategy cost + judge cost, hand-computed', () => {
     const call = estimateJudgeScoringCall(judgeItem)!;
     // judge-class $3/$15 per 1M:

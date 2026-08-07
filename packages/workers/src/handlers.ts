@@ -1542,13 +1542,46 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
         `Score how well the assistant's response completes the user's request. The ` +
         `original session was an agent workflow` +
         `${toolSequence.length > 0 ? ` using tools: ${toolSequence.join(' → ')}` : ''}. ` +
-        `Judge task completion and correctness only; ignore style.`;
+        `Judge task completion and correctness only; ignore style. When a REFERENCE ` +
+        `answer is provided, judge primarily by comparison against it. Redaction ` +
+        `placeholders like <email>, <num>, <phone> stand for removed values and match ` +
+        `any equivalent value.`;
+      // G1.4 replay fidelity: multi-turn user context, a tool-transcript
+      // system message when the session used tools, and the ORIGINAL
+      // (redacted) final answer as the judge's reference — items degrade
+      // gracefully to the single-turn reference-free shape when the trace
+      // carried neither.
       const candidates = members.map((m) => {
         const srcIdx = sources.indexOf(m);
+        const turnTexts =
+          m.turns.length > 0
+            ? m.turns.map((t) => redactTraceText(t))
+            : [texts[srcIdx]!];
+        const transcript = m.toolTranscript
+          .map(
+            (t) =>
+              `${t.name}(${redactTraceText(t.args ?? '', 300)})` +
+              (t.result !== undefined ? ` → ${redactTraceText(t.result, 300)}` : ''),
+          )
+          .join('; ');
+        const prompt = [
+          ...(transcript.length > 0
+            ? [
+                {
+                  role: 'system' as const,
+                  content: `Original session tool activity: ${transcript}`.slice(0, 2000),
+                },
+              ]
+            : []),
+          ...turnTexts.map((t) => ({ role: 'user' as const, content: t })),
+        ];
+        const reference =
+          m.referenceAnswer !== null ? redactTraceText(m.referenceAnswer) : undefined;
         return {
           id: `${suiteId}-${sha1Hex(m.traceId).slice(0, 8)}`,
           clusterId,
-          prompt: [{ role: 'user' as const, content: texts[srcIdx]! }],
+          prompt,
+          ...(reference !== undefined ? { reference } : {}),
           scoring: {
             kind: 'llm-judge' as const,
             rubric,
