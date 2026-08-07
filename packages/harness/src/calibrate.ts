@@ -32,8 +32,16 @@ import { unrunnableReason } from './runner.js';
 export const CALIBRATION_JUDGES = ['mock-judge-a', 'mock-judge-b'] as const;
 export const CALIBRATION_ANSWERER = 'mock-cheap';
 export const CALIBRATION_FLAG_BELOW = 0.8;
+/** GRADED rubric (G1.1 finding): the original "full credit only when
+ * completely correct" wording made strict judges (sonnet-class) score
+ * all-or-nothing against GRADED deterministic truth (field fractions,
+ * test pass-rates) — mAE 0.88, r=0.05. Judges must be told the scale is
+ * proportional. */
 export const CALIBRATION_RUBRIC =
-  'Score the answer for correctness against the task: full credit only when it is completely correct.';
+  'Score proportionally to how much of the request is fulfilled correctly ' +
+  '(e.g. the fraction of requested fields extracted correctly, or of test ' +
+  'cases a solution would pass). Full marks only when completely correct; ' +
+  'zero only when nothing is correct.';
 export const CALIBRATION_SCALE: [number, number] = [0, 4];
 
 /** Pearson product-moment correlation; 1 when both vectors are constant-equal, 0 on degenerate input. */
@@ -141,6 +149,7 @@ export function projectCalibrationCostUsd(
   judgeModels: string[],
   answererModel: string,
   prices: PriceTable,
+  judgeMaxTokens?: number,
 ): number {
   let total = 0;
   for (const item of items) {
@@ -150,7 +159,11 @@ export function projectCalibrationCostUsd(
     for (const judge of judgeModels) {
       const view: EvalItem = { ...item, scoring: judgeViewScoring(judge) };
       const call = estimateJudgeScoringCall(view);
-      if (call) total += estimateCallCostUsd(call, prices);
+      if (call) {
+        // The projection binds to the configured judge budget (never assume).
+        if (judgeMaxTokens !== undefined) call.outputTokens = judgeMaxTokens;
+        total += estimateCallCostUsd(call, prices);
+      }
     }
   }
   return total;
@@ -171,6 +184,11 @@ export interface CalibrationDeps {
    * BEFORE any provider call. Default 0 — free (mock) calibrations pass,
    * anything priced refuses until a cap is set deliberately. */
   budgetCapUsd?: number;
+  /** Judge completion budget (default PROTOCOL_MAX_TOKENS). Verbose judges
+   * (sonnet-class) truncate mid-analysis at the default cap; raising it
+   * here also raises the projection — the bound follows the config
+   * (G0.5 truncation lesson, second instance). */
+  judgeMaxTokens?: number;
 }
 
 function resolvedModelOf(prices: PriceTable, alias: string): string {
@@ -213,7 +231,7 @@ export async function runJudgeCalibration(
 
   // Preflight: refuse over-budget calibrations BEFORE any provider call.
   const cap = deps.budgetCapUsd ?? 0;
-  const projected = projectCalibrationCostUsd(runnable, judges, answerer, prices);
+  const projected = projectCalibrationCostUsd(runnable, judges, answerer, prices, deps.judgeMaxTokens);
   if (projected > cap) throw new BudgetCapError(projected, cap);
 
   const mock = createMockProvider(prices);
@@ -236,7 +254,13 @@ export async function runJudgeCalibration(
     const truthOutcome = await scoreAnswer(item, answer, scorerDeps);
     const scores: Record<string, number> = {};
     for (const judge of judges) {
-      const judged = await scoreLlmJudge(item, answer, judgeViewScoring(judge), scorerDeps);
+      const judged = await scoreLlmJudge(
+        item,
+        answer,
+        judgeViewScoring(judge),
+        scorerDeps,
+        deps.judgeMaxTokens,
+      );
       addUsage(totals, judged.usage);
       scores[judge] = judged.quality;
     }

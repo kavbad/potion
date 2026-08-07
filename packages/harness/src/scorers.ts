@@ -216,6 +216,11 @@ export async function scoreLlmJudge(
   answer: string,
   scoring: Extract<ScoringMethod, { kind: 'llm-judge' }>,
   deps: ScorerDeps,
+  /** Judge completion budget override (G1.1: verbose judges — sonnet-class
+   * emits field-by-field analysis before its SCORE line and truncates at
+   * the default protocol cap → parse-fail → 0). Callers that raise it MUST
+   * bind their cost projection to the same value. */
+  maxTokens: number = PROTOCOL_MAX_TOKENS,
 ): Promise<LlmJudgeOutcome> {
   const entry = deps.prices.entries.find(
     (e) => e.alias === scoring.judgeModel || e.model === scoring.judgeModel,
@@ -229,7 +234,7 @@ export async function scoreLlmJudge(
     // One-line protocol ("SCORE: <x>") → bounded output, so the preflight
     // estimator can bound judge spend. Truncation past the cap makes the
     // strict last-line parse fail loudly, never a silently wrong score.
-    params: { seed, maxTokens: PROTOCOL_MAX_TOKENS },
+    params: { seed, maxTokens },
   });
   const usage: Usage = {
     inputTokens: response.usage.inputTokens,

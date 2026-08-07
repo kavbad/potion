@@ -847,3 +847,49 @@ pin 14→50 updated), walkthrough 15/15.
 | date | run | projected | actual | cumulative |
 |---|---|---|---|---|
 | 2026-08-06 | G0.5 live recalibrations: code-gen ×2 ($0.0143 each) + extraction-v2 ($0.0156) | $0.30 | $0.0442 | $0.1225 (OpenAI key) |
+
+---
+
+## G1.1 — Ingest-time PII redaction + judge-class calibration (session 2026-08-06, plan approved)
+
+Design: shared deterministic+idempotent redactor in @potion/core (redact.ts) — JWT/secret/
+email/card(Luhn)/SSN/IBAN/phone/IPv4/url-cred placeholders, ≥4-digit rule LAST; residual
+risk documented (names/addresses/narrative PII = NER territory, out of scope for the
+pattern pass). redactAttrs walks string leaves only, preserves keys, operational allowlist
+(gen_ai.request.model, gen_ai.operation.name, tool.name). Applied at POST /v1/traces
+BEFORE rows are written; worker redactTraceText stays as second-pass defense (delegates to
+core). Backfill job traces:redact (idempotent; admin route; one-shot by design — operators
+run once post-deploy; no nightly). Leg 2: judge-class (sonnet@openrouter) calibrated on
+extraction-potion-v2 (the suite G0.5 proved has real truth spread), cap $2; OpenRouter key
+verified ALIVE pre-run ($46.0964 remaining; authoritative usage $3.9036 — ledger
+cumulative reconciled to this, +$0.025 drift from M1b estimated rows).
+
+- [x] a. judge-class LIVE calibration (leg 2; ledger before/after; record persisted)
+- [ ] b. core redact.ts + tests (patterns/Luhn/idempotency/nested/allowlist)
+- [ ] c. ingest wiring + server tests; worker delegation + contract test update
+- [ ] d. backfillRedactSpans + traces:redact job + admin route + tests
+- [ ] e. keyless full sweep + walkthrough + manual proof
+- [ ] f. docs (CLAUDE.md defect #3) + commits
+
+**G1.1 leg 2 DONE (2026-08-06)** — judge-class calibration finding chain (all persisted,
+probes on record):
+1. Rubric-scale mismatch: "full credit only when completely correct" made sonnet score
+   all-or-nothing against graded truth (mAE 0.88, r=0.05). CALIBRATION_RUBRIC is now
+   GRADED (proportional credit).
+2. Verbose-judge truncation: with the graded rubric sonnet reasons field-by-field and
+   truncated at PROTOCOL_MAX_TOKENS=128 before its SCORE line → parse-fail 0 (probe
+   evidence). Second instance of the G0.5 lesson (enforcement caps must be configurable
+   with dependent calculations bound to the config): calibration gains judgeMaxTokens
+   (projection-bound, --judge-max-tokens). FOLLOW-UP: per-judge budget for the SERVE
+   path (GuaranteeConfig) if verbose serve-judges are wanted.
+3. Final records (extraction-potion-v2, n=50, judge budget 768): judge-class (sonnet)
+   pearson-vs-truth 0.544 / mAE 0.039 — BEST judge measured; gpt-mini 0.439; cross-judge
+   agreement 0.568. All below the 0.8 contract bar → correctly FLAGGED. Standing truth:
+   reference-free judging does not yet clear contract grade — reference-anchored replays
+   (G1.4) / per-cluster rubrics (G1.5) are the路 to 0.8.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | LEDGER RECONCILE: authoritative OpenRouter usage was $3.9036 (ledger said $3.879; ~$0.025 M1b estimated-row drift) | — | — | $3.9036 / $50.00 (OpenRouter) |
+| 2026-08-06 | judge-class calibrations ×3 + 3 probes (sonnet judge calls via OpenRouter; before $46.0964 → after $45.3997 remaining) | $2.00/run cap | $0.6966 | $4.6003 / $50.00 (OpenRouter) |
+| 2026-08-06 | same runs, OpenAI side (nano answerers + mini judge) | — | ~$0.07 | ~$0.19 (OpenAI key) |

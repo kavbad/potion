@@ -53,10 +53,12 @@ interface CliArgs {
   calibrateAnswerer: string | undefined;
   /** Max items for --calibrate (G0.5: replaces the silent slice(0,30)). */
   calibrateN: number;
+  /** Judge completion budget for --calibrate (verbose judges). */
+  judgeMaxTokens: number | undefined;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30 };
+  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30, judgeMaxTokens: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--') continue; // pnpm forwards the script separator literally
@@ -101,6 +103,12 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--answerer':
         args.calibrateAnswerer = next();
         break;
+      case '--judge-max-tokens': {
+        const v = Number(next());
+        if (!Number.isInteger(v) || v <= 0) throw new Error('--judge-max-tokens must be a positive integer');
+        args.judgeMaxTokens = v;
+        break;
+      }
       case '--calibrate-n': {
         const v = Number(next());
         if (!Number.isInteger(v) || v <= 0) throw new Error('--calibrate-n must be a positive integer');
@@ -247,6 +255,7 @@ export async function main(argv: string[]): Promise<number> {
         ...(judges !== undefined ? { judgeModels: judges } : {}),
         ...(providers !== undefined ? { providers } : {}),
         ...(args.calibrateAnswerer !== undefined ? { answererModel: args.calibrateAnswerer } : {}),
+        ...(args.judgeMaxTokens !== undefined ? { judgeMaxTokens: args.judgeMaxTokens } : {}),
         budgetCapUsd: args.cap,
       });
     } catch (e) {
