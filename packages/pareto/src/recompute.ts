@@ -31,7 +31,7 @@ import { evalResults, type DbHandle, type PotionDb } from '@potion/db';
 import { aggregateResults, runEval, type RunSummary } from '@potion/harness';
 import { loadPrices } from '@potion/providers';
 import type { Queue } from '@potion/queue';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { computeFrontier } from './dominance.js';
 import { diffFrontiers } from './diff.js';
 import { loadCurrentFrontier, saveFrontier } from './persistence.js';
@@ -173,7 +173,7 @@ export function mergePriceEntry(base: PriceTable, newModel: PriceEntry): PriceTa
 /** Adapt a persisted FrontierPoint back into aggregate shape so it can join
  * the candidate pool (quality ↔ qualityMean; p95 doubles as p50; n = 0 marks
  * it as carried-over rather than freshly measured). */
-function carriedPointToAggregate(p: FrontierPoint, pricesVersion: string): StrategyAggregate {
+export function carriedPointToAggregate(p: FrontierPoint, pricesVersion: string): StrategyAggregate {
   return {
     clusterId: p.clusterId,
     strategyHash: p.strategyHash,
@@ -185,8 +185,11 @@ function carriedPointToAggregate(p: FrontierPoint, pricesVersion: string): Strat
     latencyP50: p.latencyP95,
     latencyP95: p.latencyP95,
     pricesVersion,
-    // Carried points keep their recorded provenance (M1a).
+    // Carried points keep their recorded provenance (M1a) AND their original
+    // evidence links VERBATIM (G1.6): a carried point honestly reports the
+    // rubric/evidence it was actually scored under.
     ...(p.providerMode !== undefined ? { providerMode: p.providerMode } : {}),
+    ...(p.evidence !== undefined ? { evidence: p.evidence } : {}),
   };
 }
 
@@ -199,7 +202,7 @@ export async function aggregatesFromEvalResults(
   clusterId: ClusterId,
   strategies: StrategyConfig[],
   pricesVersion: string,
-  opts: { includeStale?: boolean } = {},
+  opts: { includeStale?: boolean; orgId?: string } = {},
 ): Promise<StrategyAggregate[]> {
   const hashes = strategies.map((s) => strategyHash(s));
   if (hashes.length === 0) return [];
@@ -211,6 +214,10 @@ export async function aggregatesFromEvalResults(
         eq(evalResults.clusterId, clusterId),
         inArray(evalResults.strategyHash, hashes),
         eq(evalResults.pricesVersion, pricesVersion),
+        // G1.6 tenancy: org recomputes see ONLY their rows; the platform
+        // default (orgId absent → IS NULL) keeps every pre-G1.6 caller and
+        // fixture reading exactly what it read before.
+        opts.orgId !== undefined ? eq(evalResults.orgId, opts.orgId) : isNull(evalResults.orgId),
         ...(opts.includeStale ? [] : [eq(evalResults.stale, false)]),
       ),
     );
@@ -394,3 +401,6 @@ export async function runRecompute(opts: RunRecomputeOptions): Promise<RunRecomp
     diffs,
   };
 }
+
+/** Test-only alias (G1.6 provenance tests exercise the carried-point path). */
+export const carriedPointToAggregateForTest = carriedPointToAggregate;

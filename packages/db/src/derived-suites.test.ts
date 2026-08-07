@@ -106,15 +106,18 @@ describe('purgeDerivedSuiteItems', () => {
     });
     // nothing older than a past cutoff
     const noop = await purgeDerivedSuiteItems(db(), ORG, new Date(Date.now() - 86_400_000));
-    expect(noop).toEqual({ itemsDeleted: 0, suitesEmptied: 0 });
-    // future cutoff deletes everything in-window
+    expect(noop).toEqual({ itemsDeleted: 0, suitesEmptied: 0, purgedItemIds: [] });
+    // future cutoff deletes everything in-window; purged ids feed G1.6
+    // evidence retirement
     const purged = await purgeDerivedSuiteItems(db(), ORG, new Date(Date.now() + 1000));
-    expect(purged).toEqual({ itemsDeleted: 2, suitesEmptied: 1 });
+    expect(purged.itemsDeleted).toBe(2);
+    expect(purged.suitesEmptied).toBe(1);
+    expect([...purged.purgedItemIds].sort()).toEqual([`${SUITE}-aaaa`, `${SUITE}-bbbb`]);
     const loaded = await loadDerivedSuite(db(), SUITE);
     expect(loaded?.items).toEqual([]); // items gone
     expect(loaded?.suite.orgId).toBe(ORG); // provenance stub remains
     // idempotent
-    expect(await purgeDerivedSuiteItems(db(), ORG, 'all')).toEqual({ itemsDeleted: 0, suitesEmptied: 0 });
+    expect(await purgeDerivedSuiteItems(db(), ORG, 'all')).toEqual({ itemsDeleted: 0, suitesEmptied: 0, purgedItemIds: [] });
     expect(await listDerivedSuites(db(), { orgId: ORG })).toHaveLength(1);
   });
 });

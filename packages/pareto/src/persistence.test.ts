@@ -1,7 +1,7 @@
 // Versioned-persistence round-trip tests on PGlite (zero services).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FrontierPoint } from '@potion/core';
-import { createDb, frontierPoints, frontiers, migrate, type DbHandle } from '@potion/db';
+import { createDb, createOrg, frontierPoints, frontiers, migrate, type DbHandle } from '@potion/db';
 import { eq } from 'drizzle-orm';
 import { loadCurrentFrontier, loadFrontier, saveFrontier } from './persistence.js';
 
@@ -95,5 +95,61 @@ describe('frontier persistence (PGlite)', () => {
       .from(frontiers)
       .where(eq(frontiers.id, saved.id));
     expect(count).toHaveLength(1);
+  });
+});
+
+describe('G1.6 per-org scoping + race fix', () => {
+  let handle: DbHandle;
+  beforeAll(async () => {
+    handle = await createDb('pglite://');
+    await migrate(handle.db);
+    await createOrg(handle.db, { id: 'org_f', name: 'F' });
+    await createOrg(handle.db, { id: 'org_g', name: 'G' });
+  });
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  it('RACE: concurrent saves land distinct versions with a valid parent chain', async () => {
+    const [a, b] = await Promise.all([
+      saveFrontier(handle.db, 'race-cluster', [P1], 'recompute', 'pv-1'),
+      saveFrontier(handle.db, 'race-cluster', [P2], 'recompute', 'pv-1'),
+    ]);
+    const versions = [a.version, b.version].sort();
+    expect(versions).toEqual([1, 2]); // pre-G1.6: both landed v1, forked chain
+    const v2 = a.version === 2 ? a : b;
+    const v1 = a.version === 1 ? a : b;
+    expect(v2.parentId).toBe(v1.id);
+    expect(v1.parentId).toBeNull();
+  });
+
+  it('scope-exact chains: org v1 is parent-null even after platform v2; same (cluster, version) allowed across scopes', async () => {
+    await saveFrontier(handle.db, 'chain-cluster', [P1], 'manual', 'pv-1');
+    await saveFrontier(handle.db, 'chain-cluster', [P1, P2], 'recompute', 'pv-1');
+    const orgV1 = await saveFrontier(handle.db, 'chain-cluster', [P2], 'recompute', 'pv-1', { orgId: 'org_f' });
+    expect(orgV1.version).toBe(1); // never chains off the platform frontier
+    expect(orgV1.parentId).toBeNull();
+    expect(orgV1.orgId).toBe('org_f');
+    const orgV2 = await saveFrontier(handle.db, 'chain-cluster', [P1], 'recompute', 'pv-1', { orgId: 'org_f' });
+    expect(orgV2.version).toBe(2);
+    expect(orgV2.parentId).toBe(orgV1.id);
+  });
+
+  it('serving read: org-preferred, platform fallback, platform-pinned without orgId, zero-points falls back', async () => {
+    // platform only → org read falls back
+    await saveFrontier(handle.db, 'fb-cluster', [P1], 'manual', 'pv-1');
+    let read = await loadCurrentFrontier(handle.db, 'fb-cluster', 'org_f');
+    expect(read?.orgId).toBeNull();
+    // org frontier exists → org read prefers it; no-org read pins platform
+    await saveFrontier(handle.db, 'fb-cluster', [P2], 'recompute', 'pv-1', { orgId: 'org_f' });
+    read = await loadCurrentFrontier(handle.db, 'fb-cluster', 'org_f');
+    expect(read?.orgId).toBe('org_f');
+    expect((await loadCurrentFrontier(handle.db, 'fb-cluster'))?.orgId).toBeNull();
+    // another org never sees org_f's frontier
+    expect((await loadCurrentFrontier(handle.db, 'fb-cluster', 'org_g'))?.orgId).toBeNull();
+    // fully-retired (zero-point) org frontier → platform fallback
+    await saveFrontier(handle.db, 'fb-cluster', [], 'recompute', 'pv-1', { orgId: 'org_f' });
+    read = await loadCurrentFrontier(handle.db, 'fb-cluster', 'org_f');
+    expect(read?.orgId).toBeNull();
   });
 });

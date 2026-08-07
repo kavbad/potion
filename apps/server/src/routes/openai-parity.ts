@@ -286,7 +286,7 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
         assignment = await ctx.assigner.assign(prompt);
         ctx.assignCache.set(cacheKey, assignment);
       }
-      const loaded = await loadCurrentFrontier(ctx.db.db, assignment.clusterId);
+      const loaded = await loadCurrentFrontier(ctx.db.db, assignment.clusterId, auth.org.orgId);
       const { frontier, provenance } = guardFrontierProvenance(
         loaded,
         ctx.providerMode,

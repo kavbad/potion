@@ -66,6 +66,9 @@ export interface RunOptions {
   /** Explicit provenance override (tests). Default: detected from the
    * provider set via detectProviderMode. */
   providerModeOverride?: ProviderMode;
+  /** Tenant attribution (G1.6): stamped onto every eval_results row and the
+   * eval run. Absent = platform evidence. */
+  orgId?: string;
   /**
    * Output ceiling for answer calls (provider max_tokens), threaded into the
    * strategy ExecContext AND the preflight projection so the bound is
@@ -339,6 +342,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           modelVersions,
           pricesVersion: prices.version,
           providerMode,
+          ...(opts.orgId !== undefined ? { orgId: opts.orgId } : {}),
           cacheKey,
           createdAt: new Date().toISOString(),
         };

@@ -453,9 +453,13 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     logBase.clusterId = clusterId;
 
     // ---- 4. frontier → provenance guard → selectPoint(policy) → NULL fallback ----
-    // Frontiers are shared-global by design (ROADMAP #13): the routing
-    // evidence base is a platform asset — NEVER org-scoped.
-    const loaded = await loadCurrentFrontier(ctx.db.db, clusterId);
+    // G1.6 retracts the old "NEVER org-scoped" contract: the read is
+    // org-PREFERRED with platform fallback — an org's agent frontier serves
+    // its own traffic; everyone else (and every platform cluster) gets the
+    // shared platform frontier. NOTE: the assignment LRU (context.ts) stays
+    // content-keyed — safe ONLY while cluster ASSIGNMENT remains platform
+    // taxonomy; revisit if assignment ever considers org clusters.
+    const loaded = await loadCurrentFrontier(ctx.db.db, clusterId, auth.org.orgId);
     const { frontier, provenance } = guardFrontierProvenance(
       loaded,
       ctx.providerMode,

@@ -236,7 +236,19 @@ export function computeFrontier(aggs: StrategyAggregate[]): FrontierPoint[];
 export function diffFrontiers(from: Frontier, to: Frontier): FrontierDiff;
 export function planRecompute(newModel: PriceEntry, existing: PriceTable): StrategyConfig[]; // solo + shortlist: cheap-cascade-stage, judge, draft
 ```
-- Persistence: `saveFrontier(db, clusterId, points, trigger)` → versioned row (version = max+1, parentId chain).
+- Persistence: `saveFrontier(db, clusterId, points, trigger, pricesVersion, opts?)` → versioned row (version = max+1, parentId chain).
+- **G1.6 per-org scoping**: `org_id` (NULL = platform) on frontiers/frontier_points/eval_runs/eval_results.
+  Version chains are SCOPE-EXACT (an org's first frontier is v1/parent-null); a `(org_id, cluster_id, version)`
+  unique (NULLS NOT DISTINCT) + transactional insert + bounded retry makes concurrent saves race-safe.
+  Reads via `loadCurrentFrontier(db, clusterId, orgId?)` are org-PREFERRED with platform fallback; an omitted
+  orgId PINS platform (share links + leaderboard are platform-only by owner decision). A zero-point org
+  frontier is treated as absent (retirement fallback).
+- **G1.6 provenance (owner rule)**: every `FrontierPoint` carries `evidence` — eval_results cacheKeys, runIds,
+  n, ci95, suiteId+version, approved rubricHash, calibrationId — in the serving jsonb and mirrored on
+  frontier_points. Carried-over points keep their ORIGINAL evidence verbatim. Public DTOs strip `evidence`.
+- **G1.6 evidence retirement**: purged derived-suite items retire their eval_results to `stale` (never
+  deleted — old frontier versions keep cacheKeys as tombstone references) and affected org frontiers are
+  recomputed immediately; full retirement saves an empty version → serving falls back to platform.
 
 ## 7. packages/db & packages/queue
 

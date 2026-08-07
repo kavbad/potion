@@ -71,8 +71,19 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    guarantee wiring; sampling is uniform (no per-stratum quotas); no serving
    gate on calibration state (surfaced only). Serving API keys hold role
    `admin` and can resolve incidents — lift their own rollback (G2.3).
-2. Frontiers/eval evidence remain GLOBAL by design contract (per-org
-   frontiers = G1.6). Trace clustering is org-scoped as of G1.2
+2. [RESOLVED 2026-08-07] Frontiers/eval evidence are PER-ORG as of G1.6:
+   org_id (NULL=platform) on frontiers/frontier_points/eval_runs/
+   eval_results; reads org-preferred with platform fallback (share +
+   leaderboard PINNED platform by owner decision; detail route now 404s
+   cross-org agent clusters); saveFrontier race fixed (scope-exact unique
+   NULLS NOT DISTINCT + tx insert + retry); SCHEMA-LEVEL PROVENANCE (owner
+   rule): every frontier point carries evidence (eval cacheKeys, runIds, n,
+   ci95, suite id+version, approved rubricHash, calibrationId), carried
+   points keep originals verbatim, public DTOs strip it. Evidence
+   retirement on purge RESOLVED: stale-never-delete + immediate recompute,
+   empty frontier → platform fallback. G1.7 FLAG: eval cache key needs an
+   org component if orgs ever eval shared suites. Trace clustering has
+   been org-scoped since G1.2
    (2026-08-06): per-org nightly loop, (org,trace) grouping, cluster ids
    agent-<orgHash6>-<slug> partition agent frontiers/suites for free,
    clusters.org_id ownership checks (hint + /api/frontiers). Synthesized

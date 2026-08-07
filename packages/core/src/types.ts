@@ -140,7 +140,36 @@ export interface EvalResult {
   pricesVersion: string;
   providerMode?: ProviderMode; // absent == 'unknown' (pre-M1a rows)
   cacheKey: string; // sha256(strategyHash + itemId + judgeVersion + pricesVersion)
+  /** Tenant attribution (G1.6); absent = platform evidence. NOT part of the
+   * cacheKey identity — safe only while org evidence comes exclusively from
+   * org-partitioned item ids (agent-<orgHash6>-…); flagged for G1.7. */
+  orgId?: string;
   createdAt: string; // ISO
+}
+
+/**
+ * Schema-level provenance (G1.6, owner rule): the evidence a frontier point
+ * rests on — "here's your frontier and here's why we believe each point".
+ * Carried on StrategyAggregate AND FrontierPoint so it survives the
+ * aggregate→point projection and carried-over points keep their ORIGINAL
+ * links verbatim (a carried point honestly reports the rubric it was
+ * actually scored under, even after a rubric supersession). Absent =
+ * pre-G1.6 rows. cacheKeys may reference rows later retired to stale —
+ * documented tombstones, never dangling deletes.
+ */
+export interface FrontierPointEvidence {
+  /** eval_results cache keys (content-addressed evidence ids) aggregated. */
+  cacheKeys: string[];
+  /** Distinct eval run ids the rows came from. */
+  runIds: string[];
+  n: number;
+  qualityCi95: number;
+  suiteId?: string;
+  suiteVersion?: string;
+  /** The rubric the llm-judge evidence was scored under (0022 identity). */
+  rubricHash?: string;
+  /** judge_calibrations uuid backing trust in that rubric×judge. */
+  calibrationId?: string;
 }
 
 export interface StrategyAggregate {
@@ -155,6 +184,7 @@ export interface StrategyAggregate {
   latencyP95: number;
   pricesVersion: string;
   providerMode?: ProviderMode; // absent == 'unknown'
+  evidence?: FrontierPointEvidence; // G1.6; absent = pre-provenance
 }
 
 // ---- pareto ----
@@ -166,6 +196,7 @@ export interface FrontierPoint {
   costPer1K: number;
   latencyP95: number;
   providerMode?: ProviderMode; // absent == 'unknown' (treated as simulated)
+  evidence?: FrontierPointEvidence; // G1.6; absent = pre-provenance
 }
 
 export interface Frontier {
@@ -176,6 +207,10 @@ export interface Frontier {
   trigger: 'manual' | 'new-model' | 'recompute';
   points: FrontierPoint[];
   pricesVersion: string;
+  /** Tenant scope (G1.6): undefined/null = platform frontier. Version
+   * chains are SCOPE-EXACT — an org's first frontier is v1/parent-null,
+   * never chained off the platform frontier. */
+  orgId?: string | null;
   createdAt: string;
 }
 

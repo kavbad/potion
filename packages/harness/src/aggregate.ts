@@ -53,6 +53,20 @@ export function aggregateResults(
     latencyP50: percentileNearestRank(latencies, 50),
     latencyP95: percentileNearestRank(latencies, 95),
     pricesVersion,
+    // G1.6 schema-level provenance (owner rule): the aggregate remembers the
+    // exact evidence rows it was computed from — cacheKeys are the
+    // content-addressed eval_results ids; the pareto projection carries this
+    // onto the frontier point verbatim.
+    ...(n > 0
+      ? {
+          evidence: {
+            cacheKeys: results.map((r) => r.cacheKey),
+            runIds: [...new Set(results.map((r) => r.runId))],
+            n,
+            qualityCi95: n > 1 ? (1.96 * sd) / Math.sqrt(n) : 0,
+          },
+        }
+      : {}),
     // Provenance: explicit param wins; otherwise inherit only when EVERY
     // input row agrees on one recorded mode (mixed/unknown → absent).
     ...(providerMode !== undefined

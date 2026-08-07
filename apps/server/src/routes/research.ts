@@ -249,7 +249,12 @@ export function registerResearchRoutes(
 
   // ---- GET /api/leaderboard — PUBLIC (§13.4; exempted in the auth hook) ----
   app.get('/api/leaderboard', async (_req: FastifyRequest, reply) => {
-    const allClusters = await listClusters(db);
+    // G1.6: PLATFORM-ONLY pin (owner decision). Pre-G1.6 this iterated
+    // every tenant's agent clusters and only the live-evidence gate kept
+    // them off the public board — G1.7's live org frontiers would have
+    // turned that into a cross-tenant leak. The no-org frontier read below
+    // additionally pins org_id IS NULL.
+    const allClusters = await listClusters(db, { platformOnly: true });
     const entries: {
       clusterId: string;
       clusterName: string;

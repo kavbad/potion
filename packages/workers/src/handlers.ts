@@ -8,6 +8,7 @@ import {
   type ChatMessage, type Policy, type StrategyConfig, type Usage } from '@potion/core';
 import {
   approvedRubricForCluster,
+  retireEvalResultsByItemIds,
   insertClusterRubric,
   insertJudgeCalibration,
   insertRequestLog,
@@ -219,6 +220,7 @@ export const evalRunHandler: WorkerHandler<'eval:run'> = async (
       budgetCapUsd,
       provider: 'mock',
       resume: true,
+      ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
     },
     {
       db: ctx.dbHandle,
@@ -227,7 +229,8 @@ export const evalRunHandler: WorkerHandler<'eval:run'> = async (
     },
   );
   // Record the run row (results themselves are persisted by the runner into
-  // the content-addressed eval_results cache).
+  // the content-addressed eval_results cache). G1.6: org is a real column
+  // now, not just an options-jsonb smuggle.
   await ctx.db.insert(evalRuns).values({
     id: summary.runId,
     options: {
@@ -239,6 +242,7 @@ export const evalRunHandler: WorkerHandler<'eval:run'> = async (
     provider: 'mock',
     status: 'completed',
     spendUsd: summary.spendUsd,
+    orgId: payload.orgId ?? null,
   });
   const artifactKey = await writeJsonArtifact(ctx.artifacts, `eval/${summary.runId}.json`, {
     ...summary,
@@ -1640,6 +1644,8 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
             budgetCapUsd: MOCK_CYCLE_BUDGET_CAP_USD,
             provider: 'mock',
             resume: true,
+            // G1.6: org evidence is org-attributed at write time.
+            orgId,
           },
           { db: ctx.dbHandle, pricesPath: ctx.pricesPath, suitesV2Dir },
         );
@@ -1657,16 +1663,35 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
           provider: 'mock',
           status: 'completed',
           spendUsd: summary.spendUsd,
+          orgId,
         });
         const aggregates = await aggregatesFromEvalResults(
           ctx.db,
           clusterId,
           strategies,
           prices.version,
+          { orgId },
         );
         if (aggregates.length > 0) {
           const points = computeFrontier(aggregates);
-          await saveFrontier(ctx.db, clusterId, points, 'recompute', prices.version);
+          // G1.6: the org frontier, with schema-level provenance stamped on
+          // every point (owner rule) — the approved rubric + its calibration
+          // are already in scope from the synthesis step above.
+          await saveFrontier(ctx.db, clusterId, points, 'recompute', prices.version, {
+            orgId,
+            provenance: {
+              suiteId,
+              suiteVersion: upsert.version,
+              ...(approvedRubric !== null
+                ? {
+                    rubricHash: approvedRubric.rubricHash,
+                    ...(approvedRubric.calibrationId !== null
+                      ? { calibrationId: approvedRubric.calibrationId }
+                      : {}),
+                  }
+                : {}),
+            },
+          });
         }
       }
 
@@ -1701,12 +1726,21 @@ export interface TracesPurgeResult {
   /** G1.3: derived-suite items purged under the same retention. */
   derivedItemsDeleted: number;
   derivedSuitesEmptied: number;
+  /** G1.6 evidence retirement: eval_results rows marked STALE because their
+   * source items were purged (never deleted — old frontier points keep
+   * their cacheKeys as documented tombstone references). */
+  evalResultsRetired: number;
+  /** Org agent frontiers recomputed immediately so retired evidence stops
+   * backing serving points (empty-points version → platform fallback). */
+  frontiersRecomputed: number;
   perOrg: {
     orgId: string;
     retentionDays: number;
     redacted: number;
     deleted: number;
     itemsDeleted: number;
+    evalResultsRetired: number;
+    frontiersRecomputed: number;
     suitesEmptied: number;
   }[];
 }
@@ -1729,6 +1763,8 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
     deleted: 0,
     derivedItemsDeleted: 0,
     derivedSuitesEmptied: 0,
+    evalResultsRetired: 0,
+    frontiersRecomputed: 0,
     perOrg: [],
   };
   for (const orgId of orgIds) {
@@ -1738,10 +1774,8 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
     let deleted = 0;
     // G1.3: derived suites follow the SAME retention as spans — days=0
     // ("metadata only") empties the org's replay items but keeps the
-    // provenance rows; days>0 purges items past the same cutoff. Frontiers/
-    // eval_results built from purged items are NOT cascade-deleted (mock-only
-    // + provenance-guarded; retirement policy is a recorded G1.6 decision).
-    let derived: { itemsDeleted: number; suitesEmptied: number };
+    // provenance rows; days>0 purges items past the same cutoff.
+    let derived: { itemsDeleted: number; suitesEmptied: number; purgedItemIds: string[] };
     if (days === 0) {
       redacted = await redactSpanAttrs(ctx.db, orgId);
       derived = await purgeDerivedSuiteItems(ctx.db, orgId, 'all');
@@ -1750,12 +1784,74 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
       deleted = await deleteSpansOlderThan(ctx.db, orgId, cutoff);
       derived = await purgeDerivedSuiteItems(ctx.db, orgId, cutoff);
     }
+    // G1.6 evidence retirement (RESOLVES the G1.3 standing decision):
+    // eval_results built from purged items are marked STALE — never deleted,
+    // the guarantee's promise is "why we believed each point" and old
+    // frontier versions keep their cacheKeys as tombstones — and every
+    // affected agent frontier is recomputed IMMEDIATELY. Clustering alone
+    // would never re-save (it only saves on item ADDS), so without this a
+    // frontier would serve retired evidence forever. Full retirement saves
+    // an empty-points version; serving falls back to platform.
+    let evalResultsRetired = 0;
+    let frontiersRecomputed = 0;
+    if (derived.purgedItemIds.length > 0) {
+      const retired = await retireEvalResultsByItemIds(ctx.db, derived.purgedItemIds);
+      evalResultsRetired = retired.length;
+      const affectedClusters = [...new Set(retired.map((r) => r.clusterId))].filter((c) =>
+        c.startsWith('agent-'),
+      );
+      if (affectedClusters.length > 0) {
+        const { table: prices } = loadPrices(ctx.pricesPath);
+        const registry = buildRegistry(prices);
+        const strategies = (['cheap', 'mid', 'strong'] as const)
+          .map((cls) => classRepresentative(registry, cls))
+          .filter((e): e is NonNullable<typeof e> => e !== null && e !== undefined)
+          .map((e) => ({ type: 'single', model: e.alias }) as StrategyConfig);
+        for (const clusterId of affectedClusters) {
+          const aggregates = await aggregatesFromEvalResults(
+            ctx.db,
+            clusterId,
+            strategies,
+            prices.version,
+            { orgId },
+          );
+          const points = aggregates.length > 0 ? computeFrontier(aggregates) : [];
+          const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
+          await saveFrontier(ctx.db, clusterId, points, 'recompute', prices.version, {
+            orgId,
+            provenance: {
+              suiteId: `${clusterId}-replays-v1`,
+              ...(approvedRubric !== null
+                ? {
+                    rubricHash: approvedRubric.rubricHash,
+                    ...(approvedRubric.calibrationId !== null
+                      ? { calibrationId: approvedRubric.calibrationId }
+                      : {}),
+                  }
+                : {}),
+            },
+          });
+          frontiersRecomputed += 1;
+        }
+      }
+    }
     result.orgs += 1;
     result.redacted += redacted;
     result.deleted += deleted;
     result.derivedItemsDeleted += derived.itemsDeleted;
     result.derivedSuitesEmptied += derived.suitesEmptied;
-    result.perOrg.push({ orgId, retentionDays: days, redacted, deleted, ...derived });
+    result.evalResultsRetired += evalResultsRetired;
+    result.frontiersRecomputed += frontiersRecomputed;
+    result.perOrg.push({
+      orgId,
+      retentionDays: days,
+      redacted,
+      deleted,
+      itemsDeleted: derived.itemsDeleted,
+      suitesEmptied: derived.suitesEmptied,
+      evalResultsRetired,
+      frontiersRecomputed,
+    });
   }
   return result;
 };

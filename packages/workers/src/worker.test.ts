@@ -20,6 +20,7 @@ import {
   migrate,
   strategyConfigs,
   type DbHandle,
+  createOrg,
 } from '@potion/db';
 import { createQueue } from '@potion/queue';
 import { createGuaranteeEvaluateHandler, runWorker } from './index.js';
@@ -48,6 +49,8 @@ beforeEach(async () => {
   );
   db = await createDb();
   await migrate(db.db);
+  // G1.6: eval_runs/eval_results.org_id carries a real FK now.
+  await createOrg(db.db, { id: 'org-test', name: 'Worker Test Org' });
   artifacts = createArtifactStore('local', { dir: artifactsDir });
 });
 

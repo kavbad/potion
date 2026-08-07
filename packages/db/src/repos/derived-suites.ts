@@ -176,13 +176,16 @@ export async function purgeDerivedSuiteItems(
   db: PotionDb,
   orgId: string,
   cutoff: Date | 'all',
-): Promise<{ itemsDeleted: number; suitesEmptied: number }> {
+): Promise<{ itemsDeleted: number; suitesEmptied: number; purgedItemIds: string[] }> {
   const suiteRows = await db
     .select({ suiteId: derivedSuites.suiteId })
     .from(derivedSuites)
     .where(eq(derivedSuites.orgId, orgId));
   let itemsDeleted = 0;
   let suitesEmptied = 0;
+  // G1.6: purged ids feed evidence retirement — eval_results built from
+  // these items are marked stale and affected frontiers recomputed.
+  const purgedItemIds: string[] = [];
   for (const { suiteId } of suiteRows) {
     const deleted = await db
       .delete(derivedSuiteItems)
@@ -194,6 +197,7 @@ export async function purgeDerivedSuiteItems(
       )
       .returning({ itemId: derivedSuiteItems.itemId });
     itemsDeleted += deleted.length;
+    purgedItemIds.push(...deleted.map((d) => d.itemId));
     if (deleted.length > 0) {
       const remaining = await db
         .select({ n: sql<number>`count(*)::int` })
@@ -202,5 +206,5 @@ export async function purgeDerivedSuiteItems(
       if ((remaining[0]?.n ?? 0) === 0) suitesEmptied += 1;
     }
   }
-  return { itemsDeleted, suitesEmptied };
+  return { itemsDeleted, suitesEmptied, purgedItemIds };
 }

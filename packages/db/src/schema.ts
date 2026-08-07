@@ -28,6 +28,7 @@ import type {
   ScoringMethod,
   StrategyConfig,
   Usage,
+  FrontierPointEvidence,
 } from '@potion/core';
 
 // ---------------------------------------------------------------------------
@@ -176,6 +177,8 @@ export const evalRuns = pgTable('eval_runs', {
   budgetCapUsd: doublePrecision('budget_cap_usd').notNull(),
   provider: text('provider').notNull().default('mock'),
   status: text('status').notNull().default('pending'),
+  /** Tenant attribution (G1.6); NULL = platform run. */
+  orgId: text('org_id').references(() => orgs.id),
   spendUsd: doublePrecision('spend_usd').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -198,6 +201,9 @@ export const evalResults = pgTable('eval_results', {
    * 'unknown' == never recorded; treated as simulated everywhere. */
   providerMode: text('provider_mode').notNull().default('unknown'),
   /** M1a staleness engine: true when prices/judge/model versions drifted. */
+  /** Tenant attribution (G1.6); NULL = platform evidence. NOT part of the
+   * cacheKey identity (org item ids are org-partitioned — G1.7 flag). */
+  orgId: text('org_id').references(() => orgs.id),
   stale: boolean('stale').notNull().default(false),
   createdAt: text('created_at').notNull(), // ISO, matches core EvalResult
 });
@@ -209,6 +215,9 @@ export const frontiers = pgTable('frontiers', {
   parentId: text('parent_id'),
   trigger: text('trigger').notNull(), // 'manual' | 'new-model' | 'recompute'
   points: jsonb('points').$type<FrontierPoint[]>().notNull(),
+  /** Tenant scope (G1.6); NULL = platform. Unique (org, cluster, version)
+   * NULLS NOT DISTINCT — the saveFrontier race fix. Chains are scope-exact. */
+  orgId: text('org_id').references(() => orgs.id),
   pricesVersion: text('prices_version').notNull(),
   createdAt: text('created_at').notNull(), // ISO, matches core Frontier
 });
@@ -225,6 +234,10 @@ export const frontierPoints = pgTable('frontier_points', {
   costPer1K: doublePrecision('cost_per_1k').notNull(),
   latencyP95: doublePrecision('latency_p95').notNull(),
   /** Evidence provenance (M1a, migration 0002): 'mock' | 'live' | 'unknown'. */
+  orgId: text('org_id').references(() => orgs.id),
+  /** G1.6 provenance mirror (owner rule): the same evidence object that
+   * rides in frontiers.points jsonb, SQL-queryable for audit. */
+  evidence: jsonb('evidence').$type<FrontierPointEvidence>(),
   providerMode: text('provider_mode').notNull().default('unknown'),
 });
 
@@ -761,42 +774,6 @@ export const traceSpans = pgTable(
   ],
 );
 
-export const schema = {
-  orgs,
-  users,
-  memberships,
-  sessions,
-  magicLinks,
-  clusters,
-  clusterExemplars,
-  models,
-  strategyConfigs,
-  evalItems,
-  evalRuns,
-  evalResults,
-  frontiers,
-  frontierPoints,
-  apiKeys,
-  policies,
-  requestLogs,
-  providerKeys,
-  custodyAudit,
-  usageDaily,
-  shadowResults,
-  qualitySamples,
-  incidents,
-  shareTokens,
-  alertRules,
-  alertDeliveries,
-  budgets,
-  budgetEvents,
-  authEvents,
-  researchCycles,
-  recipeStatus,
-  traceSpans,
-};
-
-export type Schema = typeof schema;
 
 // Row types for repositories.
 export type OrgRow = typeof orgs.$inferSelect;
@@ -961,3 +938,46 @@ export const clusterRubrics = pgTable('cluster_rubrics', {
 
 export type ClusterRubricRow = typeof clusterRubrics.$inferSelect;
 export type NewClusterRubric = typeof clusterRubrics.$inferInsert;
+
+export const schema = {
+  orgs,
+  users,
+  memberships,
+  sessions,
+  magicLinks,
+  clusters,
+  clusterExemplars,
+  models,
+  strategyConfigs,
+  evalItems,
+  evalRuns,
+  evalResults,
+  frontiers,
+  frontierPoints,
+  apiKeys,
+  policies,
+  requestLogs,
+  providerKeys,
+  custodyAudit,
+  usageDaily,
+  shadowResults,
+  qualitySamples,
+  incidents,
+  shareTokens,
+  alertRules,
+  alertDeliveries,
+  budgets,
+  budgetEvents,
+  authEvents,
+  researchCycles,
+  recipeStatus,
+  traceSpans,
+  // Declared below this object historically but part of the schema (G1.6
+  // fix-in-passing — introspection over `schema` was blind to them):
+  judgeCalibrations,
+  derivedSuites,
+  derivedSuiteItems,
+  clusterRubrics,
+};
+
+export type Schema = typeof schema;

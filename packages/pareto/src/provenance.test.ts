@@ -4,10 +4,11 @@
 // override); aggregateToPoint carries provenance onto frontier points.
 // PGlite, zero services.
 import { eq } from 'drizzle-orm';
+import { carriedPointToAggregateForTest } from './recompute.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { EvalResult, FrontierPoint, StrategyAggregate } from '@potion/core';
+import type { EvalResult, FrontierPoint, FrontierPointEvidence, StrategyAggregate } from '@potion/core';
 import { strategyHash } from '@potion/core';
-import { createDb, evalResults, insertEvalResult, migrate, type DbHandle } from '@potion/db';
+import { createDb, createOrg, evalResults, frontierPoints, insertEvalResult, migrate, type DbHandle } from '@potion/db';
 import { markStale } from '@potion/harness';
 import { aggregateToPoint, computeFrontier } from './dominance.js';
 import { loadCurrentFrontier, saveFrontier } from './persistence.js';
@@ -168,5 +169,107 @@ describe('aggregatesFromEvalResults — stale exclusion', () => {
     });
     expect(incl).toHaveLength(1);
     expect(incl[0]!.n).toBe(3); // --include-stale override brings it back
+  });
+});
+
+describe('G1.6 evidence provenance', () => {
+  let handle: DbHandle;
+  beforeAll(async () => {
+    handle = await createDb('pglite://');
+    await migrate(handle.db);
+    await createOrg(handle.db, { id: 'org_ev', name: 'Ev' });
+  });
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  const EVIDENCE: FrontierPointEvidence = {
+    cacheKeys: ['ck-1', 'ck-2'],
+    runIds: ['run-x'],
+    n: 2,
+    qualityCi95: 0.04,
+  };
+
+  it('evidence + ProvenanceContext round-trip through save + load; jsonb and mirror table agree', async () => {
+    const point: FrontierPoint = {
+      clusterId: 'ev-cluster',
+      strategyHash: SH_A,
+      strategyConfig: STRAT_A,
+      quality: 0.9,
+      costPer1K: 1,
+      latencyP95: 500,
+      providerMode: 'mock',
+      evidence: EVIDENCE,
+    };
+    const saved = await saveFrontier(handle.db, 'ev-cluster', [point], 'recompute', 'pv-1', {
+      orgId: 'org_ev',
+      provenance: { suiteId: 'suite-1', suiteVersion: '1.0.2', rubricHash: 'rh-abc', calibrationId: '00000000-0000-0000-0000-000000000001' },
+    });
+    const loaded = (await loadCurrentFrontier(handle.db, 'ev-cluster', 'org_ev'))!;
+    const ev = loaded.points[0]!.evidence!;
+    // owner rule: every point carries the evidence it rests on
+    expect(ev.cacheKeys).toEqual(['ck-1', 'ck-2']);
+    expect(ev.runIds).toEqual(['run-x']);
+    expect(ev.n).toBe(2);
+    expect(ev.suiteId).toBe('suite-1');
+    expect(ev.suiteVersion).toBe('1.0.2');
+    expect(ev.rubricHash).toBe('rh-abc');
+    expect(ev.calibrationId).toBe('00000000-0000-0000-0000-000000000001');
+    // mirror table row matches the serving jsonb
+    const rows = await handle.db.select().from(frontierPoints).where(eq(frontierPoints.frontierId, saved.id));
+    expect(rows[0]!.evidence).toEqual(ev);
+    expect(rows[0]!.orgId).toBe('org_ev');
+  });
+
+  it('carried points keep their ORIGINAL evidence — a new context never overwrites', async () => {
+    const carried: FrontierPoint = {
+      clusterId: 'ev-cluster',
+      strategyHash: SH_B,
+      strategyConfig: STRAT_B,
+      quality: 0.7,
+      costPer1K: 0.4,
+      latencyP95: 300,
+      evidence: { ...EVIDENCE, rubricHash: 'rh-ORIGINAL', suiteVersion: '1.0.0' },
+    };
+    // adapt through the carried-point path, then save under a NEW context
+    const agg = carriedPointToAggregateForTest(carried, 'pv-1');
+    expect(agg.evidence?.rubricHash).toBe('rh-ORIGINAL');
+    const saved = await saveFrontier(handle.db, 'ev-cluster-2', [aggregateToPoint(agg)], 'recompute', 'pv-1', {
+      provenance: { rubricHash: 'rh-NEW', suiteVersion: '9.9.9', calibrationId: '00000000-0000-0000-0000-000000000002' },
+    });
+    const ev = saved.points[0]!.evidence!;
+    expect(ev.rubricHash).toBe('rh-ORIGINAL'); // honest audit across supersessions
+    expect(ev.suiteVersion).toBe('1.0.0');
+    // absent fields DO get stamped
+    expect(ev.calibrationId).toBe('00000000-0000-0000-0000-000000000002');
+  });
+});
+
+describe('G1.6 org-scoped aggregation', () => {
+  let handle: DbHandle;
+  beforeAll(async () => {
+    handle = await createDb('pglite://');
+    await migrate(handle.db);
+    await createOrg(handle.db, { id: 'org_iso', name: 'Iso' });
+  });
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  it('org predicate isolates evidence both ways; fresh aggregates carry cacheKeys', async () => {
+    await insertEvalResult(handle.db, evalRow('iso-platform-1', { quality: 0.9 }));
+    await insertEvalResult(handle.db, evalRow('iso-org-1', { quality: 0.2, orgId: 'org_iso' }));
+    // platform aggregation (default): org rows invisible
+    const platform = await aggregatesFromEvalResults(handle.db, 'code-gen', [STRAT_A], 'v2');
+    expect(platform).toHaveLength(1);
+    expect(platform[0]!.qualityMean).toBeCloseTo(0.9, 10);
+    expect(platform[0]!.evidence?.cacheKeys).toEqual(['iso-platform-1']);
+    // org aggregation: platform rows invisible
+    const org = await aggregatesFromEvalResults(handle.db, 'code-gen', [STRAT_A], 'v2', {
+      orgId: 'org_iso',
+    });
+    expect(org).toHaveLength(1);
+    expect(org[0]!.qualityMean).toBeCloseTo(0.2, 10);
+    expect(org[0]!.evidence?.cacheKeys).toEqual(['iso-org-1']);
   });
 });

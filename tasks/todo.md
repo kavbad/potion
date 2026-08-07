@@ -592,7 +592,7 @@ re-scoped to hot-path gaps.
       in synthesized items (ingestion contract addition); judge anchors on reference. [L]
 - [x] G1.5 Automated scorer construction: rubric generation per cluster from exemplars +
       G0.2 calibration on the result; customer-visible rubric review step. [M]
-- [ ] G1.6 Per-org frontiers [ARCHITECTURE]: org_id (NULL=platform) on frontiers/
+- [x] G1.6 Per-org frontiers [ARCHITECTURE]: org_id (NULL=platform) on frontiers/
       frontier_points/eval_runs/eval_results, unique (org,cluster,version) fixing the
       read-then-insert race, fallback-to-global reads, thread org through ~7
       loadCurrentFrontier sites (share links + leaderboard stay platform-only), org-scoped
@@ -1167,3 +1167,71 @@ on larger corpora.
 | 2026-08-07 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $5.3315 (ledger said $5.3020; ~$0.03 delayed-accounting drift from the G1.4 run) | — | — | $5.3315 / $50.00 (OpenRouter) |
 | 2026-08-07 | G1.5 live leg ×3 attempts (mock-alias bug $0; rejected-overlong gen ~$0.005; successful run $0.0664 = gen $0.0048 + probe judging $0.0616; sonnet via OpenRouter; before usage $5.3315 → after $5.3870) | $2.00 cap | $0.0555 (authoritative delta; endpoint lags ~$0.016) | $5.3870 / $50.00 (OpenRouter) |
 | 2026-08-07 | OpenAI side | — | $0 (no OpenAI calls this item) | ~$0.24 (OpenAI key, unchanged) |
+
+---
+
+## G1.6 — Per-org frontiers with schema-level provenance (session 2026-08-07, plan approved)
+
+Frontiers/eval evidence go per-org (org_id NULL=platform, org-preferred reads with
+platform fallback — load-bearing for the walkthrough's fresh org), the saveFrontier
+read-then-insert race gets a real fix (NULLS NOT DISTINCT unique + transactional
+insert + bounded retry), and — the owner's headline — provenance becomes SCHEMA-LEVEL:
+every frontier point carries a FrontierPointEvidence object (eval_results cacheKeys,
+runIds, n, ci95, suiteId+version, approved rubricHash, calibrationId) in the serving
+jsonb AND mirrored on frontier_points. Carried points keep their ORIGINAL evidence
+verbatim (honest audit across rubric supersessions). Evidence retirement (G1.3
+standing decision) RESOLVES as staleness-plus-immediate-recompute, never delete.
+Share + leaderboard stay platform-pinned (owner decision); public DTOs strip
+evidence. Detail-route cross-org read gap closes (uniform 404). No live leg — every
+G1.6 writer is mock until G1.7.
+
+- [x] a. db+core: 0023 (org_id ×4, evidence jsonb, backfill-before-index, unique +
+      read indexes) + repos (tx insert, scope-exact latest, org-preference read,
+      retireEvalResultsByItemIds, listClusters platformOnly) + FrontierPointEvidence
+- [x] b. harness+pareto: evidence built in aggregateResults, passed through
+      aggregateToPoint/carried points; saveFrontier opts+retry; recompute org
+      predicate; tests (race, round-trip, org-fallback, isolation)
+- [x] c. workers: cluster handler org+provenance ctx; evalRun org column; purge
+      retirement (stale + immediate recompute + empty-version fallback) + e2e
+- [x] d. server: org threading (chat/parity/playground/dashboard), detail 404,
+      leaderboard pin, share comments + DTO strip + route tests
+- [x] e. full sweep + walkthrough + docs (retirement decision resolved at both
+      recorded sites) + commit
+
+**G1.6 DONE (2026-08-07)** — per-org frontiers with schema-level provenance.
+Migration 0023: org_id (NULL=platform) on frontiers/frontier_points/eval_runs/
+eval_results with backfill-before-index (pre-G1.6 org rows attributed via
+clusters.org_id — without it the new predicates would silently orphan them);
+(org, cluster, version) unique NULLS NOT DISTINCT + transactional insert +
+bounded 23505 retry kills the saveFrontier read-then-insert race (test: two
+concurrent saves land v1/v2 with a valid chain — the old code forked the
+chain silently). Version chains are SCOPE-EXACT (org v1 is parent-null).
+Reads are org-preferred with platform fallback; omitted orgId PINS platform,
+so share links + leaderboard are platform-only by DEFAULT (owner decision),
+with the leaderboard's cluster list additionally pinned platformOnly (it
+previously iterated every tenant's clusters — G1.7's live org frontiers
+would have leaked cross-tenant). Detail route now 404s cross-org agent
+clusters uniformly (closed a live G1.2-era read gap).
+
+PROVENANCE (owner headline): FrontierPointEvidence {cacheKeys, runIds, n,
+ci95, suiteId, suiteVersion, rubricHash, calibrationId} flows
+aggregateResults → aggregateToPoint → saveFrontier(provenance ctx stamped
+only where absent) → serving jsonb + frontier_points mirror. Carried points
+keep their ORIGINAL evidence verbatim (honest audit across rubric
+supersessions). Authed detail surface returns evidence per point (the
+guarantee report's raw material); public share/leaderboard DTOs omit it.
+
+EVIDENCE RETIREMENT (resolves the G1.3 standing decision, both recorded
+sites updated): purge → retireEvalResultsByItemIds (stale, never delete —
+tombstone cacheKeys stay auditable) → IMMEDIATE recompute of affected org
+frontiers (clustering alone never re-saves after a purge); full retirement
+saves an empty version and serving falls back to platform.
+
+Evidence org-tagging: RunOptions.orgId stamps eval_results/eval_runs
+(eval_runs.org_id is a real column now, not an options-jsonb smuggle);
+aggregatesFromEvalResults isolates org vs platform both ways. G1.7 FLAG
+(recorded): the eval cache key needs an org component if orgs ever eval
+SHARED suites (safe today — org evidence only comes from org-partitioned
+agent item ids). 954 keyless tests green (+11); walkthrough 15/15 (fresh-org
+platform fallback is load-bearing and exercised by steps 3/6/share). NO
+live leg — every G1.6 writer is mock until G1.7; $0 spend.

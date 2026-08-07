@@ -28,6 +28,8 @@ import {
   setOrgTraceRetentionDays,
   type DbHandle,
   type NewTraceSpan,
+  evalResults,
+  frontiers,
 } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { eq } from 'drizzle-orm';
@@ -251,8 +253,18 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     // Eval runs recorded; agent clusters have a first (mock) frontier.
     const runs = await db.db.select().from(evalRuns);
     expect(runs.length).toBe(3);
-    const frontier = await loadCurrentFrontier(db.db, billingId);
+    // G1.6: agent frontiers are ORG frontiers now — the platform-pinned
+    // no-org read returns null; the org-scoped read serves them.
+    expect(await loadCurrentFrontier(db.db, billingId)).toBeNull();
+    const frontier = await loadCurrentFrontier(db.db, billingId, 'org_a');
     expect(frontier).not.toBeNull();
+    expect(frontier!.orgId).toBe('org_a');
+    // provenance (owner rule): every point carries its evidence links
+    for (const p of frontier!.points) {
+      expect(p.evidence).toBeDefined();
+      expect(p.evidence!.cacheKeys.length).toBeGreaterThan(0);
+      expect(p.evidence!.suiteId).toBe(`${billingId}-replays-v1`);
+    }
     expect(frontier!.version).toBe(1);
     expect(frontier!.points.length).toBeGreaterThan(0);
 
@@ -286,7 +298,7 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     expect(bumped.suite.version).toBe('1.0.1');
     expect(bumped.items).toHaveLength(2);
     // Frontier recomputed (still v1 lineage from the same pipeline).
-    const frontier = await loadCurrentFrontier(db.db, `agent-${slug}`);
+    const frontier = await loadCurrentFrontier(db.db, `agent-${slug}`, 'org_a');
     expect(frontier).not.toBeNull();
   });
 
@@ -375,6 +387,45 @@ describe('traces:purge (M5 #36, SPEC §14.3)', () => {
     const res = await tracesPurgeHandler({ orgId: 'org_a' }, ctx());
     expect(res.orgs).toBe(1);
     expect(res.deleted).toBe(0); // fresh spans survive the 30-day window
+  });
+});
+
+describe('G1.6 evidence retirement on purge', () => {
+  it('purge marks eval_results stale, recomputes the org frontier; full retirement → empty version + platform fallback', async () => {
+    // Build an org cluster with evidence + frontier (recent sessions so the
+    // 7-day clustering window sees them), then retention 0 → purge ALL.
+    await seedSession('org_a', 'tr_p1', 'Reconcile the billing ledger for March', 'search');
+    await seedSession('org_a', 'tr_p2', 'Reconcile the billing ledger for April', 'search', '2026-08-06T11:00:00Z');
+    await tracesClusterHandler({ orgId: 'org_a' }, ctx());
+    await setOrgTraceRetentionDays(db.db, 'org_a', 0);
+    const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
+    const before = await loadCurrentFrontier(db.db, clusterId, 'org_a');
+    expect(before).not.toBeNull();
+    expect(before!.points.length).toBeGreaterThan(0);
+    const evidenceKeys = before!.points.flatMap((p) => p.evidence?.cacheKeys ?? []);
+    expect(evidenceKeys.length).toBeGreaterThan(0);
+
+    // Retention 0 = metadata only: EVERY derived item purged → full retirement.
+    const res = await tracesPurgeHandler({ orgId: 'org_a' }, ctx());
+    expect(res.derivedItemsDeleted).toBe(2);
+    expect(res.evalResultsRetired).toBeGreaterThan(0);
+    expect(res.frontiersRecomputed).toBe(1);
+
+    // Retired evidence is STALE, not deleted — tombstones stay auditable.
+    const rows = await db.db.select().from(evalResults).where(eq(evalResults.clusterId, clusterId));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.stale)).toBe(true);
+
+    // Full retirement → the new frontier version is EMPTY, and serving
+    // falls back to platform (null here — no platform frontier exists).
+    const after = await db.db
+      .select()
+      .from(frontiers)
+      .where(eq(frontiers.clusterId, clusterId));
+    const latest = after.sort((a, b) => b.version - a.version)[0]!;
+    expect(latest.version).toBe(before!.version + 1);
+    expect(latest.points).toEqual([]);
+    expect(await loadCurrentFrontier(db.db, clusterId, 'org_a')).toBeNull();
   });
 });
 

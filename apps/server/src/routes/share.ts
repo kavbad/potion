@@ -143,6 +143,8 @@ export function registerShareRoutes(app: FastifyInstance, ctx: PotionContext): v
       }
       // The link targets a CURRENT frontier — minting against a cluster with
       // no frontier would 404 every reader forever, so refuse up front.
+      // PLATFORM-ONLY by owner decision (G1.6): share links never expose an
+      // org frontier — omitting orgId pins org_id IS NULL.
       const frontier = await loadCurrentFrontier(ctx.db.db, clusterId);
       if (!frontier) {
         return reply
@@ -223,6 +225,8 @@ export function registerShareRoutes(app: FastifyInstance, ctx: PotionContext): v
     const row = await resolvePublicToken(ctx, reply, token, 'frontier');
     if (!row) return reply;
     const clusterId = typeof row.payload.clusterId === 'string' ? row.payload.clusterId : null;
+    // PLATFORM-ONLY by owner decision (G1.6); evidence is stripped below —
+    // internal cache keys never leave authed surfaces.
     const frontier = clusterId ? await loadCurrentFrontier(ctx.db.db, clusterId) : null;
     if (!frontier || !clusterId) {
       return reply
@@ -249,6 +253,8 @@ export function registerShareRoutes(app: FastifyInstance, ctx: PotionContext): v
           costPer1K: p.costPer1K,
           latencyP95: p.latencyP95,
           // Provenance preserved per point — the share page badges SIMULATED.
+          // point.evidence (G1.6) is DELIBERATELY absent from this public
+          // DTO: internal cache keys never leave authed surfaces.
           providerMode: p.providerMode ?? 'unknown',
         })),
       },

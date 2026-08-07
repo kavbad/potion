@@ -127,7 +127,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         );
     }
 
-    const frontier = await loadCurrentFrontier(ctx.db.db, body.clusterId);
+    const frontier = await loadCurrentFrontier(ctx.db.db, body.clusterId, org.orgId);
     if (!frontier || frontier.points.length === 0) {
       return reply
         .code(404)

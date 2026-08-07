@@ -55,6 +55,8 @@ export function aggregateToPoint(agg: StrategyAggregate): FrontierPoint {
     costPer1K: agg.costPer1K,
     latencyP95: agg.latencyP95,
     ...(agg.providerMode !== undefined ? { providerMode: agg.providerMode } : {}),
+    // G1.6: evidence links survive the aggregate→point projection.
+    ...(agg.evidence !== undefined ? { evidence: agg.evidence } : {}),
   };
 }
 

@@ -20,6 +20,7 @@ import {
   insertPolicy,
   listClusters,
   updateApiKeyPolicy,
+  getClusterByIdForOrg,
   type OrgContext,
   type PotionDb,
 } from '@potion/db';
@@ -177,8 +178,9 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
    * omitted rather than 404-ing the selector one click at a time. Each entry
    * carries a provenance summary (M1a): how many points are live evidence vs
    * simulated (provider_mode 'mock'/'unknown').
-   * Frontiers/clusters/taxonomy are shared-global by design (ROADMAP #13) —
-   * this endpoint intentionally takes NO org scope. */
+   * G1.6: reads are org-PREFERRED with platform fallback — the caller sees
+   * their own agent frontiers plus the shared platform ones; other tenants'
+   * clusters were already invisible via the org-filtered cluster list. */
   app.get('/api/frontiers', async (req, reply) => {
     const taxonomy = loadTaxonomy();
     const clusters: Array<{
@@ -193,7 +195,9 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     const pushIfFrontier = async (clusterId: string): Promise<void> => {
       if (seen.has(clusterId)) return;
       seen.add(clusterId);
-      const frontier = await loadCurrentFrontier(db, clusterId);
+      // G1.6: org-preferred read — the caller sees THEIR frontier where one
+      // exists, platform elsewhere (the cluster list is already org-filtered).
+      const frontier = await loadCurrentFrontier(db, clusterId, req.potionOrg!.orgId);
       if (frontier) {
         clusters.push({
           clusterId: frontier.clusterId,
@@ -261,9 +265,17 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
    * point when a policy exists. */
   app.get('/api/frontiers/:clusterId', async (req, reply) => {
     const { clusterId } = req.params as { clusterId: string };
-    // shared-global by design (ROADMAP #13): the frontier itself is a
-    // platform asset; only the OPERATING POINT (policy) is tenant-scoped.
-    const frontier = await loadCurrentFrontier(db, clusterId);
+    // G1.6: ownership FIRST — another org's agent-cluster id gets the SAME
+    // 404 as a nonexistent one (pre-G1.6 a guessed agent-<hash>-<sig> id
+    // returned another tenant's points). Then the org-preferred read.
+    const cluster = await getClusterByIdForOrg(db, clusterId, req.potionOrg!.orgId);
+    const isKnownTaxonomy = loadTaxonomy().clusters.some((t) => t.id === clusterId);
+    if (!cluster && !isKnownTaxonomy) {
+      return reply
+        .code(404)
+        .send(openAiError(`no frontier for cluster '${clusterId}'`, 'invalid_request_error'));
+    }
+    const frontier = await loadCurrentFrontier(db, clusterId, req.potionOrg!.orgId);
     if (!frontier) {
       return reply
         .code(404)
@@ -316,6 +328,10 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
           quality: p.quality,
           costPer1K: p.costPer1K,
           latencyP95: p.latencyP95,
+          // G1.6 (owner rule): the AUTHED surface carries each point's
+          // evidence links — this is the guarantee report's raw material.
+          // Public DTOs (share/leaderboard) deliberately omit it.
+          evidence: p.evidence ?? null,
           // Provenance per point (M1a): absence surfaces as explicit 'unknown'
           // so the dashboard can badge it SIMULATED.
           providerMode: p.providerMode ?? 'unknown',

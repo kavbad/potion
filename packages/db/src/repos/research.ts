@@ -146,21 +146,27 @@ export async function listEvalLineageRows(db: PotionDb): Promise<EvalLineageRow[
 /**
  * List clusters. With `opts.orgId`, returns PLATFORM clusters (org_id NULL —
  * static taxonomy + grandfathered pre-G1.2 agent rows) plus the org's OWN;
- * other tenants' clusters are invisible (G1.2). Without opts: global (the
- * public leaderboard keeps this — agent clusters are mock-only and excluded
- * by the live-evidence gate, and org-hash ids are non-identifying).
+ * other tenants' clusters are invisible (G1.2). `platformOnly` (G1.6) pins
+ * org_id IS NULL — the public leaderboard uses this. Unscoped global listing
+ * remains for internal/worker callers only.
  */
 export async function listClusters(
   db: PotionDb,
-  opts: { orgId?: string } = {},
+  opts: { orgId?: string; platformOnly?: boolean } = {},
 ): Promise<ClusterRow[]> {
+  // platformOnly (G1.6): the public leaderboard pins org_id IS NULL
+  // explicitly — before G1.6 it iterated every tenant's agent clusters and
+  // only the live-evidence gate kept them off the public surface; G1.7's
+  // live org frontiers would have turned that into a cross-tenant leak.
   return db
     .select()
     .from(clusters)
     .where(
-      opts.orgId !== undefined
-        ? or(isNull(clusters.orgId), eq(clusters.orgId, opts.orgId))
-        : undefined,
+      opts.platformOnly === true
+        ? isNull(clusters.orgId)
+        : opts.orgId !== undefined
+          ? or(isNull(clusters.orgId), eq(clusters.orgId, opts.orgId))
+          : undefined,
     )
     .orderBy(desc(clusters.createdAt));
 }
