@@ -2,7 +2,7 @@
 //   · POST /api/evals → 202 { jobId } (inline strategies registered by hash)
 //   · GET /api/jobs/:id → state transitions queued/active → completed with a
 //     RunSummary-shaped result (memory driver, REAL default handler, mock
-//     providers, authored 14-item suite)
+//     providers, authored suite — 50 items post-G0.5 scaling)
 //   · org scoping: cross-org reads 404; unknown ids 404
 //   · validation: no strategies → 400; unknown strategy hash → job fails
 //     with a typed error surfaced via GET
@@ -78,12 +78,12 @@ describe('M3 #28 jobs endpoints', () => {
     expect(view.state).toBe('completed');
     expect(view.progress).toBe(100);
     expect(view.result?.runId).toBeTruthy();
-    expect(view.result?.executed).toBe(14); // 14 authored items × 1 strategy
+    expect(view.result?.executed).toBe(50); // 50 authored items × 1 strategy (G0.5 scaling)
     expect(view.result?.artifactKey).toBeNull(); // no store configured (M2 default)
 
     // results persisted by the real handler
     const rows = await db().select().from(evalResults);
-    expect(rows.filter((r) => r.runId === view.result?.runId).length).toBe(14);
+    expect(rows.filter((r) => r.runId === view.result?.runId).length).toBe(50);
   });
 
   it('GET /api/jobs/:id is org-scoped (404 cross-org) and 404s unknown ids', async () => {

@@ -1,0 +1,15 @@
+{
+  "suiteId": "extraction-potion-v2",
+  "clusterId": "extraction",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored extraction v2 (discriminative field-match: 6-10 fields/item, array fields strict-ordered, absent-field rule, ambiguity-resistant references; generator + independent reviewer)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": ["field-match"]
+  },
+  "createdAt": "2026-08-06T21:00:00.000-07:00"
+}

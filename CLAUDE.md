@@ -78,12 +78,20 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
 3. Trace ingestion stores `gen_ai.prompt` verbatim; redaction (3 regexes) is
    late (clustering hop only) and thin; derived suites live on worker-local
    disk with no lifecycle.
-4. Eval suites are n=12–14 per cluster — frontier is directional, not
-   statistical.
+4. Eval suites (G0.5): deterministic clusters scaled — code-gen 60 tiered
+   items (permanent sandbox self-pass gate), extraction 50 discriminative,
+   classification/multi-step-reasoning/rag-answer 50 each. Gate-2 LIVE:
+   96.00% on OpenAI embeddings (POTION_CLUSTER_THRESHOLD=0.2 recommended;
+   mock-tuned 0.62 collapses to 6% live — artifacts/m1b-gate2-live.log).
+   STILL OPEN: 5 llm-judge breadth suites remain n=14; live calibration
+   verdict: gpt-4.1-mini as reference-free judge = pearson-vs-truth 0.421,
+   below the 0.8 bar — the live serve-judge default (judge-class) is
+   UNCALIBRATED; frontier-capability outpaces authored item difficulty
+   (nano solves 56/60 incl. hard tier).
 5. 8 pre-existing lint errors (unused imports) block `pnpm verify`.
 6. Rate limiting + assignment cache are per-replica in-memory (Redis store
    is a designed seam, `apps/server/src/middleware/ratelimit.ts`).
-7. Gate-2 live embeddings path never run (needs OPENAI_API_KEY).
+7. [DONE 2026-08-06] Gate-2 live: 96.00% (see #4).
 8. Server has 305 tests but the serving hot path has gaps: guarantee
    override query runs on EVERY request ungated; pre-auth failures logged
    under org_demo; per-request jsonb-path incident queries unindexed.

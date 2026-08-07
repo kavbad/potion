@@ -51,10 +51,12 @@ interface CliArgs {
   judges: string[];
   /** Answerer alias for --calibrate; undefined → mock-cheap default. */
   calibrateAnswerer: string | undefined;
+  /** Max items for --calibrate (G0.5: replaces the silent slice(0,30)). */
+  calibrateN: number;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined };
+  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--') continue; // pnpm forwards the script separator literally
@@ -99,6 +101,12 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--answerer':
         args.calibrateAnswerer = next();
         break;
+      case '--calibrate-n': {
+        const v = Number(next());
+        if (!Number.isInteger(v) || v <= 0) throw new Error('--calibrate-n must be a positive integer');
+        args.calibrateN = v;
+        break;
+      }
       case '--max-output-tokens': {
         const v = Number(next());
         if (!Number.isInteger(v) || v <= 0) throw new Error('--max-output-tokens must be a positive integer');
@@ -224,7 +232,7 @@ export async function main(argv: string[]): Promise<number> {
             return loadSuiteFile(resolved.path, resolved.suiteId);
           })()
         : loadSuiteV2(args.suitesV2[0]!).items
-      ).slice(0, 30);
+      ).slice(0, args.calibrateN);
       calClusterId = items[0]?.clusterId ?? null;
       const prices = loadPrices().table;
     const judges =

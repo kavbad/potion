@@ -575,7 +575,7 @@ re-scoped to hot-path gaps.
       paired-bootstrap machinery), configurable min-samples (floor 5 → raise), stratified
       sampling incl. error path, samples keyed (org, policy, cluster, strategy). [M]
 - [x] G0.4 Cost estimator dominates actuals (c248d74; regression-tested vs recorded M1b)
-- [ ] G0.5 Gate-2 live embeddings run + suites scaled 50–100/cluster (needs OPENAI key +
+- [x] G0.5 Gate-2 live embeddings run + suites scaled 50–100/cluster (needs OPENAI key +
       small ledgered budget). [M]
 
 ### Phase G1 — per-customer workload pipeline
@@ -796,16 +796,16 @@ deferred (no calibration value) — follow-up item.
       embeddings + test; mock ≥85% @0.62 reproduces through the new path
 - [x] b. LIVE Gate-2: threshold sweep 0.1–0.7, confusion matrices,
       artifacts/m1b-gate2-live.log, recommended POTION_CLUSTER_THRESHOLD, ledger
-- [ ] c. code-gen-potion-v2: 60 tiered JS items (20E/25M/15H, ≥5 tests each), mechanical
+- [x] c. code-gen-potion-v2: 60 tiered JS items (20E/25M/15H, ≥5 tests each), mechanical
       self-pass gate as a permanent harness test + reviewer pass
-- [ ] d. extraction-potion-v2: 50 authored field-match items (6-10 fields, arrays,
+- [x] d. extraction-potion-v2: 50 authored field-match items (6-10 fields, arrays,
       absent fields, ambiguous docs) + reviewer pass + ingest lint
-- [ ] e. exact v1 appends: classification/multi-step-reasoning/rag-answer +36 each → 50
+- [x] e. exact v1 appends: classification/multi-step-reasoning/rag-answer +36 each → 50
       (new ids only; existing 14 byte-untouched; domination regression re-run green)
-- [ ] f. cli --calibrate-n (default 30, silent slice removed)
-- [ ] g. LIVE recalibration on code-gen-potion-v2 (nano answerer, mini judge, cap $2) —
+- [x] f. cli --calibrate-n (default 30, silent slice removed)
+- [x] g. LIVE recalibration on code-gen-potion-v2 (nano answerer, mini judge, cap $2) —
       closes G0.2 INDETERMINATE with a real pearson-vs-truth
-- [ ] h. docs (CLAUDE.md defect #4 + Gate-2), ledger rows, two commits
+- [x] h. docs (CLAUDE.md defect #4 + Gate-2), ledger rows, two commits
 
 ### GATE 2 LIVE ✅ (2026-08-06, OpenAI text-embedding-3-small dims=384)
 
@@ -824,3 +824,26 @@ record). Pre-G0.5 defect fixed: evaluate.ts ignored POTION_EMBEDDER entirely.
 | date | run | projected | actual | cumulative |
 |---|---|---|---|---|
 | 2026-08-06 | Gate-2 LIVE sweep: 462 texts embedded once (memoized across 10 thresholds), ~16.5K tokens @ $0.02/1M | $0.01 | ~$0.0004 | $0.0783 (OpenAI key) |
+
+**G0.5 DONE (2026-08-06)** — Gate-2 LIVE 96.00% (see proof block above; leg-1 commit
+5ffbdca). Suite scaling: code-gen-potion-v2 (60 tiered JS items, 100% sandbox self-pass
+— now a PERMANENT harness gate), extraction-potion-v2 (50 discriminative field-match),
++36 each to classification/multi-step-reasoning/rag-answer (→50; append-only, M1b
+domination regression green). Independent adversarial review: 0 blocking findings
+(all 36 reasoning answers recomputed by script). --calibrate-n added (silent slice(0,30)
+removed). LIVE recalibrations (nano answerer, mini judge, ~$0.045 total):
+- code-gen: nano fully solves 56/60 — even the hard tier barely dents a 2025 nano;
+  4-point truth spread → pearson statistically meaningless; the judge scored 1.0 on an
+  item whose code LOOKED right but failed tests (a reading-judge cannot execute code —
+  code-exec truth is irreplaceable there). Flag correct.
+- extraction-v2: REAL signal at last — pearson-vs-truth 0.421 (n=50, genuine field-level
+  spread; the discriminative design works), mAE 0.073. FINDING OF RECORD: gpt-4.1-mini
+  as a reference-free judge is measurably below the 0.8 trust bar. The guarantee's
+  serve-judge default for live (judge-class = sonnet-class) remains UNCALIBRATED —
+  calibrating it is the natural next live run (OpenRouter key needed, ~$0.10).
+Suites: 899→910 pnpm tests green (cluster 55, harness 137, server 307 — jobs.test count
+pin 14→50 updated), walkthrough 15/15.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | G0.5 live recalibrations: code-gen ×2 ($0.0143 each) + extraction-v2 ($0.0156) | $0.30 | $0.0442 | $0.1225 (OpenAI key) |

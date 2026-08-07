@@ -1,0 +1,15 @@
+{
+  "suiteId": "code-gen-potion-v2",
+  "clusterId": "code-gen",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored JS benchmark v2 (difficulty-tiered: 20 easy / 25 medium / 15 hard; every reference sandbox-self-passes — see suite-selfpass.test.ts)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": ["code-exec"]
+  },
+  "createdAt": "2026-08-06T21:00:00.000-07:00"
+}
