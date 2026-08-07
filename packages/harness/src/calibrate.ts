@@ -18,6 +18,7 @@
 // pearsonVsTruth is high by construction — which is exactly the assertion.
 import type { Provider } from '@potion/providers';
 import type { EvalItem, PriceEntry, PriceTable, ProviderId, ScoringMethod, Usage } from '@potion/core';
+import { mulberry32 } from '@potion/core';
 import { createMockProvider, loadPrices } from '@potion/providers';
 import { createResolver, execute } from '@potion/strategies';
 import {
@@ -321,6 +322,208 @@ export async function runJudgeCalibration(
     });
   }
 
+  return assembleReport(pairs, judges, prices, totals.spendUsd, answerer, skipped);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rubric-probe calibration (G1.5)
+//
+// llm-judge items have no deterministic truth, so a CANDIDATE rubric on a
+// replay suite is calibrated against CONSTRUCTED truth built from the G1.4
+// references: the reference verbatim (truth 1.0), the reference truncated at
+// ~50% on a word boundary (truth 0.5), and a DIFFERENT item's reference via
+// seeded rotation-derangement (truth 0.0). Probes ARE the answers — no
+// answerer calls, 3n judge calls — and judging is reference-anchored by
+// construction (the replay-judging configuration). The 0.5 label is a
+// constructed approximation, so meanAbsErr is ADVISORY here; trust decisions
+// hang on pearson/spearman (the existing 0.8 flag line): can the judge under
+// this rubric separate perfect / partial / wrong on the cluster's own data?
+// Records persist with answererModel 'synthetic-perturbation' so they can
+// never be mistaken for G0.2 deterministic-truth evidence.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const RUBRIC_PROBE_MIN_REFERENCED = 3;
+export const RUBRIC_PROBE_ANSWERER = 'synthetic-perturbation';
+
+export class RubricProbeInsufficientError extends Error {
+  constructor(readonly referencedCount: number) {
+    super(
+      `rubric probe calibration requires ≥ ${RUBRIC_PROBE_MIN_REFERENCED} referenced items ` +
+        `(got ${referencedCount}) — the mismatch derangement and 3-level truth degenerate below that`,
+    );
+    this.name = 'RubricProbeInsufficientError';
+  }
+}
+
+export type RubricProbeKind = 'reference' | 'truncated' | 'mismatch';
+
+export interface RubricProbe {
+  /** The replay item, reference KEPT (probes judge reference-anchored). */
+  item: EvalItem;
+  kind: RubricProbeKind;
+  /** The probe answer the judge scores. */
+  answer: string;
+  /** Constructed truth: 1.0 / 0.5 (approximate) / 0.0. */
+  truth: number;
+}
+
+/** Same stringification rule as the judge prompt builder: strings verbatim,
+ * everything else JSON. */
+function referenceTextOf(item: EvalItem): string {
+  return typeof item.reference === 'string' ? item.reference : JSON.stringify(item.reference);
+}
+
+/** Cut at ~`fraction` of the text on a word boundary (hard cut when the
+ * nearest boundary is degenerate). Deterministic. */
+export function truncateAtWordBoundary(text: string, fraction = 0.5): string {
+  const cut = Math.max(1, Math.floor(text.length * fraction));
+  const boundary = text.lastIndexOf(' ', cut);
+  return text.slice(0, boundary > cut * 0.5 ? boundary : cut);
+}
+
+/**
+ * Build the probe set: 3 probes per referenced item. The mismatch answer is
+ * another item's reference chosen by seeded ROTATION (offset k ∈ [1, n-1]) —
+ * a derangement by construction, so no item is ever "mismatched" with its
+ * own reference. Deterministic under `seed`.
+ */
+export function buildRubricProbes(items: EvalItem[], seed: number): RubricProbe[] {
+  const referenced = items.filter((i) => i.reference !== undefined);
+  if (referenced.length < RUBRIC_PROBE_MIN_REFERENCED) {
+    throw new RubricProbeInsufficientError(referenced.length);
+  }
+  const rng = mulberry32(seed);
+  const k = 1 + Math.floor(rng() * (referenced.length - 1));
+  const probes: RubricProbe[] = [];
+  for (let i = 0; i < referenced.length; i++) {
+    const item = referenced[i]!;
+    const ref = referenceTextOf(item);
+    const other = referenceTextOf(referenced[(i + k) % referenced.length]!);
+    probes.push(
+      { item, kind: 'reference', answer: ref, truth: 1 },
+      { item, kind: 'truncated', answer: truncateAtWordBoundary(ref), truth: 0.5 },
+      { item, kind: 'mismatch', answer: other, truth: 0 },
+    );
+  }
+  return probes;
+}
+
+/** The candidate-rubric scoring view of a probe: the item's own judge config
+ * (scale, judge default) with the rubric under test swapped in. */
+function probeScoring(
+  probe: RubricProbe,
+  rubricText: string,
+  judgeModel: string,
+): Extract<ScoringMethod, { kind: 'llm-judge' }> {
+  const scale: [number, number] =
+    probe.item.scoring.kind === 'llm-judge' ? probe.item.scoring.scale : [0, 1];
+  return { kind: 'llm-judge', rubric: rubricText, judgeModel, scale };
+}
+
+/**
+ * Worst-case probe-calibration projection: one judge call per (probe ×
+ * judge) — no answerer leg (probes are the answers). The embedded answer is
+ * the probe's actual text, so the bound is measured, not assumed.
+ */
+export function projectProbeCalibrationCostUsd(
+  probes: RubricProbe[],
+  rubricText: string,
+  judgeModels: string[],
+  prices: PriceTable,
+  judgeMaxTokens?: number,
+): number {
+  let total = 0;
+  for (const probe of probes) {
+    for (const judge of judgeModels) {
+      const view: EvalItem = { ...probe.item, scoring: probeScoring(probe, rubricText, judge) };
+      const call = estimateJudgeScoringCall(view, Math.ceil(probe.answer.length / 4));
+      if (call) {
+        if (judgeMaxTokens !== undefined) call.outputTokens = judgeMaxTokens;
+        total += estimateCallCostUsd(call, prices);
+      }
+    }
+  }
+  return total;
+}
+
+export interface RubricProbeCalibrationDeps extends Omit<CalibrationDeps, 'answererModel' | 'referenceAnchored'> {
+  /** Probe-construction seed (derangement offset). Default 1. */
+  seed?: number;
+}
+
+/**
+ * Calibrate a CANDIDATE rubric on a replay suite via perturbation probes.
+ * Reference-anchored by construction; preflight-capped like every priced
+ * path. Pair ids are `<itemId>#<probeKind>`.
+ */
+export async function runRubricProbeCalibration(
+  items: EvalItem[],
+  rubricText: string,
+  deps: RubricProbeCalibrationDeps = {},
+): Promise<CalibrationReport> {
+  const prices = withCalibrationJudges(deps.prices ?? loadPrices().table);
+  const judges = deps.judgeModels ?? [...CALIBRATION_JUDGES];
+  if (judges.length === 0) throw new Error('probe calibration requires at least one judge model');
+  const probes = buildRubricProbes(items, deps.seed ?? 1);
+
+  const cap = deps.budgetCapUsd ?? 0;
+  const projected = projectProbeCalibrationCostUsd(
+    probes,
+    rubricText,
+    judges,
+    prices,
+    deps.judgeMaxTokens,
+  );
+  if (projected > cap) throw new BudgetCapError(projected, cap);
+
+  const mock = createMockProvider(prices);
+  const providers: Record<ProviderId, Provider> = deps.providers ?? {
+    anthropic: mock,
+    openai: mock,
+    google: mock,
+    openrouter: mock,
+    mock,
+  };
+  const scorerDeps: ScorerDeps = { providers, prices };
+  const totals = { spendUsd: 0 };
+
+  const pairs: CalibrationPair[] = [];
+  for (const probe of probes) {
+    const scores: Record<string, number> = {};
+    for (const judge of judges) {
+      const judged = await scoreLlmJudge(
+        probe.item,
+        probe.answer,
+        probeScoring(probe, rubricText, judge),
+        scorerDeps,
+        deps.judgeMaxTokens,
+      );
+      addUsage(totals, judged.usage);
+      scores[judge] = judged.quality;
+    }
+    pairs.push({
+      itemId: `${probe.item.id}#${probe.kind}`,
+      truth: probe.truth,
+      scores,
+      scoreA: scores[judges[0]!]!,
+      scoreB: judges.length > 1 ? scores[judges[1]!]! : scores[judges[0]!]!,
+    });
+  }
+
+  return assembleReport(pairs, judges, prices, totals.spendUsd, RUBRIC_PROBE_ANSWERER, []);
+}
+
+/** Shared report assembly: per-judge truth stats (INDETERMINATE on constant
+ * truth), pairwise agreement, flag aggregation. Used by both deterministic
+ * (G0.2) and rubric-probe (G1.5) calibrations. */
+function assembleReport(
+  pairs: CalibrationPair[],
+  judges: string[],
+  prices: PriceTable,
+  spendUsd: number,
+  answererModel: string,
+  skipped: CalibrationReport['skipped'],
+): CalibrationReport {
   const truths = pairs.map((p) => p.truth);
   const truthIsConstant = truths.length > 0 && truths.every((t) => t === truths[0]);
   const truth: JudgeTruthStats[] = judges.map((judge) => {
@@ -373,9 +576,9 @@ export async function runJudgeCalibration(
       truth.some((t) => t.flagged) || (judges.length > 1 && agreement < CALIBRATION_FLAG_BELOW),
     pairs,
     truth,
-    spendUsd: totals.spendUsd,
+    spendUsd,
     pricesVersion: prices.version,
-    answererModel: answerer,
+    answererModel,
     skipped,
   };
 }

@@ -9,10 +9,10 @@
 //                              (mock-corpus-derived; CI-only provenance)
 // Prints the Gate-3 results table: strategy, quality mean±CI, $/1K req, p50/p95.
 import { createProviders, loadPrices, MOCK_PROVIDER_DISCLAIMER } from '@potion/providers';
-import { StrategyConfigSchema, type PriceTable, type StrategyConfig } from '@potion/core';
+import { sha256, StrategyConfigSchema, type PriceTable, type StrategyConfig } from '@potion/core';
 import { createDb, insertJudgeCalibration, migrate } from '@potion/db';
 import { BudgetCapError } from './estimate.js';
-import { runJudgeCalibration } from './calibrate.js';
+import { CALIBRATION_RUBRIC, runJudgeCalibration } from './calibrate.js';
 import { loadSuiteV2 } from './ingest/suite-v2.js';
 import { SimulatedSuiteError, runEval, type RunSummary } from './runner.js';
 import { loadSuiteFile, resolveSuite } from './suites.js';
@@ -311,6 +311,9 @@ export async function main(argv: string[]): Promise<number> {
           flagged: t.flagged,
           spendUsd: report.spendUsd,
           pairs: report.pairs.map((p) => ({ itemId: p.itemId, truth: p.truth, scores: p.scores })),
+          // G1.5: the rubric the judge was calibrated UNDER — a rubric edit
+          // must never inherit old trust evidence.
+          rubricHash: sha256(CALIBRATION_RUBRIC),
         });
       }
       console.log(`  persisted ${report.truth.length} judge_calibrations record(s) (provider_mode=${args.provider})`);

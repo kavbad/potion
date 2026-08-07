@@ -18,7 +18,9 @@ export type JobKind =
   // ---- M5 #36 agent workloads (SPEC §14.2/§14.3) ----
   | 'traces:cluster'
   | 'traces:purge'
-  | 'traces:redact';
+  | 'traces:redact'
+  // ---- G1.5 automated scorer construction ----
+  | 'rubric:generate';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -33,6 +35,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'traces:cluster',
   'traces:purge',
   'traces:redact',
+  'rubric:generate',
 ] as const;
 
 export interface EvalRunPayload {
@@ -97,6 +100,7 @@ export interface JobPayloads {
   'traces:cluster': TracesClusterPayload;
   'traces:purge': TracesPurgePayload;
   'traces:redact': TracesRedactPayload;
+  'rubric:generate': RubricGeneratePayload;
 }
 
 /**
@@ -196,4 +200,23 @@ export interface ResearchCyclePayload {
    * random when omitted). */
   seed?: number;
   orgId?: string;
+}
+
+/**
+ * Per-cluster rubric generation (G1.5, admin-triggered only — never in the
+ * nightly loop): one capped LLM call over the cluster's redacted exemplars
+ * produces a CANDIDATE rubric (status 'pending'), which is probe-calibrated
+ * against constructed truth from the suite's G1.4 references and metered as
+ * request_logs status='rubric_gen'. Nothing is IN FORCE until a human
+ * approves it (POST /api/rubrics/:id/approve). POTION_RUBRIC_PROVIDER=live
+ * env-gates live generation; the default mock path is deterministic with
+ * provider_mode='mock' persisted (honest provenance).
+ */
+export interface RubricGeneratePayload {
+  orgId: string;
+  clusterId: string;
+  /** Live spend cap (default $1.00). */
+  capUsd?: number;
+  /** Probe-derangement seed (default: derived from the suite id). */
+  seed?: number;
 }

@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { roundCost, type EvalItem, type ScoringMethod } from '@potion/core';
+import { roundCost, type EvalItem, type ScoringMethod, sha256 } from '@potion/core';
 import { createDb, getEvalResultByCacheKey, type DbHandle } from '@potion/db';
 import { createMockProvider, evalTaskById, hashString } from '@potion/providers';
 import { BudgetCapError, estimateItemCostUsd } from './estimate.js';
@@ -110,6 +110,27 @@ describe('runEval', () => {
     expect(row).not.toBeNull();
     expect(row!.runId).toBe(summary.runId);
     expect(row!.scorer).toBe('field-match');
+  });
+
+  it('G1.5: rubric text is part of the llm-judge cache key; deterministic keys unchanged', () => {
+    const sh = strategyHash({ type: 'single', model: 'mock-frontier' });
+    const judgeScoring = (rubric: string) => ({
+      kind: 'llm-judge' as const,
+      rubric,
+      judgeModel: 'mock-judge',
+      scale: [0, 1] as [number, number],
+    });
+    const item = { ...suiteItem('ex-01'), scoring: judgeScoring('rubric A') };
+    const keyA = cacheKeyOf(sh, item, judgeScoring('rubric A'), prices);
+    const keyB = cacheKeyOf(sh, item, judgeScoring('rubric B'), prices);
+    // a rubric edit is a DIFFERENT scoring harness — never reuse old scores
+    expect(keyA).not.toBe(keyB);
+    expect(cacheKeyOf(sh, item, judgeScoring('rubric A'), prices)).toBe(keyA);
+    // deterministic scorers carry no rubric — key format unchanged
+    const det = suiteItem('ex-01');
+    expect(cacheKeyOf(sh, det, det.scoring, prices)).toBe(
+      sha256(`${sh}|${det.id}|none|${prices.version}`),
+    );
   });
 
   it('resume skips cache hits and reproduces identical aggregates', async () => {

@@ -108,6 +108,20 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    (G1.4) judge-class r=0.948/rho=0.967, gpt-mini 0.843/0.936 — first
    configuration to clear 0.8. Replay judging (items with references) is
    contract-grade; the reference-free SERVE path remains below the bar.
+   Rubrics (G1.5, 2026-08-07): per-cluster rubrics GENERATED from redacted
+   exemplars (rubric:generate — admin-triggered, capped, metered as
+   request_logs 'rubric_gen'), probe-calibrated against constructed truth
+   from G1.4 references (reference=1.0 / 50%-truncation=0.5 / deranged
+   mismatch=0.0; answererModel='synthetic-perturbation'; mAE advisory, flag
+   on r/rho), and gated behind a customer-visible review surface
+   (/rubrics + /api/rubrics): only an APPROVED rubric is in force (partial
+   unique index), approval restamps the suite homogeneous, rejections stay
+   listed with their reason. Rubric identity is real: rubric_hash on
+   judge_calibrations + rubric component in the eval cache key. OWNER RULE
+   (lessons.md): customer-derived artifacts always ship with status +
+   evidence attached. STILL OPEN: rubric-cause staleness on eval_results
+   (needs schema change — recorded follow-up); serve-path rubric stays
+   platform-global by design.
 5. 8 pre-existing lint errors (unused imports) block `pnpm verify`.
 6. Rate limiting + assignment cache are per-replica in-memory (Redis store
    is a designed seam, `apps/server/src/middleware/ratelimit.ts`).
@@ -132,9 +146,9 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   redaction (real pass, not 3 regexes; raw prompts never at rest) +
   org-scoped trace clustering; (7) [DONE 2026-08-06] derived-suite storage
   with lifecycle (G1.3) + replay fidelity — reference answers, tool
-  results, multi-turn (G1.4); (8) automated scorer
-  construction: per-cluster rubric generation + calibration on customer
-  suites; (9) per-org frontiers [ARCHITECTURE: org_id NULL=platform +
+  results, multi-turn (G1.4); (8) [DONE 2026-08-06]
+  automated scorer construction: per-cluster rubric generation +
+  probe calibration + customer review (G1.5); (9) per-org frontiers [ARCHITECTURE: org_id NULL=platform +
   fallback-to-global; ~7 loadCurrentFrontier sites; org-scoped recompute];
   (10) live capped evals of customer suites; (11) researcher loop → per-org
   refresh (thread suiteV2Ids/suitesV2Dir/org through cycles; gate

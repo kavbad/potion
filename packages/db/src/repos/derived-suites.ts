@@ -141,6 +141,33 @@ export async function listDerivedSuites(
 }
 
 /**
+ * Restamp every llm-judge item of a suite to a new rubric text (G1.5).
+ * Appends skip existing ids, so a rubric change would otherwise leave a
+ * suite scoring different items under different rubrics — approval makes
+ * the suite homogeneous in one UPDATE. Non-llm-judge rows are untouched.
+ * Returns the number of restamped items.
+ */
+export async function restampDerivedSuiteRubric(
+  db: PotionDb,
+  suiteId: string,
+  rubricText: string,
+): Promise<number> {
+  const updated = await db
+    .update(derivedSuiteItems)
+    .set({
+      scoring: sql`jsonb_set(${derivedSuiteItems.scoring}, '{rubric}', ${JSON.stringify(rubricText)}::jsonb)`,
+    })
+    .where(
+      and(
+        eq(derivedSuiteItems.suiteId, suiteId),
+        sql`${derivedSuiteItems.scoring}->>'kind' = 'llm-judge'`,
+      ),
+    )
+    .returning({ itemId: derivedSuiteItems.itemId });
+  return updated.length;
+}
+
+/**
  * Retention purge (G1.3): delete an org's derived items older than `cutoff`,
  * or ALL its items (`'all'` — the retention-0 "metadata only" semantic: the
  * provenance row + manifest remain as the stub). Idempotent.

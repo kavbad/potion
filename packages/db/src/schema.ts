@@ -880,6 +880,10 @@ export const judgeCalibrations = pgTable('judge_calibrations', {
   flagged: boolean('flagged').notNull(),
   spendUsd: doublePrecision('spend_usd').notNull().default(0),
   pairs: jsonb('pairs').$type<CalibrationPairEvidence[]>().notNull().default([]),
+  /** Identity of the rubric the judge was calibrated UNDER (0022) — a rubric
+   * edit is a different judge harness and must never inherit old trust
+   * evidence. NULL = pre-0022 rows (rubric unrecorded). */
+  rubricHash: text('rubric_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -924,3 +928,36 @@ export type DerivedSuiteRow = typeof derivedSuites.$inferSelect;
 export type NewDerivedSuite = typeof derivedSuites.$inferInsert;
 export type DerivedSuiteItemRow = typeof derivedSuiteItems.$inferSelect;
 export type NewDerivedSuiteItem = typeof derivedSuiteItems.$inferInsert;
+
+// ---- cluster rubrics (G1.5, migration 0022) ----
+// Per-cluster generated rubrics with a review lifecycle. Only 'approved' is
+// ever IN FORCE (partial unique index: at most one per cluster); everything
+// else is a visible draft/record. status_reason carries the WHY as data
+// (owner rule: customer-derived artifacts always ship with status + evidence
+// attached; rejected rubrics stay listed with their failure reason).
+export type ClusterRubricStatus = 'pending' | 'approved' | 'rejected' | 'superseded';
+
+export const clusterRubrics = pgTable('cluster_rubrics', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  clusterId: text('cluster_id').notNull(),
+  suiteId: text('suite_id').notNull(),
+  rubricText: text('rubric_text').notNull(),
+  rubricHash: text('rubric_hash').notNull(),
+  status: text('status').$type<ClusterRubricStatus>().notNull().default('pending'),
+  statusReason: text('status_reason'),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  generatorModel: text('generator_model').notNull(),
+  providerMode: text('provider_mode').notNull().default('mock'),
+  exemplarCount: integer('exemplar_count').notNull().default(0),
+  /** Soft ref to judge_calibrations.id — NULL = uncalibrated (reason in
+   * status_reason), still reviewable: the human accepts the risk knowingly. */
+  calibrationId: uuid('calibration_id'),
+  spendUsd: doublePrecision('spend_usd').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ClusterRubricRow = typeof clusterRubrics.$inferSelect;
+export type NewClusterRubric = typeof clusterRubrics.$inferInsert;

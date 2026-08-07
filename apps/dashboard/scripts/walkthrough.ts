@@ -611,6 +611,47 @@ async function main(): Promise<void> {
       hinted.headers.get('x-frontier-trace')?.includes(`cluster=${agentCluster.clusterId}`),
       `hint not honored: ${hinted.headers.get('x-frontier-trace')}`,
     );
+    // G1.5: rubric generation (mock, capped, metered) → customer-visible
+    // DRAFT with calibration evidence → approve puts it IN FORCE and
+    // restamps the suite's items.
+    const rubGen = await dashFetch('/api/rubrics/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clusterId: agentCluster.clusterId }),
+    });
+    const rubGenBody = await rubGen.json();
+    assert(rubGen.status === 202, `rubric generate → HTTP ${rubGen.status}: ${JSON.stringify(rubGenBody)}`);
+    const rubDeadline = Date.now() + 120_000;
+    let rubResult: { rubricId?: string; providerMode?: string } = {};
+    for (;;) {
+      const job = await (
+        await fetch(`${API}/api/jobs/${rubGenBody.jobId}`, {
+          headers: { authorization: `Bearer ${apiKey}` },
+        })
+      ).json();
+      if (job.state === 'completed') {
+        rubResult = job.result ?? {};
+        break;
+      }
+      assert(job.state !== 'failed', `rubric job failed: ${job.error ?? 'unknown'}`);
+      assert(Date.now() < rubDeadline, 'rubric job did not complete in 120s');
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    assert(rubResult.rubricId !== undefined, `rubric result missing id: ${JSON.stringify(rubResult)}`);
+    assert(rubResult.providerMode === 'mock', 'rubric provenance must say mock in the mock world');
+    const rubList = await (await dashFetch('/api/rubrics')).json();
+    const draft = (rubList.rubrics as Array<{ id: string; status: string; inForce: boolean; rubricText: string }>).find(
+      (r) => r.id === rubResult.rubricId,
+    );
+    assert(draft !== undefined && draft.status === 'pending' && draft.inForce === false, 'draft must list as NOT in force');
+    const approve = await dashFetch(`/api/rubrics/${rubResult.rubricId}/approve`, { method: 'POST' });
+    const approveBody = await approve.json();
+    assert(approve.ok && approveBody.restampedItems >= 1, `approve → HTTP ${approve.status}: ${JSON.stringify(approveBody)}`);
+    // The /rubrics page renders the review surface.
+    const rubPage = await dashFetch('/rubrics');
+    const rubHtml = await rubPage.text();
+    assert(rubPage.ok && rubHtml.includes('Rubrics'), `/rubrics → HTTP ${rubPage.status}`);
+    assert(rubHtml.includes('IN FORCE'), 'IN FORCE badge missing from /rubrics');
     // Retention 0 + purge: prompts/attrs redacted, metadata kept (idempotent).
     const put = await dashFetch('/api/traces/retention', {
       method: 'PUT',

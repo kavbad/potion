@@ -5,12 +5,18 @@ import { fileURLToPath } from 'node:url';
 import { createMockProvider, loadPrices } from '@potion/providers';
 import { BudgetCapError } from './estimate.js';
 import {
+  buildRubricProbes,
   pearson,
   projectCalibrationCostUsd,
+  projectProbeCalibrationCostUsd,
+  RubricProbeInsufficientError,
   runJudgeCalibration,
+  runRubricProbeCalibration,
   spearman,
+  truncateAtWordBoundary,
   withCalibrationJudges,
 } from './calibrate.js';
+import type { EvalItem } from '@potion/core';
 import { loadSuite, SIMULATED_SUITES_DIR } from './suites.js';
 
 const PRICES_PATH = fileURLToPath(new URL('../../../prices.json', import.meta.url));
@@ -148,5 +154,134 @@ describe('runJudgeCalibration', () => {
     expect(once.entries).toHaveLength(base.entries.length + 2);
     expect(twice.entries).toHaveLength(once.entries.length);
     expect(once.entries.find((e) => e.alias === 'mock-judge-a')?.provider).toBe('mock');
+  });
+});
+
+// ─── G1.5 rubric-probe calibration ───────────────────────────────────────────
+
+function replayItem(id: string, reference: string): EvalItem {
+  return {
+    id,
+    clusterId: 'agent-x',
+    prompt: [{ role: 'user', content: `replay task ${id}` }],
+    reference,
+    scoring: { kind: 'llm-judge', rubric: 'old rubric', judgeModel: 'mock-judge-a', scale: [0, 1] },
+  };
+}
+
+const REPLAY_ITEMS = [
+  replayItem('r-01', 'The retry loop now backs off exponentially with a cap of five attempts total.'),
+  replayItem('r-02', 'Invoice 4421 was marked pending and the customer received a summary email.'),
+  replayItem('r-03', 'The duplicate charge was refunded and a credit note was issued for the account.'),
+  replayItem('r-04', 'Escalated to tier two after the diagnostic script found no configuration drift.'),
+];
+
+describe('buildRubricProbes (G1.5)', () => {
+  it('3 probes per referenced item, deterministic, derangement never self-maps', () => {
+    const a = buildRubricProbes(REPLAY_ITEMS, 7);
+    const b = buildRubricProbes(REPLAY_ITEMS, 7);
+    expect(a).toEqual(b); // deterministic under seed
+    expect(a).toHaveLength(12);
+    for (const item of REPLAY_ITEMS) {
+      const mine = a.filter((p) => p.item.id === item.id);
+      expect(mine.map((p) => p.kind).sort()).toEqual(['mismatch', 'reference', 'truncated']);
+      const ref = mine.find((p) => p.kind === 'reference')!;
+      expect(ref.answer).toBe(item.reference);
+      expect(ref.truth).toBe(1);
+      const trunc = mine.find((p) => p.kind === 'truncated')!;
+      expect(trunc.answer.length).toBeLessThan((item.reference as string).length);
+      expect((item.reference as string).startsWith(trunc.answer)).toBe(true);
+      expect(trunc.truth).toBe(0.5);
+      const mis = mine.find((p) => p.kind === 'mismatch')!;
+      expect(mis.answer).not.toBe(item.reference); // derangement: never own reference
+      expect(REPLAY_ITEMS.some((o) => o.reference === mis.answer && o.id !== item.id)).toBe(true);
+      expect(mis.truth).toBe(0);
+    }
+    // every seed yields a derangement
+    for (let seed = 0; seed < 20; seed++) {
+      for (const p of buildRubricProbes(REPLAY_ITEMS, seed)) {
+        if (p.kind === 'mismatch') expect(p.answer).not.toBe(p.item.reference);
+      }
+    }
+  });
+
+  it('< 3 referenced items throws the typed reason; unreferenced items are excluded', () => {
+    const bare: EvalItem = { ...replayItem('r-05', 'x'), reference: undefined };
+    delete bare.reference;
+    expect(() => buildRubricProbes([REPLAY_ITEMS[0]!, REPLAY_ITEMS[1]!, bare], 1)).toThrow(
+      RubricProbeInsufficientError,
+    );
+    try {
+      buildRubricProbes([REPLAY_ITEMS[0]!], 1);
+    } catch (e) {
+      expect((e as RubricProbeInsufficientError).referencedCount).toBe(1);
+    }
+  });
+
+  it('truncation cuts on a word boundary', () => {
+    expect(truncateAtWordBoundary('alpha beta gamma delta')).toBe('alpha beta');
+    expect(truncateAtWordBoundary('nospacesatallinthisstring')).toBe('nospacesatal');
+  });
+});
+
+describe('runRubricProbeCalibration (G1.5)', () => {
+  const prices = withCalibrationJudges(loadPrices(PRICES_PATH).table);
+
+  // A judge that scores by REFERENCE/ANSWER similarity — a discriminating
+  // judge yields high correlation with the constructed truth by design.
+  function similarityJudge() {
+    const mock = createMockProvider(prices);
+    return {
+      ...mock,
+      complete: async (req: Parameters<typeof mock.complete>[0]) => {
+        const res = await mock.complete(req);
+        const text = req.messages.map((m) => m.content).join('\n');
+        const block = (label: string) => {
+          const re = new RegExp(`${label}:\\n<<<UNTRUSTED_DATA_BEGIN>>>\\n([\\s\\S]*?)\\n<<<UNTRUSTED_DATA_END>>>`);
+          return re.exec(text)?.[1] ?? '';
+        };
+        const ref = block('REFERENCE');
+        const ans = block('ANSWER');
+        const q = ans === ref ? 1 : ref.startsWith(ans) && ans.length > 0 ? ans.length / ref.length : 0;
+        return { ...res, text: `SCORE: ${q.toFixed(2)}` };
+      },
+    };
+  }
+
+  it('discriminating judge → high r/rho, unflagged; probes judge reference-anchored', async () => {
+    const judge = similarityJudge();
+    const providers = { anthropic: judge, openai: judge, google: judge, openrouter: judge, mock: judge };
+    const report = await runRubricProbeCalibration(REPLAY_ITEMS, 'candidate rubric text', {
+      prices,
+      providers,
+      judgeModels: ['mock-judge-a'],
+      seed: 3,
+    });
+    expect(report.n).toBe(12);
+    expect(report.answererModel).toBe('synthetic-perturbation');
+    const t = report.truth[0]!;
+    expect(t.pearsonVsTruth).toBeGreaterThan(0.9);
+    expect(t.spearmanVsTruth).toBeGreaterThan(0.9);
+    expect(t.flagged).toBe(false);
+    expect(report.pairs.every((p) => /#(reference|truncated|mismatch)$/.test(p.itemId))).toBe(true);
+  });
+
+  it('non-discriminating judge (plain mock: unknown corpus → ~constant) → flagged', async () => {
+    const report = await runRubricProbeCalibration(REPLAY_ITEMS, 'candidate rubric text', {
+      prices,
+      judgeModels: ['mock-judge-a'],
+      seed: 3,
+    });
+    expect(report.truth[0]!.flagged).toBe(true);
+  });
+
+  it('preflight refuses over-cap runs BEFORE any provider call', async () => {
+    const probes = buildRubricProbes(REPLAY_ITEMS, 1);
+    // priced judge (judge-class) with cap 0 → must throw
+    const projected = projectProbeCalibrationCostUsd(probes, 'r', ['judge-class'], prices);
+    expect(projected).toBeGreaterThan(0);
+    await expect(
+      runRubricProbeCalibration(REPLAY_ITEMS, 'r', { prices, judgeModels: ['judge-class'] }),
+    ).rejects.toThrow(BudgetCapError);
   });
 });

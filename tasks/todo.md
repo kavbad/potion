@@ -587,7 +587,7 @@ re-scoped to hot-path gaps.
       exemplars; X-Potion-Cluster validates org ownership. [M]
 - [x] G1.3 Derived suites out of worker-local disk: Postgres or artifact store with
       retention/deletion tied to trace retention; suite provenance rows. [M]
-- [ ] G1.4 Replay fidelity: capture reference answer + tool results + multi-turn context
+- [x] G1.4 Replay fidelity: capture reference answer + tool results + multi-turn context
       in synthesized items (ingestion contract addition); judge anchors on reference. [L]
 - [ ] G1.5 Automated scorer construction: rubric generation per cluster from exemplars +
       G0.2 calibration on the result; customer-visible rubric review step. [M]
@@ -1065,3 +1065,85 @@ scores, which strengthens, not weakens, the comparison.
 | 2026-08-06 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $4.9866 (ledger said $4.9706; ~$0.016 drift) | — | — | $4.9866 / $50.00 (OpenRouter) |
 | 2026-08-06 | G1.4 anchored calibration, extraction-potion-v2 n=50 (sonnet judge via OpenRouter; before usage $4.9866 → after $5.3020) | $2.00 cap, harness projection under cap | $0.3153 (OpenRouter share of $0.3633 total) | $5.3020 / $50.00 (OpenRouter) |
 | 2026-08-06 | same run, OpenAI side (gpt-nano answerers + gpt-mini judge) | — | ~$0.048 | ~$0.24 (OpenAI key, usage-priced) |
+
+---
+
+## G1.5 — Per-cluster rubric generation + probe calibration + review (session 2026-08-06, plan approved)
+
+Every rubric is a hardcoded literal today; the replay-suite rubric templates only the
+tool sequence and ignores the exemplars sitting next to it. G1.5: generate the rubric
+per cluster FROM exemplars (one capped, metered, admin-triggered LLM call), calibrate
+the result with PERTURBATION-PROBE truth built from G1.4 references (reference=1.0,
+50%-truncation=0.5, deranged-mismatch=0.0 — llm-judge items have no deterministic
+truth, so truth is constructed; answererModel='synthetic-perturbation' keeps these
+rows distinct from G0.2 records; mAE advisory, flag on r/rho), and gate USE behind a
+customer-visible review step. Rubric identity becomes real: rubric_hash on
+judge_calibrations + rubric component in the eval cache key (one-time llm-judge cache
+invalidation, deliberate). Approve = transactional: demote prior approved →
+superseded, restamp the suite's items to the new text (homogeneous suites). OWNER RULE
+(also in lessons.md): customers see everything derived from their data, always paired
+with status + evidence — drafts/rejections visible, unmistakably labeled NOT IN FORCE,
+rejected rows keep their failure reason. Serve-path rubrics, rubric-cause staleness on
+eval_results (recorded follow-up), and scale unification are non-scope.
+
+- [x] a. db: 0022 cluster_rubrics (status_reason, partial unique approved index) +
+      judge_calibrations.rubric_hash + repos (insert/list/approve/reject/restamp) +
+      usage rollup 'rubric_gen' + tests
+- [x] b. harness: buildRubricProbes + runRubricProbeCalibration + probe preflight +
+      cacheKeyOf rubric hash + cli rubricHash + tests
+- [x] c. workers: rubric:generate handler (env-gated provider, hardened output,
+      chained probe calibration, rubric_gen metering, org isolation) + synthesis
+      pickup of approved rubric + e2e tests
+- [x] d. server routes (generate/list/approve/reject) + dashboard /rubrics page +
+      admin island + tests
+- [x] e. full sweep + walkthrough extension + mock proof + LIVE leg (cap $2, ledger)
+      + docs + commit
+
+**G1.5 DONE (2026-08-07)** — automated scorer construction. Storage: 0022
+cluster_rubrics (status pending|approved|rejected|superseded + status_reason as
+FIRST-CLASS data; partial unique index = at most one approved per cluster) +
+judge_calibrations.rubric_hash. Generation: rubric:generate (admin-only, never
+nightly) — one capped LLM call over untrusted-wrapped redacted exemplars;
+output hardened (fence-strip, 80–2000 chars, marker/header/control-char
+rejection = job failure, no fallback row); metered as request_logs
+'rubric_gen' (rollup: cost only). Probe calibration: constructed truth from
+G1.4 references (verbatim=1.0 / 50%-word-boundary-truncation=0.5 / seeded
+rotation-derangement mismatch=0.0), 3n judge calls, no answerer leg, own
+preflight; answererModel='synthetic-perturbation'; <3 referenced items →
+uncalibrated pending rubric with reason. Review: /api/rubrics +
+/rubrics dashboard page — every row pairs full text with status badge
+(only approved renders IN FORCE) + calibration verdict; reject REQUIRES a
+reason; rejected/superseded rows stay listed. Approve = transaction: demote
+prior approved → superseded + restamp suite items homogeneous; synthesis
+prefers the approved rubric (template fallback). Rubric identity: cache key
+gains rubric-hash component for llm-judge items (one-time invalidation,
+deliberate); CLI calibrations record rubricHash. 943 keyless tests green
+(+18); walkthrough 15/15 (step 13 extended: generate → draft NOT-in-force →
+approve → restamp → /rubrics renders).
+
+**LIVE LEG (cap $2, actual $0.0664 on the successful run)** — seeded 4-session
+billing-agent cluster (script packages/workers/scripts/g15-live-rubric.ts,
+db .pglite/rubric-g15): sonnet (judge-class) generated a genuinely
+cluster-specific 6-criterion rubric ($0.0048); live probe calibration
+r=0.793 / rho=0.831 / mAE 0.171 (advisory), n=12 — honestly FLAGGED (r a
+hair under the 0.8 line on a 4-item corpus; rho clears it). Approve →
+restamped 4 items homogeneous. Both rubric_gen request_logs rows verified.
+Live-leg findings hardened into code + tests:
+1. classRepresentative picks the CHEAPEST class member → 'live' mode
+   resolved to mock-judge ($0) and produced word-bank text labeled live.
+   Fixed: excludeProvider('mock') in live mode + regression test (keyless
+   live run must FAIL, never silently mock).
+2. Sonnet ignores character bounds (wrote ~1300 chars under a 1200 cap,
+   twice) → validation rejected honestly both times. Guard widened to 2000
+   (anti-smuggling bound, not typography); prompt now instructs ~1000.
+
+FOLLOW-UPS (recorded): rubric-cause staleness on eval_results (schema
+change); serve-path rubric remains platform-global by design; probe truth
+mid-anchor (50% truncation) revisit only if live r lands gray-zone 0.6–0.8
+on larger corpora.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-07 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $5.3315 (ledger said $5.3020; ~$0.03 delayed-accounting drift from the G1.4 run) | — | — | $5.3315 / $50.00 (OpenRouter) |
+| 2026-08-07 | G1.5 live leg ×3 attempts (mock-alias bug $0; rejected-overlong gen ~$0.005; successful run $0.0664 = gen $0.0048 + probe judging $0.0616; sonnet via OpenRouter; before usage $5.3315 → after $5.3870) | $2.00 cap | $0.0555 (authoritative delta; endpoint lags ~$0.016) | $5.3870 / $50.00 (OpenRouter) |
+| 2026-08-07 | OpenAI side | — | $0 (no OpenAI calls this item) | ~$0.24 (OpenAI key, unchanged) |

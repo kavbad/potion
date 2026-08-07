@@ -183,14 +183,19 @@ function modelVersionsFor(strategy: StrategyConfig, prices: PriceTable): Record<
   return out;
 }
 
-/** judgeVersion component of the cacheKey (SPEC §5): resolved judge model for
- * llm-judge scorers; 'none' for deterministic scorers. */
+/** judgeVersion component of the cacheKey (SPEC §5): resolved judge model
+ * PLUS rubric identity for llm-judge scorers; 'none' for deterministic
+ * scorers. The rubric hash (G1.5) makes a rubric edit a DIFFERENT scoring
+ * harness — before 0022, editing a rubric in place silently reused scores
+ * judged under the old wording. One-time llm-judge cache invalidation on
+ * upgrade is deliberate; deterministic-scorer keys are unchanged. */
 function judgeVersionOf(scoring: ScoringMethod, prices: PriceTable): string {
   if (scoring.kind !== 'llm-judge') return 'none';
   const entry = prices.entries.find(
     (e) => e.alias === scoring.judgeModel || e.model === scoring.judgeModel,
   );
-  return entry?.model ?? scoring.judgeModel;
+  const resolved = entry?.model ?? scoring.judgeModel;
+  return `${resolved}|rubric:${sha256(scoring.rubric).slice(0, 16)}`;
 }
 
 export function cacheKeyOf(

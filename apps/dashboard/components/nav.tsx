@@ -14,6 +14,7 @@ const ITEMS = [
   { href: '/reports', label: 'Savings', step: '6' },
   { href: '/recipes', label: 'Recipe library', step: '7' },
   { href: '/traces', label: 'Traces', step: '8' },
+  { href: '/rubrics', label: 'Rubrics', step: '›' },
   { href: '/leaderboard', label: 'Leaderboard', step: '›' },
   { href: '/settings/audit', label: 'Audit trail', step: '›' },
 ];

@@ -54,6 +54,7 @@ import { registerAlertRoutes } from './routes/alerts.js';
 import { registerResearchRoutes } from './routes/research.js';
 // ---- M5 #36 agent workloads ----
 import { registerTraceRoutes } from './routes/traces.js';
+import { registerRubricRoutes } from './routes/rubrics.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
 import { createBudgetEvaluateHandler } from '@potion/workers';
 // ---- end M4 #33/#35 imports ----
@@ -312,6 +313,8 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // BEFORE the purge so retention-0 orgs still get clustered from payloads
   // that are about to be redacted (purge redacts, never blocks clustering).
   registerTraceRoutes(app, ctx, { queue });
+  // G1.5: per-cluster rubric review surface (generate/list/approve/reject).
+  registerRubricRoutes(app, ctx, { queue });
   const tracesCluster = setInterval(() => {
     queue.enqueue('traces:cluster', {}).catch((err: unknown) => {
       app.log.warn(err, 'traces cluster enqueue failed — swallowed');

@@ -52,3 +52,24 @@ ceiling/floor compression silently caps any correlation, and rank (Spearman) vs 
 (Pearson) agreement separates "monotone scale distortion, recoverable" from "cannot
 rank, real." Expect run-to-run variance from live judges — attach CIs before letting a
 verdict carry contractual weight.
+
+## Customer-derived artifacts always ship with status + evidence attached
+
+**What happened (2026-08-06):** Planning the G1.5 rubric review surface, the owner set
+the rule: pending and rejected rubrics must be unmistakably labeled as not in force —
+draft text shown WITH its status and calibration verdict so an uncalibrated draft is
+never mistaken for the operative contract — and rejected artifacts stay visible with
+their failure reason ("failed calibration at r=0.6 and was not deployed") rather than
+being hidden.
+
+**Why:** Visible rigor IS the product. A quality guarantee sells trust; showing the
+drafts, the failures, and the evidence trail builds it, while hiding failures reads as
+having something to hide. Also prevents the concrete hazard of a customer treating a
+draft as the operative contract.
+
+**How to apply:** Any surface that shows something derived from customer data (rubrics,
+derived suites, calibrations, frontiers, verdicts) must pair the artifact with (1) its
+lifecycle status, unmistakably distinguishing in-force from not-in-force, and (2) the
+evidence for/against it (calibration verdict, provenance, failure reason). Never delete
+or hide a rejected/failed artifact from its review surface; record WHY in a
+first-class field (status_reason), not a log line.
