@@ -117,6 +117,7 @@ export {
   // ---- M5 #36 agent workloads ----
   tracesClusterHandler,
   tracesPurgeHandler,
+  tracesRedactHandler,
   redactTraceText,
   toolSignatureSlug,
   TRACES_CLUSTER_DEFAULT_SINCE_DAYS,

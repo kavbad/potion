@@ -579,7 +579,7 @@ re-scoped to hot-path gaps.
       small ledgered budget). [M]
 
 ### Phase G1 — per-customer workload pipeline
-- [ ] G1.1 Ingest-time redaction: real PII pass at POST /v1/traces before rows are written
+- [x] G1.1 Ingest-time redaction: real PII pass at POST /v1/traces before rows are written
       (names/phones/addresses/ids; documented residual risk), raw prompt never at rest;
       re-redact existing rows via migration job. [M]
 - [ ] G1.2 Org-scoped trace clustering: org predicate in listTracesForClustering SQL,
@@ -865,11 +865,11 @@ verified ALIVE pre-run ($46.0964 remaining; authoritative usage $3.9036 — ledg
 cumulative reconciled to this, +$0.025 drift from M1b estimated rows).
 
 - [x] a. judge-class LIVE calibration (leg 2; ledger before/after; record persisted)
-- [ ] b. core redact.ts + tests (patterns/Luhn/idempotency/nested/allowlist)
-- [ ] c. ingest wiring + server tests; worker delegation + contract test update
-- [ ] d. backfillRedactSpans + traces:redact job + admin route + tests
-- [ ] e. keyless full sweep + walkthrough + manual proof
-- [ ] f. docs (CLAUDE.md defect #3) + commits
+- [x] b. core redact.ts + tests (patterns/Luhn/idempotency/nested/allowlist)
+- [x] c. ingest wiring + server tests; worker delegation + contract test update
+- [x] d. backfillRedactSpans + traces:redact job + admin route + tests
+- [x] e. keyless full sweep + walkthrough + manual proof
+- [x] f. docs (CLAUDE.md defect #3) + commits
 
 **G1.1 leg 2 DONE (2026-08-06)** — judge-class calibration finding chain (all persisted,
 probes on record):
@@ -893,3 +893,16 @@ probes on record):
 | 2026-08-06 | LEDGER RECONCILE: authoritative OpenRouter usage was $3.9036 (ledger said $3.879; ~$0.025 M1b estimated-row drift) | — | — | $3.9036 / $50.00 (OpenRouter) |
 | 2026-08-06 | judge-class calibrations ×3 + 3 probes (sonnet judge calls via OpenRouter; before $46.0964 → after $45.3997 remaining) | $2.00/run cap | $0.6966 | $4.6003 / $50.00 (OpenRouter) |
 | 2026-08-06 | same runs, OpenAI side (nano answerers + mini judge) | — | ~$0.07 | ~$0.19 (OpenAI key) |
+
+**G1.1 leg 1 DONE (2026-08-06)** — platform redactor in @potion/core (JWT/secret/email/
+card+Luhn/SSN/IBAN/phone/IPv4/url-cred, ≥4-digit rule last; deterministic + idempotent;
+placeholder vocabulary preserved). Applied at POST /v1/traces before rows are written —
+raw prompts never at rest; string leaves only, keys preserved, operational allowlist
+(model ids with digit runs survive). Worker redactTraceText delegates to core (defense-
+in-depth). Backfill: traces:redact job + POST /api/traces/redact (admin, org-forced,
+idempotent — second run updates 0). RESIDUAL RISK (documented): names/addresses/narrative
+PII are NER territory — pattern pass only; partner-facing surfaces treat redacted text as
+reduced-risk, not risk-free. OPERATOR RUNBOOK: run POST /api/traces/redact once per org
+after deploying G1.1 (covers pre-G1.1 rows). 914 pnpm tests green (core 32, workers 28,
+server 308), walkthrough 15/15 (loop detection verified on ingest-redacted spans). No
+live calls (leg 1 $0).

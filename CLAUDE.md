@@ -75,9 +75,13 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
    (db/schema.ts:33-38) — no org dimension; nightly traces:cluster pools all
    orgs; synthesized agent suites are mock-evaluated only and can never
    serve live (provenance guard, correctly).
-3. Trace ingestion stores `gen_ai.prompt` verbatim; redaction (3 regexes) is
-   late (clustering hop only) and thin; derived suites live on worker-local
-   disk with no lifecycle.
+3. Trace ingestion (G1.1, 2026-08-06): PII redacted AT INGEST via the
+   platform redactor (@potion/core redact.ts — card+Luhn/SSN/IBAN/phone/
+   JWT/etc., deterministic+idempotent); raw prompts never at rest; backfill
+   job traces:redact for pre-G1.1 rows; worker pass kept as defense-in-depth.
+   RESIDUAL: names/addresses/narrative PII (NER territory) undetected —
+   documented; derived suites still live on worker-local disk with no
+   lifecycle (G1.3).
 4. Eval suites (G0.5): deterministic clusters scaled — code-gen 60 tiered
    items (permanent sandbox self-pass gate), extraction 50 discriminative,
    classification/multi-step-reasoning/rag-answer 50 each. Gate-2 LIVE:

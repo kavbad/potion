@@ -4,6 +4,7 @@
 // purge + redaction for §14.3; read models for the session rollup and the
 // agent-cluster synthesis (§14.2).
 import { and, asc, desc, eq, gte, lt, ne, sql, type SQL } from 'drizzle-orm';
+import { redactAttrs } from '@potion/core';
 import type { PotionDb } from '../db.js';
 import { orgs, traceSpans, type NewTraceSpan, type TraceSpanRow } from '../schema.js';
 
@@ -103,6 +104,37 @@ export async function deleteSpansOlderThan(
 /** SPEC §14.3 retention=0 ("metadata only"): redact the payload column but
  * keep span metadata (model/usage/cost/timestamps/names). Returns the number
  * of rows redacted this call (idempotent — already-empty attrs are skipped). */
+/**
+ * G1.1 backfill: re-run the platform PII redactor over EXISTING span attrs
+ * (rows ingested before ingest-time redaction, or seeded directly at the
+ * repo layer). Idempotent by construction — redactPii is a no-op on already
+ * redacted text, and unchanged rows are not rewritten. Returns the number
+ * of rows actually updated.
+ */
+export async function backfillRedactSpans(
+  db: PotionDb,
+  orgId?: string,
+): Promise<{ scanned: number; updated: number }> {
+  const rows = await db
+    .select({ id: traceSpans.id, attrs: traceSpans.attrs })
+    .from(traceSpans)
+    .where(
+      and(
+        orgId !== undefined ? eq(traceSpans.orgId, orgId) : undefined,
+        ne(traceSpans.attrs, {}),
+      ),
+    );
+  let updated = 0;
+  for (const row of rows) {
+    const redacted = redactAttrs(row.attrs as Record<string, unknown>);
+    if (JSON.stringify(redacted) !== JSON.stringify(row.attrs)) {
+      await db.update(traceSpans).set({ attrs: redacted }).where(eq(traceSpans.id, row.id));
+      updated += 1;
+    }
+  }
+  return { scanned: rows.length, updated };
+}
+
 export async function redactSpanAttrs(db: PotionDb, orgId: string): Promise<number> {
   const updated = await db
     .update(traceSpans)

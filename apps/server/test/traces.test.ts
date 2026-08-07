@@ -89,6 +89,39 @@ afterAll(async () => {
 });
 
 describe('POST /v1/traces (M5 #36)', () => {
+  it('G1.1: PII is redacted AT INGEST — raw prompts never at rest; operational keys survive', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/traces',
+      headers: KEY,
+      payload: {
+        spans: [
+          {
+            trace_id: 'tr_pii',
+            span_id: 'sp_pii_1',
+            name: 'agent.root',
+            model: 'haiku-class',
+            input_tokens: 10,
+            output_tokens: 5,
+            attributes: {
+              'gen_ai.prompt': 'Email cfo@acme.io about card 4111 1111 1111 1111 and call +1 (555) 123-4567 re invoice 99887766',
+              'tool.args': { q: 'ssn 123-45-6789', n: 7 },
+            },
+          },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    const wf = await app.inject({ method: 'GET', url: '/api/traces/tr_pii', headers: ADMIN });
+    const span = wf.json().spans[0];
+    expect(span.attrs['gen_ai.prompt']).toBe(
+      'Email <email> about card <card> and call <phone> re invoice <num>',
+    );
+    expect(span.attrs['tool.args']).toEqual({ q: 'ssn <ssn>', n: 7 });
+    // server-injected model key intact despite its digit run
+    expect(span.attrs['gen_ai.request.model']).toBe('haiku-class');
+  });
+
   it('401 without a key; 400 for an invalid batch; 202 idempotent with ingest pricing', async () => {
     const unauthed = await app.inject({ method: 'POST', url: '/v1/traces', payload: { spans: [agentSpan()] } });
     expect(unauthed.statusCode).toBe(401);

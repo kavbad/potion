@@ -22,7 +22,8 @@
 // surface (leaderboard/recipes) never reads them.
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { costUsd, roundCost } from '@potion/core';
+import {
+  redactAttrs, costUsd, roundCost } from '@potion/core';
 import {
   detectLoopSignals,
   getOrgTraceRetentionDays,
@@ -112,7 +113,11 @@ export function registerTraceRoutes(
           ? roundCost(costUsd({ inputTokens: input, outputTokens: output }, entry))
           : 0;
       batchCost += cost;
-      const attrs = { ...(s.attributes ?? {}) };
+      // G1.1: PII-redact user-supplied attributes AT INGEST — raw prompts are
+      // never at rest. String leaves only (numbers/booleans/keys preserved);
+      // the server-injected model key is added AFTER (allowlisted anyway —
+      // model ids carry digit runs the generic rule would mangle).
+      const attrs = redactAttrs({ ...(s.attributes ?? {}) });
       if (s.model !== undefined && attrs['gen_ai.request.model'] === undefined) {
         attrs['gen_ai.request.model'] = s.model;
       }
@@ -268,6 +273,19 @@ export function registerTraceRoutes(
       return reply.code(403).send(forbidden(org.role, 'purge traces'));
     }
     const jobId = await opts.queue.enqueue('traces:purge', { orgId: org.orgId });
+    return reply.code(202).send({ jobId });
+  });
+
+  // ---- POST /api/traces/redact (admin) — G1.1 PII-redaction backfill ------
+  // One-shot by design: ingest-time redaction covers new rows; this re-runs
+  // the platform redactor over rows ingested before G1.1 (idempotent — a
+  // second run updates 0). Org-forced like purge.
+  app.post('/api/traces/redact', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'redact traces'));
+    }
+    const jobId = await opts.queue.enqueue('traces:redact', { orgId: org.orgId });
     return reply.code(202).send({ jobId });
   });
 }

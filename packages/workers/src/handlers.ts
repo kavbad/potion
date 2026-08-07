@@ -2,8 +2,10 @@
 // (deterministic, zero network) unless overridden via runWorker handlers —
 // live-provider sweeps stay an operator-run script affair (scripts/m1b-sweep).
 import { fileURLToPath } from 'node:url';
-import { strategyHash, type Policy, type StrategyConfig } from '@potion/core';
 import {
+  redactPii, strategyHash, type Policy, type StrategyConfig } from '@potion/core';
+import {
+  backfillRedactSpans,
   distinctSampledTargets,
   evalRuns,
   evaluateGuarantee,
@@ -1327,14 +1329,12 @@ export const AGENT_SUITE_ITEM_CAP = 25;
 export const AGENT_EXEMPLAR_CAP = 8;
 
 /** Redact payload text before it pools across orgs or lands in suites
- * (SPEC §14.2 "redact payloads, keep structure"): emails, long digit runs
- * (ids/account numbers), and token-shaped secrets. Deterministic. */
+ * (SPEC §14.2 "redact payloads, keep structure"). G1.1: delegates to the
+ * platform redactor (@potion/core redactPii — the same pass now applied at
+ * INGEST; this hop is defense-in-depth for repo-seeded/legacy rows) and
+ * keeps the 2000-char truncation as an embedding budget. Deterministic. */
 export function redactTraceText(text: string, maxLen = 2000): string {
-  return text
-    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
-    .replace(/\b(?:sk|pk|key|tok|bearer|api)[-_][A-Za-z0-9-]{8,}\b/gi, '<secret>')
-    .replace(/\b\d{4,}\b/g, '<num>')
-    .slice(0, maxLen);
+  return redactPii(text).slice(0, maxLen);
 }
 
 function sha1Hex(s: string): string {
@@ -1631,6 +1631,12 @@ export interface TracesPurgeResult {
   perOrg: { orgId: string; retentionDays: number; redacted: number; deleted: number }[];
 }
 
+/** G1.1: PII-redaction backfill over existing trace_spans (idempotent). */
+export const tracesRedactHandler: WorkerHandler<'traces:redact'> = async (payload, ctx) => {
+  const result = await backfillRedactSpans(ctx.db, payload.orgId);
+  return result; // { scanned, updated }
+};
+
 export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
   payload: TracesPurgePayload,
   ctx: JobContext,
@@ -1674,6 +1680,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   // ---- M5 #36 agent workloads ----
   'traces:cluster': tracesClusterHandler,
   'traces:purge': tracesPurgeHandler,
+  'traces:redact': tracesRedactHandler,
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,

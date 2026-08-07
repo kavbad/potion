@@ -30,6 +30,7 @@ import {
   toolSignatureSlug,
   tracesClusterHandler,
   tracesPurgeHandler,
+  tracesRedactHandler,
   type JobContext,
 } from './handlers.js';
 
@@ -268,6 +269,22 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
     await seedSession('org_a', 'tr_a1', 'Refactor the billing retry loop', 'search');
     const bare: JobContext = { db: db.db, dbHandle: db, pricesPath, suitesV2Dir };
     await expect(tracesClusterHandler({}, bare)).rejects.toThrow('embedder');
+  });
+});
+
+describe('traces:redact backfill (G1.1)', () => {
+  it('re-redacts raw-seeded rows in place; idempotent second run updates 0', async () => {
+    await seedSession('org_a', 'tr_bf', 'Mail cfo@acme.io about account 99887766', 'search');
+    const first = await tracesRedactHandler({ orgId: 'org_a' }, ctx());
+    expect(first.scanned).toBeGreaterThanOrEqual(2); // root + tool span
+    expect(first.updated).toBeGreaterThanOrEqual(1); // the PII-bearing root
+    const spans = await listSpansForTrace(db.db, 'org_a', 'tr_bf');
+    const root = spans.find((sp) => (sp.attrs as Record<string, unknown>)['gen_ai.prompt'] !== undefined)!;
+    expect((root.attrs as Record<string, unknown>)['gen_ai.prompt']).toBe(
+      'Mail <email> about account <num>',
+    );
+    const second = await tracesRedactHandler({ orgId: 'org_a' }, ctx());
+    expect(second.updated).toBe(0);
   });
 });
 

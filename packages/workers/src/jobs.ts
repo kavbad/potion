@@ -17,7 +17,8 @@ export type JobKind =
   | 'research:cycle'
   // ---- M5 #36 agent workloads (SPEC §14.2/§14.3) ----
   | 'traces:cluster'
-  | 'traces:purge';
+  | 'traces:purge'
+  | 'traces:redact';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -31,6 +32,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'research:cycle',
   'traces:cluster',
   'traces:purge',
+  'traces:redact',
 ] as const;
 
 export interface EvalRunPayload {
@@ -94,6 +96,7 @@ export interface JobPayloads {
   // ---- M5 #36 agent workloads (SPEC §14) ----
   'traces:cluster': TracesClusterPayload;
   'traces:purge': TracesPurgePayload;
+  'traces:redact': TracesRedactPayload;
 }
 
 /**
@@ -119,6 +122,13 @@ export interface TracesClusterPayload {
  */
 export interface TracesPurgePayload {
   /** Restrict to one org (default: every org holding spans). */
+  orgId?: string;
+}
+
+/** G1.1 PII-redaction backfill: re-run the platform redactor over existing
+ * span attrs (pre-ingest-redaction rows). Idempotent — a second run updates
+ * 0 rows. orgId narrows to one org (admin route forces the caller's). */
+export interface TracesRedactPayload {
   orgId?: string;
 }
 
