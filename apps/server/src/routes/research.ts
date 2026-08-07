@@ -27,6 +27,7 @@ import {
   listEvalLineageRows,
   listLeaderboardAdopters,
   listResearchCycles,
+  getClusterByIdForOrg,
   RECIPE_STATUSES,
   type RecipeStatus,
 } from '@potion/db';
@@ -106,11 +107,14 @@ export function registerResearchRoutes(
   });
 
   // ---- GET /api/research/cycles (viewer+) ----
+  // G1.8: scoped platform-or-own-org — a tenant's cycles (candidate sets,
+  // spend, focus aliases) never leak to other tenants.
   app.get('/api/research/cycles', async (req: FastifyRequest, reply) => {
-    const cycles = await listResearchCycles(db, 50);
+    const cycles = await listResearchCycles(db, 50, { orgId: req.potionOrg!.orgId });
     return reply.send({
       cycles: cycles.map((c) => ({
         id: c.id,
+        orgId: c.orgId,
         trigger: c.trigger,
         focusAlias: c.focusAlias,
         status: c.status,
@@ -122,6 +126,64 @@ export function registerResearchRoutes(
         completedAt: c.completedAt,
       })),
     });
+  });
+
+  // ---- POST /api/research/cycle (admin) — G1.8 per-org cycle trigger ----
+  // Sweeps the caller's OWN derived suites through the research loop. Every
+  // agent-* suite is ownership-checked (unknown and unowned collapse to the
+  // same 404); org is forced from auth. The handler re-verifies ownership
+  // and applies the org-budget/live-spend conventions.
+  app.post('/api/research/cycle', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply
+        .code(403)
+        .send(
+          openAiError(
+            `role '${org.role}' may not trigger research cycles — requires 'admin'`,
+            'invalid_request_error',
+            'insufficient_role',
+          ),
+        );
+    }
+    const body = z
+      .object({
+        clusterId: z.string().min(1).optional(),
+        suiteV2Ids: z.array(z.string().min(1)).max(10).optional(),
+        capUsd: z.number().positive().max(50).optional(),
+        seed: z.number().int().optional(),
+      })
+      .refine((b) => b.clusterId !== undefined || (b.suiteV2Ids?.length ?? 0) > 0, {
+        message: 'clusterId or suiteV2Ids required',
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_body',
+        message: body.error.issues.map((i) => i.message).join('; '),
+      });
+    }
+    const suiteV2Ids =
+      body.data.suiteV2Ids ?? [`${body.data.clusterId}-replays-v1`];
+    // Ownership pre-check for every agent-* suite (the job re-verifies).
+    for (const suiteId of suiteV2Ids) {
+      if (!suiteId.startsWith('agent-')) continue;
+      const clusterId = suiteId.replace(/-replays-v1$/, '');
+      const cluster = await getClusterByIdForOrg(db, clusterId, org.orgId);
+      if (!cluster || cluster.orgId === null) {
+        return reply
+          .code(404)
+          .send(openAiError('suite not found', 'invalid_request_error', 'suite_not_found'));
+      }
+    }
+    const jobId = await opts.queue.enqueue('research:cycle', {
+      suiteV2Ids,
+      trigger: 'manual',
+      orgId: org.orgId,
+      ...(body.data.capUsd !== undefined ? { capUsd: body.data.capUsd } : {}),
+      ...(body.data.seed !== undefined ? { seed: body.data.seed } : {}),
+    });
+    return reply.code(202).send({ jobId });
   });
 
   // ---- GET /api/recipes?cluster&status (viewer+) — the recipe library ----
@@ -144,7 +206,9 @@ export function registerResearchRoutes(
     const statusByHash = new Map(statuses.map((s) => [s.strategyHash, s]));
 
     // Eval lineage per hash (provenance set, runs, dates, clusters).
-    const evalRows = await listEvalLineageRows(db);
+    // G1.8: platform-or-own-org — closes the pre-existing leak of every
+    // tenant's agent-cluster ids through the library lineage.
+    const evalRows = await listEvalLineageRows(db, { orgId: req.potionOrg!.orgId });
     type Lineage = {
       evalCount: number;
       runIds: Set<string>;

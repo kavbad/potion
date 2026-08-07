@@ -44,8 +44,25 @@ export async function updateResearchCycle(
 }
 
 /** Recent cycles, newest first (dashboard /recipes lineage + audit). */
-export async function listResearchCycles(db: PotionDb, limit = 50): Promise<ResearchCycleRow[]> {
-  return db.select().from(researchCycles).orderBy(desc(researchCycles.createdAt)).limit(limit);
+/** Cycles listing. With `opts.orgId`: platform cycles (org_id NULL) plus
+ * the org's OWN — other tenants' cycles are invisible (G1.8: candidate
+ * sets, spend, and focus aliases are tenant data). Unscoped listing remains
+ * for internal/worker callers only. */
+export async function listResearchCycles(
+  db: PotionDb,
+  limit = 50,
+  opts: { orgId?: string } = {},
+): Promise<ResearchCycleRow[]> {
+  return db
+    .select()
+    .from(researchCycles)
+    .where(
+      opts.orgId !== undefined
+        ? or(isNull(researchCycles.orgId), eq(researchCycles.orgId, opts.orgId))
+        : undefined,
+    )
+    .orderBy(desc(researchCycles.createdAt))
+    .limit(limit);
 }
 
 export async function getResearchCycle(
@@ -130,7 +147,13 @@ export type EvalLineageRow = Pick<
   EvalResultRow,
   'strategyHash' | 'clusterId' | 'runId' | 'providerMode' | 'createdAt'
 >;
-export async function listEvalLineageRows(db: PotionDb): Promise<EvalLineageRow[]> {
+/** Lineage rows for the recipe library. With `opts.orgId`: platform rows
+ * plus the org's own — G1.8 closes the pre-existing leak where every
+ * tenant's agent-cluster ids surfaced to every viewer via /api/recipes. */
+export async function listEvalLineageRows(
+  db: PotionDb,
+  opts: { orgId?: string } = {},
+): Promise<EvalLineageRow[]> {
   return db
     .select({
       strategyHash: evalResults.strategyHash,
@@ -139,7 +162,12 @@ export async function listEvalLineageRows(db: PotionDb): Promise<EvalLineageRow[
       providerMode: evalResults.providerMode,
       createdAt: evalResults.createdAt,
     })
-    .from(evalResults);
+    .from(evalResults)
+    .where(
+      opts.orgId !== undefined
+        ? or(isNull(evalResults.orgId), eq(evalResults.orgId, opts.orgId))
+        : undefined,
+    );
 }
 
 /** Every seeded cluster (leaderboard iterates these), newest first. */

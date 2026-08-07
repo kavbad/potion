@@ -168,9 +168,10 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   automated scorer construction: per-cluster rubric generation +
   probe calibration + customer review (G1.5); (9) per-org frontiers [ARCHITECTURE: org_id NULL=platform +
   fallback-to-global; ~7 loadCurrentFrontier sites; org-scoped recompute];
-  (10) live capped evals of customer suites; (11) researcher loop → per-org
-  refresh (thread suiteV2Ids/suitesV2Dir/org through cycles; gate
-  unchanged).
+  (10) [DONE 2026-08-07] live capped evals of customer suites (G1.7);
+  (11) [DONE 2026-08-07] researcher per-org refresh (G1.8: org cycles over
+  owned derived suites, gate.ts unchanged, recipe_status stays platform,
+  cycle/lineage surfaces tenant-scoped). PHASE G1 COMPLETE.
 - **Phase G2 — guarantee as product surface** (owner-reordered 2026-08-07;
   queue of record G2.7 → G2.1 → G2.2 → G2.3 → G2.4 → G2.6 → G2.8 → G2.5):
   (17-FIRST) operator onboarding: org-creation route + hand-issued key

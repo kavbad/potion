@@ -15,24 +15,31 @@ import {
   alertDeliveries,
   alertRules,
   createDb,
+  createOrg,
   DEFAULT_ORG_ID,
   evalResults,
   getRecipeStatusByHashes,
   getResearchCycle,
   insertEvalResult,
   insertResearchCycle,
+  insertTraceSpans,
   migrate,
+  recipeStatus,
   strategyConfigs,
   type DbHandle,
+  type NewTraceSpan,
 } from '@potion/db';
 import { loadCurrentFrontier, saveFrontier } from '@potion/pareto';
 import { cacheKeyOf, loadSuiteV2 } from '@potion/harness';
 import { loadPrices } from '@potion/providers';
 import { inArray } from 'drizzle-orm';
 import {
+  orgHashOf,
   researchCycleHandler,
   researchScanHandler,
   RESEARCH_V2_SUITE_IDS,
+  toolSignatureSlug,
+  tracesClusterHandler,
   type JobContext,
 } from './handlers.js';
 import type { ResearchCyclePayload } from './jobs.js';
@@ -401,5 +408,111 @@ describe('research ledger', () => {
     void cycle;
     const rows = await db.db.select().from(evalResults);
     expect(rows.length).toBe(0); // no eval evidence fabricated by ledgering
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G1.8 — per-org research cycles
+// ---------------------------------------------------------------------------
+
+describe('research:cycle per-org (G1.8)', () => {
+  const ORG = 'org_rc';
+
+  function rcSpan(over: Partial<NewTraceSpan>): NewTraceSpan {
+    return {
+      orgId: ORG,
+      traceId: 'tr',
+      spanId: 'sp',
+      name: 'agent.root',
+      model: 'mock-cheap',
+      usage: { input_tokens: 10, output_tokens: 5 },
+      costUsd: 0,
+      attrs: {},
+      ts: new Date(),
+      ...over,
+    };
+  }
+
+  const wordHash = (w: string) => {
+    let h = 0;
+    for (let i = 0; i < w.length; i++) h = (Math.imul(h, 31) + w.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  };
+  const embedder = {
+    async embed(texts: string[]): Promise<number[][]> {
+      return texts.map((t) => {
+        const v = new Array<number>(384).fill(0);
+        for (const w of t.toLowerCase().split(/[^a-z0-9]+/)) if (w.length > 0) v[wordHash(w) % 384]! += 1;
+        const norm = Math.sqrt(v.reduce((s2, x) => s2 + x * x, 0)) || 1;
+        return v.map((x) => x / norm);
+      });
+    },
+  };
+
+  async function seedOrgSuite(): Promise<string> {
+    await createOrg(db.db, { id: ORG, name: 'RC' });
+    for (const [t, p] of [
+      ['tr_rc1', 'Summarize the incident report for case 40001001'],
+      ['tr_rc2', 'Summarize the incident report for case 40001002'],
+    ] as const) {
+      await insertTraceSpans(db.db, [
+        rcSpan({ traceId: t, spanId: `${t}_root`, attrs: { 'gen_ai.prompt': p } }),
+        rcSpan({
+          traceId: t,
+          spanId: `${t}_tool`,
+          name: 'tool.reports',
+          attrs: { 'gen_ai.operation.name': 'execute_tool' },
+          ts: new Date(Date.now() + 60_000),
+        }),
+      ]);
+    }
+    await tracesClusterHandler({ orgId: ORG }, { ...ctx(), embedder });
+    return `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['reports'])}-replays-v1`;
+  }
+
+  it('org cycle over an owned derived suite: db loading, org-stamped evidence, cycle org_id, NO recipe_status mutation', async () => {
+    const suiteId = await seedOrgSuite();
+    const statusesBefore = await db.db.select().from(recipeStatus);
+    const res = await researchCycleHandler(
+      { suiteV2Ids: [suiteId], orgId: ORG, seed: 11, trigger: 'manual' },
+      ctx(),
+    );
+    expect(res.candidates).toBeGreaterThan(0);
+    expect(res.suitesRun).toEqual([suiteId]);
+    // cycle row carries the org
+    const cycle = (await getResearchCycle(db.db, res.cycleId))!;
+    expect(cycle.orgId).toBe(ORG);
+    // evidence is org-stamped (|org cache keys → distinct rows)
+    const rows = await db.db.select().from(evalResults);
+    const orgRows = rows.filter((r) => r.orgId === ORG && r.runId !== 'run-seeded');
+    expect(orgRows.length).toBeGreaterThan(0);
+    // recipe_status untouched by the org cycle (platform library)
+    const statusesAfter = await db.db.select().from(recipeStatus);
+    expect(statusesAfter.length).toBe(statusesBefore.length);
+  });
+
+  it('org-scoped dedupe: a hash with PLATFORM-only rows is still evaluated for the org', async () => {
+    const suiteId = await seedOrgSuite();
+    // First: a platform cycle over an authored suite evaluates the grammar.
+    const platform = await researchCycleHandler({ seed: 11, trigger: 'manual' }, ctx());
+    expect(platform.candidates).toBeGreaterThan(0);
+    // Then: the ORG cycle with the same seed must NOT dedupe those hashes
+    // away (its own evidence set is empty).
+    const org = await researchCycleHandler(
+      { suiteV2Ids: [suiteId], orgId: ORG, seed: 11, trigger: 'manual' },
+      ctx(),
+    );
+    expect(org.candidates).toBeGreaterThan(0);
+  });
+
+  it('ownership: an org cycle over ANOTHER org\'s suite throws; platform cycles refuse agent-* suites', async () => {
+    const suiteId = await seedOrgSuite();
+    await createOrg(db.db, { id: 'org_rc_b', name: 'RCB' });
+    await expect(
+      researchCycleHandler({ suiteV2Ids: [suiteId], orgId: 'org_rc_b', trigger: 'manual' }, ctx()),
+    ).rejects.toThrow(/does not belong/);
+    await expect(
+      researchCycleHandler({ suiteV2Ids: [suiteId], trigger: 'manual' }, ctx()),
+    ).rejects.toThrow(/org cycles only/);
   });
 });

@@ -6,7 +6,7 @@ import {
   redactPii,
   type ProviderId, seedFromString, sha256, strategyHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
-  type ChatMessage, type Policy, type StrategyConfig, type Usage } from '@potion/core';
+  type ChatMessage, type EvalItem, type Policy, type StrategyConfig, type Usage } from '@potion/core';
 import {
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
@@ -993,6 +993,7 @@ async function liveHeldoutPairs(
   candidateHash: string,
   incumbentHash: string,
   pricesVersion: string,
+  orgId?: string,
 ): Promise<ItemPair[]> {
   const rows = await ctx.db
     .select({
@@ -1008,6 +1009,9 @@ async function liveHeldoutPairs(
         eq(evalResults.pricesVersion, pricesVersion),
         eq(evalResults.stale, false),
         eq(evalResults.providerMode, 'live'),
+        // G1.8: org cycles pair against the ORG's live rows only — never a
+        // mix with platform evidence.
+        orgId !== undefined ? eq(evalResults.orgId, orgId) : isNull(evalResults.orgId),
       ),
     );
   const byItem = new Map<string, Map<string, number>>();
@@ -1027,12 +1031,13 @@ async function liveHeldoutPairs(
   return pairs;
 }
 
-/** Fan a platform-level promotion alert out to every org with an ENABLED
- * rule subscribed to recipe_promoted (alerts are org-scoped; the event is
- * platform-wide, so we emit per subscribed org). */
+/** Fan a promotion alert out. Platform promotions go to every org with an
+ * ENABLED rule subscribed to recipe_promoted; an ORG cycle's promotion
+ * (G1.8) is private tenant data and goes ONLY to the owning org. */
 async function emitPromotionAlerts(
   ctx: JobContext,
   detail: Record<string, unknown>,
+  onlyOrgId?: string,
 ): Promise<void> {
   const rows = await ctx.db
     .selectDistinct({ orgId: alertRules.orgId })
@@ -1041,6 +1046,7 @@ async function emitPromotionAlerts(
       and(
         isNull(alertRules.disabledAt),
         sql`'recipe_promoted' = ANY(${alertRules.events})`,
+        onlyOrgId !== undefined ? eq(alertRules.orgId, onlyOrgId) : undefined,
       ),
     );
   for (const { orgId } of rows) {
@@ -1064,6 +1070,31 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
   const seed = payload.seed ?? Math.floor(Math.random() * 2 ** 31);
   const trigger = payload.trigger ?? 'manual';
 
+  // G1.8: suite PRECONDITIONS before any other work (candidate generation,
+  // cycle rows) — ownership and platform/org rules are not sweep-time
+  // concerns. agent-* suites are ORG data: org cycles must own them;
+  // platform cycles may not sweep them at all. Items are loaded once here
+  // and reused by the sweep.
+  const cycleSuiteIds = payload.suiteV2Ids ?? [...RESEARCH_V2_SUITE_IDS];
+  const suiteItemsById = new Map<string, EvalItem[]>();
+  for (const suiteId of cycleSuiteIds) {
+    if (suiteId.startsWith('agent-')) {
+      if (payload.orgId === undefined) {
+        throw new Error(
+          `platform research cycles cannot sweep derived suite '${suiteId}' — org cycles only`,
+        );
+      }
+      const derived = await loadDerivedSuite(ctx.db, suiteId);
+      if (!derived) throw new Error(`derived suite '${suiteId}' not found in db storage`);
+      if (derived.suite.orgId !== payload.orgId) {
+        throw new Error(`derived suite '${suiteId}' does not belong to org '${payload.orgId}'`);
+      }
+      suiteItemsById.set(suiteId, derived.items);
+    } else {
+      suiteItemsById.set(suiteId, loadSuiteV2(suiteId, ctx.suitesV2Dir ?? SUITES_V2_DIR).items);
+    }
+  }
+
   // ---- candidate set ----
   let candidates: StrategyConfig[];
   if (payload.recipeHash !== undefined) {
@@ -1077,21 +1108,38 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     }
     candidates = [rows[0]!.config];
   } else {
-    const configRows = await ctx.db.select({ hash: strategyConfigs.hash }).from(strategyConfigs);
-    const statusRows = await ctx.db
-      .select({ hash: recipeStatus.strategyHash })
-      .from(recipeStatus);
-    const existingHashes = new Set<string>([
-      ...configRows.map((r) => r.hash),
-      ...statusRows.map((r) => r.hash),
-    ]);
+    // G1.8: existingHashes prunes candidates already REGISTERED — platform
+    // bookkeeping. For an ORG cycle that pruning is wrong: evaluating known
+    // (platform-registered) recipes on the ORG's own suite is precisely the
+    // point, so org cycles prune only against their own evaluated cells.
+    let existingHashes = new Set<string>();
+    if (payload.orgId === undefined) {
+      const configRows = await ctx.db.select({ hash: strategyConfigs.hash }).from(strategyConfigs);
+      const statusRows = await ctx.db
+        .select({ hash: recipeStatus.strategyHash })
+        .from(recipeStatus);
+      existingHashes = new Set<string>([
+        ...configRows.map((r) => r.hash),
+        ...statusRows.map((r) => r.hash),
+      ]);
+    }
     // Eval-cache cells: hashes already evaluated at the CURRENT prices
     // version (stale rows are deliberately re-runnable — the staleness
     // engine owns that lifecycle).
     const evalRows = await ctx.db
       .selectDistinct({ hash: evalResults.strategyHash })
       .from(evalResults)
-      .where(and(eq(evalResults.pricesVersion, prices.version), eq(evalResults.stale, false)));
+      .where(
+        and(
+          eq(evalResults.pricesVersion, prices.version),
+          eq(evalResults.stale, false),
+          // G1.8: org cycles dedupe against the ORG's evidence — a hash with
+          // platform-only rows must still be evaluated on the org's suites.
+          payload.orgId !== undefined
+            ? eq(evalResults.orgId, payload.orgId)
+            : isNull(evalResults.orgId),
+        ),
+      );
     const evaluatedHashes = new Set<string>(evalRows.map((r) => r.hash));
     candidates = generateCandidatesExplained({
       registry: buildRegistry(prices),
@@ -1103,6 +1151,19 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     }).map((c) => c.config);
   }
 
+  // G1.8: live ORG cycles inherit the G1.7 spend conventions — fail-CLOSED
+  // org-budget refusal BEFORE any spend (platform cycles stay operator-
+  // ledgered and unmetered).
+  if (payload.orgId !== undefined && provider === 'live') {
+    const budget = await getBudget(ctx.db, payload.orgId);
+    if (budget !== null && budget.hardStop) {
+      const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
+      if (mtd + budgetCapUsd > budget.monthlyCapUsd) {
+        throw new OrgBudgetRefusalError(payload.orgId, mtd, budgetCapUsd, budget.monthlyCapUsd);
+      }
+    }
+  }
+
   // ---- cycle row (the §15.3 research ledger) ----
   const cycle = await insertResearchCycle(ctx.db, {
     trigger,
@@ -1110,16 +1171,23 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     candidates,
     status: 'running',
     seed,
+    orgId: payload.orgId ?? null,
   });
 
   // Register every candidate: content-addressed strategy_configs row +
   // recipe_status 'candidate' (firstCycleId sticky on later cycles).
+  // G1.8: ORG cycles register configs (content-addressed, shared, harmless)
+  // but NEVER touch recipe_status — that table is the PLATFORM library
+  // lifecycle, keyed by hash alone; an org cycle mutating it would flip
+  // every tenant's view.
   const candidateHashes: string[] = [];
   for (const config of candidates) {
     const hash = strategyHash(config);
     candidateHashes.push(hash);
     await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
-    await upsertRecipeStatus(ctx.db, hash, 'candidate', cycle.id);
+    if (payload.orgId === undefined) {
+      await upsertRecipeStatus(ctx.db, hash, 'candidate', cycle.id);
+    }
   }
 
   if (candidates.length === 0) {
@@ -1142,8 +1210,8 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     };
   }
 
-  // ---- sweep over the standard v2 suite set (graceful stop at the cap) ----
-  const suiteV2Ids = payload.suiteV2Ids ?? [...RESEARCH_V2_SUITE_IDS];
+  // ---- sweep over the validated suite set (graceful stop at the cap) ----
+  const suiteV2Ids = cycleSuiteIds;
   const suitesRun: string[] = [];
   const clusterIds = new Set<string>();
   let spendUsd = 0;
@@ -1152,10 +1220,10 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
   let stopReason: string | null = null;
 
   for (const suiteId of suiteV2Ids) {
-    const suite = loadSuiteV2(suiteId);
-    for (const item of suite.items) clusterIds.add(item.clusterId);
+    const suiteItems = suiteItemsById.get(suiteId)!;
+    for (const item of suiteItems) clusterIds.add(item.clusterId);
     const remaining = budgetCapUsd - spendUsd;
-    const projected = projectRunCostUsd(candidates, suite.items, prices);
+    const projected = projectRunCostUsd(candidates, suiteItems, prices);
     if (projected > remaining + BUDGET_TOLERANCE) {
       stoppedEarly = true;
       stopReason =
@@ -1171,12 +1239,31 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
         strategies: candidates,
         budgetCapUsd: remaining,
         provider,
+        // G1.8: org cycles produce org-attributed evidence under |org cache
+        // keys (G1.6/G1.7 conventions) — never platform rows.
+        ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
       },
-      { db: ctx.dbHandle, pricesPath: ctx.pricesPath },
+      {
+        db: ctx.dbHandle,
+        pricesPath: ctx.pricesPath,
+        ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
+      },
     );
     spendUsd += summary.spendUsd;
     provenance = summary.providerMode;
     suitesRun.push(suiteId);
+  }
+
+  // G1.8: live ORG cycle spend is customer-attributable (G1.7 convention) —
+  // one aggregate eval_live row through the rollup chokepoint.
+  if (payload.orgId !== undefined && provider === 'live' && spendUsd > 0) {
+    await insertRequestLog(ctx.db, {
+      orgId: payload.orgId,
+      model: 'research-cycle',
+      usage: { inputTokens: 0, outputTokens: 0, costUsd: spendUsd, latencyMs: 0 } as Usage,
+      latencyMs: 0,
+      status: 'eval_live',
+    });
   }
 
   await updateResearchCycle(ctx.db, cycle.id, {
@@ -1194,7 +1281,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
   const promotions: CyclePromotion[] = [];
   const thresholds = promotionThresholdsFromEnv();
   for (const clusterId of clusterIds) {
-    const current = await loadCurrentFrontier(ctx.db, clusterId);
+    const current = await loadCurrentFrontier(ctx.db, clusterId, payload.orgId);
     const pool: StrategyConfig[] = [];
     const poolHashes = new Set<string>();
     for (const p of current?.points ?? []) {
@@ -1210,7 +1297,15 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
         pool.push(c);
       }
     }
-    const aggregates = await aggregatesFromEvalResults(ctx.db, clusterId, pool, prices.version);
+    // G1.8: org-scoped, provenance-pure aggregation — a live org cycle
+    // aggregates live-only (the G1.7 taint rule); mock cycles keep their
+    // scope's mock rows.
+    const aggregates = await aggregatesFromEvalResults(ctx.db, clusterId, pool, prices.version, {
+      ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
+      ...(payload.orgId !== undefined && provider === 'live'
+        ? { providerMode: 'live' as const }
+        : {}),
+    });
     if (aggregates.length === 0) continue;
     const points: FrontierPoint[] = computeFrontier(aggregates);
     const pointByHash = new Map(points.map((pt) => [pt.strategyHash, pt]));
@@ -1225,7 +1320,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
       let reason: string;
       if (incumbent === null) {
         // No incumbent: first live frontier ever for this cluster.
-        const pairs = await liveHeldoutPairs(ctx, clusterId, hash, hash, prices.version);
+        const pairs = await liveHeldoutPairs(ctx, clusterId, hash, hash, prices.version, payload.orgId);
         if (pairs.length === 0) continue; // still live-evidence-gated
         path = 'bootstrap';
         reason = 'first live-provenance frontier for cluster (no incumbent)';
@@ -1236,6 +1331,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
           hash,
           incumbent.strategyHash,
           prices.version,
+          payload.orgId,
         );
         const verdict = evaluatePromotion(pairs, {
           candidateCostPer1K: candidatePoint.costPer1K,
@@ -1249,33 +1345,63 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
       }
 
       // A candidate cleared the gate → publish the recomputed frontier as
-      // the next version (saveFrontier chains parentId automatically), flip
-      // lifecycle states, fan out the alert. One publish per cluster.
+      // the next version (saveFrontier chains parentId automatically —
+      // scope-exact per G1.6), flip lifecycle states (PLATFORM cycles only),
+      // fan out the alert (org cycles: owning org only). One publish per
+      // cluster.
+      let provenanceCtx: { suiteId?: string; suiteVersion?: string; rubricHash?: string; calibrationId?: string } = {};
+      if (payload.orgId !== undefined && clusterId.startsWith('agent-')) {
+        const derivedSuiteId = `${clusterId}-replays-v1`;
+        const derivedRow = await loadDerivedSuite(ctx.db, derivedSuiteId);
+        const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
+        provenanceCtx = {
+          suiteId: derivedSuiteId,
+          ...(derivedRow !== null ? { suiteVersion: derivedRow.suite.version } : {}),
+          ...(approvedRubric !== null
+            ? {
+                rubricHash: approvedRubric.rubricHash,
+                ...(approvedRubric.calibrationId !== null
+                  ? { calibrationId: approvedRubric.calibrationId }
+                  : {}),
+              }
+            : {}),
+        };
+      }
       const saved = await saveFrontier(
         ctx.db,
         clusterId,
         points,
         trigger === 'scan' ? 'new-model' : 'recompute',
         prices.version,
+        {
+          ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
+          ...(Object.keys(provenanceCtx).length > 0 ? { provenance: provenanceCtx } : {}),
+        },
       );
       const newHashes = new Set(points.map((pt) => pt.strategyHash));
-      for (const pt of points) {
-        await upsertRecipeStatus(ctx.db, pt.strategyHash, 'frontier');
-      }
-      for (const prev of current?.points ?? []) {
-        if (!newHashes.has(prev.strategyHash)) {
-          await upsertRecipeStatus(ctx.db, prev.strategyHash, 'archived');
+      if (payload.orgId === undefined) {
+        for (const pt of points) {
+          await upsertRecipeStatus(ctx.db, pt.strategyHash, 'frontier');
+        }
+        for (const prev of current?.points ?? []) {
+          if (!newHashes.has(prev.strategyHash)) {
+            await upsertRecipeStatus(ctx.db, prev.strategyHash, 'archived');
+          }
         }
       }
-      await emitPromotionAlerts(ctx, {
-        clusterId,
-        strategyHash: hash,
-        path,
-        reason,
-        frontierId: saved.id,
-        frontierVersion: saved.version,
-        cycleId: cycle.id,
-      });
+      await emitPromotionAlerts(
+        ctx,
+        {
+          clusterId,
+          strategyHash: hash,
+          path,
+          reason,
+          frontierId: saved.id,
+          frontierVersion: saved.version,
+          cycleId: cycle.id,
+        },
+        payload.orgId,
+      );
       promotions.push({
         clusterId,
         strategyHash: hash,

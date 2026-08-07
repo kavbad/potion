@@ -713,6 +713,9 @@ export const researchCycles = pgTable(
     /** Live USD spent by this cycle (its own ledger, SPEC §15.3 — NOT the
      * M1b cap). Mock cycles stay 0. */
     spendUsd: doublePrecision('spend_usd').notNull().default(0),
+    /** Tenant scope (G1.8); NULL = platform cycle. Org cycles sweep the
+     * org's derived suites and never mutate the platform recipe library. */
+    orgId: text('org_id').references(() => orgs.id),
     /** Provenance of the cycle's evidence: 'mock' | 'live' | 'unknown'. */
     provenance: text('provenance').notNull().default('unknown'),
     /** mulberry32 seed for the promotion-gate paired bootstrap (SPEC §15.4)

@@ -600,7 +600,7 @@ re-scoped to hot-path gaps.
 - [x] G1.7 Live capped evals of customer suites (estimator now honest): live sweep of the
       per-org frontier under --cap with ledger rows; mock-derived frontiers remain
       demo-only. [M]
-- [ ] G1.8 Researcher per-org refresh: thread suiteV2Ids + suitesV2Dir + org through
+- [x] G1.8 Researcher per-org refresh: thread suiteV2Ids + suitesV2Dir + org through
       researchCycleHandler; gate.ts unchanged; per-org cycle trigger route. [S]
 
 ### Phase G2 — guarantee as product surface
@@ -1344,3 +1344,40 @@ references; a 0.9 floor would be meaningless there and trivially satisfied elsew
 2. The guarantee report's headline metric is BASELINE RETENTION — the candidate
    strategy's score relative to the baseline strategy's score on identical items.
    Raw scores stay available (evidence, drill-down) but are never the headline.
+---
+
+## G1.8 — Researcher per-org refresh (session 2026-08-07, plan approved)
+
+Thread org through the research cycle CALLER side (gate.ts untouched — confirmed
+pure): async suite-loading split (agent-* from db with ownership check; authored via
+suitesV2Dir at last), runEval orgId, org-scoped evaluated-hash dedupe, org
+frontier/aggregates/heldout-pairs/save+provenance, alerts to the owning org only,
+recipe_status NEVER mutated by org cycles (platform library stays platform), live org
+cycles inherit G1.7 spend conventions (fail-closed budget refusal + eval_live row,
+model 'research-cycle'). Migration 0024: research_cycles.org_id (NULL=platform).
+Routes: /api/research/cycles scoped platform-or-own-org (cross-tenant leak closed);
+NEW POST /api/research/cycle (admin, ownership 404, org forced); /api/recipes lineage
+predicate (foreign agent-cluster-id leak closed in passing). NO live leg ($0).
+
+- [x] a. db: 0024 + insert/list org + lineage predicate + tests
+- [x] b. workers: handler threading + tests (org cycle e2e, cross-org refusal,
+      platform unchanged, no recipe_status mutation, no live clobber)
+- [x] c. server routes + tests + full sweep + walkthrough + docs + commit
+
+**G1.8 DONE (2026-08-07)** — researcher per-org refresh, all caller-side (gate.ts
+untouched). Suite preconditions HOISTED before any work: agent-* suites load from db
+with ownership enforced (org cycles must own them; platform cycles refuse them);
+authored suites finally honor suitesV2Dir. Org threading: runEval orgId (|org cache
+keys), org-scoped evaluated-hash dedupe, existingHashes pruning SKIPPED for org cycles
+(evaluating known platform recipes on the org's suite is the point — found by test),
+org frontier read/aggregate/save + provenance ctx, liveHeldoutPairs org predicate
+(org pairs never mix with platform live rows), promotion alerts to the owning org
+only. recipe_status NEVER mutated by org cycles (platform library). Live org cycles
+inherit G1.7 spend conventions: fail-closed OrgBudgetRefusalError + one eval_live row
+(model 'research-cycle'). Migration 0024: research_cycles.org_id (NULL=platform).
+Routes: /api/research/cycles scoped platform-or-own-org (cross-tenant cycle leak
+closed); NEW POST /api/research/cycle (admin, ownership 404, org forced);
+/api/recipes lineage predicate closed the pre-existing foreign-agent-cluster-id leak.
+NO live leg — $0, no ledger movement. Tests: workers 42 (+3), server research 7 (+2),
+db 13; 970 keyless tests green total; walkthrough 15/15; platform research path
+byte-for-byte unchanged (all pre-existing tests pass untouched).

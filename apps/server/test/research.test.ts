@@ -274,3 +274,114 @@ describe('GET /api/leaderboard with live evidence (§13.4)', () => {
     expect(body.adoptingOrgs).toContain('Demo Org');
   });
 });
+
+// ---------------------------------------------------------------------------
+// G1.8 — per-org cycle trigger + scoped surfaces
+// ---------------------------------------------------------------------------
+
+describe('G1.8 per-org research surfaces', () => {
+  it('POST /api/research/cycle: viewer 403; cross-org/unknown suite 404; owned 202 with forced org', async () => {
+    const d = db();
+    const { createOrg, insertResearchCycle } = await import('@potion/db');
+    // admin session on org_demo
+    await createUser(d, { id: 'usr_rc_admin', email: 'rcadmin@r.dev', name: 'a' });
+    await createMembership(d, { orgId: DEFAULT_ORG_ID, userId: 'usr_rc_admin', role: 'admin' });
+    await createSession(d, {
+      id: 'ses_rc_admin',
+      userId: 'usr_rc_admin',
+      tokenHash: sha256('ps_rc_admin'),
+      orgId: DEFAULT_ORG_ID,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const ADMIN = { cookie: 'potion_session=ps_rc_admin' };
+
+    // viewer refused
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/api/research/cycle',
+      headers: { ...VIEWER, 'content-type': 'application/json' },
+      payload: { clusterId: 'agent-abcdef-123456' },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    // unknown agent cluster → 404 (no oracle); another org's → same 404
+    await createOrg(d, { id: 'org_rc_x', name: 'RCX' });
+    await d.insert(clusters).values({
+      id: 'agent-ffffff-eeeeee',
+      name: 'agent: x',
+      description: 'x',
+      orgId: 'org_rc_x',
+    });
+    for (const clusterId of ['agent-nosuch-cluster', 'agent-ffffff-eeeeee']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/research/cycle',
+        headers: { ...ADMIN, 'content-type': 'application/json' },
+        payload: { clusterId },
+      });
+      expect(res.statusCode).toBe(404);
+    }
+
+    // owned agent cluster → 202
+    await d.insert(clusters).values({
+      id: 'agent-dddddd-cccccc',
+      name: 'agent: owned',
+      description: 'o',
+      orgId: DEFAULT_ORG_ID,
+    });
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/research/cycle',
+      headers: { ...ADMIN, 'content-type': 'application/json' },
+      payload: { clusterId: 'agent-dddddd-cccccc', capUsd: 2 },
+    });
+    expect(ok.statusCode).toBe(202);
+    expect((ok.json() as { jobId: string }).jobId).toBeTruthy();
+
+    // cycles listing hides other orgs' cycles, shows platform + own
+    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 1 });
+    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 2, orgId: DEFAULT_ORG_ID });
+    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 3, orgId: 'org_rc_x' });
+    const list = await app.inject({ method: 'GET', url: '/api/research/cycles', headers: VIEWER });
+    expect(list.statusCode).toBe(200);
+    const { cycles } = list.json() as { cycles: Array<{ orgId: string | null }> };
+    expect(cycles.some((c) => c.orgId === 'org_rc_x')).toBe(false);
+    expect(cycles.some((c) => c.orgId === DEFAULT_ORG_ID)).toBe(true);
+    expect(cycles.some((c) => c.orgId === null)).toBe(true);
+  });
+
+  it('GET /api/recipes lineage no longer lists foreign agent clusters', async () => {
+    const d = db();
+    const { insertEvalResult } = await import('@potion/db');
+    const mk = (cacheKey: string, clusterId: string, orgId?: string) => ({
+      runId: 'run-lineage',
+      itemId: cacheKey,
+      clusterId,
+      strategyHash: 'h-lineage',
+      strategyConfig: { type: 'single' as const, model: 'mock-mid' },
+      quality: 0.5,
+      scorer: 'exact',
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0, latencyMs: 1 },
+      latencyMs: { p50: 1, p95: 1, mean: 1 },
+      modelVersions: {},
+      pricesVersion: 'lineage-pv',
+      cacheKey,
+      createdAt: new Date().toISOString(),
+      ...(orgId !== undefined ? { orgId } : {}),
+    });
+    // lineage attaches only to REGISTERED hashes — register ours first
+    const { strategyConfigs: scTable } = await import('@potion/db');
+    await d
+      .insert(scTable)
+      .values({ hash: 'h-lineage', config: { type: 'single', model: 'mock-mid' } })
+      .onConflictDoNothing();
+    await insertEvalResult(d, mk('lin-platform', 'code-gen'));
+    await insertEvalResult(d, mk('lin-own', 'agent-dddddd-cccccc', DEFAULT_ORG_ID));
+    await insertEvalResult(d, mk('lin-foreign', 'agent-ffffff-eeeeee', 'org_rc_x'));
+    const res = await app.inject({ method: 'GET', url: '/api/recipes', headers: VIEWER });
+    expect(res.statusCode).toBe(200);
+    const raw = res.body;
+    expect(raw).toContain('agent-dddddd-cccccc');
+    expect(raw).not.toContain('agent-ffffff-eeeeee'); // foreign tenant invisible
+  });
+});
