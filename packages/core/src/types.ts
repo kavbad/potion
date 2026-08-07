@@ -265,6 +265,16 @@ export interface GuaranteeConfig {
   /** Minimum window evidence before a breach may fire (G0.3); absent →
    * platform floor (5). Hard minimum 5 — raise only. */
   minSamples?: number | undefined;
+  /** Judge completion cap for sampled-answer scoring (G2.1); absent → 128.
+   * Verbose judges truncate at 128 → parse fail → quality 0 → silent
+   * floor-dragging; orgs with wordy judge models raise this. */
+  judgeMaxTokens?: number | undefined;
+  /** Contractual retention floor (G2.1): breach iff CI95 upper of
+   * serving/incumbent retention on the derived suite < this. Absent → 0.9
+   * platform default, applied at EVALUATION time only (minSamples
+   * precedent). Scale-free by construction — the incumbent's measured
+   * score is the denominator — so it survives "never absolute floors". */
+  retentionFloor?: number | undefined;
 }
 
 export type Policy =

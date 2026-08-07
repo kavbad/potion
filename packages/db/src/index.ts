@@ -12,6 +12,7 @@ export * from './repos/guarantee.js';
 export * from './repos/judge-calibrations.js';
 export * from './repos/derived-suites.js';
 export * from './repos/cluster-rubrics.js';
+export * from './repos/cluster-incumbents.js';
 export * from './repos/org-delete.js';
 export * from './repos/alerts.js';
 export * from './repos/budgets.js';

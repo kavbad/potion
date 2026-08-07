@@ -34,6 +34,7 @@ import { runWorker,
 import { registerJobRoutes } from './routes/jobs.js';
 // ---- M3 #21 shadow (m3-shadow) — appended import ----
 import { registerReportRoutes } from './routes/reports.js';
+import { registerGuaranteeReportRoutes } from './routes/guarantee-report.js';
 // ---- end M3 #21 shadow imports ----
 // ---- M3 #22 guarantee (m3-guarantee) — appended imports ----
 import { createGuaranteeEvaluateHandler } from '@potion/workers';
@@ -267,6 +268,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   //   usage rollup. The serving-path shadow trigger itself lives in
   //   routes/chat.ts (fire-and-forget after the response) + src/shadow.ts.
   registerReportRoutes(app, ctx);
+  registerGuaranteeReportRoutes(app, ctx);
   // ---- end M3 #21 shadow ----
 
   // ---- M4 #31 share (m4-playground) ----

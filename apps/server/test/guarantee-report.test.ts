@@ -1,0 +1,323 @@
+// G2.1 surfaces: completion-id correlation, incumbent designation routes,
+// the guarantee report (retention HEADLINE, gap-filled series, labeled
+// legs), and the widened /api/guarantee/status. Mock providers throughout.
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import { sha256, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
+import {
+  activeIncumbent,
+  clusters,
+  createMembership,
+  createOrg,
+  createSession,
+  createUser,
+  designateIncumbent,
+  insertApiKey,
+  insertIncident,
+  insertPolicy,
+  insertQualitySample,
+  listQualitySamples,
+  listRequestLogs,
+  upsertStrategyConfig,
+  type IncidentRow,
+} from '@potion/db';
+import { saveFrontier } from '@potion/pareto';
+import { buildServer } from '../src/server.js';
+import { latestRetentionHeadline } from '../src/routes/guarantee-report.js';
+
+const CFG_CHEAP: StrategyConfig = { type: 'single', model: 'mock-cheap' };
+const CFG_MID: StrategyConfig = { type: 'single', model: 'mock-mid' };
+const H_CHEAP = strategyHash(CFG_CHEAP);
+const H_MID = strategyHash(CFG_MID);
+
+const ORG = 'org_gr';
+const KEY = 'pk_gr_key';
+const PID = 'pol-gr';
+const AGENT_CLUSTER = 'agent-grtest-billing';
+
+function point(config: StrategyConfig, quality: number, costPer1K: number): FrontierPoint {
+  return {
+    clusterId: 'code-gen',
+    strategyHash: strategyHash(config),
+    strategyConfig: config,
+    quality,
+    costPer1K,
+    latencyP95: 500,
+  };
+}
+
+const GUARANTEE = { minQuality: 0.99, windowMin: 60, sampleRate: 1, action: 'alert' as const };
+
+let app: FastifyInstance;
+const db = () => app.potion.db.db;
+
+const today = new Date().toISOString().slice(0, 10);
+
+function retentionBlock(over: Record<string, unknown> = {}) {
+  return {
+    mean: 0.95,
+    ci95: [0.9, 1.0],
+    floor: 0.9,
+    pairs: 8,
+    excludedPairs: 1,
+    seed: 42,
+    resamples: 1000,
+    epsilon: 0.05,
+    ...over,
+  };
+}
+
+beforeAll(async () => {
+  app = await buildServer({ seed: false });
+  await saveFrontier(db(), 'code-gen', [point(CFG_CHEAP, 0.5, 0.1), point(CFG_MID, 0.7, 1.0)], 'manual', '2026-08-04');
+  await createOrg(db(), { id: ORG, name: 'GR' });
+  await insertPolicy(db(), {
+    id: PID,
+    orgId: ORG,
+    name: PID,
+    config: { type: 'max_quality', costCeilingPer1K: 100, guarantee: GUARANTEE } as Policy,
+  });
+  await insertApiKey(db(), { id: `key-${PID}`, keyHash: sha256(KEY), name: PID, orgId: ORG, policyId: PID });
+  await upsertStrategyConfig(db(), H_CHEAP, CFG_CHEAP);
+  await upsertStrategyConfig(db(), H_MID, CFG_MID);
+  await db()
+    .insert(clusters)
+    .values({ id: AGENT_CLUSTER, name: 'billing', description: 'test agent cluster', orgId: ORG });
+  // Sessions: admin + viewer for the designation role checks.
+  await createUser(db(), { id: 'usr_gr_admin', email: 'admin@gr.dev', name: 'admin' });
+  await createMembership(db(), { orgId: ORG, userId: 'usr_gr_admin', role: 'admin' });
+  await createSession(db(), {
+    id: 'ses_gr_admin',
+    userId: 'usr_gr_admin',
+    tokenHash: sha256('ps_gr_admin'),
+    orgId: ORG,
+    expiresAt: new Date(Date.now() + 3600_000),
+  });
+  await createUser(db(), { id: 'usr_gr_viewer', email: 'viewer@gr.dev', name: 'viewer' });
+  await createMembership(db(), { orgId: ORG, userId: 'usr_gr_viewer', role: 'viewer' });
+  await createSession(db(), {
+    id: 'ses_gr_viewer',
+    userId: 'usr_gr_viewer',
+    tokenHash: sha256('ps_gr_viewer'),
+    orgId: ORG,
+    expiresAt: new Date(Date.now() + 3600_000),
+  });
+}, 30000);
+
+afterAll(async () => {
+  await app.close();
+});
+
+async function waitFor<T>(fn: () => Promise<T>, pred: (v: T) => boolean, timeoutMs = 9000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let v = await fn();
+  while (!pred(v) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100));
+    v = await fn();
+  }
+  return v;
+}
+
+describe('completion-id correlation (G2.1)', () => {
+  it('ok request logs its completion id; the sampled quality row + judge-spend row join on it', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'Write a python function that reverses a string' }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const completionId = res.json().id as string;
+    expect(completionId).toMatch(/^chatcmpl-/);
+    // The serving row carries the id (correlation label, not an FK)...
+    const logs = await waitFor(
+      () => listRequestLogs(db(), ORG),
+      (rows) => rows.some((r) => r.status === 'ok' && r.completionId === completionId),
+    );
+    expect(logs.some((r) => r.status === 'ok' && r.completionId === completionId)).toBe(true);
+    // ...the sampled quality row joins on the same id...
+    const samples = await waitFor(
+      () => listQualitySamples(db(), ORG),
+      (rows) => rows.some((r) => r.requestId === completionId),
+    );
+    expect(samples.some((r) => r.requestId === completionId)).toBe(true);
+    // ...and the guarantee judge-spend meter row carries it too.
+    const judgeRows = await waitFor(
+      () => listRequestLogs(db(), ORG),
+      (rows) => rows.some((r) => r.status === 'guarantee_judge' && r.completionId === completionId),
+    );
+    expect(judgeRows.some((r) => r.status === 'guarantee_judge' && r.completionId === completionId)).toBe(true);
+  });
+});
+
+describe('incumbent designation routes (G2.1)', () => {
+  it('viewer 403; unknown cluster 404; platform cluster 404; bad hash 400; admin designates; GET history', async () => {
+    const post = (cluster: string, body: unknown, cookie: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/guarantee/clusters/${cluster}/incumbent`,
+        headers: { cookie, 'content-type': 'application/json' },
+        payload: body as Record<string, unknown>,
+      });
+    expect((await post(AGENT_CLUSTER, { strategyHash: H_MID }, 'potion_session=ps_gr_viewer')).statusCode).toBe(403);
+    expect((await post('agent-nope-x', { strategyHash: H_MID }, 'potion_session=ps_gr_admin')).statusCode).toBe(404);
+    // Platform cluster (org_id NULL): designation refused — the contractual
+    // leg needs the org's OWN derived suite.
+    expect((await post('code-gen', { strategyHash: H_MID }, 'potion_session=ps_gr_admin')).statusCode).toBe(404);
+    expect((await post(AGENT_CLUSTER, {}, 'potion_session=ps_gr_admin')).statusCode).toBe(400);
+    expect((await post(AGENT_CLUSTER, { strategyHash: 'sha-nope' }, 'potion_session=ps_gr_admin')).statusCode).toBe(400);
+
+    const ok = await post(AGENT_CLUSTER, { strategyHash: H_MID }, 'potion_session=ps_gr_admin');
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().incumbent.strategyHash).toBe(H_MID);
+    // Redesignate → supersession visible in history.
+    const re = await post(AGENT_CLUSTER, { strategyHash: H_CHEAP }, 'potion_session=ps_gr_admin');
+    expect(re.statusCode).toBe(200);
+    const hist = await app.inject({
+      method: 'GET',
+      url: `/api/guarantee/clusters/${AGENT_CLUSTER}/incumbent`,
+      headers: { cookie: 'potion_session=ps_gr_admin' },
+    });
+    expect(hist.statusCode).toBe(200);
+    const body = hist.json();
+    expect(body.active.strategyHash).toBe(H_CHEAP);
+    expect(body.history).toHaveLength(2);
+    expect(body.history.some((h: { status: string }) => h.status === 'superseded')).toBe(true);
+    expect((await activeIncumbent(db(), ORG, AGENT_CLUSTER))?.strategyHash).toBe(H_CHEAP);
+  });
+});
+
+describe('latestRetentionHeadline (pure)', () => {
+  const rowBase = {
+    orgId: ORG,
+    resolvedAt: null as Date | null,
+  };
+  function row(over: Partial<IncidentRow> & { detail: Record<string, unknown> }): IncidentRow {
+    return { id: 'inc', kind: 'quality_breach', createdAt: new Date(), ...rowBase, ...over } as IncidentRow;
+  }
+
+  it('picks the NEWEST verdict across breach incidents and resolved all-clear advisories', () => {
+    const older = row({
+      id: 'inc-old',
+      kind: 'quality_breach',
+      createdAt: new Date('2026-08-01T00:00:00Z'),
+      detail: { leg: 'suite', policyId: PID, clusterId: AGENT_CLUSTER, retention: retentionBlock({ mean: 0.7 }), providerMode: 'mock' },
+    });
+    const newer = row({
+      id: 'inc-new',
+      kind: 'advisory',
+      createdAt: new Date('2026-08-02T00:00:00Z'),
+      resolvedAt: new Date('2026-08-03T00:00:00Z'),
+      detail: {
+        policyId: PID,
+        clusterId: AGENT_CLUSTER,
+        leg: 'serve',
+        resolution: { verdict: 'all-clear', retention: retentionBlock({ mean: 0.97 }), providerMode: 'mock' },
+      },
+    });
+    const h = latestRetentionHeadline([older, newer], PID, AGENT_CLUSTER)!;
+    expect(h.verdict).toBe('all-clear');
+    expect(h.mean).toBe(0.97);
+    expect(h.providerMode).toBe('mock');
+    // Wrong tuple → no headline.
+    expect(latestRetentionHeadline([older, newer], PID, 'other-cluster')).toBeNull();
+  });
+});
+
+describe('GET /api/reports/guarantee (G2.1)', () => {
+  it('renders entries with retention headline, labeled legs, gap-filled series; html variant', async () => {
+    // Evidence: samples today for (policy, agent cluster) + a suite verdict.
+    for (const q of [0.8, 0.85, 0.9]) {
+      await insertQualitySample(db(), {
+        orgId: ORG,
+        strategyHash: H_MID,
+        quality: q,
+        createdAt: new Date(),
+        policyId: PID,
+        clusterId: AGENT_CLUSTER,
+      });
+    }
+    await insertIncident(db(), {
+      orgId: ORG,
+      kind: 'quality_breach',
+      detail: {
+        leg: 'suite',
+        policyId: PID,
+        clusterId: AGENT_CLUSTER,
+        fromStrategy: H_MID,
+        retention: retentionBlock({ mean: 0.82, ci95: [0.75, 0.88] }),
+        providerMode: 'mock',
+      },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/reports/guarantee?from=${today}&to=${today}`,
+      headers: { authorization: `Bearer ${KEY}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const report = res.json();
+    expect(report.orgId).toBe(ORG);
+    const entry = report.entries.find(
+      (e: { policyId: string; clusterId: string }) => e.policyId === PID && e.clusterId === AGENT_CLUSTER,
+    );
+    expect(entry).toBeTruthy();
+    // HEADLINE: retention, never raw scores.
+    expect(entry.retention.verdict).toBe('contractual-breach');
+    expect(entry.retention.mean).toBe(0.82);
+    expect(entry.retention.confidence).toBe('low'); // 8 pairs
+    // Incumbent designated in the earlier test → hierarchy, not legacy.
+    expect(entry.incumbent).not.toBeNull();
+    expect(report.legacyPath).toBe(false);
+    // Gap-filled single-day series with the seeded samples.
+    expect(entry.qualitySeries).toHaveLength(1);
+    expect(entry.qualitySeries[0].day).toBe(today);
+    expect(entry.qualitySeries[0].samples).toBeGreaterThanOrEqual(3);
+    // Legs labeled on every incident.
+    for (const i of entry.incidents) {
+      expect(['serve', 'suite', 'legacy']).toContain(i.leg);
+    }
+    // HTML artifact variant.
+    const html = await app.inject({
+      method: 'GET',
+      url: `/api/reports/guarantee?from=${today}&to=${today}&format=html`,
+      headers: { authorization: `Bearer ${KEY}` },
+    });
+    expect(html.statusCode).toBe(200);
+    expect(html.headers['content-type']).toContain('text/html');
+    expect(html.body).toContain('Baseline retention');
+    expect(html.body).toContain(AGENT_CLUSTER);
+  });
+
+  it('401 without credentials; 400 on malformed window', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/reports/guarantee', headers: { authorization: 'Bearer pk_nope' } })).statusCode).toBe(401);
+    const bad = await app.inject({
+      method: 'GET',
+      url: '/api/reports/guarantee?from=nope&to=2026-08-07',
+      headers: { authorization: `Bearer ${KEY}` },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+});
+
+describe('GET /api/guarantee/status (G2.1 fields)', () => {
+  it('surfaces incumbents, openAdvisories, retentionFloor, legacyPath', async () => {
+    await insertIncident(db(), {
+      orgId: ORG,
+      kind: 'advisory',
+      detail: { leg: 'serve', policyId: PID, clusterId: AGENT_CLUSTER, fromStrategy: H_MID },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/guarantee/status',
+      headers: { authorization: `Bearer ${KEY}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.incumbents.length).toBeGreaterThanOrEqual(1);
+    expect(body.incumbents[0].clusterId).toBe(AGENT_CLUSTER);
+    expect(body.openAdvisories).toBeGreaterThanOrEqual(1);
+    const pol = body.policies.find((p: { policyId: string }) => p.policyId === PID);
+    expect(pol.retentionFloor).toBe(0.9);
+    expect(pol.legacyPath).toBe(false);
+  });
+});

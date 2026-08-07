@@ -124,6 +124,7 @@ export async function runGuaranteeSample(
         messages: params.messages,
         answerText: params.served.text,
         judgeModel,
+        judgeMaxTokens: guarantee.judgeMaxTokens,
       },
       { providers: params.orgProviders.providers, prices: ctx.prices },
     );
@@ -152,6 +153,9 @@ export async function runGuaranteeSample(
       usage: score.usage,
       latencyMs: score.usage.latencyMs,
       status: GUARANTEE_JUDGE_LOG_STATUS,
+      // G2.1: judge spend joins the completion it evaluated (and the
+      // quality_samples row keyed by the same request id).
+      completionId: params.requestId,
     });
 
     return evaluateOrEnqueue(ctx, params, guarantee, warn);
@@ -234,6 +238,17 @@ async function evaluateOrEnqueue(
       strategyHash: params.served.hash,
       policy: params.policy,
     });
+    if (evaluation.advisory?.triggered) {
+      // G2.1 trust hierarchy, queueless deployment: the suite-verify job
+      // cannot be enqueued here — the advisory row stays OPEN (durable) and
+      // is picked up by the next worker-side guarantee sweep or a manual
+      // verify. Surfaced, never silent.
+      warn(
+        `guarantee advisory for org ${params.orgId} policy ${params.policyId} cluster ` +
+          `${params.clusterId}: serve-path floor crossing (incident ${evaluation.advisory.incidentId}) — ` +
+          'suite-verify pending (no queue in-process; the advisory stays open until verified)',
+      );
+    }
     if (evaluation.breach && evaluation.incidentId !== null && evaluation.action !== null) {
       ctx.observability?.meter.observeGuaranteeBreach?.({
         orgId: params.orgId,

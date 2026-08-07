@@ -829,6 +829,156 @@ async function main(): Promise<void> {
     }
   });
 
+
+  await step('15. guarantee retention (designate incumbent → sampled traffic → suite-verify → report)', async () => {
+    // G2.1 trust hierarchy, end to end on a fresh partner org: the incumbent
+    // designation is the baseline of every verdict; the suite-verify verdict
+    // is mock-LABELED (providerMode stamped — mock deployments never render
+    // unlabeled trust evidence); the report headlines RETENTION with raw
+    // scores demoted to drill-down.
+    const OP = { authorization: `Bearer ${OPERATOR_TOKEN}` };
+    const OPJ = { ...OP, 'content-type': 'application/json' };
+    const savedCookie = sessionCookie;
+    try {
+      const create = await fetch(`${API}/operator/orgs`, {
+        method: 'POST',
+        headers: OPJ,
+        body: JSON.stringify({ id: 'org-walk15', name: 'Retention Partner', adminEmail: 'partner@walk15.dev' }),
+      });
+      const created = await create.json();
+      assert(create.status === 201, `operator create → HTTP ${create.status}`);
+      const linkUrl = new URL(created.magicLink);
+      const verify = await fetch(`${API}${linkUrl.pathname}${linkUrl.search}`, { redirect: 'manual' });
+      const tok = /potion_session=([^;]+)/.exec(verify.headers.get('set-cookie') ?? '')?.[1];
+      assert(tok !== undefined, 'magic link did not mint a session');
+      const cookie = `potion_session=${tok}`;
+      // Guarantee-carrying policy + serving key (retentionFloor 0.9 default;
+      // sampleRate 1 so every request judge-scores).
+      const pol = await fetch(`${API}/api/policies`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({
+          policy: {
+            type: 'max_quality',
+            costCeilingPer1K: 5,
+            guarantee: { minQuality: 0.5, windowMin: 60, sampleRate: 1, action: 'alert' },
+          },
+          createKey: true,
+        }),
+      });
+      const polBody = await pol.json();
+      assert(pol.ok && typeof polBody.apiKey === 'string', `policy+key → HTTP ${pol.status}`);
+      const policyId = polBody.policy.id as string;
+      const key = polBody.apiKey as string;
+      // 6 near-identical sessions → one agent cluster with a 6-item suite.
+      for (let i = 1; i <= 6; i++) {
+        const t = `wt15_${i}`;
+        const ing = await fetch(`${API}/v1/traces`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+          body: JSON.stringify({
+            spans: [
+              { trace_id: t, span_id: `${t}_r`, name: 'agent.root', model: 'mock-cheap', attributes: { 'gen_ai.prompt': `Reconcile the ledger entry for invoice 7000100${i}` } },
+              { trace_id: t, span_id: `${t}_t`, name: 'tool.ledger', model: 'mock-cheap', attributes: { 'gen_ai.operation.name': 'execute_tool' } },
+              { trace_id: t, span_id: `${t}_a`, name: 'chat', model: 'mock-cheap', attributes: { 'gen_ai.completion': `Reconciled ${t}.` } },
+            ],
+          }),
+        });
+        assert(ing.status === 202, `ingest → HTTP ${ing.status}`);
+      }
+      const clus = await fetch(`${API}/api/traces/cluster`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ sinceDays: 30 }),
+      });
+      const clusBody = await clus.json();
+      assert(clus.status === 202, `cluster → HTTP ${clus.status}`);
+      let clusResult: { clusters?: Array<{ clusterId: string }> } = {};
+      for (let i = 0; i < 120; i++) {
+        const job = await (await fetch(`${API}/api/jobs/${clusBody.jobId}`, { headers: { cookie } })).json();
+        if (job.state === 'completed') { clusResult = job.result ?? {}; break; }
+        assert(job.state !== 'failed', `cluster job failed: ${job.error}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      const clusterId = clusResult.clusters?.[0]?.clusterId;
+      assert(clusterId !== undefined, 'no agent cluster synthesized');
+      // The cluster job's mock eval saved an org frontier — its points carry
+      // registered strategy hashes: incumbent = first, serving = last.
+      const frontierBody = await (await fetch(`${API}/api/frontiers/${clusterId}`, { headers: { cookie } })).json();
+      const points: Array<{ strategyHash: string }> = frontierBody.frontier?.points ?? [];
+      assert(points.length >= 1, 'org frontier has no points');
+      const incumbentHash = points[0]!.strategyHash;
+      const servingHash = points[points.length - 1]!.strategyHash;
+      // DESIGNATE (admin; the baseline of every later verdict).
+      const des = await fetch(`${API}/api/guarantee/clusters/${clusterId}/incumbent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ strategyHash: incumbentHash }),
+      });
+      assert(des.ok, `designate → HTTP ${des.status}: ${await des.text()}`);
+      // Sampled serving traffic (X-Potion-Cluster pins the agent cluster);
+      // every response id is a completion id the quality row joins on.
+      for (let i = 0; i < 3; i++) {
+        const chat = await fetch(`${API}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, 'X-Potion-Cluster': clusterId },
+          body: JSON.stringify({ model: 'potion-auto', messages: [{ role: 'user', content: `Reconcile the ledger entry for invoice 7000200${i}` }] }),
+        });
+        assert(chat.ok, `chat → HTTP ${chat.status}`);
+        const chatBody = await chat.json();
+        assert(typeof chatBody.id === 'string' && chatBody.id.startsWith('chatcmpl-'), 'no completion id');
+      }
+      // Judge sampling is fire-and-forget — wait for the samples to land.
+      let sampled = 0;
+      for (let i = 0; i < 60; i++) {
+        const status = await (await fetch(`${API}/api/guarantee/status`, { headers: { cookie } })).json();
+        sampled = status.policies?.find((p: { policyId: string }) => p.policyId === policyId)?.samples ?? 0;
+        if (sampled >= 3) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert(sampled >= 3, `only ${sampled}/3 quality samples landed`);
+      // CONTRACTUAL leg: manual suite-verify (the advisory path enqueues the
+      // same job; mock mode renders a mock-labeled verdict).
+      const ver = await fetch(`${API}/api/guarantee/clusters/${clusterId}/verify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ policyId, servingStrategyHash: servingHash }),
+      });
+      const verBody = await ver.json();
+      assert(ver.status === 202, `verify → HTTP ${ver.status}: ${JSON.stringify(verBody)}`);
+      let verdict: { outcome?: string; providerMode?: string; retention?: { pairs: number } | null } = {};
+      for (let i = 0; i < 120; i++) {
+        const job = await (await fetch(`${API}/api/jobs/${verBody.jobId}`, { headers: { cookie } })).json();
+        if (job.state === 'completed') { verdict = job.result ?? {}; break; }
+        assert(job.state !== 'failed', `suite-verify failed: ${job.error}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      const okOutcomes = ['all-clear', 'contractual-breach', 'self-incumbent'];
+      assert(okOutcomes.includes(verdict.outcome ?? ''), `unexpected verify outcome: ${JSON.stringify(verdict)}`);
+      assert(verdict.providerMode === 'mock', `verdict must be mock-labeled, got '${verdict.providerMode}'`);
+      if (verdict.outcome !== 'self-incumbent') {
+        assert((verdict.retention?.pairs ?? 0) >= 5, `retention pairs < 5: ${JSON.stringify(verdict.retention)}`);
+      }
+      // REPORT: retention headline surface + designation + gap-filled series.
+      const today = new Date().toISOString().slice(0, 10);
+      const rep = await (await fetch(`${API}/api/reports/guarantee?from=${today}&to=${today}`, { headers: { cookie } })).json();
+      const entry = (rep.entries ?? []).find(
+        (e: { policyId: string; clusterId: string }) => e.policyId === policyId && e.clusterId === clusterId,
+      );
+      assert(entry !== undefined, `report entry missing: ${JSON.stringify(rep.entries?.map((e: { clusterId: string }) => e.clusterId))}`);
+      assert(entry.incumbent?.strategyHash === incumbentHash, 'report incumbent mismatch');
+      assert(rep.legacyPath === false, 'org with a designation must not read legacyPath');
+      assert(entry.qualitySeries.some((d: { samples: number }) => d.samples >= 3), 'series missing samples');
+      const html = await fetch(`${API}/api/reports/guarantee?from=${today}&to=${today}&format=html`, { headers: { cookie } });
+      assert(html.ok && (html.headers.get('content-type') ?? '').includes('text/html'), 'html report failed');
+      const htmlText = await html.text();
+      assert(htmlText.includes('Baseline retention'), 'html report missing retention headline');
+      return `designated ${incumbentHash.slice(0, 8)} → 3 sampled requests → suite-verify ${verdict.outcome} (mock-labeled, ${verdict.retention?.pairs ?? 0} pairs) → retention report rendered`;
+    } finally {
+      sessionCookie = savedCookie;
+    }
+  });
+
   const total = elapsed(t0);
   console.log('────────────────────────────────────────────────────────────────');
   console.log(

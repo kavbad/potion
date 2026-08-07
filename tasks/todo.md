@@ -615,7 +615,7 @@ capstone everything else serves.)
       route (operator credential): TRUE CASCADE per the owner's deletion-semantics
       carve-out (2026-08-07) — evidence rows and tombstones included, unlike the
       operational purge's stale-never-delete; explainability knowingly sacrificed. [S/M]
-- [ ] G2.1 Guarantee report: quality time series per policy/cluster (persisted samples +
+- [x] G2.1 Guarantee report: quality time series per policy/cluster (persisted samples +
       request_logs join via new completion-id column); exportable monthly report next to
       the invoice. Incl. the serve-path judgeMaxTokens budget on GuaranteeConfig
       (G1.4-filed stray: verbose judges truncate at PROTOCOL_MAX_TOKENS on the serve
@@ -1446,3 +1446,96 @@ Runbook docs/ONBOARDING-RUNBOOK.md (first user-facing doc for the invoice CLI;
 carve-out quoted verbatim in the offboarding section); README self-serve
 advertisement corrected; ENTERPRISE cross-link. 978 keyless tests green (+8);
 walkthrough 16/16. $0 — no live leg.
+---
+
+## G2.1 — Guarantee report, incumbent baseline, trust hierarchy (session 2026-08-07, plan approved)
+
+STANDING DECISION (owner, 2026-08-07) — THE TRUST HIERARCHY, which G2.2 BINDS ITS
+SLAs TO: the two scale-separated guarantee legs form a hierarchy, not a pair.
+SERVE-path floor crossings — the floor derived at evaluation time from the
+INCUMBENT's own serve-path quality_samples distribution (same scale as the
+comparison; seeded bootstrap CI95 lower of the window mean; never persisted, per
+the minSamples applied-at-evaluation-time precedent) — are ADVISORY TRIGGERS that
+enqueue an anchored suite re-eval (guarantee:suite-verify). ONLY SUITE-leg evidence
+— the serving strategy and the org's DESIGNATED INCUMBENT re-evaluated on the
+derived suite, per-item BASELINE RETENTION r_i = serving_i/incumbent_i on identical
+items — renders the CONTRACTUAL breach verdict. SLA clocks (G2.2) start at advisory
+creation; notification latency is measured to the contractual verdict. Rationale:
+references score ~1.0 by construction (the G1.5 probe-calibration axiom), so
+retention against references is meaningless — the baseline must be a STRATEGY; and
+serve scores (reference-free) vs suite scores (reference-anchored) are different
+workload-specific scales, so floors must never cross scales.
+
+Honest sizing: [L] (the hierarchy adds designation, the advisory/contractual split,
+and a worker job to the original report scope). $0 — no live leg; live retention
+proof composes into G2.8.
+
+- [x] a. db+core: 0025 (completion_id + partial index, cluster_incumbents lifecycle
+      table, incidents 'advisory' kind, eval_results pairing index) + incumbents
+      repo + GuaranteeConfig judgeMaxTokens/retentionFloor + tests
+- [x] b. serve leg: deriveServeFloor (seeded bootstrap lower, 2× window) +
+      hierarchy-aware evaluateGuarantee (legacy byte-identical without designation;
+      crossings → deduped advisory ONLY) + judgeMaxTokens threading +
+      qualitySeriesDaily + tests
+- [x] c. suite leg: guarantee:suite-verify (outcome-recorded refusals, retention
+      with epsilon exclusion, seeded CI, contractual verdict with FULL evidence,
+      all-clear resolution) + pairedQualities lift + advisory enqueue + tests
+- [x] d. surfaces: chat completion_id + judge-spend join; designation routes;
+      /api/reports/guarantee + monthly artifact + CLI + invoice relabel; status
+      fields; dashboard; tests
+- [x] e. full sweep + walkthrough extension + docs + commit
+
+DONE (2026-08-07, session g21-guarantee-report):
+- Migration 0025: request_logs.completion_id (+ partial idx; chat logs it on every
+  ok/error/SSE path post-generation, judge-spend rows join on it); cluster_incumbents
+  (rubric-lifecycle clone: one ACTIVE per (org,cluster) partial unique, transactional
+  supersession with reasons, unknown-hash refusal, idempotent re-designation);
+  incidents kind CHECK += 'advisory'; eval_results (cluster,hash,prices) WHERE
+  stale=false pairing index.
+- Config: GuaranteeConfig.judgeMaxTokens (128–4096; threads scoreServedAnswer →
+  scoreLlmJudge 5th arg — the G1.4 stray closed) + retentionFloor (0–1; 0.9 platform
+  default applied at EVALUATION time only; scale-free — denominator is the
+  incumbent's measured score).
+- SERVE LEG (advisory): deriveServeFloor = seeded-bootstrap CI95 LOWER of the
+  incumbent's own serve window mean (2× candidate window, full provenance, derived
+  fresh — never persisted); evaluateGuarantee is hierarchy-aware — no incumbent ⇒
+  legacy path byte-for-byte (25 pre-G2.1 tests untouched); designated ⇒ minQuality
+  ignored, confident crossings mint deduped kind='advisory' incidents ONLY (never
+  breach/rollback, never routing; latestActiveRollback kind-filter asserted),
+  advisory.triggered = the suite-verify enqueue signal (worker enqueues; queueless
+  in-process path warns + leaves the advisory open).
+- SUITE LEG (contractual): guarantee:suite-verify job — ownership, designation load,
+  config resolution, self-incumbent identity short-circuit, empty-suite, FAIL-CLOSED
+  budget refusal (recorded outcome, no throw, no spend), live reachability refusal;
+  runEval [serving, incumbent] on the derived suite (resume:true, org/mode cache
+  keys, live judge override + 768); pairedQualities (lifted to db repo;
+  liveHeldoutPairs delegates — research promotion stays live-only); computeRetention
+  (pure): epsilon 0.05 exclusion + count, <5-usable / excluded-majority guards,
+  seeded bootstrap over ratios; CONTRACTUAL breach iff CI95 upper < retentionFloor →
+  quality_breach/rollback (resolveRollbackTarget reused) with the FULL evidence
+  block (retention+seed+suite+rubric+incumbent+run+spend+providerMode); all-clear
+  resolves the advisory WITH evidence (durable record). Verdicts providerMode-STAMPED
+  (mock deployments render mock-labeled verdicts).
+- SURFACES: designation routes (admin, org-owned-cluster 404 rule, hash-resolve 400,
+  history with superseded reasons); manual verify route (202+jobId);
+  /api/guarantee/status += incumbents/openAdvisories/retentionFloor/legacyPath;
+  GET /api/reports/guarantee (?from&to | ?period, ?format=html) — HEADLINE =
+  retention with confidence + provenance, raw series demoted to drill-down,
+  gap-filled qualitySeriesDaily, incidents labeled by leg, per-entry
+  retention-unavailable reasons; renderGuaranteeReportHtml (print-clean);
+  backend.saveReport → <org>-<period>-guarantee.json/.html next to the invoice;
+  `pnpm --filter @potion/server guarantee-report` CLI; invoice cost-only lines
+  relabeled "Potion scoring & evaluation services"; dashboard /reports retention
+  section (headline cards, SSR sparkline, advisory banner, designation empty-state).
+- Verify: full keyless sweep 1009 tests green (db 97, workers 54 incl. 10 new
+  suite-verify, server 330 incl. 6 new surfaces, harness 156, +rest); walkthrough
+  extended to step 15 (operator org → guarantee policy → 6 traces → cluster →
+  designate → 3 sampled requests (completion ids) → manual suite-verify all-clear
+  mock-labeled 6 pairs → retention report JSON+HTML) — 16/16 PASS.
+- Fix of note: /api/reports/guarantee uses req.potionOrg (the auth hook), NOT
+  resolveRequestOrg — the savings helper is bearer-only and would silently fall a
+  session-cookie caller back to the demo org.
+- $0 spend — no live leg (live retention proof composes into G2.8's capstone).
+  Suite-verify cost note: ~$0.70 cold / ~$0.35 incumbent-cached per verify at the
+  25-item cap ($5 default cap, fail-closed).
+

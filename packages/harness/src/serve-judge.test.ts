@@ -63,6 +63,12 @@ describe('scoreServedAnswer', () => {
     expect(seen).toEqual([PROTOCOL_MAX_TOKENS]);
   });
 
+  it('judgeMaxTokens override threads to the judge call (G2.1 serve budget)', async () => {
+    const seen: Array<number | undefined> = [];
+    await scoreServedAnswer({ ...PARAMS, judgeMaxTokens: 768 }, deps(seen));
+    expect(seen).toEqual([768]);
+  });
+
   it('throws on an unknown judge alias (caller drops the sample loudly)', async () => {
     await expect(scoreServedAnswer({ ...PARAMS, judgeModel: 'no-such-judge' }, deps())).rejects.toThrow(
       /unknown judge model/,

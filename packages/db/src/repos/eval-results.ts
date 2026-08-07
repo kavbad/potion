@@ -1,6 +1,6 @@
 // Thin typed repository for eval_results (SPEC §7; G1.6 org attribution +
-// retirement-by-staleness).
-import { and, eq, inArray } from 'drizzle-orm';
+// retirement-by-staleness; G2.1 paired qualities).
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { EvalResult, ProviderMode } from '@potion/core';
 import type { PotionDb } from '../db.js';
 import { evalResults } from '../schema.js';
@@ -102,4 +102,65 @@ export async function getEvalResultByCacheKey(
 export async function listEvalResults(db: PotionDb, runId: string): Promise<EvalResult[]> {
   const rows = await db.select().from(evalResults).where(eq(evalResults.runId, runId));
   return rows.map(rowToEvalResult);
+}
+
+/** One item scored by both strategies — structurally identical to the
+ * researcher gate's ItemPair (§15.4 heldout pairs). */
+export interface QualityPair {
+  itemId: string;
+  candidateQuality: number;
+  incumbentQuality: number;
+}
+
+/**
+ * Per-item quality rows for two hashes on one cluster, paired by itemId
+ * (G2.1 lift of the workers-private liveHeldoutPairs). Non-stale rows in
+ * ONE providerMode only — modes structurally cannot mix in a pairing (the
+ * research promotion gate passes 'live'; guarantee:suite-verify passes the
+ * env's mode and stamps it on the verdict). orgId scoping matches the
+ * eval rows' attribution: an org's pairing never mixes platform evidence.
+ */
+export async function pairedQualities(
+  db: PotionDb,
+  scope: {
+    clusterId: string;
+    candidateHash: string;
+    incumbentHash: string;
+    pricesVersion: string;
+    providerMode: 'mock' | 'live';
+    orgId?: string;
+  },
+): Promise<QualityPair[]> {
+  const rows = await db
+    .select({
+      itemId: evalResults.itemId,
+      strategyHash: evalResults.strategyHash,
+      quality: evalResults.quality,
+    })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.clusterId, scope.clusterId),
+        inArray(evalResults.strategyHash, [scope.candidateHash, scope.incumbentHash]),
+        eq(evalResults.pricesVersion, scope.pricesVersion),
+        eq(evalResults.stale, false),
+        eq(evalResults.providerMode, scope.providerMode),
+        scope.orgId !== undefined ? eq(evalResults.orgId, scope.orgId) : isNull(evalResults.orgId),
+      ),
+    );
+  const byItem = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const m = byItem.get(r.itemId) ?? new Map<string, number>();
+    m.set(r.strategyHash, r.quality);
+    byItem.set(r.itemId, m);
+  }
+  const pairs: QualityPair[] = [];
+  for (const [itemId, m] of byItem) {
+    const candidateQuality = m.get(scope.candidateHash);
+    const incumbentQuality = m.get(scope.incumbentHash);
+    if (candidateQuality !== undefined && incumbentQuality !== undefined) {
+      pairs.push({ itemId, candidateQuality, incumbentQuality });
+    }
+  }
+  return pairs;
 }

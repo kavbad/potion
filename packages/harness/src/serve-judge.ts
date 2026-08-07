@@ -52,6 +52,11 @@ export interface ScoreServedAnswerParams {
   answerText: string;
   /** Judge model alias (caller resolves config override vs platform default). */
   judgeModel: string;
+  /** Judge completion budget (G2.1 GuaranteeConfig.judgeMaxTokens); absent →
+   * the protocol default (128). Verbose judges truncate at 128 → parse
+   * fail → quality 0 → silent floor-dragging; the config knob is bounded
+   * 128–4096 so the projection stays cap-bound. */
+  judgeMaxTokens?: number | undefined;
 }
 
 export interface ServedAnswerScore extends LlmJudgeOutcome {
@@ -80,6 +85,6 @@ export async function scoreServedAnswer(
     prompt: params.messages,
     scoring,
   };
-  const outcome = await scoreLlmJudge(item, params.answerText, scoring, deps);
+  const outcome = await scoreLlmJudge(item, params.answerText, scoring, deps, params.judgeMaxTokens);
   return { ...outcome, scorer: `llm-judge:${params.judgeModel}` };
 }

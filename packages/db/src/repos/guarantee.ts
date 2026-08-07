@@ -43,6 +43,7 @@ import {
   type QualitySampleRow,
 } from '../schema.js';
 import { getFrontierById, getLatestFrontier } from './frontiers.js';
+import { activeIncumbent } from './cluster-incumbents.js';
 
 /** Minimum evidence before a breach may fire (SPEC §12.5: below that,
  * insufficient evidence → no action). */
@@ -299,6 +300,192 @@ export async function listPoliciesWithGuarantee(
   return rows.filter((r) => r.config.guarantee !== undefined);
 }
 
+/**
+ * Gap-filled per-day quality series for one (org, policy, cluster) over
+ * [fromDay, toDay] UTC inclusive (G2.1 report; dailySpendSeries cursor
+ * shape). Days without samples report mean:null + samples:0 — quality has
+ * no zero-fill semantics (a quiet day is not a bad day).
+ */
+export async function qualitySeriesDaily(
+  db: PotionDb,
+  scope: { orgId: string; policyId: string; clusterId: string },
+  range: { fromDay: string; toDay: string },
+): Promise<Array<{ day: string; mean: number | null; samples: number }>> {
+  const result = await db.execute(
+    sql`SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+               avg(quality)::float8 AS mean,
+               count(*)::int AS samples
+        FROM quality_samples
+        WHERE org_id = ${scope.orgId}
+          AND policy_id = ${scope.policyId}
+          AND cluster_id = ${scope.clusterId}
+          AND created_at >= ${`${range.fromDay}T00:00:00.000Z`}::timestamptz
+          AND created_at < (${`${range.toDay}T00:00:00.000Z`}::timestamptz + interval '1 day')
+        GROUP BY 1`,
+  );
+  const byDay = new Map<string, { mean: number; samples: number }>();
+  for (const r of result.rows as Array<{ day: string; mean: number; samples: number }>) {
+    byDay.set(r.day, { mean: r.mean, samples: r.samples });
+  }
+  const out: Array<{ day: string; mean: number | null; samples: number }> = [];
+  const cursor = new Date(`${range.fromDay}T00:00:00Z`);
+  const end = new Date(`${range.toDay}T00:00:00Z`);
+  while (cursor.getTime() <= end.getTime()) {
+    const day = cursor.toISOString().slice(0, 10);
+    const hit = byDay.get(day);
+    out.push({ day, mean: hit?.mean ?? null, samples: hit?.samples ?? 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// derived serve floor (G2.1 trust hierarchy — advisory leg)
+// ---------------------------------------------------------------------------
+
+/** Everything needed to re-derive a serve floor — attached to every
+ * advisory incident (a floor without provenance is a test failure). */
+export interface ServeFloorProvenance {
+  n: number;
+  mean: number;
+  ci95: [number, number];
+  seed: number;
+  resamples: number;
+  /** The baseline window actually queried (2× the candidate's windowMin). */
+  windowMin: number;
+  incumbentHash: string;
+}
+
+export interface DerivedServeFloor {
+  /** CI95 LOWER bound of the incumbent's own serve-path window mean; null =
+   * insufficient baseline evidence (caller suppresses, surfaced). */
+  floor: number | null;
+  provenance: ServeFloorProvenance | null;
+  /** Baseline sample count (reported even when insufficient). */
+  samples: number;
+}
+
+/**
+ * Derive the serve-path advisory floor from the INCUMBENT's OWN serve-path
+ * distribution (G2.1 standing decision: floors derive from the baseline's
+ * measured distribution, never absolute numbers — and both sides of the
+ * comparison are reference-free serve scores, so the scales match).
+ *
+ * Floor = seeded-bootstrap CI95 LOWER bound of the incumbent's window mean
+ * over 2× the candidate's windowMin (steadier baseline than the candidate's
+ * own window). Derived FRESH at every evaluation, never persisted — the
+ * floor self-corrects as the incumbent's serve distribution drifts.
+ */
+export async function deriveServeFloor(
+  db: PotionDb,
+  scope: {
+    orgId: string;
+    policyId: string;
+    clusterId: string;
+    incumbentHash: string;
+    /** The CANDIDATE's window; the baseline queries 2× this. */
+    windowMin: number;
+    minSamples: number;
+  },
+  now: Date = new Date(),
+): Promise<DerivedServeFloor> {
+  const baselineWindowMin = scope.windowMin * 2;
+  const evidence = await windowEvidence(
+    db,
+    {
+      orgId: scope.orgId,
+      policyId: scope.policyId,
+      clusterId: scope.clusterId,
+      strategyHash: scope.incumbentHash,
+      windowMin: baselineWindowMin,
+    },
+    now,
+  );
+  if (evidence.samples < scope.minSamples || evidence.mean === null) {
+    return { floor: null, provenance: null, samples: evidence.samples };
+  }
+  const seed = seedFromString(
+    `serve-floor|${scope.orgId}|${scope.policyId}|${scope.clusterId}|${scope.incumbentHash}|` +
+      `${evidence.samples}|${sha256(JSON.stringify(evidence.qualities))}`,
+  );
+  const { ci95 } = bootstrapMeanCi(evidence.qualities, seed, BOOTSTRAP_RESAMPLES);
+  return {
+    floor: ci95[0],
+    provenance: {
+      n: evidence.samples,
+      mean: evidence.mean,
+      ci95: ci95 as [number, number],
+      seed,
+      resamples: BOOTSTRAP_RESAMPLES,
+      windowMin: baselineWindowMin,
+      incumbentHash: scope.incumbentHash,
+    },
+    samples: evidence.samples,
+  };
+}
+
+/** An OPEN advisory for the same evidence tuple — the advisory dedupe
+ * gate (one open tripwire per tuple; suite-verify resolves it). */
+export async function openAdvisoryForTuple(
+  db: PotionDb,
+  scope: { orgId: string; policyId: string; clusterId: string; fromStrategy: string },
+): Promise<IncidentRow | null> {
+  const rows = await db
+    .select()
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.orgId, scope.orgId),
+        eq(incidents.kind, 'advisory'),
+        isNull(incidents.resolvedAt),
+        sql`${incidents.detail} ->> 'policyId' = ${scope.policyId}`,
+        sql`${incidents.detail} ->> 'clusterId' = ${scope.clusterId}`,
+        sql`${incidents.detail} ->> 'fromStrategy' = ${scope.fromStrategy}`,
+      ),
+    )
+    .orderBy(desc(incidents.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Resolve an ADVISORY incident WITH its outcome evidence (G2.1): the
+ * suite-verify verdict — escalated or all-clear — is merged into the
+ * advisory's detail as `resolution` before resolvedAt is set, so the
+ * tripwire row itself records how it was disposed ('all-clear' is a
+ * durable record, not a deletion). Returns null when no open advisory
+ * matches (already resolved / wrong org / not an advisory).
+ */
+export async function resolveAdvisoryWithEvidence(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  resolution: Record<string, unknown>,
+): Promise<IncidentRow | null> {
+  const rows = await db
+    .select()
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.id, id),
+        eq(incidents.orgId, orgId),
+        eq(incidents.kind, 'advisory'),
+        isNull(incidents.resolvedAt),
+      ),
+    );
+  const row = rows[0];
+  if (!row) return null;
+  const updated = await db
+    .update(incidents)
+    .set({
+      detail: { ...(row.detail as Record<string, unknown>), resolution },
+      resolvedAt: new Date(),
+    })
+    .where(eq(incidents.id, id))
+    .returning();
+  return updated[0] ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // breach evaluation
 // ---------------------------------------------------------------------------
@@ -382,6 +569,24 @@ export async function resolveRollbackTarget(
 export interface GuaranteeEvaluation {
   rollingQuality: number | null;
   samples: number;
+  /** 'hierarchy' when an incumbent is designated (G2.1): the serve leg is
+   * ADVISORY-only against the derived floor and `breach` is structurally
+   * false — only suite-verify evidence renders the contractual verdict.
+   * 'legacy' (no incumbent): the pre-G2.1 absolute-minQuality path,
+   * byte-for-byte. */
+  mode: 'legacy' | 'hierarchy';
+  /** Hierarchy-mode advisory outcome (null in legacy mode). `triggered`
+   * is true ONLY when a NEW advisory incident was minted this evaluation —
+   * the caller's suite-verify enqueue signal. A crossing with an already-
+   * open advisory reports deduped=true, triggered=false (the open
+   * tripwire's verify is already pending). */
+  advisory: {
+    triggered: boolean;
+    incidentId: string | null;
+    deduped: boolean;
+    floor: number;
+    provenance: ServeFloorProvenance;
+  } | null;
   breach: boolean;
   /** The configured action that fired (null when suppressed). */
   action: 'rollback' | 'alert' | null;
@@ -389,7 +594,13 @@ export interface GuaranteeEvaluation {
   /** Why no incident was written (null = an incident was written).
    * 'not-significant' (G0.3): observed mean below the floor but the CI95
    * straddles it — the at-risk state; visible, never an incident. */
-  suppressed: 'insufficient-evidence' | 'no-breach' | 'not-significant' | 'cooldown' | null;
+  suppressed:
+    | 'insufficient-evidence'
+    | 'no-breach'
+    | 'not-significant'
+    | 'cooldown'
+    | 'insufficient-baseline'
+    | null;
   /** 95% bootstrap CI on the window mean (null before the CI stage runs —
    * insufficient evidence or observed mean at/above the floor). */
   ci95: [number, number] | null;
@@ -453,12 +664,22 @@ export async function evaluateGuarantee(
   const base = {
     rollingQuality: evidence.mean,
     samples: evidence.samples,
+    mode: 'legacy' as const,
+    advisory: null,
     incidentId: null,
     ci95: null,
     seed: null,
     minSamplesRequired: minSamples,
     rollback: null,
   };
+  // TRUST HIERARCHY (G2.1): a designated incumbent switches the serve leg
+  // to advisory-only mode — the absolute minQuality is ignored (workload-
+  // specific scales make it meaningless) and floor crossings enqueue an
+  // anchored suite re-eval instead of acting.
+  const incumbent = await activeIncumbent(db, input.orgId, input.clusterId);
+  if (incumbent) {
+    return evaluateAdvisoryLeg(db, input, { guarantee, minSamples, evidence, incumbent }, now);
+  }
   // Insufficient evidence: below the configured floor, never act.
   if (evidence.samples < minSamples) {
     return { ...base, breach: false, action: null, suppressed: 'insufficient-evidence' };
@@ -560,5 +781,124 @@ export async function evaluateGuarantee(
       toFrontierVersion: target.frontierVersion,
       source: target.source,
     },
+  };
+}
+
+/**
+ * The advisory serve leg (G2.1 trust hierarchy). Mirrors the legacy CI
+ * rigor with the derived floor in minQuality's place: a crossing fires
+ * only when the candidate window mean's seeded CI95 UPPER bound is below
+ * the incumbent-derived floor. Crossings mint kind='advisory' incidents
+ * ONLY — never quality_breach/rollback, never an operating-point change —
+ * and `advisory.triggered` is the caller's signal to enqueue
+ * guarantee:suite-verify (the contractual leg).
+ */
+async function evaluateAdvisoryLeg(
+  db: PotionDb,
+  input: {
+    orgId: string;
+    policyId: string;
+    clusterId: string;
+    strategyHash: string;
+    policy: Policy;
+  },
+  ctx: {
+    guarantee: NonNullable<Policy['guarantee']>;
+    minSamples: number;
+    evidence: { qualities: number[]; samples: number; mean: number | null };
+    incumbent: { id: string; strategyHash: string };
+  },
+  now: Date,
+): Promise<GuaranteeEvaluation> {
+  const { guarantee, minSamples, evidence, incumbent } = ctx;
+  const base = {
+    rollingQuality: evidence.mean,
+    samples: evidence.samples,
+    mode: 'hierarchy' as const,
+    advisory: null,
+    breach: false as const,
+    action: null,
+    incidentId: null,
+    ci95: null,
+    seed: null,
+    minSamplesRequired: minSamples,
+    rollback: null,
+  };
+  if (evidence.samples < minSamples) {
+    return { ...base, suppressed: 'insufficient-evidence' };
+  }
+  const floorRes = await deriveServeFloor(
+    db,
+    {
+      orgId: input.orgId,
+      policyId: input.policyId,
+      clusterId: input.clusterId,
+      incumbentHash: incumbent.strategyHash,
+      windowMin: guarantee.windowMin,
+      minSamples,
+    },
+    now,
+  );
+  if (floorRes.floor === null || floorRes.provenance === null) {
+    // The incumbent itself lacks serve-path evidence: no floor can be
+    // derived, nothing fires — surfaced, never silent.
+    return { ...base, suppressed: 'insufficient-baseline' };
+  }
+  const floor = floorRes.floor;
+  const provenance = floorRes.provenance;
+  const mean = evidence.mean ?? 0;
+  if (mean >= floor) {
+    return { ...base, suppressed: 'no-breach' };
+  }
+  const seed = seedFromString(
+    `${input.orgId}|${input.policyId}|${input.clusterId}|${input.strategyHash}|` +
+      `${evidence.samples}|${sha256(JSON.stringify(evidence.qualities))}`,
+  );
+  const { ci95 } = bootstrapMeanCi(evidence.qualities, seed, BOOTSTRAP_RESAMPLES);
+  const ciBase = { ...base, ci95: ci95 as [number, number], seed };
+  if (ci95[1] >= floor) {
+    return { ...ciBase, suppressed: 'not-significant' };
+  }
+  // Dedupe: one OPEN advisory per tuple — its suite-verify is already
+  // pending, so no new row and no new enqueue signal.
+  const open = await openAdvisoryForTuple(db, {
+    orgId: input.orgId,
+    policyId: input.policyId,
+    clusterId: input.clusterId,
+    fromStrategy: input.strategyHash,
+  });
+  if (open) {
+    return {
+      ...ciBase,
+      suppressed: 'cooldown',
+      advisory: { triggered: false, incidentId: open.id, deduped: true, floor, provenance },
+    };
+  }
+  const incidentId = await insertIncident(db, {
+    orgId: input.orgId,
+    kind: 'advisory' satisfies IncidentKind,
+    detail: {
+      leg: 'serve',
+      policyId: input.policyId,
+      clusterId: input.clusterId,
+      fromStrategy: input.strategyHash,
+      rollingQuality: mean,
+      ci95,
+      seed,
+      resamples: BOOTSTRAP_RESAMPLES,
+      samples: evidence.samples,
+      windowMin: guarantee.windowMin,
+      minSamples,
+      floor,
+      floorProvenance: provenance,
+      incumbent: { hash: incumbent.strategyHash, designationId: incumbent.id },
+      note: 'advisory tripwire — contractual verdict pending suite-verify',
+    },
+  });
+  return {
+    ...ciBase,
+    suppressed: null,
+    incidentId,
+    advisory: { triggered: true, incidentId, deduped: false, floor, provenance },
   };
 }

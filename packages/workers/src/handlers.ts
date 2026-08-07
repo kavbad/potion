@@ -3,7 +3,7 @@
 // live-provider sweeps stay an operator-run script affair (scripts/m1b-sweep).
 import { fileURLToPath } from 'node:url';
 import {
-  redactPii,
+  redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi,
   type ProviderId, seedFromString, sha256, strategyHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
   type ChatMessage, type EvalItem, type Policy, type StrategyConfig, type Usage } from '@potion/core';
@@ -21,6 +21,12 @@ import {
   evalRuns,
   evaluateGuarantee,
   listPoliciesWithGuarantee,
+  activeIncumbent,
+  getPolicyById,
+  insertIncident,
+  pairedQualities,
+  resolveAdvisoryWithEvidence,
+  resolveRollbackTarget,
   strategyConfigs,
   type DbHandle,
   type GuaranteeEvaluation,
@@ -100,7 +106,7 @@ import {
   type TraceClusterSource,
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
-import type { FrontierLiveSweepPayload, RubricGeneratePayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type { FrontierLiveSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
 import { orgDeleteHandler } from './org-delete.js';
 // ---- end M5 #36 imports ----
 import {
@@ -406,6 +412,10 @@ export interface GuaranteeEvaluateResult {
   evaluations: GuaranteeEvaluation[];
   /** Breach incidents written this run. */
   breaches: Array<{ orgId: string; action: 'rollback' | 'alert'; incidentId: string }>;
+  /** G2.1 trust hierarchy: NEW advisory tripwires minted this run, each
+   * with whether a suite-verify was enqueued (queue present) — the
+   * contractual leg is never rendered here. */
+  advisories: Array<{ orgId: string; incidentId: string; suiteVerifyEnqueued: boolean }>;
 }
 
 /** One evaluation target: (org, policy, cluster, strategy, governing policy). */
@@ -471,11 +481,38 @@ export function createGuaranteeEvaluateHandler(opts: {
     const targets = await resolveTargets(ctx.db, payload);
     const evaluations: GuaranteeEvaluation[] = [];
     const breaches: GuaranteeEvaluateResult['breaches'] = [];
+    const advisories: GuaranteeEvaluateResult['advisories'] = [];
     for (const target of targets) {
       const evaluation = await evaluateGuarantee(ctx.db, target);
       // (target carries orgId/policyId/clusterId/strategyHash/policy — the
       // evaluator's exact keyed input shape.)
       evaluations.push(evaluation);
+      // G2.1 trust hierarchy: a NEW advisory tripwire enqueues the
+      // contractual suite re-eval. Enqueue faults never fail the job —
+      // the advisory row is the durable record and stays OPEN, so the
+      // next crossing (or a manual run) retries the verify.
+      if (evaluation.advisory?.triggered && evaluation.advisory.incidentId !== null) {
+        let suiteVerifyEnqueued = false;
+        if (ctx.queue) {
+          try {
+            await ctx.queue.enqueue('guarantee:suite-verify', {
+              orgId: target.orgId,
+              policyId: target.policyId,
+              clusterId: target.clusterId,
+              servingStrategyHash: target.strategyHash,
+              advisoryIncidentId: evaluation.advisory.incidentId,
+            });
+            suiteVerifyEnqueued = true;
+          } catch {
+            // swallowed — see above
+          }
+        }
+        advisories.push({
+          orgId: target.orgId,
+          incidentId: evaluation.advisory.incidentId,
+          suiteVerifyEnqueued,
+        });
+      }
       if (evaluation.breach && evaluation.incidentId !== null && evaluation.action !== null) {
         breaches.push({
           orgId: target.orgId,
@@ -507,7 +544,7 @@ export function createGuaranteeEvaluateHandler(opts: {
         // ---- end M4 #33 alerts emission ----
       }
     }
-    return { evaluations, breaches };
+    return { evaluations, breaches, advisories };
   };
 }
 
@@ -996,40 +1033,17 @@ async function liveHeldoutPairs(
   pricesVersion: string,
   orgId?: string,
 ): Promise<ItemPair[]> {
-  const rows = await ctx.db
-    .select({
-      itemId: evalResults.itemId,
-      strategyHash: evalResults.strategyHash,
-      quality: evalResults.quality,
-    })
-    .from(evalResults)
-    .where(
-      and(
-        eq(evalResults.clusterId, clusterId),
-        inArray(evalResults.strategyHash, [candidateHash, incumbentHash]),
-        eq(evalResults.pricesVersion, pricesVersion),
-        eq(evalResults.stale, false),
-        eq(evalResults.providerMode, 'live'),
-        // G1.8: org cycles pair against the ORG's live rows only — never a
-        // mix with platform evidence.
-        orgId !== undefined ? eq(evalResults.orgId, orgId) : isNull(evalResults.orgId),
-      ),
-    );
-  const byItem = new Map<string, Map<string, number>>();
-  for (const r of rows) {
-    const m = byItem.get(r.itemId) ?? new Map<string, number>();
-    m.set(r.strategyHash, r.quality);
-    byItem.set(r.itemId, m);
-  }
-  const pairs: ItemPair[] = [];
-  for (const [itemId, m] of byItem) {
-    const candidateQuality = m.get(candidateHash);
-    const incumbentQuality = m.get(incumbentHash);
-    if (candidateQuality !== undefined && incumbentQuality !== undefined) {
-      pairs.push({ itemId, candidateQuality, incumbentQuality });
-    }
-  }
-  return pairs;
+  // G2.1: delegates to the lifted repo pairing (structurally identical
+  // rows). The promotion gate stays LIVE-only — mock cycles structurally
+  // cannot promote; guarantee:suite-verify passes the env's mode instead.
+  return pairedQualities(ctx.db, {
+    clusterId,
+    candidateHash,
+    incumbentHash,
+    pricesVersion,
+    providerMode: 'live',
+    ...(orgId !== undefined ? { orgId } : {}),
+  });
 }
 
 /** Fan a promotion alert out. Platform promotions go to every org with an
@@ -2516,6 +2530,356 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
   };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
+//
+// The advisory serve leg only ever trips a wire; THIS job renders the
+// verdict, by re-evaluating the serving strategy and the org's designated
+// incumbent on the derived suite and measuring per-item retention
+// r_i = serving_i / incumbent_i. Runs in the env's provider mode — mock
+// deployments render mock-LABELED verdicts (providerMode is stamped on
+// every verdict; modes structurally cannot mix in the pairing). Every
+// non-verdict outcome is a RECORDED refusal, never a silent drop, and the
+// advisory stays open so the verify can be retried.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DEFAULT_SUITE_VERIFY_CAP_USD = 5;
+/** Items where the incumbent itself scores below this are EXCLUDED from
+ * retention (smoothing would fabricate retention on items the baseline
+ * fails); the exclusion count is always reported. */
+export const SUITE_VERIFY_EPSILON = 0.05;
+export const DEFAULT_RETENTION_FLOOR = 0.9;
+/** Minimum usable pairs for a verdict (mirrors GUARANTEE_MIN_SAMPLES). */
+export const SUITE_VERIFY_MIN_PAIRS = 5;
+
+export interface SuiteVerifyRetention {
+  mean: number;
+  ci95: [number, number];
+  seed: number;
+  resamples: number;
+  pairs: number;
+  excludedPairs: number;
+  epsilon: number;
+  floor: number;
+}
+
+/**
+ * Pure retention arithmetic (unit-testable): epsilon exclusion → guards →
+ * seeded bootstrap over per-item ratios. Returns either the retention
+ * block or the insufficiency reason — never both, never neither.
+ */
+export function computeRetention(
+  pairs: Array<{ itemId: string; candidateQuality: number; incumbentQuality: number }>,
+  opts: { seedKey: string; floor: number; epsilon?: number; minPairs?: number },
+): { retention: SuiteVerifyRetention | null; insufficient: string | null } {
+  const epsilon = opts.epsilon ?? SUITE_VERIFY_EPSILON;
+  const minPairs = opts.minPairs ?? SUITE_VERIFY_MIN_PAIRS;
+  const usable = pairs.filter((p) => p.incumbentQuality >= epsilon);
+  const excludedPairs = pairs.length - usable.length;
+  if (usable.length < minPairs || excludedPairs > pairs.length / 2) {
+    return {
+      retention: null,
+      insufficient: `${usable.length} usable pairs (${excludedPairs} excluded below epsilon ${epsilon}) — need ${minPairs}+ with a usable majority`,
+    };
+  }
+  const ratios = usable.map((p) => p.candidateQuality / p.incumbentQuality);
+  const seed = seedFromString(`${opts.seedKey}|${usable.length}|${sha256(JSON.stringify(ratios))}`);
+  const { mean, ci95 } = bootstrapMeanCi(ratios, seed, BOOTSTRAP_RESAMPLES);
+  return {
+    retention: {
+      mean,
+      ci95: ci95 as [number, number],
+      seed,
+      resamples: BOOTSTRAP_RESAMPLES,
+      pairs: usable.length,
+      excludedPairs,
+      epsilon,
+      floor: opts.floor,
+    },
+    insufficient: null,
+  };
+}
+
+export interface GuaranteeSuiteVerifyResult {
+  outcome:
+    | 'contractual-breach'
+    | 'all-clear'
+    | 'self-incumbent'
+    | 'no-incumbent'
+    | 'incumbent-unresolvable'
+    | 'no-suite'
+    | 'insufficient-pairs'
+    | 'budget-refused';
+  providerMode: ProviderMode;
+  runId: string | null;
+  spendUsd: number;
+  retention: SuiteVerifyRetention | null;
+  /** The contractual incident minted on breach (quality_breach/rollback). */
+  verdictIncidentId: string | null;
+  advisoryResolved: boolean;
+  detail: string | null;
+}
+
+export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'> = async (
+  payload: GuaranteeSuiteVerifyPayload,
+  ctx: JobContext,
+): Promise<GuaranteeSuiteVerifyResult> => {
+  const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
+  const base = {
+    providerMode,
+    runId: null,
+    spendUsd: 0,
+    retention: null,
+    verdictIncidentId: null,
+    advisoryResolved: false,
+    detail: null,
+  };
+
+  // Ownership — misuse, not an outcome: throw.
+  const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
+  const cluster = clusterRows[0];
+  if (!cluster) throw new Error(`unknown cluster '${payload.clusterId}'`);
+  if (cluster.orgId !== payload.orgId) {
+    throw new Error(`cluster '${payload.clusterId}' does not belong to org '${payload.orgId}'`);
+  }
+  const policyRow = await getPolicyById(ctx.db, payload.orgId, payload.policyId);
+  if (!policyRow) throw new Error(`unknown policy '${payload.policyId}' for org '${payload.orgId}'`);
+  const guarantee = policyRow.config.guarantee;
+  if (!guarantee) throw new Error(`policy '${payload.policyId}' carries no guarantee config`);
+
+  // Designation — recorded outcomes (the advisory stays open).
+  const incumbent = await activeIncumbent(ctx.db, payload.orgId, payload.clusterId);
+  if (!incumbent) {
+    return { ...base, outcome: 'no-incumbent', detail: 'no active incumbent designation — designate one to enable retention verdicts' };
+  }
+  const loadCfg = async (hash: string): Promise<StrategyConfig | null> => {
+    const rows = await ctx.db.select().from(strategyConfigs).where(eq(strategyConfigs.hash, hash));
+    return rows[0]?.config ?? null;
+  };
+  const incumbentCfg = await loadCfg(incumbent.strategyHash);
+  if (!incumbentCfg) {
+    return { ...base, outcome: 'incumbent-unresolvable', detail: `incumbent strategy '${incumbent.strategyHash}' not in strategy_configs — re-designate` };
+  }
+  const servingCfg = await loadCfg(payload.servingStrategyHash);
+  if (!servingCfg) {
+    return { ...base, outcome: 'incumbent-unresolvable', detail: `serving strategy '${payload.servingStrategyHash}' not in strategy_configs` };
+  }
+  const floor = guarantee.retentionFloor ?? DEFAULT_RETENTION_FLOOR;
+
+  // Serving the incumbent itself: retention is 1.0 by identity — all-clear
+  // without spend (durable record on the advisory).
+  if (payload.servingStrategyHash === incumbent.strategyHash) {
+    let advisoryResolved = false;
+    if (payload.advisoryIncidentId) {
+      advisoryResolved =
+        (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
+          verdict: 'all-clear',
+          reason: 'self-incumbent',
+          providerMode,
+          floor,
+        })) !== null;
+    }
+    return { ...base, outcome: 'self-incumbent', advisoryResolved, detail: 'serving strategy IS the incumbent — retention 1.0 by identity' };
+  }
+
+  const suiteId = `${payload.clusterId}-replays-v1`;
+  const loaded = await loadDerivedSuite(ctx.db, suiteId);
+  if (!loaded || loaded.items.length === 0) {
+    return { ...base, outcome: 'no-suite', detail: `derived suite '${suiteId}' is empty — nothing to verify against` };
+  }
+  const capUsd = payload.capUsd ?? DEFAULT_SUITE_VERIFY_CAP_USD;
+
+  // FAIL-CLOSED budget refusal (live spend only) — RECORDED, no throw: the
+  // advisory stays open and the refusal is part of the report.
+  if (providerMode === 'live') {
+    const budget = await getBudget(ctx.db, payload.orgId);
+    if (budget !== null && budget.hardStop) {
+      const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
+      if (mtd + capUsd > budget.monthlyCapUsd) {
+        return {
+          ...base,
+          outcome: 'budget-refused',
+          detail: `hard-stop budget would be exceeded (MTD $${mtd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly $${budget.monthlyCapUsd.toFixed(2)}) — no spend occurred`,
+        };
+      }
+    }
+  }
+
+  const { table: prices } = loadPrices(ctx.pricesPath);
+  let judgeModelOverride: string | undefined;
+  if (providerMode === 'live') {
+    // Live reachability — explicit refusal, never a silent drop (G1.7
+    // live-leg finding: partial spend then ProviderAuthError).
+    const reachable = (p: string): boolean =>
+      p !== 'mock' &&
+      process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
+    const registry = buildRegistry(prices).filter((e) => reachable(e.provider));
+    const judgeEntry = classRepresentative(registry, 'judge');
+    if (!judgeEntry) {
+      throw new Error('suite-verify refused: no reachable live judge-class model (set OPENROUTER_API_KEY or peers) — no spend occurred');
+    }
+    judgeModelOverride = judgeEntry.alias;
+  }
+
+  // The paired re-eval: |org / mode-suffixed cache keys make the incumbent
+  // leg cheap on repeat verifies (resume:true).
+  const summary: RunSummary = await runEval(
+    {
+      suiteIds: [],
+      suiteV2Ids: [suiteId],
+      strategies: [servingCfg, incumbentCfg],
+      budgetCapUsd: capUsd,
+      provider: providerMode,
+      resume: true,
+      orgId: payload.orgId,
+      ...(judgeModelOverride !== undefined ? { judgeModelOverride } : {}),
+      ...(providerMode === 'live'
+        ? { judgeMaxTokens: LIVE_SWEEP_JUDGE_MAX_TOKENS, maxOutputTokens: LIVE_SWEEP_ANSWER_MAX_TOKENS }
+        : {}),
+    },
+    { db: ctx.dbHandle, pricesPath: ctx.pricesPath },
+  );
+  await ctx.db.insert(evalRuns).values({
+    id: summary.runId,
+    options: {
+      suiteIds: [],
+      suiteV2Ids: [suiteId],
+      strategyHashes: [payload.servingStrategyHash, incumbent.strategyHash],
+      agentCluster: payload.clusterId,
+      purpose: 'guarantee:suite-verify',
+    },
+    budgetCapUsd: capUsd,
+    provider: providerMode,
+    status: 'completed',
+    spendUsd: summary.spendUsd,
+    orgId: payload.orgId,
+  });
+  if (providerMode === 'live' && summary.spendUsd > 0) {
+    // Customer-attributable metering through the rollup chokepoint.
+    await insertRequestLog(ctx.db, {
+      orgId: payload.orgId,
+      clusterId: payload.clusterId,
+      model: 'suite-verify',
+      usage: { inputTokens: 0, outputTokens: 0, costUsd: summary.spendUsd, latencyMs: 0 } as Usage,
+      latencyMs: 0,
+      status: 'eval_live',
+    });
+  }
+  const spent = { ...base, runId: summary.runId, spendUsd: summary.spendUsd };
+
+  // Retention over identical items, mode-filtered pairing.
+  const pairs = await pairedQualities(ctx.db, {
+    clusterId: payload.clusterId,
+    candidateHash: payload.servingStrategyHash,
+    incumbentHash: incumbent.strategyHash,
+    pricesVersion: prices.version,
+    providerMode,
+    orgId: payload.orgId,
+  });
+  const computed = computeRetention(pairs, {
+    seedKey:
+      `suite-verify|${payload.orgId}|${payload.policyId}|${payload.clusterId}|` +
+      `${payload.servingStrategyHash}|${incumbent.strategyHash}`,
+    floor,
+  });
+  if (computed.retention === null) {
+    return { ...spent, outcome: 'insufficient-pairs', detail: computed.insufficient };
+  }
+  const retention = computed.retention;
+  const { mean, ci95 } = retention;
+  const approvedRubric = await approvedRubricForCluster(ctx.db, payload.clusterId);
+  // The FULL evidence block — a verdict without provenance is a test
+  // failure (owner rule: status + evidence, always).
+  const evidence = {
+    leg: 'suite',
+    policyId: payload.policyId,
+    clusterId: payload.clusterId,
+    fromStrategy: payload.servingStrategyHash,
+    retention,
+    suiteId,
+    suiteVersion: loaded.suite.version,
+    ...(approvedRubric !== null
+      ? {
+          rubricHash: approvedRubric.rubricHash,
+          ...(approvedRubric.calibrationId !== null ? { calibrationId: approvedRubric.calibrationId } : {}),
+        }
+      : {}),
+    incumbent: { hash: incumbent.strategyHash, designationId: incumbent.id },
+    runId: summary.runId,
+    spendUsd: summary.spendUsd,
+    providerMode,
+    ...(payload.advisoryIncidentId !== undefined ? { advisoryIncidentId: payload.advisoryIncidentId } : {}),
+  };
+
+  // CONTRACTUAL verdict: breach iff the retention CI95 UPPER bound is
+  // below the floor (confidently under, the G0.3 rigor).
+  if (ci95[1] < floor) {
+    let verdictIncidentId: string;
+    if (guarantee.action === 'rollback') {
+      const target = await resolveRollbackTarget(ctx.db, {
+        clusterId: payload.clusterId,
+        policy: policyRow.config,
+        fromStrategyHash: payload.servingStrategyHash,
+      });
+      verdictIncidentId = target
+        ? await insertIncident(ctx.db, {
+            orgId: payload.orgId,
+            kind: 'rollback',
+            detail: {
+              ...evidence,
+              toStrategy: target.strategyHash,
+              toFrontierVersion: target.frontierVersion,
+              targetSource: target.source,
+            },
+          })
+        : await insertIncident(ctx.db, {
+            orgId: payload.orgId,
+            kind: 'quality_breach',
+            detail: { ...evidence, intendedAction: 'rollback', reason: 'no-rollback-target' },
+          });
+    } else {
+      verdictIncidentId = await insertIncident(ctx.db, {
+        orgId: payload.orgId,
+        kind: 'quality_breach',
+        detail: evidence,
+      });
+    }
+    let advisoryResolved = false;
+    if (payload.advisoryIncidentId) {
+      advisoryResolved =
+        (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
+          verdict: 'contractual-breach',
+          escalatedTo: verdictIncidentId,
+          retention,
+          providerMode,
+        })) !== null;
+    }
+    try {
+      await emitAlertEvent(ctx, {
+        orgId: payload.orgId,
+        event: guarantee.action === 'rollback' ? 'rollback' : 'quality_breach',
+        detail: { incidentId: verdictIncidentId, clusterId: payload.clusterId, strategyHash: payload.servingStrategyHash, retention: mean, retentionCi95: ci95, floor },
+      });
+    } catch {
+      // alert faults never fail the verdict — the incident is durable
+    }
+    return { ...spent, outcome: 'contractual-breach', retention, verdictIncidentId, advisoryResolved };
+  }
+
+  // All-clear — durable record on the advisory (when one is attached).
+  let advisoryResolved = false;
+  if (payload.advisoryIncidentId) {
+    advisoryResolved =
+      (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
+        verdict: 'all-clear',
+        retention,
+        providerMode,
+        evidence,
+      })) !== null;
+  }
+  return { ...spent, outcome: 'all-clear', retention, advisoryResolved };
+};
+
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'eval:run': evalRunHandler,
   'sweep:run': sweepRunHandler,
@@ -2537,6 +2901,8 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'frontier:live-sweep': frontierLiveSweepHandler,
   // ---- G2.7 operator org deletion ----
   'org:delete': orgDeleteHandler,
+  // ---- G2.1 trust hierarchy: contractual suite re-eval ----
+  'guarantee:suite-verify': guaranteeSuiteVerifyHandler,
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,

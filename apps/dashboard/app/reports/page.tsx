@@ -10,7 +10,13 @@ import { ApiUnreachable, apiFetch } from '@/lib/api';
 import { collectIncidents } from '@/lib/guarantee';
 import { confidenceHint } from '@/lib/savings-chart';
 import { formatUsd } from '@/lib/usage-chart';
-import type { GuaranteeStatusDto, SavingsAlternativeDto, SavingsReportDto } from '@/lib/types';
+import type {
+  GuaranteeReportDto,
+  GuaranteeReportEntryDto,
+  GuaranteeStatusDto,
+  SavingsAlternativeDto,
+  SavingsReportDto,
+} from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +67,10 @@ export default async function ReportsPage({
   const incidents = collectIncidents(guaranteeStatus);
   const me = await apiFetch<{ role?: string }>('/auth/me').catch(() => null);
   const isAdmin = me?.role === 'admin';
+  // G2.1: the retention report (tolerant — the page renders without it).
+  const guaranteeReport = await apiFetch<GuaranteeReportDto>(
+    `/api/reports/guarantee?${qs}`,
+  ).catch(() => null);
 
   return (
     <PageShell>
@@ -108,6 +118,11 @@ export default async function ReportsPage({
 
       {/* M4 #35 budget autopilot: cap line + forecast + hard-stop toggle */}
       <BudgetCard />
+
+      {/* G2.1: retention HEADLINE (standing decision — retention leads, raw
+          scores are drill-down). Advisory tripwires banner + designation
+          empty-state (visible rigor, never a silent default). */}
+      {guaranteeReport && <RetentionSection report={guaranteeReport} />}
 
       {/* headline cards */}
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3">
@@ -254,5 +269,132 @@ function PageShell({ children }: { children: React.ReactNode }) {
       </p>
       {children}
     </div>
+  );
+}
+
+
+// ---- G2.1 retention section (trust hierarchy) ----
+
+function RetentionSection({ report }: { report: GuaranteeReportDto }) {
+  const openAdvisories = report.entries.reduce((n, e) => n + e.openAdvisories.length, 0);
+  return (
+    <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-lg font-medium text-ink">Quality guarantee — baseline retention</h2>
+        <span className="text-xs text-faint">
+          {report.from} → {report.to}
+        </span>
+      </div>
+      {openAdvisories > 0 && (
+        <div className="mb-4 rounded-lg border border-warn bg-amber-50 px-4 py-3 text-sm text-warn">
+          {openAdvisories} open advisory tripwire{openAdvisories === 1 ? '' : 's'} — serve-path
+          floor crossings awaiting suite verification. Advisories never change routing; only
+          suite evidence renders a contractual verdict.
+        </div>
+      )}
+      {report.legacyPath && (
+        <div className="mb-4 rounded-lg border border-dashed border-line px-6 py-8 text-center text-sm text-faint">
+          No incumbent designated yet — retention is unavailable and guarantees use the legacy
+          absolute-floor path. Designate your current production strategy as the incumbent (
+          <code className="font-mono">POST /api/guarantee/clusters/:clusterId/incumbent</code>
+          ) to switch this workload to retention verdicts.
+        </div>
+      )}
+      {report.entries.length === 0 ? (
+        <p className="text-sm text-faint">No guarantee evidence in this window.</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {report.entries.map((e) => (
+            <RetentionEntryCard key={`${e.policyId}|${e.clusterId}`} entry={e} />
+          ))}
+        </div>
+      )}
+      <p className="mt-6 text-xs leading-relaxed text-faint">
+        The headline is retention: your serving strategy&apos;s score relative to your designated
+        incumbent on identical replay-suite items. Raw scores are workload-specific
+        (reference-anchored scales) and appear only as the sparkline drill-down.
+      </p>
+    </section>
+  );
+}
+
+function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
+  const r = entry.retention;
+  return (
+    <div className="rounded-lg border border-line bg-paper px-5 py-4">
+      <div className="mb-1 text-xs text-faint">
+        {entry.policyId} · <span className="font-mono">{entry.clusterId}</span>
+      </div>
+      {r ? (
+        <>
+          <div className="flex items-baseline gap-3">
+            <span className="text-2xl font-semibold tabular-nums text-ink">
+              {(r.mean * 100).toFixed(1)}%
+            </span>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                r.verdict === 'all-clear'
+                  ? 'border-accent bg-accent-soft text-accent'
+                  : 'border-warn bg-amber-50 text-warn'
+              }`}
+            >
+              {r.verdict}
+            </span>
+          </div>
+          <div className="mt-1 text-[11px] text-faint">
+            CI95 [{(r.ci95[0] * 100).toFixed(1)}%, {(r.ci95[1] * 100).toFixed(1)}%] vs floor{' '}
+            {(r.floor * 100).toFixed(0)}% · {r.pairs} pairs ({r.excludedPairs} excluded) ·{' '}
+            {r.confidence} · {r.providerMode}
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-soft">{entry.retentionUnavailableReason ?? 'retention unavailable'}</div>
+      )}
+      {entry.incumbent && (
+        <div className="mt-2 text-[11px] text-faint">
+          incumbent <span className="font-mono">{entry.incumbent.strategyHash.slice(0, 12)}</span>
+          {entry.derivedFloor &&
+            ` · serve floor ${entry.derivedFloor.floor.toFixed(3)} (n=${entry.derivedFloor.provenance.n})`}
+        </div>
+      )}
+      <QualitySparkline series={entry.qualitySeries} />
+    </div>
+  );
+}
+
+/** SSR SVG sparkline of the daily serve-path quality means (drill-down —
+ * gaps stay gaps: days without samples break the line). */
+function QualitySparkline({
+  series,
+}: {
+  series: Array<{ day: string; mean: number | null; samples: number }>;
+}) {
+  const w = 240;
+  const h = 36;
+  const n = series.length;
+  if (n === 0) return null;
+  const x = (i: number) => (n === 1 ? w / 2 : (i / (n - 1)) * (w - 4) + 2);
+  const y = (q: number) => h - 3 - q * (h - 6);
+  let d = '';
+  let pen = false;
+  for (let i = 0; i < n; i++) {
+    const m = series[i]!.mean;
+    if (m === null) {
+      pen = false;
+      continue;
+    }
+    d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(m).toFixed(1)} `;
+    pen = true;
+  }
+  if (d === '') return null;
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      className="mt-3 h-9 w-full"
+      role="img"
+      aria-label="daily serve-path quality"
+    >
+      <path d={d.trim()} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent" />
+    </svg>
   );
 }

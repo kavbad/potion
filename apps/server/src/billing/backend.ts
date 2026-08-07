@@ -26,6 +26,9 @@ export interface BillingBackend {
   readonly kind: string;
   /** Persist (or issue) an invoice plus its rendered HTML. */
   saveInvoice(invoice: Invoice, html: string): Promise<BillingBackendRef>;
+  /** Persist a non-invoice monthly artifact (G2.1 guarantee report) next to
+   * the invoices: <id>.json + <id>.html. */
+  saveReport(id: string, payload: unknown, html: string): Promise<BillingBackendRef>;
 }
 
 /** Local json-file backend — the Wave-2 default. */
@@ -39,6 +42,14 @@ export class JsonFileBillingBackend implements BillingBackend {
     const htmlPath = join(this.dir, `${invoice.id}.html`);
     await writeFile(jsonPath, `${JSON.stringify(invoice, null, 2)}\n`, 'utf8');
     await writeFile(htmlPath, html, 'utf8');
+    return { ref: jsonPath };
+  }
+
+  async saveReport(id: string, payload: unknown, html: string): Promise<BillingBackendRef> {
+    await mkdir(this.dir, { recursive: true });
+    const jsonPath = join(this.dir, `${id}.json`);
+    await writeFile(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    await writeFile(join(this.dir, `${id}.html`), html, 'utf8');
     return { ref: jsonPath };
   }
 }
@@ -59,6 +70,10 @@ export class StripeBillingBackend implements BillingBackend {
 
   saveInvoice(): Promise<BillingBackendRef> {
     throw new Error('TODO(#18): StripeBillingBackend.saveInvoice — stub, see constructor.');
+  }
+
+  saveReport(): Promise<BillingBackendRef> {
+    throw new Error('TODO(#18): StripeBillingBackend.saveReport — stub, see constructor.');
   }
 }
 

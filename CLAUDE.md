@@ -180,9 +180,11 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   across 26 tables with per-table report, walkthrough step 14 proves
   create → pipeline → delete → nothing derived survives; runbook
   docs/ONBOARDING-RUNBOOK.md);
-  (12) customer-visible guarantee report (quality time series;
-  completion-id column on request_logs; incl. serve-path judgeMaxTokens
-  budget stray); (13) incident SLAs — alert on the in-process breach path,
+  (12) [DONE 2026-08-07] customer-visible guarantee report (G2.1: incumbent
+  designation as the retention baseline, TRUST HIERARCHY — advisory serve
+  leg / contractual suite leg via guarantee:suite-verify, retention
+  headline report + monthly artifact + CLI, completion-id correlation,
+  serve-path judgeMaxTokens stray closed; walkthrough step 15); (13) incident SLAs — alert on the in-process breach path,
   breach→notification bound, auto-restore semantics, serving keys must NOT
   resolve incidents (role split); (14) targeted server tests on the serving
   hot path incl. the mock-eligibility audit of every provider-resolution

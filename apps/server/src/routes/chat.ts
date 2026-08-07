@@ -572,6 +572,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
 
     const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+    // G2.1: the completion id becomes the request log's correlation label —
+    // every ok/error row from here down joins quality_samples.request_id
+    // (quality meets spend/latency). Pre-generation failures stay NULL.
+    logBase.completionId = id;
     const created = Math.floor(Date.now() / 1000);
     // BYOK serving path (M2 Wave 2, ROADMAP #16): resolve the provider set
     // for the request's ORG — an org with active provider keys is served by

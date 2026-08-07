@@ -24,7 +24,9 @@ export type JobKind =
   // ---- G1.7 live capped org evals ----
   | 'frontier:live-sweep'
   // ---- G2.7 operator org deletion ----
-  | 'org:delete';
+  | 'org:delete'
+  // ---- G2.1 trust hierarchy: contractual suite re-eval ----
+  | 'guarantee:suite-verify';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -42,6 +44,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'rubric:generate',
   'frontier:live-sweep',
   'org:delete',
+  'guarantee:suite-verify',
 ] as const;
 
 export interface EvalRunPayload {
@@ -109,6 +112,7 @@ export interface JobPayloads {
   'rubric:generate': RubricGeneratePayload;
   'frontier:live-sweep': FrontierLiveSweepPayload;
   'org:delete': OrgDeletePayload;
+  'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
 }
 
 /**
@@ -239,6 +243,27 @@ export interface RubricGeneratePayload {
  * resulting all-live org frontier becomes servable through the G1.6
  * org-preferred read + provenance guard. Admin-triggered only.
  */
+/**
+ * G2.1 trust hierarchy — the CONTRACTUAL leg. Enqueued when the advisory
+ * serve leg trips (or manually): re-evaluate the SERVING strategy and the
+ * org's DESIGNATED INCUMBENT on the derived suite and render the retention
+ * verdict from suite evidence only. Runs in the env's provider mode with
+ * providerMode-stamped verdicts (mock deployments render mock-labeled
+ * verdicts; modes structurally cannot mix in the pairing).
+ */
+export interface GuaranteeSuiteVerifyPayload {
+  orgId: string;
+  /** The guarantee-carrying policy row (config + retentionFloor source). */
+  policyId: string;
+  clusterId: string;
+  /** The strategy whose retention is on trial. */
+  servingStrategyHash: string;
+  /** Eval spend cap (live mode; default $5, live-sweep precedent). */
+  capUsd?: number;
+  /** The open advisory this verify resolves (absent on manual runs). */
+  advisoryIncidentId?: string;
+}
+
 export interface FrontierLiveSweepPayload {
   orgId: string;
   clusterId: string;

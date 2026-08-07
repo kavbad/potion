@@ -138,7 +138,13 @@ export async function generateInvoice(
       const totalCents = platformCents + marginCents;
       return {
         clusterId,
-        description: `Potion routed requests — cluster '${clusterId}' (${period})`,
+        // G2.1 relabel: a cost-only line (0 served requests — guarantee
+        // judging, rubric generation, live eval sweeps) is scoring &
+        // evaluation work, not routed traffic; the label must say so.
+        description:
+          acc.requests === 0
+            ? `Potion scoring & evaluation services — cluster '${clusterId}' (${period})`
+            : `Potion routed requests — cluster '${clusterId}' (${period})`,
         requests: acc.requests,
         inputTokens: acc.inputTokens,
         outputTokens: acc.outputTokens,

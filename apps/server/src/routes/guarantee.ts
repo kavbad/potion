@@ -22,11 +22,16 @@
 import type { FastifyInstance } from 'fastify';
 import type { GuaranteeConfig } from '@potion/core';
 import {
+  activeIncumbent,
+  designateIncumbent,
+  getClusterByIdForOrg,
   latestJudgeCalibration,
   listIncidents,
+  listIncumbents,
   listPoliciesWithGuarantee,
   resolveIncident,
   rollingQualityForPolicy,
+  type ClusterIncumbentRow,
   type IncidentRow,
 } from '@potion/db';
 import { defaultServeJudgeModel } from '@potion/harness';
@@ -35,7 +40,9 @@ import type { PotionContext } from '../context.js';
 
 export interface IncidentDto {
   id: string;
-  kind: 'quality_breach' | 'rollback';
+  /** 'advisory' (G2.1): serve-leg tripwire — shown labeled, never a
+   * contractual breach and never an operating-point change. */
+  kind: 'quality_breach' | 'rollback' | 'advisory';
   detail: Record<string, unknown>;
   createdAt: string;
   resolvedAt: string | null;
@@ -61,11 +68,45 @@ export interface GuaranteePolicyStatus {
   breaches: IncidentDto[];
   /** null = this judge has never been calibrated (itself a trust signal). */
   judgeCalibration: JudgeCalibrationDto | null;
+  /** G2.1: the contractual retention floor this policy evaluates under
+   * (config or the 0.9 platform default — evaluation-time, never stored). */
+  retentionFloor: number;
+  /** G2.1 LEGACY MARKER: true when the org has NO active incumbent
+   * designation — breach verdicts still use the absolute minQuality path,
+   * and retention is unavailable until an incumbent is designated. */
+  legacyPath: boolean;
+}
+
+/** Active designation surfaced org-wide (G2.1). */
+export interface IncumbentDto {
+  clusterId: string;
+  strategyHash: string;
+  designatedAt: string;
+  status: string;
+  statusReason: string | null;
 }
 
 export interface GuaranteeStatus {
   orgId: string;
   policies: GuaranteePolicyStatus[];
+  /** G2.1: the org's ACTIVE incumbent designations — the trust-hierarchy
+   * switch. Empty = every cluster is on the labeled legacy path. */
+  incumbents: IncumbentDto[];
+  /** Open serve-leg advisories (tripwires whose suite-verify is pending). */
+  openAdvisories: number;
+}
+
+/** Platform default retention floor (G2.1) — evaluation-time only. */
+export const PLATFORM_RETENTION_FLOOR = 0.9;
+
+export function incumbentDto(row: ClusterIncumbentRow): IncumbentDto {
+  return {
+    clusterId: row.clusterId,
+    strategyHash: row.strategyHash,
+    designatedAt: row.designatedAt.toISOString(),
+    status: row.status,
+    statusReason: row.statusReason,
+  };
 }
 
 export function incidentDto(row: IncidentRow): IncidentDto {
@@ -87,11 +128,16 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
         .code(401)
         .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
-    const [policies, incidents] = await Promise.all([
+    const [policies, incidents, designations] = await Promise.all([
       listPoliciesWithGuarantee(ctx.db.db, org.orgId),
       listIncidents(ctx.db.db, org.orgId),
+      listIncumbents(ctx.db.db, org.orgId),
     ]);
     const breaches = incidents.map(incidentDto);
+    const incumbents = designations.filter((d) => d.status === 'active').map(incumbentDto);
+    const openAdvisories = incidents.filter(
+      (i) => i.kind === 'advisory' && i.resolvedAt === null,
+    ).length;
     const statuses: GuaranteePolicyStatus[] = await Promise.all(
       policies.map(async (p) => {
         const guarantee = p.config.guarantee!;
@@ -125,11 +171,139 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
                 createdAt: calibration.createdAt.toISOString(),
               }
             : null,
+          retentionFloor: guarantee.retentionFloor ?? PLATFORM_RETENTION_FLOOR,
+          legacyPath: incumbents.length === 0,
         };
       }),
     );
-    const body: GuaranteeStatus = { orgId: org.orgId, policies: statuses };
+    const body: GuaranteeStatus = { orgId: org.orgId, policies: statuses, incumbents, openAdvisories };
     return reply.send(body);
+  });
+
+  // ---- G2.1 incumbent designation (the retention baseline) ----
+  // Designation is per (org, cluster) and admin-only: the incumbent is the
+  // denominator of every contractual verdict. Restricted to ORG-OWNED agent
+  // clusters — the contractual leg re-evaluates on the org's derived suite,
+  // which only exists for its own workloads. NO silent default anywhere: an
+  // undesignated cluster stays on the labeled legacy path.
+  app.post('/api/guarantee/clusters/:clusterId/incumbent', async (req, reply) => {
+    const org = req.potionOrg;
+    if (!org) {
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
+    }
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply
+        .code(403)
+        .send(
+          openAiError(
+            `role '${org.role}' may not designate incumbents — requires 'admin'`,
+            'invalid_request_error',
+            'insufficient_role',
+          ),
+        );
+    }
+    const { clusterId } = req.params as { clusterId: string };
+    const body = (req.body ?? {}) as { strategyHash?: unknown };
+    if (typeof body.strategyHash !== 'string' || body.strategyHash.length === 0) {
+      return reply
+        .code(400)
+        .send(openAiError('strategyHash (string) is required', 'invalid_request_error', 'invalid_request_error'));
+    }
+    const cluster = await getClusterByIdForOrg(ctx.db.db, clusterId, org.orgId);
+    if (!cluster || cluster.orgId !== org.orgId) {
+      // Unknown, foreign, or platform cluster — all 404 (retention verdicts
+      // need the org's OWN derived suite; platform clusters have none).
+      return reply
+        .code(404)
+        .send(openAiError('cluster not found for this org', 'invalid_request_error', 'not_found'));
+    }
+    try {
+      const row = await designateIncumbent(ctx.db.db, org.orgId, clusterId, body.strategyHash);
+      return reply.send({ incumbent: incumbentDto(row) });
+    } catch (err) {
+      // Unknown strategy hash — a designation pointing at nothing would
+      // render every later verdict unexplainable.
+      return reply
+        .code(400)
+        .send(openAiError((err as Error).message, 'invalid_request_error', 'invalid_request_error'));
+    }
+  });
+
+  // ---- POST manual suite-verify (G2.1 contractual leg, admin) ----
+  // The advisory serve leg enqueues this automatically; the manual route
+  // exists for operator-driven verification and the walkthrough. 202 + the
+  // jobId (the job result carries the providerMode-stamped verdict).
+  app.post('/api/guarantee/clusters/:clusterId/verify', async (req, reply) => {
+    const org = req.potionOrg;
+    if (!org) {
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
+    }
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply
+        .code(403)
+        .send(
+          openAiError(
+            `role '${org.role}' may not launch suite verification — requires 'admin'`,
+            'invalid_request_error',
+            'insufficient_role',
+          ),
+        );
+    }
+    const { clusterId } = req.params as { clusterId: string };
+    const body = (req.body ?? {}) as { policyId?: unknown; servingStrategyHash?: unknown; capUsd?: unknown };
+    if (typeof body.policyId !== 'string' || typeof body.servingStrategyHash !== 'string') {
+      return reply
+        .code(400)
+        .send(openAiError('policyId and servingStrategyHash (strings) are required', 'invalid_request_error', 'invalid_request_error'));
+    }
+    const cluster = await getClusterByIdForOrg(ctx.db.db, clusterId, org.orgId);
+    if (!cluster || cluster.orgId !== org.orgId) {
+      return reply
+        .code(404)
+        .send(openAiError('cluster not found for this org', 'invalid_request_error', 'not_found'));
+    }
+    if (!ctx.queue) {
+      return reply
+        .code(503)
+        .send(openAiError('job queue unavailable', 'server_error', 'queue_unavailable'));
+    }
+    const jobId = await ctx.queue.enqueue('guarantee:suite-verify', {
+      orgId: org.orgId,
+      policyId: body.policyId,
+      clusterId,
+      servingStrategyHash: body.servingStrategyHash,
+      ...(typeof body.capUsd === 'number' ? { capUsd: body.capUsd } : {}),
+    });
+    return reply.code(202).send({ jobId });
+  });
+
+  // ---- GET designation history (superseded rows kept, reasons attached) ----
+  app.get('/api/guarantee/clusters/:clusterId/incumbent', async (req, reply) => {
+    const org = req.potionOrg;
+    if (!org) {
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
+    }
+    const { clusterId } = req.params as { clusterId: string };
+    const cluster = await getClusterByIdForOrg(ctx.db.db, clusterId, org.orgId);
+    if (!cluster || cluster.orgId !== org.orgId) {
+      return reply
+        .code(404)
+        .send(openAiError('cluster not found for this org', 'invalid_request_error', 'not_found'));
+    }
+    const [active, history] = await Promise.all([
+      activeIncumbent(ctx.db.db, org.orgId, clusterId),
+      listIncumbents(ctx.db.db, org.orgId, clusterId),
+    ]);
+    return reply.send({
+      active: active ? incumbentDto(active) : null,
+      history: history.map(incumbentDto),
+    });
   });
 
   // ---- POST /api/incidents/:id/resolve — admin role only ----

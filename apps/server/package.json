@@ -30,7 +30,8 @@
     "start": "node dist/index.js",
     "loadtest": "tsx test/load.ts",
     "aggregate": "tsx src/jobs/aggregate-usage.ts",
-    "invoice": "tsx src/billing/cli.ts"
+    "invoice": "tsx src/billing/cli.ts",
+    "guarantee-report": "tsx src/billing/guarantee-report-cli.ts"
   },
   "dependencies": {
     "@potion/artifacts": "workspace:^",

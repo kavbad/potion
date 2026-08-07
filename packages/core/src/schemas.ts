@@ -107,6 +107,15 @@ export const GuaranteeConfigSchema = z.object({
    * partners raise it, never lower it. Applied at EVALUATION time only
    * (never injected into stored configs). */
   minSamples: z.number().int().min(5).optional(),
+  /** Judge completion cap for sampled-answer scoring (G2.1). Absent → 128.
+   * Bounded 128–4096: the floor keeps the legacy default reachable, the
+   * cap keeps serve-path judge spend projection-bound. */
+  judgeMaxTokens: z.number().int().min(128).max(4096).optional(),
+  /** Contractual retention floor (G2.1). Absent → 0.9 platform default,
+   * applied at EVALUATION time only (never injected into stored configs).
+   * Relative and scale-free — denominator is the incumbent's measured
+   * score on identical items. */
+  retentionFloor: z.number().min(0).max(1).optional(),
 });
 
 export const PolicySchema = z.discriminatedUnion('type', [

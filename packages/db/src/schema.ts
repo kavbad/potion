@@ -308,6 +308,10 @@ export const requestLogs = pgTable('request_logs', {
   usage: jsonb('usage').$type<Usage>(),
   latencyMs: doublePrecision('latency_ms'),
   status: text('status'),
+  /** Chat completion id (chatcmpl-…) — correlation label, not an FK (G2.1):
+   * joins quality_samples.request_id so quality meets spend/latency. NULL on
+   * pre-G2.1 rows and pre-generation failures. */
+  completionId: text('completion_id'),
   trace: text('trace'),
 });
 
@@ -484,8 +488,12 @@ export const qualitySamples = pgTable('quality_samples', {
  * alert-only. Cooldown (one incident per (org, cluster, strategy) per
  * window) is enforced by the evaluator via detail.clusterId/fromStrategy.
  */
-export type IncidentKind = 'quality_breach' | 'rollback';
-export const INCIDENT_KINDS: readonly IncidentKind[] = ['quality_breach', 'rollback'];
+/** 'advisory' (G2.1 trust hierarchy): a serve-leg floor-crossing tripwire —
+ * durable/dedupable/resolvable but NEVER contractual and NEVER a rollback
+ * source (readers filter by kind). Only suite-verify evidence escalates it
+ * into 'quality_breach'/'rollback'. */
+export type IncidentKind = 'quality_breach' | 'rollback' | 'advisory';
+export const INCIDENT_KINDS: readonly IncidentKind[] = ['quality_breach', 'rollback', 'advisory'];
 
 export const incidents = pgTable(
   'incidents',
@@ -942,6 +950,30 @@ export const clusterRubrics = pgTable('cluster_rubrics', {
 export type ClusterRubricRow = typeof clusterRubrics.$inferSelect;
 export type NewClusterRubric = typeof clusterRubrics.$inferInsert;
 
+// ---- cluster incumbents (G2.1, migration 0025) ----
+// The org's DESIGNATED INCUMBENT strategy per cluster — the baseline every
+// retention verdict and derived floor rests on. At most one ACTIVE per
+// (org, cluster) (partial unique); redesignation supersedes transactionally
+// (the cluster_rubrics lifecycle shape). No silent defaults anywhere: an
+// undesignated cluster reports "retention unavailable" and stays on the
+// labeled legacy absolute-floor path.
+export type ClusterIncumbentStatus = 'active' | 'superseded';
+
+export const clusterIncumbents = pgTable('cluster_incumbents', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  clusterId: text('cluster_id').notNull(),
+  strategyHash: text('strategy_hash').notNull(),
+  status: text('status').$type<ClusterIncumbentStatus>().notNull().default('active'),
+  statusReason: text('status_reason'),
+  designatedAt: timestamp('designated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ClusterIncumbentRow = typeof clusterIncumbents.$inferSelect;
+export type NewClusterIncumbent = typeof clusterIncumbents.$inferInsert;
+
 export const schema = {
   orgs,
   users,
@@ -981,6 +1013,7 @@ export const schema = {
   derivedSuites,
   derivedSuiteItems,
   clusterRubrics,
+  clusterIncumbents,
 };
 
 export type Schema = typeof schema;

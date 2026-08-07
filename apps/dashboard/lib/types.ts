@@ -280,6 +280,46 @@ export interface GuaranteePolicyStatusDto {
 export interface GuaranteeStatusDto {
   orgId: string;
   policies: GuaranteePolicyStatusDto[];
+  /** G2.1: active incumbent designations (absent on pre-G2.1 servers). */
+  incumbents?: Array<{ clusterId: string; strategyHash: string; designatedAt: string }>;
+  openAdvisories?: number;
+}
+
+// ---- G2.1 guarantee report (trust hierarchy; retention headline) ----
+
+export interface RetentionHeadlineDto {
+  verdict: 'all-clear' | 'contractual-breach';
+  mean: number;
+  ci95: [number, number];
+  floor: number;
+  pairs: number;
+  excludedPairs: number;
+  seed: number;
+  confidence: 'low' | 'medium' | 'high';
+  providerMode: string;
+  at: string;
+  incidentId: string;
+}
+
+export interface GuaranteeReportEntryDto {
+  policyId: string;
+  clusterId: string;
+  retention: RetentionHeadlineDto | null;
+  retentionUnavailableReason: string | null;
+  incumbent: { clusterId: string; strategyHash: string; designatedAt: string } | null;
+  derivedFloor: { floor: number; provenance: { n: number; mean: number; ci95: [number, number]; windowMin: number; incumbentHash: string } } | null;
+  openAdvisories: IncidentDto[];
+  incidents: Array<IncidentDto & { leg: 'serve' | 'suite' | 'legacy' }>;
+  qualitySeries: Array<{ day: string; mean: number | null; samples: number }>;
+}
+
+export interface GuaranteeReportDto {
+  orgId: string;
+  from: string;
+  to: string;
+  entries: GuaranteeReportEntryDto[];
+  legacyPath: boolean;
+  generatedAt: string;
 }
 
 // ---- M4b #37 recipe library (the autoresearcher's accumulated asset) ----

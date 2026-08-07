@@ -103,6 +103,20 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     expect(toCents(inv.totals.totalUsd)).toBe(lineTotalCents);
   });
 
+  it('G2.1 relabel: a cost-only line (0 requests) reads scoring & evaluation, not routed requests', async () => {
+    // September has request rows only for code-gen; add a cost-only cluster
+    // (guarantee judging / eval sweeps roll up with requests: 0).
+    await db()
+      .insert(usageDaily)
+      .values([{ orgId: ORG_A, day: '2026-09-02', clusterId: 'agent-x-billing', requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0.5, platformCostUsd: 0.5 }]);
+    const inv = await generateInvoice(db(), ORG_A, '2026-09');
+    const costOnly = inv.lineItems.find((l) => l.clusterId === 'agent-x-billing')!;
+    expect(costOnly.description).toContain('Potion scoring & evaluation services');
+    expect(costOnly.description).not.toContain('routed requests');
+    const served = inv.lineItems.find((l) => l.clusterId === 'code-gen')!;
+    expect(served.description).toContain('Potion routed requests');
+  });
+
   it('rejects unknown orgs and malformed periods', async () => {
     await expect(generateInvoice(db(), 'org_nope', '2026-08')).rejects.toThrow("unknown org");
     await expect(generateInvoice(db(), ORG_A, '2026-13')).rejects.toThrow();
@@ -136,6 +150,22 @@ describe('BillingBackend', () => {
       const parsed = JSON.parse(readFileSync(ref, 'utf8'));
       expect(parsed.totals.totalUsd).toBe(0.23);
       expect(readFileSync(join(dir, 'inv_org_demo_2026-08.html'), 'utf8')).toContain('Total due');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('G2.1: saveReport writes <id>.json + .html next to the invoices', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'potion-reports-'));
+    try {
+      const { ref } = await new JsonFileBillingBackend(dir).saveReport(
+        'org_demo-2026-08-guarantee',
+        { orgId: 'org_demo', entries: [] },
+        '<html>report</html>',
+      );
+      expect(ref).toBe(join(dir, 'org_demo-2026-08-guarantee.json'));
+      expect(JSON.parse(readFileSync(ref, 'utf8')).orgId).toBe('org_demo');
+      expect(readFileSync(join(dir, 'org_demo-2026-08-guarantee.html'), 'utf8')).toContain('report');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
