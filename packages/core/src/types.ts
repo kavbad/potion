@@ -227,6 +227,9 @@ export interface GuaranteeConfig {
   /** Judge model alias for sampled-answer scoring (G0.1); absent → platform
    * default (judge-class live / mock-judge mock). */
   judgeModel?: string | undefined;
+  /** Minimum window evidence before a breach may fire (G0.3); absent →
+   * platform floor (5). Hard minimum 5 — raise only. */
+  minSamples?: number | undefined;
 }
 
 export type Policy =

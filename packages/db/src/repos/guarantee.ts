@@ -30,6 +30,7 @@ import {
   type FrontierPoint,
   type Policy,
 } from '@potion/core';
+import { BOOTSTRAP_RESAMPLES, bootstrapMeanCi, seedFromString, sha256 } from '@potion/core';
 import type { PotionDb } from '../db.js';
 import {
   incidents,
@@ -70,59 +71,82 @@ function windowCutoff(windowMin: number, now: Date): string {
   return new Date(now.getTime() - windowMin * 60_000).toISOString();
 }
 
-/** Rolling mean quality + sample count for (org, strategy) over windowMin. */
-export async function rollingQuality(
+/** Most-recent samples fetched per keyed window (bootstrap input bound). */
+export const WINDOW_EVIDENCE_LIMIT = 1000;
+
+/**
+ * The keyed evidence window (G0.3): the actual quality values (newest first,
+ * capped at WINDOW_EVIDENCE_LIMIT) for STRICTLY
+ * (org, policy, cluster, strategy) within windowMin. NULL-key rows
+ * (pre-G0.3) are not evidence — they are excluded by the key predicates.
+ */
+export async function windowEvidence(
   db: PotionDb,
-  scope: { orgId: string; strategyHash: string; windowMin: number },
+  scope: {
+    orgId: string;
+    policyId: string;
+    clusterId: string;
+    strategyHash: string;
+    windowMin: number;
+  },
   now: Date = new Date(),
-): Promise<RollingQuality> {
+): Promise<{ qualities: number[]; samples: number; mean: number | null }> {
   const result = await db.execute(
-    sql`SELECT avg(quality)::float8 AS mean, count(*)::int AS samples
+    sql`SELECT quality
         FROM quality_samples
         WHERE org_id = ${scope.orgId}
+          AND policy_id = ${scope.policyId}
+          AND cluster_id = ${scope.clusterId}
           AND strategy_hash = ${scope.strategyHash}
-          AND created_at > ${windowCutoff(scope.windowMin, now)}::timestamptz`,
+          AND created_at > ${windowCutoff(scope.windowMin, now)}::timestamptz
+        ORDER BY created_at DESC
+        LIMIT ${WINDOW_EVIDENCE_LIMIT}`,
   );
-  const row = (result.rows as Array<{ mean: number | null; samples: number }>)[0];
-  return { mean: row?.mean ?? null, samples: row?.samples ?? 0 };
+  const qualities = (result.rows as Array<{ quality: number }>).map((r) => r.quality);
+  const mean =
+    qualities.length > 0 ? qualities.reduce((a, q) => a + q, 0) / qualities.length : null;
+  return { qualities, samples: qualities.length, mean };
 }
 
-/** Rolling mean over ALL of an org's samples in the window — the per-policy
- * rollup behind GET /api/guarantee/status (samples are strategy-tagged; the
- * per-strategy breakdown uses rollingQuality). */
-export async function rollingQualityForOrg(
+/** Rolling mean + count for (org, policy) over windowMin — the per-policy
+ * number behind GET /api/guarantee/status (keyed evidence only). */
+export async function rollingQualityForPolicy(
   db: PotionDb,
-  scope: { orgId: string; windowMin: number },
+  scope: { orgId: string; policyId: string; windowMin: number },
   now: Date = new Date(),
 ): Promise<RollingQuality> {
   const result = await db.execute(
     sql`SELECT avg(quality)::float8 AS mean, count(*)::int AS samples
         FROM quality_samples
         WHERE org_id = ${scope.orgId}
+          AND policy_id = ${scope.policyId}
           AND created_at > ${windowCutoff(scope.windowMin, now)}::timestamptz`,
   );
   const row = (result.rows as Array<{ mean: number | null; samples: number }>)[0];
   return { mean: row?.mean ?? null, samples: row?.samples ?? 0 };
 }
 
-/** Distinct strategy hashes an org sampled within the last `withinMin`
- * minutes — the periodic guarantee:evaluate sweep's work set. */
-export async function distinctSampledStrategies(
+/** Distinct keyed evidence tuples an org sampled within `withinMin` —
+ * the periodic guarantee:evaluate sweep's work set (G0.3: replaces the
+ * strategies × clustersForStrategy cartesian reconstruction). NULL-key
+ * rows are not evidence and are excluded. */
+export async function distinctSampledTargets(
   db: PotionDb,
   orgId: string,
   withinMin: number,
   now: Date = new Date(),
-): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ strategyHash: qualitySamples.strategyHash })
-    .from(qualitySamples)
-    .where(
-      and(
-        eq(qualitySamples.orgId, orgId),
-        gt(qualitySamples.createdAt, new Date(windowCutoff(withinMin, now))),
-      ),
-    );
-  return rows.map((r) => r.strategyHash);
+): Promise<Array<{ policyId: string; clusterId: string; strategyHash: string }>> {
+  const result = await db.execute(
+    sql`SELECT DISTINCT policy_id, cluster_id, strategy_hash
+        FROM quality_samples
+        WHERE org_id = ${orgId}
+          AND policy_id IS NOT NULL
+          AND cluster_id IS NOT NULL
+          AND created_at > ${windowCutoff(withinMin, now)}::timestamptz`,
+  );
+  return (result.rows as Array<{ policy_id: string; cluster_id: string; strategy_hash: string }>).map(
+    (r) => ({ policyId: r.policy_id, clusterId: r.cluster_id, strategyHash: r.strategy_hash }),
+  );
 }
 
 /** All samples for an org (status API / tests), newest first. */
@@ -149,11 +173,21 @@ export async function insertIncident(db: PotionDb, row: NewIncident): Promise<st
   return inserted[0]!.id;
 }
 
-/** Cooldown check: an incident already exists for (org, cluster, strategy)
- * within the last windowMin minutes → suppress (no flapping). */
+/** Cooldown check: an incident already exists for (org, policy, cluster,
+ * strategy) within the last windowMin minutes → suppress (no flapping).
+ * G0.3: the policy key means two policies breaching on the same strategy
+ * each get their own incident (they have independent floors). Pre-G0.3
+ * incidents lack detail.policyId and never match — one extra incident per
+ * key across the upgrade, then normal cooldown. */
 export async function hasRecentIncident(
   db: PotionDb,
-  scope: { orgId: string; clusterId: string; fromStrategy: string; windowMin: number },
+  scope: {
+    orgId: string;
+    policyId: string;
+    clusterId: string;
+    fromStrategy: string;
+    windowMin: number;
+  },
   now: Date = new Date(),
 ): Promise<boolean> {
   const rows = await db
@@ -163,6 +197,7 @@ export async function hasRecentIncident(
       and(
         eq(incidents.orgId, scope.orgId),
         gt(incidents.createdAt, new Date(windowCutoff(scope.windowMin, now))),
+        sql`${incidents.detail} ->> 'policyId' = ${scope.policyId}`,
         sql`${incidents.detail} ->> 'clusterId' = ${scope.clusterId}`,
         sql`${incidents.detail} ->> 'fromStrategy' = ${scope.fromStrategy}`,
       ),
@@ -264,23 +299,6 @@ export async function listPoliciesWithGuarantee(
   return rows.filter((r) => r.config.guarantee !== undefined);
 }
 
-/** Clusters whose CURRENT (latest-version) frontier contains a strategy —
- * how the periodic sweep recovers the cluster dimension that the
- * quality_samples contract schema deliberately omits. */
-export async function clustersForStrategy(db: PotionDb, strategyHash: string): Promise<string[]> {
-  const result = await db.execute(
-    sql`SELECT DISTINCT fp.cluster_id AS cluster_id
-        FROM frontier_points fp
-        JOIN frontiers f ON f.id = fp.frontier_id
-        WHERE fp.strategy_hash = ${strategyHash}
-          AND NOT EXISTS (
-            SELECT 1 FROM frontiers f2
-            WHERE f2.cluster_id = f.cluster_id AND f2.version > f.version
-          )`,
-  );
-  return (result.rows as Array<{ cluster_id: string }>).map((r) => r.cluster_id);
-}
-
 // ---------------------------------------------------------------------------
 // breach evaluation
 // ---------------------------------------------------------------------------
@@ -368,8 +386,17 @@ export interface GuaranteeEvaluation {
   /** The configured action that fired (null when suppressed). */
   action: 'rollback' | 'alert' | null;
   incidentId: string | null;
-  /** Why no incident was written (null = an incident was written). */
-  suppressed: 'insufficient-evidence' | 'no-breach' | 'cooldown' | null;
+  /** Why no incident was written (null = an incident was written).
+   * 'not-significant' (G0.3): observed mean below the floor but the CI95
+   * straddles it — the at-risk state; visible, never an incident. */
+  suppressed: 'insufficient-evidence' | 'no-breach' | 'not-significant' | 'cooldown' | null;
+  /** 95% bootstrap CI on the window mean (null before the CI stage runs —
+   * insufficient evidence or observed mean at/above the floor). */
+  ci95: [number, number] | null;
+  /** Seed the CI was computed with (audit re-derivation) — null when no CI. */
+  seed: number | null;
+  /** The evidence floor this evaluation applied (config or platform 5). */
+  minSamplesRequired: number;
   /** Set when a rollback target was chosen (incident kind='rollback'). */
   rollback: {
     fromStrategy: string;
@@ -380,48 +407,86 @@ export interface GuaranteeEvaluation {
 }
 
 /**
- * Evaluate the rolling quality window for (org, cluster, strategy) against
- * the policy's guarantee and fire the configured action exactly once per
- * window (cooldown). NEVER throws on business outcomes — every outcome is
- * reported in the return value; only db errors propagate.
+ * Evaluate the keyed rolling quality window for (org, policy, cluster,
+ * strategy) against the policy's guarantee and fire the configured action
+ * exactly once per window (cooldown). NEVER throws on business outcomes —
+ * every outcome is reported in the return value; only db errors propagate.
+ *
+ * G0.3 decision contract: a breach fires only when the seeded 95% bootstrap
+ * CI's UPPER bound on the window mean is below minQuality — statistically
+ * confident the true mean is under the floor, the same "CI bound must clear
+ * the line" rigor as the researcher promotion gate, pointed in the breach
+ * direction. Observed-below-floor with a straddling CI is 'not-significant':
+ * reported, never an incident. The seed derives from the evidence itself
+ * (seedFromString) and is stored in the incident detail — every verdict is
+ * re-derivable.
  *
  * Requires policy.guarantee (callers gate on it); throws otherwise.
  */
 export async function evaluateGuarantee(
   db: PotionDb,
-  input: { orgId: string; clusterId: string; strategyHash: string; policy: Policy },
+  input: {
+    orgId: string;
+    policyId: string;
+    clusterId: string;
+    strategyHash: string;
+    policy: Policy;
+  },
   now: Date = new Date(),
 ): Promise<GuaranteeEvaluation> {
   const guarantee = input.policy.guarantee;
   if (!guarantee) {
     throw new Error('evaluateGuarantee requires a policy with a guarantee config');
   }
-  const rolling = await rollingQuality(
+  const minSamples = guarantee.minSamples ?? GUARANTEE_MIN_SAMPLES;
+  const evidence = await windowEvidence(
     db,
-    { orgId: input.orgId, strategyHash: input.strategyHash, windowMin: guarantee.windowMin },
+    {
+      orgId: input.orgId,
+      policyId: input.policyId,
+      clusterId: input.clusterId,
+      strategyHash: input.strategyHash,
+      windowMin: guarantee.windowMin,
+    },
     now,
   );
   const base = {
-    rollingQuality: rolling.mean,
-    samples: rolling.samples,
+    rollingQuality: evidence.mean,
+    samples: evidence.samples,
     incidentId: null,
+    ci95: null,
+    seed: null,
+    minSamplesRequired: minSamples,
     rollback: null,
   };
-  // Insufficient evidence: below GUARANTEE_MIN_SAMPLES, never act.
-  if (rolling.samples < GUARANTEE_MIN_SAMPLES) {
+  // Insufficient evidence: below the configured floor, never act.
+  if (evidence.samples < minSamples) {
     return { ...base, breach: false, action: null, suppressed: 'insufficient-evidence' };
   }
-  const mean = rolling.mean ?? 0;
-  // Recovery / healthy: at or above the floor → no incident.
+  const mean = evidence.mean ?? 0;
+  // Recovery / healthy: observed mean at or above the floor → no incident.
   if (mean >= guarantee.minQuality) {
     return { ...base, breach: false, action: null, suppressed: 'no-breach' };
   }
-  // Cooldown: one incident per (org, cluster, strategy) per window.
+  // CI stage: seeded from the evidence itself — auditable re-derivation.
+  const seed = seedFromString(
+    `${input.orgId}|${input.policyId}|${input.clusterId}|${input.strategyHash}|` +
+      `${evidence.samples}|${sha256(JSON.stringify(evidence.qualities))}`,
+  );
+  const { ci95 } = bootstrapMeanCi(evidence.qualities, seed, BOOTSTRAP_RESAMPLES);
+  const ciBase = { ...base, ci95: ci95 as [number, number], seed };
+  if (ci95[1] >= guarantee.minQuality) {
+    // Observed below the floor but not statistically confident: at-risk,
+    // reported, no incident.
+    return { ...ciBase, breach: false, action: null, suppressed: 'not-significant' };
+  }
+  // Cooldown: one incident per (org, policy, cluster, strategy) per window.
   if (
     await hasRecentIncident(
       db,
       {
         orgId: input.orgId,
+        policyId: input.policyId,
         clusterId: input.clusterId,
         fromStrategy: input.strategyHash,
         windowMin: guarantee.windowMin,
@@ -429,16 +494,21 @@ export async function evaluateGuarantee(
       now,
     )
   ) {
-    return { ...base, breach: true, action: null, suppressed: 'cooldown' };
+    return { ...ciBase, breach: true, action: null, suppressed: 'cooldown' };
   }
 
   const detailBase = {
+    policyId: input.policyId,
     clusterId: input.clusterId,
     fromStrategy: input.strategyHash,
     rollingQuality: mean,
+    ci95,
+    seed,
+    resamples: BOOTSTRAP_RESAMPLES,
     minQuality: guarantee.minQuality,
+    minSamples,
     windowMin: guarantee.windowMin,
-    samples: rolling.samples,
+    samples: evidence.samples,
   };
 
   if (guarantee.action === 'alert') {
@@ -447,7 +517,7 @@ export async function evaluateGuarantee(
       kind: 'quality_breach' satisfies IncidentKind,
       detail: detailBase,
     });
-    return { ...base, breach: true, action: 'alert', incidentId, suppressed: null };
+    return { ...ciBase, breach: true, action: 'alert', incidentId, suppressed: null };
   }
 
   // action === 'rollback'
@@ -466,7 +536,7 @@ export async function evaluateGuarantee(
       kind: 'quality_breach' satisfies IncidentKind,
       detail: { ...detailBase, intendedAction: 'rollback', reason: 'no-rollback-target' },
     });
-    return { ...base, breach: true, action: 'rollback', incidentId, suppressed: null };
+    return { ...ciBase, breach: true, action: 'rollback', incidentId, suppressed: null };
   }
   const incidentId = await insertIncident(db, {
     orgId: input.orgId,
@@ -479,7 +549,7 @@ export async function evaluateGuarantee(
     },
   });
   return {
-    ...base,
+    ...ciBase,
     breach: true,
     action: 'rollback',
     incidentId,

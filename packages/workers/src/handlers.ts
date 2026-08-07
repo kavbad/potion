@@ -4,8 +4,7 @@
 import { fileURLToPath } from 'node:url';
 import { strategyHash, type Policy, type StrategyConfig } from '@potion/core';
 import {
-  clustersForStrategy,
-  distinctSampledStrategies,
+  distinctSampledTargets,
   evalRuns,
   evaluateGuarantee,
   listPoliciesWithGuarantee,
@@ -390,9 +389,10 @@ export interface GuaranteeEvaluateResult {
   breaches: Array<{ orgId: string; action: 'rollback' | 'alert'; incidentId: string }>;
 }
 
-/** One evaluation target: (org, cluster, strategy, governing policy). */
+/** One evaluation target: (org, policy, cluster, strategy, governing policy). */
 interface EvaluationTarget {
   orgId: string;
+  policyId: string;
   clusterId: string;
   strategyHash: string;
   policy: Policy;
@@ -402,30 +402,44 @@ async function resolveTargets(
   db: PotionDb,
   payload: GuaranteeEvaluatePayload,
 ): Promise<EvaluationTarget[]> {
-  // Per-sample / explicit mode: the caller names the exact tuple.
-  if (payload.policy && payload.orgId && payload.clusterId && payload.strategyHash) {
+  // Per-target / explicit mode: the caller names the exact keyed tuple.
+  if (
+    payload.policy &&
+    payload.orgId &&
+    payload.policyId &&
+    payload.clusterId &&
+    payload.strategyHash
+  ) {
     if (payload.policy.guarantee === undefined) return [];
     return [
       {
         orgId: payload.orgId,
+        policyId: payload.policyId,
         clusterId: payload.clusterId,
         strategyHash: payload.strategyHash,
         policy: payload.policy,
       },
     ];
   }
-  // Sweep mode: every guarantee-carrying policy (optionally one org) × the
-  // org's recently sampled strategies × the clusters whose current frontier
-  // carries the strategy.
+  // Sweep mode (G0.3): every guarantee-carrying policy (optionally one org)
+  // × the org's KEYED evidence tuples sampled in the policy's window — the
+  // sample rows carry policy/cluster now, so the old strategies ×
+  // clustersForStrategy cartesian reconstruction (which multiplied incidents
+  // across every cluster a strategy served) is gone.
   const policies = await listPoliciesWithGuarantee(db, payload.orgId);
   const targets: EvaluationTarget[] = [];
   for (const row of policies) {
     const guarantee = row.config.guarantee!;
-    const strategies = await distinctSampledStrategies(db, row.orgId, guarantee.windowMin);
-    for (const strategyHash of strategies) {
-      for (const clusterId of await clustersForStrategy(db, strategyHash)) {
-        targets.push({ orgId: row.orgId, clusterId, strategyHash, policy: row.config });
-      }
+    const tuples = await distinctSampledTargets(db, row.orgId, guarantee.windowMin);
+    for (const t of tuples) {
+      if (t.policyId !== row.id) continue; // evidence keyed to OTHER policies is not this policy's
+      targets.push({
+        orgId: row.orgId,
+        policyId: t.policyId,
+        clusterId: t.clusterId,
+        strategyHash: t.strategyHash,
+        policy: row.config,
+      });
     }
   }
   return targets;
@@ -440,6 +454,8 @@ export function createGuaranteeEvaluateHandler(opts: {
     const breaches: GuaranteeEvaluateResult['breaches'] = [];
     for (const target of targets) {
       const evaluation = await evaluateGuarantee(ctx.db, target);
+      // (target carries orgId/policyId/clusterId/strategyHash/policy — the
+      // evaluator's exact keyed input shape.)
       evaluations.push(evaluation);
       if (evaluation.breach && evaluation.incidentId !== null && evaluation.action !== null) {
         breaches.push({

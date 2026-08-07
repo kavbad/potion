@@ -226,6 +226,10 @@ export interface GuaranteeConfigDto {
   windowMin: number;
   sampleRate: number;
   action: 'rollback' | 'alert';
+  /** G0.1: judge model alias override (absent → platform default). */
+  judgeModel?: string;
+  /** G0.3: evidence floor override (absent → platform 5; hard minimum 5). */
+  minSamples?: number;
 }
 
 export interface IncidentDto {
@@ -243,6 +247,12 @@ export interface IncidentDto {
     samples?: number;
     intendedAction?: string;
     reason?: string;
+    // G0.3 statistical evidence (CI-based breach decisions):
+    policyId?: string;
+    ci95?: [number, number];
+    seed?: number;
+    resamples?: number;
+    minSamples?: number;
   } & Record<string, unknown>;
   createdAt: string;
   resolvedAt: string | null;

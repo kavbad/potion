@@ -21,7 +21,8 @@ import {
   migrate,
   nextHigherQualityPoint,
   resolveIncident,
-  rollingQuality,
+  rollingQualityForPolicy,
+  windowEvidence,
   type DbHandle,
 } from './index.js';
 import { insertFrontier } from './repos/frontiers.js';
@@ -81,14 +82,26 @@ async function seedFrontiers(): Promise<void> {
   });
 }
 
+/** The keyed-evidence defaults every evaluator test uses (G0.3). */
+const PID = 'pol-g';
+const CID = 'code-gen';
+
 async function seedSamples(
   orgId: string,
   hash: string,
   qualities: number[],
   createdAt: Date = NOW,
+  keys: { policyId?: string | null; clusterId?: string | null } = {},
 ): Promise<void> {
   for (const q of qualities) {
-    await insertQualitySample(db(), { orgId, strategyHash: hash, quality: q, createdAt });
+    await insertQualitySample(db(), {
+      orgId,
+      strategyHash: hash,
+      quality: q,
+      createdAt,
+      policyId: keys.policyId === undefined ? PID : keys.policyId,
+      clusterId: keys.clusterId === undefined ? CID : keys.clusterId,
+    });
   }
 }
 
@@ -134,26 +147,46 @@ describe('quality_samples judge evidence (G0.1, migration 0016)', () => {
   });
 });
 
-describe('rollingQuality', () => {
-  it('computes the mean over the window and ignores older samples + other orgs', async () => {
+describe('windowEvidence (strictly keyed, G0.3)', () => {
+  const SCOPE = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: CID, strategyHash: H_CHEAP, windowMin: 60 };
+
+  it('returns keyed in-window qualities; other orgs/strategies/old samples excluded', async () => {
     await createOrg(db(), { id: 'org_other', name: 'Other' });
     await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.2, 0.4, 0.6]);
     // outside the 60-min window
     await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.99], new Date(NOW.getTime() - 61 * 60_000));
     await seedSamples('org_other', H_CHEAP, [0.99]);
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.99]);
-    const r = await rollingQuality(
-      db(),
-      { orgId: DEFAULT_ORG_ID, strategyHash: H_CHEAP, windowMin: 60 },
-      NOW,
-    );
+    const r = await windowEvidence(db(), SCOPE, NOW);
     expect(r.samples).toBe(3);
     expect(r.mean).toBeCloseTo(0.4, 10);
+    expect([...r.qualities].sort()).toEqual([0.2, 0.4, 0.6]);
+  });
+
+  it('STRICT keys: other-policy, other-cluster, and NULL-key (pre-G0.3) rows are not evidence', async () => {
+    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1], NOW, { policyId: 'pol-other' });
+    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1], NOW, { clusterId: 'extraction' });
+    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1], NOW, { policyId: null, clusterId: null });
+    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.8]);
+    const r = await windowEvidence(db(), SCOPE, NOW);
+    expect(r.samples).toBe(1);
+    expect(r.qualities).toEqual([0.8]);
   });
 
   it('returns null mean with no samples', async () => {
-    const r = await rollingQuality(db(), { orgId: DEFAULT_ORG_ID, strategyHash: H_CHEAP, windowMin: 60 }, NOW);
-    expect(r).toEqual({ mean: null, samples: 0 });
+    const r = await windowEvidence(db(), SCOPE, NOW);
+    expect(r).toEqual({ qualities: [], mean: null, samples: 0 });
+  });
+});
+
+describe('rollingQualityForPolicy (status rollup)', () => {
+  it('pools the policy across strategies/clusters; other policies excluded', async () => {
+    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.2, 0.4]);
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.9], NOW, { clusterId: 'extraction' });
+    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.0], NOW, { policyId: 'pol-other' });
+    const r = await rollingQualityForPolicy(db(), { orgId: DEFAULT_ORG_ID, policyId: PID, windowMin: 60 }, NOW);
+    expect(r.samples).toBe(3);
+    expect(r.mean).toBeCloseTo(0.5, 10);
   });
 });
 
@@ -198,7 +231,7 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.2, 0.3, 0.2, 0.2]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result.breach).toBe(true);
@@ -240,7 +273,7 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1, 0.1, 0.1, 0.1, 0.1]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_CHEAP, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_CHEAP, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result.rollback).toEqual({
@@ -256,7 +289,7 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.0, 0.0, 0.0, 0.0]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: false, suppressed: 'insufficient-evidence', samples: 4 });
@@ -269,7 +302,7 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.9, 0.8, 0.95, 0.85, 0.9]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: false, suppressed: 'no-breach' });
@@ -281,14 +314,14 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.2, 0.2, 0.2, 0.2]);
     const first = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(first.incidentId).not.toBeNull();
     // same window, still breaching → suppressed by cooldown
     const second = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       new Date(NOW.getTime() + 5 * 60_000),
     );
     expect(second).toMatchObject({ breach: true, action: null, suppressed: 'cooldown' });
@@ -303,7 +336,7 @@ describe('evaluateGuarantee', () => {
     );
     const later = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       new Date(NOW.getTime() + 62 * 60_000),
     );
     expect(later.suppressed).toBeNull();
@@ -315,7 +348,7 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.2, 0.2, 0.2]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ALERT_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ALERT_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: true, action: 'alert', rollback: null });
@@ -339,7 +372,7 @@ describe('evaluateGuarantee', () => {
     await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.1, 0.1, 0.1]); // mid tops v1
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: true, action: 'rollback', rollback: null });
@@ -352,10 +385,80 @@ describe('evaluateGuarantee', () => {
     await expect(
       evaluateGuarantee(
         db(),
-        { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(undefined) },
+        { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(undefined) },
         NOW,
       ),
     ).rejects.toThrow('guarantee');
+  });
+});
+
+describe('evaluateGuarantee CI decision (G0.3)', () => {
+  const INPUT = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID };
+
+  it('confident breach: decisively-low evidence → ciUpper < floor, incident carries ci95 + seed', async () => {
+    await seedFrontiers();
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.2, 0.3, 0.2, 0.2]);
+    const result = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ROLLBACK_G) }, NOW);
+    expect(result.breach).toBe(true);
+    expect(result.ci95).not.toBeNull();
+    expect(result.ci95![1]).toBeLessThan(ROLLBACK_G.minQuality); // the decision bound
+    expect(result.seed).not.toBeNull();
+    expect(result.minSamplesRequired).toBe(5);
+    const incident = (await listIncidents(db(), DEFAULT_ORG_ID))[0]!;
+    expect(incident.detail).toMatchObject({
+      policyId: PID,
+      ci95: result.ci95,
+      seed: result.seed,
+      resamples: 1000,
+      minSamples: 5,
+    });
+  });
+
+  it("observed below floor but CI straddles → 'not-significant', NO incident", async () => {
+    await seedFrontiers();
+    // mean 0.58 < 0.6 floor, but high variance across 5 samples: resamples
+    // heavy in 0.95s push the CI upper bound above the floor.
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.4, 0.95, 0.95, 0.5]);
+    const result = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ROLLBACK_G) }, NOW);
+    expect(result.rollingQuality).toBeCloseTo(0.58, 10);
+    expect(result.breach).toBe(false);
+    expect(result.suppressed).toBe('not-significant');
+    expect(result.ci95).not.toBeNull();
+    expect(result.ci95![1]).toBeGreaterThanOrEqual(ROLLBACK_G.minQuality);
+    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(0);
+  });
+
+  it('is exactly reproducible: same evidence → same ci95 and seed', async () => {
+    await seedFrontiers();
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.4, 0.95, 0.95, 0.5]);
+    const a = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ALERT_G) }, NOW);
+    const b = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ALERT_G) }, NOW);
+    expect(a.ci95).toEqual(b.ci95);
+    expect(a.seed).toBe(b.seed);
+  });
+
+  it('configured minSamples raises the evidence floor', async () => {
+    await seedFrontiers();
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]); // 6 samples
+    const result = await evaluateGuarantee(
+      db(),
+      { ...INPUT, policy: policyWith({ ...ROLLBACK_G, minSamples: 8 }) },
+      NOW,
+    );
+    expect(result.breach).toBe(false);
+    expect(result.suppressed).toBe('insufficient-evidence');
+    expect(result.minSamplesRequired).toBe(8);
+    expect(result.samples).toBe(6);
+    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(0);
+  });
+
+  it('evidence from another policy or cluster never feeds this window', async () => {
+    await seedFrontiers();
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.1], NOW, { policyId: 'pol-other' });
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1], NOW, { clusterId: 'extraction' });
+    const result = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ROLLBACK_G) }, NOW);
+    expect(result.samples).toBe(0); // 5 rows exist, none are THIS window's evidence
+    expect(result.suppressed).toBe('insufficient-evidence');
   });
 });
 
@@ -399,16 +502,18 @@ describe('incidents: resolve + active rollback + org isolation', () => {
     expect(list.slice(1).every((r) => r.resolvedAt !== null)).toBe(true);
   });
 
-  it('hasRecentIncident keys on (org, cluster, fromStrategy) + window', async () => {
+  it('hasRecentIncident keys on (org, policy, cluster, fromStrategy) + window', async () => {
     await insertIncident(db(), {
       orgId: DEFAULT_ORG_ID,
       kind: 'rollback',
-      detail: { clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP },
+      detail: { policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP },
     });
-    const scope = { orgId: DEFAULT_ORG_ID, clusterId: 'code-gen', fromStrategy: H_MID, windowMin: 60 };
+    const scope = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, windowMin: 60 };
     expect(await hasRecentIncident(db(), scope, NOW)).toBe(true);
     expect(await hasRecentIncident(db(), { ...scope, clusterId: 'other' }, NOW)).toBe(false);
     expect(await hasRecentIncident(db(), { ...scope, fromStrategy: H_CHEAP }, NOW)).toBe(false);
+    // G0.3: another policy on the same (cluster, strategy) is NOT cooled down
+    expect(await hasRecentIncident(db(), { ...scope, policyId: 'pol-other' }, NOW)).toBe(false);
   });
 });
 

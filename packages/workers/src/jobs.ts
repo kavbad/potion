@@ -72,6 +72,8 @@ export interface ShadowJudgePayload {
  */
 export interface GuaranteeEvaluatePayload {
   orgId?: string;
+  /** G0.3: evidence is keyed (org, policy, cluster, strategy). */
+  policyId?: string;
   clusterId?: string;
   strategyHash?: string;
   /** The governing policy (carries the guarantee config); sweep mode loads

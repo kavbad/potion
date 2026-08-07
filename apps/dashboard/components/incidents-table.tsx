@@ -36,7 +36,7 @@ export function IncidentsTable({
         No guarantee incidents. Attach a{' '}
         <code className="font-mono">guarantee</code> block to a policy (
         <code className="font-mono">
-          {'{ "minQuality": 0.8, "windowMin": 15, "sampleRate": 0.2, "action": "rollback" }'}
+          {'{ "minQuality": 0.8, "windowMin": 15, "sampleRate": 0.2, "action": "rollback", "minSamples": 20 }'}
         </code>
         ) and Potion watches the rolling quality of served answers — breaching the floor rolls
         the operating point back or raises an alert here.

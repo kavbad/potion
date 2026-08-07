@@ -5,3 +5,4 @@ export * from './select.js';
 export * from './schemas.js';
 // Additive (M2-security): prompt-injection defense primitives.
 export * from './safety.js';
+export * from './stats.js';

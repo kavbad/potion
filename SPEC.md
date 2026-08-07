@@ -390,7 +390,7 @@ export interface SavingsReport {
 ### 12.5 Quality guarantee + auto-rollback (#22) — apps/server, packages/db
 
 ```ts
-export interface GuaranteeConfig { minQuality: number; windowMin: number; sampleRate: number; action: 'rollback' | 'alert' }
+export interface GuaranteeConfig { minQuality: number; windowMin: number; sampleRate: number; action: 'rollback' | 'alert'; judgeModel?: string; minSamples?: number }
 // Policy gains optional `guarantee`. Migration 0008_guarantee:
 //   quality_samples(id, org_id, request_id, strategy_hash, quality, created_at)
 //   incidents(id, org_id, kind: 'quality_breach' | 'rollback', detail jsonb, created_at, resolved_at)

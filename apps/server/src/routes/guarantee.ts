@@ -25,7 +25,7 @@ import {
   listIncidents,
   listPoliciesWithGuarantee,
   resolveIncident,
-  rollingQualityForOrg,
+  rollingQualityForPolicy,
   type IncidentRow,
 } from '@potion/db';
 import { openAiError, roleAtLeast } from '../auth.js';
@@ -79,8 +79,11 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
     const statuses: GuaranteePolicyStatus[] = await Promise.all(
       policies.map(async (p) => {
         const guarantee = p.config.guarantee!;
-        const rolling = await rollingQualityForOrg(ctx.db.db, {
+        // G0.3: the rolling number is the POLICY's keyed evidence — the same
+        // population its breach windows evaluate — not an org-wide pool.
+        const rolling = await rollingQualityForPolicy(ctx.db.db, {
           orgId: org.orgId,
+          policyId: p.id,
           windowMin: guarantee.windowMin,
         });
         return {

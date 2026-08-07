@@ -571,7 +571,7 @@ re-scoped to hot-path gaps.
 - [ ] G0.2 Judge trust: extend runJudgeCalibration beyond hard-wired mock judges — real
       judge pair on reference-scored items, Pearson + flag <0.8, per workload; store the
       calibration record with the frontier evidence. [M]
-- [ ] G0.3 Contract-grade breach stats: CI-lower-bound breach decision (reuse gate.ts
+- [x] G0.3 Contract-grade breach stats: CI-lower-bound breach decision (reuse gate.ts
       paired-bootstrap machinery), configurable min-samples (floor 5 → raise), stratified
       sampling incl. error path, samples keyed (org, policy, cluster, strategy). [M]
 - [x] G0.4 Cost estimator dominates actuals (c248d74; regression-tested vs recorded M1b)
@@ -681,3 +681,49 @@ same class as the traces.test fix. Zero live API calls.
 | date | run | projected | actual | cumulative |
 |---|---|---|---|---|
 | 2026-08-06 | G0.1 session — no live calls (mock judge only) | $0.00 | $0.00 | $3.879 / $50.00 |
+
+---
+
+## G0.3 — Contract-grade breach statistics (session 2026-08-06, plan approved)
+
+Design: samples re-keyed (org, policy, cluster, strategy) via migration 0017 (strict
+windows; NULL-key stub-era rows excluded from evidence); seeded bootstrap CI moved to
+@potion/core stats.ts (SPEC-pinned researcher mulberry32 variant, gate.ts delegates —
+zero-drift); breach fires only when CI95 UPPER < minQuality (confident breach), observed-
+below-floor-but-straddling → new 'not-significant' suppressed state; deterministic seed
+from the evidence itself (auditable, stored in incident detail with ci95/resamples);
+GuaranteeConfig.minSamples (additive, floor 5, evaluation-time default); error-path
+sampling (quality 0, scorer 'serve-error', no judge) at the 3 chat exec-failure catches;
+sweep rework (distinct keyed tuples replace the strategies×clustersForStrategy cartesian
+— fixes N-incidents-per-strategy misattribution); status route per-policy keyed numbers.
+
+- [x] a. core: stats.ts (mulberry32 + bootstrapMeanCi + seedFromString) + minSamples
+      schema; researcher rng/gate zero-drift delegate (26 tests pin verdicts)
+- [x] b. db: 0017 migration + keyed window query returning values + CI decision +
+      cooldown policyId + distinctSampledTargets; delete rollingQualityForOrg +
+      clustersForStrategy (caller-less)
+- [x] c. server: keyed inserts, runGuaranteeErrorSample + 3 catch-site wiring, policyId
+      threading, status route per-policy numbers
+- [x] d. workers: resolveTargets keyed sweep + payload policyId
+- [x] e. dashboard types + incidents-table doc string + SPEC.md GuaranteeConfig (fixes
+      judgeModel drift too)
+- [x] f. tests: core stats; db (confident-breach / not-significant / minSamples /
+      strict-keying); server error-path integration; workers keyed sweep; 8 fixture
+      insert sites gain keys; full pnpm -r + walkthrough
+- [x] g. manual proof + CLAUDE.md defect update + ledger ($0) + commit
+
+**G0.3 DONE (2026-08-06)**: proof — decisively-low window {mean 0.20, ci95
+[0.14, 0.26], seed recorded} → breach with full audit detail (policyId/ci95/
+seed/resamples/minSamples in the incident); high-variance window {mean 0.58 <
+floor 0.6, ci95 [0.28, 0.86]} → 'not-significant', NO incident; verdicts
+re-derive bit-identically; exec failure → 503 + keyed quality-0 'serve-error'
+sample (integration-tested); status route reports per-policy keyed numbers.
+Sweep now evaluates distinct keyed tuples (the N-incidents-per-strategy
+cluster misattribution is structurally gone). Full verify: 894 pnpm tests
+green (core 26, db 74, server 307, workers 27, researcher 26 bit-identical,
+rest unchanged); walkthrough 15/15; only the 2 documented pre-existing lint
+errors. Zero live API calls.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-06 | G0.3 session — no live calls | $0.00 | $0.00 | $3.879 / $50.00 |

@@ -171,6 +171,21 @@ describe('schemas', () => {
         guarantee: { ...g, judgeModel: 'judge-class' },
       }).guarantee?.judgeModel,
     ).toBe('judge-class');
+    // minSamples (G0.3) is additive with a HARD floor of 5
+    expect(
+      PolicySchema.parse({
+        type: 'min_cost',
+        qualityFloor: 0.8,
+        guarantee: { ...g, minSamples: 20 },
+      }).guarantee?.minSamples,
+    ).toBe(20);
+    expect(
+      PolicySchema.safeParse({
+        type: 'min_cost',
+        qualityFloor: 0.8,
+        guarantee: { ...g, minSamples: 3 },
+      }).success,
+    ).toBe(false); // below the floor — contract-grade means raise, never lower
     // guarantee composes with shadow on the same policy
     const both = PolicySchema.parse({
       type: 'min_cost',

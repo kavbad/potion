@@ -253,7 +253,7 @@ describe('guarantee:evaluate', () => {
     // 5 low samples already present (G0.1: the SERVER judge-scores and
     // inserts samples; this job only evaluates — no content in the payload).
     for (let i = 0; i < 5; i++) {
-      await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1 });
+      await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1, clusterId: 'code-gen', policyId: 'pol-w-guarantee' });
     }
     const meterCalls: Array<{ orgId: string; action: string }> = [];
     const queue = createQueue('memory');
@@ -273,6 +273,7 @@ describe('guarantee:evaluate', () => {
     });
     const jobId = await queue.enqueue('guarantee:evaluate', {
       orgId: DEFAULT_ORG_ID,
+      policyId: 'pol-w-guarantee',
       clusterId: 'code-gen',
       strategyHash: H_MID,
       policy: POLICY,
@@ -311,7 +312,7 @@ describe('guarantee:evaluate', () => {
       config: POLICY,
     });
     for (let i = 0; i < 5; i++) {
-      await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1 });
+      await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1, clusterId: 'code-gen', policyId: 'pol-w-guarantee' });
     }
     const queue = createQueue('memory');
     await runWorker({ queue, db, suitesDir });
@@ -333,7 +334,7 @@ describe('guarantee:evaluate', () => {
       name: 'guarantee',
       config: POLICY,
     });
-    await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1 });
+    await insertQualitySample(db.db, { orgId: DEFAULT_ORG_ID, strategyHash: H_MID, quality: 0.1, clusterId: 'code-gen', policyId: 'pol-w-guarantee' });
     const queue = createQueue('memory');
     await runWorker({ queue, db, suitesDir });
     const jobId = await queue.enqueue('guarantee:evaluate', {});

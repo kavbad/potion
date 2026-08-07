@@ -50,6 +50,7 @@ import { runShadow, shouldSample } from '../shadow.js';
 // ---- M3 #22 guarantee (m3-guarantee) — appended import ----
 import {
   resolveGuaranteeOverride,
+  runGuaranteeErrorSample,
   runGuaranteeSample,
   shouldSampleGuarantee,
 } from '../guarantee.js';
@@ -618,6 +619,23 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         reply.raw.write('data: [DONE]\n\n');
         reply.raw.end();
         await logRequest({ ...logBase, status: 'error', latencyMs: elapsed() });
+        // G0.3: the quality floor sees failures — a SAMPLED request whose
+        // execution failed records a quality-0 'serve-error' sample.
+        if (guaranteeCfg && guaranteeSampled) {
+          void runGuaranteeErrorSample(
+            ctx,
+            {
+              orgId: auth.org.orgId,
+              requestId: id,
+              clusterId,
+              messages: body.messages as ChatMessage[],
+              policy,
+              policyId,
+              served: { hash: sh },
+            },
+            (msg) => app.log.warn(msg),
+          ).catch((e) => app.log.warn(e, 'guarantee error-sample failed — swallowed'));
+        }
         return;
       }
       // M3 #25: provider tool_calls stream as tool_calls delta chunks with
@@ -718,6 +736,23 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         reply.raw.write('data: [DONE]\n\n');
         reply.raw.end();
         await logRequest({ ...logBase, status: 'error', latencyMs: elapsed() });
+        // G0.3: the quality floor sees failures — a SAMPLED request whose
+        // execution failed records a quality-0 'serve-error' sample.
+        if (guaranteeCfg && guaranteeSampled) {
+          void runGuaranteeErrorSample(
+            ctx,
+            {
+              orgId: auth.org.orgId,
+              requestId: id,
+              clusterId,
+              messages: body.messages as ChatMessage[],
+              policy,
+              policyId,
+              served: { hash: sh },
+            },
+            (msg) => app.log.warn(msg),
+          ).catch((e) => app.log.warn(e, 'guarantee error-sample failed — swallowed'));
+        }
         return;
       }
       // upgraded flag → trace header, NOT the stream (SPEC §12.6).
@@ -825,6 +860,23 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       return sent;
     } catch (err) {
       await logRequest({ ...logBase, status: 'error', latencyMs: elapsed() });
+      // G0.3: the quality floor sees failures — record a quality-0
+      // 'serve-error' sample for SAMPLED requests.
+      if (guaranteeCfg && guaranteeSampled) {
+        void runGuaranteeErrorSample(
+          ctx,
+          {
+            orgId: auth.org.orgId,
+            requestId: id,
+            clusterId,
+            messages: body.messages as ChatMessage[],
+            policy,
+            policyId,
+            served: { hash: sh },
+          },
+          (msg) => app.log.warn(msg),
+        ).catch((e) => app.log.warn(e, 'guarantee error-sample failed — swallowed'));
+      }
       // M4 #33: breaker fast-reject → breaker_open alert (edge-deduped).
       notifyBreakerOpen(ctx, auth.org.orgId, err, (m) => app.log.warn(m));
       // M3 #25: provider down mid-execution → 503 service_unavailable

@@ -442,6 +442,11 @@ export const qualitySamples = pgTable('quality_samples', {
   /** Chat completion id (chatcmpl-…) — correlation label, not an FK. */
   requestId: text('request_id'),
   strategyHash: text('strategy_hash').notNull(),
+  // G0.3 evidence keys (0017, additive): breach windows are STRICTLY keyed
+  // (org, policy, cluster, strategy) — NULL-key rows (pre-G0.3) are not
+  // evidence.
+  clusterId: text('cluster_id'),
+  policyId: text('policy_id'),
   quality: doublePrecision('quality').notNull(),
   // G0.1 judge evidence (0016, additive; stub-era rows carry NULLs):
   /** Scorer label, e.g. 'llm-judge:judge-class'. */

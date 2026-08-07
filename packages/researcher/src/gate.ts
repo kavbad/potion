@@ -14,7 +14,7 @@
 // are parameters (the worker reads env overrides); the pure function is
 // provenance-agnostic — the LIVE-ONLY evidence rule is enforced by the
 // caller (worker), never delegated here.
-import { mulberry32 } from './rng.js';
+import { bootstrapMeanCi } from '@potion/core';
 
 /** One heldout item scored by both recipes (paired by itemId). */
 export interface ItemPair {
@@ -57,25 +57,16 @@ export const DEFAULT_QUALITY_DELTA_MIN = 0.015;
 export const DEFAULT_COST_CUT_MIN = 0.2;
 export const DEFAULT_RESAMPLES = 1000;
 
-/** Percentile bootstrap CI on the mean of `deltas` (seeded, reproducible). */
+/** Percentile bootstrap CI on the mean of `deltas` (seeded, reproducible).
+ * The math lives in @potion/core bootstrapMeanCi (moved verbatim in G0.3 so
+ * the guarantee breach CI shares the pinned primitive) — this wrapper keeps
+ * the SPEC §15.4 name and signature; verdicts are bit-identical. */
 export function pairedBootstrapCi(
   deltas: number[],
   seed: number,
   resamples: number = DEFAULT_RESAMPLES,
 ): { mean: number; ci95: [number, number] } {
-  const n = deltas.length;
-  const mean = deltas.reduce((s, d) => s + d, 0) / n;
-  const rand = mulberry32(seed);
-  const means: number[] = new Array<number>(resamples);
-  for (let r = 0; r < resamples; r++) {
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += deltas[Math.floor(rand() * n)]!;
-    means[r] = sum / n;
-  }
-  means.sort((a, b) => a - b);
-  const lo = means[Math.max(0, Math.floor(0.025 * (resamples - 1)))]!;
-  const hi = means[Math.min(resamples - 1, Math.ceil(0.975 * (resamples - 1)))]!;
-  return { mean, ci95: [lo, hi] };
+  return bootstrapMeanCi(deltas, seed, resamples);
 }
 
 export function evaluatePromotion(

@@ -59,6 +59,10 @@ export const GUARANTEE_EVALUATE_JOB = 'guarantee:evaluate';
  * org COST by the usage rollup, never toward served request/token counts. */
 export const GUARANTEE_JUDGE_LOG_STATUS = 'guarantee_judge';
 
+/** quality_samples.scorer for error-path samples (G0.3): the request's
+ * strategy execution failed — quality 0 by definition, no judge involved. */
+export const SERVE_ERROR_SCORER = 'serve-error';
+
 /** Per-request sampling decision (chat route calls this for EVERY request
  * whose policy carries a guarantee config). */
 export function shouldSampleGuarantee(
@@ -127,6 +131,10 @@ export async function runGuaranteeSample(
       orgId: params.orgId,
       requestId: params.requestId,
       strategyHash: params.served.hash,
+      // G0.3 evidence keys — breach windows are strictly (org, policy,
+      // cluster, strategy).
+      clusterId: params.clusterId,
+      policyId: params.policyId,
       quality: score.quality,
       scorer: score.scorer,
       judgeModel,
@@ -146,20 +154,82 @@ export async function runGuaranteeSample(
       status: GUARANTEE_JUDGE_LOG_STATUS,
     });
 
+    return evaluateOrEnqueue(ctx, params, guarantee, warn);
+  } catch (err) {
+    warn(
+      `guarantee: sample failed for request ${params.requestId}: ${(err as Error).message} — ` +
+        'swallowed, sample DROPPED (served response unaffected; a failed judge call never ' +
+        'records a fake score)',
+    );
+    return null;
+  }
+}
+
+/**
+ * Error-path sample (G0.3): a SAMPLED request whose strategy execution
+ * FAILED records quality 0 with scorer 'serve-error' — no judge call, no
+ * spend, judge evidence columns NULL. The quality floor must see outages:
+ * a failing strategy drags its keyed rolling mean toward 0. Same
+ * fire-and-forget / never-throws contract as runGuaranteeSample.
+ */
+export async function runGuaranteeErrorSample(
+  ctx: PotionContext,
+  params: Omit<GuaranteeSampleParams, 'orgProviders' | 'served'> & {
+    served: { hash: string };
+  },
+  warn: (msg: string) => void = () => {},
+): Promise<GuaranteeEvaluation | null> {
+  const guarantee = params.policy.guarantee;
+  if (!guarantee) return null;
+  try {
+    await insertQualitySample(ctx.db.db, {
+      orgId: params.orgId,
+      requestId: params.requestId,
+      strategyHash: params.served.hash,
+      clusterId: params.clusterId,
+      policyId: params.policyId,
+      quality: 0,
+      scorer: SERVE_ERROR_SCORER,
+    });
+    return evaluateOrEnqueue(ctx, params, guarantee, warn);
+  } catch (err) {
+    warn(
+      `guarantee: error-path sample failed for request ${params.requestId}: ` +
+        `${(err as Error).message} — swallowed, sample DROPPED`,
+    );
+    return null;
+  }
+}
+
+/** Shared post-insert step: hand evaluation to the worker (content-free
+ * per-target job — alerts ride the worker path) or evaluate in-process. */
+async function evaluateOrEnqueue(
+  ctx: PotionContext,
+  params: Pick<GuaranteeSampleParams, 'orgId' | 'clusterId' | 'policyId' | 'policy'> & {
+    served: { hash: string };
+  },
+  guarantee: GuaranteeConfig,
+  warn: (msg: string) => void,
+): Promise<GuaranteeEvaluation | null> {
+  {
     const queue = queueOf(ctx);
     if (queue) {
-      // Content-free per-target evaluation: the worker evaluates the rolling
-      // window and emits breach alerts (M4 #33 path).
       await queue.enqueue(GUARANTEE_EVALUATE_JOB, {
         orgId: params.orgId,
+        policyId: params.policyId,
         clusterId: params.clusterId,
         strategyHash: params.served.hash,
         policy: params.policy,
       });
       return null;
     }
+    if (params.policyId === null) {
+      warn('guarantee: no policy id on the request — window evaluation skipped (unkeyed)');
+      return null;
+    }
     const evaluation = await evaluateGuarantee(ctx.db.db, {
       orgId: params.orgId,
+      policyId: params.policyId,
       clusterId: params.clusterId,
       strategyHash: params.served.hash,
       policy: params.policy,
@@ -170,8 +240,9 @@ export async function runGuaranteeSample(
         action: evaluation.action,
       });
       warn(
-        `guarantee breach for org ${params.orgId} cluster ${params.clusterId}: rolling quality ` +
-          `${(evaluation.rollingQuality ?? 0).toFixed(3)} < ${guarantee.minQuality} over ` +
+        `guarantee breach for org ${params.orgId} policy ${params.policyId} cluster ` +
+          `${params.clusterId}: rolling quality ${(evaluation.rollingQuality ?? 0).toFixed(3)} ` +
+          `< ${guarantee.minQuality} (ci95 upper ${(evaluation.ci95?.[1] ?? 0).toFixed(3)}) over ` +
           `${guarantee.windowMin}min (${evaluation.samples} samples) → ${evaluation.action}` +
           (evaluation.rollback
             ? ` (${evaluation.rollback.fromStrategy.slice(0, 8)}→${evaluation.rollback.toStrategy.slice(0, 8)} ${evaluation.rollback.source})`
@@ -179,13 +250,6 @@ export async function runGuaranteeSample(
       );
     }
     return evaluation;
-  } catch (err) {
-    warn(
-      `guarantee: sample failed for request ${params.requestId}: ${(err as Error).message} — ` +
-        'swallowed, sample DROPPED (served response unaffected; a failed judge call never ' +
-        'records a fake score)',
-    );
-    return null;
   }
 }
 

@@ -102,6 +102,11 @@ export const GuaranteeConfigSchema = z.object({
    * platform default (judge-class live / mock-judge mock). Additive —
    * stored policy rows without it parse unchanged. */
   judgeModel: z.string().min(1).optional(),
+  /** Minimum window evidence before a breach may fire (G0.3). Absent →
+   * platform floor (5). The floor is a hard minimum — contract-grade
+   * partners raise it, never lower it. Applied at EVALUATION time only
+   * (never injected into stored configs). */
+  minSamples: z.number().int().min(5).optional(),
 });
 
 export const PolicySchema = z.discriminatedUnion('type', [

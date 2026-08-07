@@ -275,6 +275,7 @@ describe('runGuaranteeSample', () => {
     const payload = enqueued[0]!.payload;
     expect(payload).toEqual({
       orgId: ORG_B,
+      policyId: 'pol-g-b',
       clusterId: 'code-gen',
       strategyHash: H_MID,
       policy: { type: 'max_quality', costCeilingPer1K: 100, guarantee: G_ROLLBACK },
@@ -340,6 +341,41 @@ describe('sampling integration (POST /v1/chat/completions)', () => {
     expect(rows[0]!.orgId).toBe(ORG_B);
   });
 
+  it("execution failure → 503 + a quality-0 'serve-error' sample, keyed (G0.3)", async () => {
+    // A frontier whose only point references an unresolvable model: the
+    // strategy throws at execute → the JSON path's catch fires the
+    // error-path sampler. Uses the 'extraction' cluster so the shared
+    // code-gen frontiers stay intact.
+    const BAD = { type: 'single', model: 'no-such-model' } as const;
+    await saveFrontier(db(), 'extraction', [
+      {
+        clusterId: 'extraction',
+        strategyHash: strategyHash(BAD),
+        strategyConfig: BAD,
+        quality: 0.9,
+        costPer1K: 0.1,
+        latencyP95: 500,
+      },
+    ], 'manual', '2026-08-04');
+    const res = await chat(KEY(ORG_B), {
+      messages: [
+        { role: 'user', content: 'Extract the vendor name and total amount from this invoice: ACME Corp, $142.50' },
+      ],
+    });
+    expect(res.statusCode).toBe(503);
+    const rows = await waitFor(
+      async () =>
+        (await listQualitySamples(db(), ORG_B)).filter((r) => r.scorer === 'serve-error'),
+      (r) => r.length >= 1,
+    );
+    const row = rows[0]!;
+    expect(row.quality).toBe(0);
+    expect(row.clusterId).toBe('extraction');
+    expect(row.policyId).toBe('pol-g-b');
+    expect(row.strategyHash).toBe(strategyHash(BAD));
+    expect(row.judgeModel).toBeNull(); // no judge ran — quality 0 by definition
+  }, 30_000);
+
   it('sampleRate 0 → never any rows', async () => {
     const res = await chat(KEY(ORG_ZERO));
     expect(res.statusCode).toBe(200);
@@ -362,7 +398,13 @@ describe('rollback integration (2 frontier versions)', () => {
     // 4 low samples for MID already in the window; the request's sample is
     // the 5th → breach → rollback mid → cheap (v1's equivalent point).
     for (let i = 0; i < 4; i++) {
-      await insertQualitySample(db(), { orgId: ORG_RB, strategyHash: H_MID, quality: 0.05 });
+      await insertQualitySample(db(), {
+        orgId: ORG_RB,
+        strategyHash: H_MID,
+        quality: 0.05,
+        clusterId: 'code-gen',
+        policyId: 'pol-g-rb',
+      });
     }
     const res1 = await chat(KEY(ORG_RB));
     expect(res1.statusCode).toBe(200);
@@ -418,7 +460,13 @@ describe('rollback integration (2 frontier versions)', () => {
 describe('alert integration', () => {
   it('breach writes a quality_breach incident; the operating point is UNCHANGED', async () => {
     for (let i = 0; i < 4; i++) {
-      await insertQualitySample(db(), { orgId: ORG_ALERT, strategyHash: H_MID, quality: 0.05 });
+      await insertQualitySample(db(), {
+        orgId: ORG_ALERT,
+        strategyHash: H_MID,
+        quality: 0.05,
+        clusterId: 'code-gen',
+        policyId: 'pol-g-alert',
+      });
     }
     const res1 = await chat(KEY(ORG_ALERT));
     expect(res1.statusCode).toBe(200);

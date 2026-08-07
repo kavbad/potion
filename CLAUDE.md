@@ -51,16 +51,17 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
 
 ## Known defects / debt (verified 2026-08-06 exploration)
 
-1. Guarantee measurement: the Jaccard-vs-prompt stub is RETIRED (G0.1,
-   2026-08-06) — sampled answers are scored by a real llm-judge call
-   (serve-judge in @potion/harness; reference-free rubric, protocol-capped,
-   spend metered via status='guarantee_judge' request_logs rows; queue
-   payloads content-free). STILL OPEN: breach statistics are a plain mean
-   over ≥5 samples, success-path-only sampling, samples keyed (org,
-   strategy) while incidents key by cluster (G0.3); judge calibration
-   records (G0.2); `shadow:judge` remains `{stub:true}` and shadowScore is
-   still Jaccard-vs-primary (labeled). Serving API keys hold role `admin`
-   and can resolve incidents — lift their own rollback (G2.3).
+1. Guarantee measurement is now real AND statistically defensible (G0.1 +
+   G0.3, 2026-08-06): sampled answers judge-scored (serve-judge, spend
+   metered); breaches fire only on a seeded bootstrap CI95 upper bound
+   below the floor, on strictly-keyed (org, policy, cluster, strategy)
+   evidence incl. error-path quality-0 samples; verdicts re-derivable from
+   the incident detail (ci95/seed/resamples); configurable minSamples
+   (floor 5). STILL OPEN: judge calibration records (G0.2); `shadow:judge`
+   remains `{stub:true}` and shadowScore is still Jaccard-vs-primary
+   (labeled); /v1/completions parity route has NO guarantee wiring at all;
+   sampling is uniform (no per-stratum quotas). Serving API keys hold role
+   `admin` and can resolve incidents — lift their own rollback (G2.3).
 2. Frontiers/clusters/eval evidence are GLOBAL by design contract
    (db/schema.ts:33-38) — no org dimension; nightly traces:cluster pools all
    orgs; synthesized agent suites are mock-evaluated only and can never
