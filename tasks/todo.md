@@ -619,7 +619,13 @@ capstone everything else serves.)
       request_logs join via new completion-id column); exportable monthly report next to
       the invoice. Incl. the serve-path judgeMaxTokens budget on GuaranteeConfig
       (G1.4-filed stray: verbose judges truncate at PROTOCOL_MAX_TOKENS on the serve
-      path today). [M]
+      path today). SCORING DECISIONS (owner, 2026-08-07, from the G1.7 live finding
+      that reference-anchored scales are workload-specific — live scores 0.20/0.26 on
+      an honest suite): (a) guarantee FLOORS are derived from the baseline strategy's
+      MEASURED score distribution on the same suite — never picked as absolute numbers;
+      (b) the report's HEADLINE metric is BASELINE RETENTION — candidate strategy's
+      score relative to the baseline strategy's score on identical items; raw scores
+      available but never headlined. [M]
 - [ ] G2.2 Incident SLAs: emitAlert on the in-process breach path (parity with worker),
       measured breach→notification latency, auto-restore-on-recovery option, cooldown
       that re-fires on worsening. [M]
@@ -1328,3 +1334,13 @@ seam in RunDeps if the gap ever matters beyond ledger reconciliation.
 | 2026-08-07 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $5.4078 (ledger said $5.3870; ~$0.02 delayed-accounting drift) | — | — | $5.4078 / $50.00 (OpenRouter) |
 | 2026-08-07 | G1.7 live leg ×2 attempts (attempt 1: ProviderAuthError on unreachable gemini rep after partial nano spend ~<$0.01 OpenAI-side, unmetered — the documented gap; attempt 2 SUCCESS: 15 calls, $0.205 total = OpenRouter judge+answers $0.148 + OpenAI answers ~$0.057; before usage $5.4078 → after $5.5556) | $3.00 cap, $0.425 harness projection | $0.1478 (authoritative OpenRouter delta) | $5.5556 / $50.00 (OpenRouter) |
 | 2026-08-07 | same run, OpenAI side (nano/gpt answers, usage-priced) | — | ~$0.06 | ~$0.30 (OpenAI key) |
+
+STANDING DECISIONS (owner, 2026-08-07, recorded for G2.1's plan) — reference-anchored
+score scales are WORKLOAD-SPECIFIC (established by the G1.7 live leg: 0.20/0.26 on a
+suite where the judge correctly punishes generic answers against session-specific
+references; a 0.9 floor would be meaningless there and trivially satisfied elsewhere):
+1. Guarantee floors are DERIVED from the baseline strategy's measured score
+   distribution on the same suite — never picked as absolute numbers.
+2. The guarantee report's headline metric is BASELINE RETENTION — the candidate
+   strategy's score relative to the baseline strategy's score on identical items.
+   Raw scores stay available (evidence, drill-down) but are never the headline.
