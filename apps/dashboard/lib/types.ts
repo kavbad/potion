@@ -301,11 +301,22 @@ export interface RetentionHeadlineDto {
   incidentId: string;
 }
 
+export interface VerificationStateDto {
+  state: 'verified' | 'pending' | 'unverifiable' | 'none';
+  openAdvisoryAgeMin: number | null;
+  verifyAttempts: number;
+  lastAttempt: { at: string; outcome: string; detail: string | null } | null;
+  escalatedAt: string | null;
+  verifySlaMin: number;
+}
+
 export interface GuaranteeReportEntryDto {
   policyId: string;
   clusterId: string;
   retention: RetentionHeadlineDto | null;
   retentionUnavailableReason: string | null;
+  /** G2.2 (absent on pre-G2.2 servers). */
+  verification?: VerificationStateDto;
   incumbent: { clusterId: string; strategyHash: string; designatedAt: string } | null;
   derivedFloor: { floor: number; provenance: { n: number; mean: number; ci95: [number, number]; windowMin: number; incumbentHash: string } } | null;
   openAdvisories: IncidentDto[];

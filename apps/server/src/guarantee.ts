@@ -50,6 +50,7 @@ import {
 } from '@potion/db';
 import { defaultServeJudgeModel, scoreServedAnswer } from '@potion/harness';
 import type { OrgProviders, PotionContext } from './context.js';
+import { emitAlert } from './alerts.js';
 
 /** Job name enqueued for queue-backed window evaluation (ROADMAP #28
  * workers consume it; G0.1: per-target mode only — never carries content). */
@@ -263,6 +264,32 @@ async function evaluateOrEnqueue(
             ? ` (${evaluation.rollback.fromStrategy.slice(0, 8)}→${evaluation.rollback.toStrategy.slice(0, 8)} ${evaluation.rollback.source})`
             : ''),
       );
+      // G2.2 PARITY: the queueless in-process path emits the SAME alert
+      // the worker path does (byte-parallel payload incl. the legacy SLA
+      // clock = the breach incident's createdAt). emitAlert falls through
+      // to the in-process dispatcher here (no queue) — the delivery row
+      // still records its latency. Alert faults never touch the sample
+      // path.
+      try {
+        await emitAlert(ctx, {
+          orgId: params.orgId,
+          event: evaluation.action === 'rollback' ? 'rollback' : 'quality_breach',
+          incidentId: evaluation.incidentId,
+          ...(evaluation.incidentAt !== null
+            ? { clockStartAt: evaluation.incidentAt.toISOString() }
+            : {}),
+          detail: {
+            incidentId: evaluation.incidentId,
+            clusterId: params.clusterId,
+            strategyHash: params.served.hash,
+            rollingQuality: evaluation.rollingQuality,
+            samples: evaluation.samples,
+            ...(evaluation.rollback !== null ? { rollback: evaluation.rollback } : {}),
+          },
+        });
+      } catch (err) {
+        warn(`guarantee: breach alert emission failed (swallowed): ${(err as Error).message}`);
+      }
     }
     return evaluation;
   }

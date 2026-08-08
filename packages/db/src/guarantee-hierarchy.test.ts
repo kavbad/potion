@@ -163,6 +163,30 @@ describe('hierarchy evaluator', () => {
     ).toBe(first.advisory!.incidentId);
   });
 
+  it('G2.2 worsening: a confidently-worse crossing appends to the OPEN advisory and signals immediate re-verify', async () => {
+    await designate();
+    await seed(H_INCUMBENT, [0.8, 0.82, 0.78, 0.81, 0.79, 0.8, 0.8, 0.81]);
+    await seed(H_SERVING, [0.3, 0.32, 0.28, 0.31, 0.29, 0.3]);
+    const first = await evaluate();
+    expect(first.advisory!.triggered).toBe(true);
+    expect(first.advisory!.worsened).toBe(false);
+    expect(first.advisory!.createdAt).toBeInstanceOf(Date);
+    // The situation collapses: new evidence drags the window mean far below
+    // the advisory's recorded CI (separation) — no second advisory row, but
+    // the ledger records the worsening and the caller re-verifies NOW.
+    await seed(H_SERVING, [0.01, 0.02, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02]);
+    const worse = await evaluate();
+    expect(worse.suppressed).toBe('cooldown');
+    expect(worse.advisory!.deduped).toBe(true);
+    expect(worse.advisory!.worsened).toBe(true);
+    expect(worse.advisory!.incidentId).toBe(first.advisory!.incidentId);
+    const incidents = await listIncidents(db(), ORG);
+    expect(incidents).toHaveLength(1); // one-open-per-tuple invariant holds
+    const log = (incidents[0]!.detail as Record<string, unknown>).worsened as unknown[];
+    expect(log).toHaveLength(1);
+    expect((log[0] as Record<string, unknown>).ci95).toBeTruthy();
+  });
+
   it('incumbent without serve evidence → insufficient-baseline, nothing fires', async () => {
     await designate();
     await seed(H_SERVING, [0.3, 0.32, 0.28, 0.31, 0.29]);

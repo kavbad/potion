@@ -1,6 +1,8 @@
 // Alert rule routes (M4, ROADMAP #33, SPEC §13.5).
 //
 //   GET    /api/alerts           viewer+ — the org's rules, target MASKED
+//   GET    /api/alerts/deliveries viewer+ — delivery audit incl. G2.2 SLA
+//                                latency (incident linkage + clock + ms)
 //   POST   /api/alerts           admin   — create {kind, targetUrl, events[]}
 //   DELETE /api/alerts/:id       admin   — remove (org-scoped, uniform 404)
 //   POST   /api/alerts/test      admin   — fire a test payload at a caller-
@@ -20,6 +22,7 @@ import {
   ALERT_RULE_KINDS,
   deleteAlertRule,
   insertAlertRule,
+  listAlertDeliveriesForOrg,
   listAlertRules,
   redactUrl,
   type AlertEvent,
@@ -90,6 +93,38 @@ export function registerAlertRoutes(app: FastifyInstance, ctx: PotionContext): v
     }
     const rows = await listAlertRules(ctx.db.db, org.orgId);
     return reply.send({ rules: rows.map(ruleDto) });
+  });
+
+  // ---- G2.2: the delivery audit becomes customer-visible — measured
+  // notification latency per delivered row (SLA binding: the clock the
+  // emitter bound, advisory creation on the hierarchy path). Org scoping
+  // rides the rule → org join; target URLs are never present on delivery
+  // rows by construction.
+  app.get('/api/alerts/deliveries', async (req, reply) => {
+    const org = req.potionOrg;
+    if (!org) {
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
+    }
+    const q = (req.query ?? {}) as { limit?: string };
+    const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
+    const rows = await listAlertDeliveriesForOrg(ctx.db.db, org.orgId, limit);
+    return reply.send({
+      deliveries: rows.map((d) => ({
+        id: d.id,
+        ruleId: d.ruleId,
+        event: d.event,
+        status: d.status,
+        attempts: d.attempts,
+        lastError: d.lastError,
+        incidentId: d.incidentId,
+        clockStartAt: d.clockStartAt?.toISOString() ?? null,
+        latencyMs: d.latencyMs,
+        createdAt: d.createdAt.toISOString(),
+        deliveredAt: d.deliveredAt?.toISOString() ?? null,
+      })),
+    });
   });
 
   app.post('/api/alerts', async (req, reply) => {

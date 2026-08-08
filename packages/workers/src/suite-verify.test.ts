@@ -16,12 +16,16 @@ import {
   createOrg,
   designateIncumbent,
   evalRuns,
+  getIncidentByIdForOrg,
+  insertIncident,
   insertPolicy,
   insertQualitySample,
   insertTraceSpans,
+  latestActiveRollback,
   listIncidents,
   migrate,
   openAdvisoryForTuple,
+  policies,
   strategyConfigs,
   upsertBudget,
   upsertStrategyConfig,
@@ -37,6 +41,7 @@ import {
   toolSignatureSlug,
   tracesClusterHandler,
   SUITE_VERIFY_EPSILON,
+  RECOVERY_UNCONFIRMED_AFTER,
   type GuaranteeSuiteVerifyResult,
   type JobContext,
 } from './handlers.js';
@@ -324,5 +329,226 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
     const advisory = incidents.find((i) => i.id === result.advisories[0]!.incidentId)!;
     expect(advisory.resolvedAt).not.toBeNull();
     expect((advisory.detail as Record<string, unknown>).resolution).toMatchObject({ verdict: 'all-clear' });
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// G2.2: starved verification, escalation, contractual dedupe, auto-restore
+// ---------------------------------------------------------------------------
+
+describe('G2.2 incident SLAs', () => {
+  const HOURS = 3_600_000;
+
+  function captureQueue() {
+    const enqueued: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    return {
+      enqueued,
+      queue: {
+        enqueue: async (kind: string, payload: unknown) =>
+          void enqueued.push({ kind, payload: payload as Record<string, unknown> }),
+      },
+    };
+  }
+
+  async function backdatedAdvisory(clusterId: string, hoursAgo: number): Promise<string> {
+    return insertIncident(db.db, {
+      orgId: ORG,
+      kind: 'advisory',
+      createdAt: new Date(Date.now() - hoursAgo * HOURS),
+      detail: {
+        leg: 'serve',
+        policyId: PID,
+        clusterId,
+        fromStrategy: H_SERVING,
+        ci95: [0.28, 0.32],
+      },
+    });
+  }
+
+  it('budget-refused verify appends a DURABLE attempt to the advisory ledger', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const advisoryId = await backdatedAdvisory(clusterId, 1);
+    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true });
+    process.env.POTION_EVAL_PROVIDER = 'live';
+    const r = await verify(clusterId, { advisoryIncidentId: advisoryId });
+    expect(r.outcome).toBe('budget-refused');
+    const advisory = await getIncidentByIdForOrg(db.db, ORG, advisoryId);
+    expect(advisory!.resolvedAt).toBeNull(); // clock keeps running
+    const detail = advisory!.detail as Record<string, unknown>;
+    const attempts = detail.verifyAttempts as Array<{ outcome: string; detail: string }>;
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]!.outcome).toBe('budget-refused');
+    expect(attempts[0]!.detail).toContain('no spend occurred');
+    expect(detail.lastVerifyAttemptAt).toBeTruthy();
+  });
+
+  it('sweep retry pass re-enqueues stale open advisories WITH the advisory id; fresh stamps throttle', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    const staleId = await backdatedAdvisory(clusterId, 2); // 120min > VERIFY_RETRY_MIN
+    const { enqueued, queue } = captureQueue();
+    const handler = createGuaranteeEvaluateHandler({});
+    const result = (await handler({}, ctx(queue))) as { retriedVerifies: Array<{ incidentId: string }> };
+    expect(result.retriedVerifies.map((r) => r.incidentId)).toEqual([staleId]);
+    const verifies = enqueued.filter((e) => e.kind === 'guarantee:suite-verify');
+    expect(verifies).toHaveLength(1);
+    expect(verifies[0]!.payload.advisoryIncidentId).toBe(staleId);
+    expect(verifies[0]!.payload.servingStrategyHash).toBe(H_SERVING);
+    // The enqueue stamped verifyEnqueuedAt — the NEXT sweep throttles even
+    // though no attempt has landed yet (H3: memory queue is serial).
+    const again = (await handler({}, ctx(captureQueue().queue))) as { retriedVerifies: unknown[] };
+    expect(again.retriedVerifies).toHaveLength(0);
+  });
+
+  it('escalation: advisory past verifySlaMin emits guarantee_unverifiable ONCE with the advisory clock', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    const advisoryId = await backdatedAdvisory(clusterId, 5); // 300min > 240 default
+    const unverifiable: string[] = [];
+    const meter = { observeGuaranteeUnverifiable: (o: { orgId: string }) => void unverifiable.push(o.orgId) };
+    const handler = createGuaranteeEvaluateHandler({ meter });
+    const first = captureQueue();
+    const r1 = (await handler({}, ctx(first.queue))) as { escalated: Array<{ incidentId: string }> };
+    expect(r1.escalated.map((e) => e.incidentId)).toEqual([advisoryId]);
+    expect(unverifiable).toEqual([ORG]);
+    const alerts = first.enqueued.filter((e) => e.kind === 'alerts:dispatch');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.payload.event).toBe('guarantee_unverifiable');
+    expect(alerts[0]!.payload.incidentId).toBe(advisoryId);
+    const advisory = await getIncidentByIdForOrg(db.db, ORG, advisoryId);
+    // The clock IS the advisory's createdAt — it kept running while starved.
+    expect(alerts[0]!.payload.clockStartAt).toBe(advisory!.createdAt.toISOString());
+    expect((advisory!.detail as Record<string, unknown>).escalation).toMatchObject({ verifySlaMin: 240 });
+    // Second sweep: CAS already stamped → no re-emit, no double count.
+    const second = captureQueue();
+    const r2 = (await handler({}, ctx(second.queue))) as { escalated: unknown[] };
+    expect(r2.escalated).toHaveLength(0);
+    expect(second.enqueued.filter((e) => e.kind === 'alerts:dispatch')).toHaveLength(0);
+    expect(unverifiable).toHaveLength(1);
+  });
+
+  it('contractual dedupe: a second breach verify resolves to the EXISTING incident, no duplicate', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 5 })); // unreachable → breach
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const first = await verify(clusterId);
+    expect(first.outcome).toBe('contractual-breach');
+    const advisoryId = await backdatedAdvisory(clusterId, 1);
+    const second = await verify(clusterId, { advisoryIncidentId: advisoryId });
+    expect(second.outcome).toBe('contractual-breach');
+    expect(second.verdictIncidentId).toBe(first.verdictIncidentId); // deduped
+    expect(second.detail).toContain('deduped');
+    expect(second.advisoryResolved).toBe(true); // advisory still resolves, pointing at the existing incident
+    const incidents = await listIncidents(db.db, ORG);
+    expect(incidents.filter((i) => i.kind === 'quality_breach')).toHaveLength(1);
+    const advisory = incidents.find((i) => i.id === advisoryId)!;
+    expect((advisory.detail as Record<string, unknown>).resolution).toMatchObject({
+      escalatedTo: first.verdictIncidentId,
+      deduped: true,
+    });
+  });
+
+  it('auto-restore: CONFIDENT recovery (floor 0) resolves the rollback and emits guarantee_restored', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0, autoRestore: true }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const rollbackId = await insertIncident(db.db, {
+      orgId: ORG,
+      kind: 'rollback',
+      createdAt: new Date(Date.now() - 1 * HOURS),
+      detail: { policyId: PID, clusterId, fromStrategy: H_SERVING, toStrategy: H_INCUMBENT },
+    });
+    const { enqueued, queue } = captureQueue();
+    const r = (await guaranteeSuiteVerifyHandler(
+      { orgId: ORG, policyId: PID, clusterId, servingStrategyHash: H_SERVING, restoreForIncidentId: rollbackId },
+      ctx(queue),
+    )) as GuaranteeSuiteVerifyResult;
+    expect(r.outcome).toBe('all-clear');
+    expect(r.restoredIncidentId).toBe(rollbackId);
+    expect(await latestActiveRollback(db.db, ORG, clusterId)).toBeNull(); // override lifted
+    const restored = await getIncidentByIdForOrg(db.db, ORG, rollbackId);
+    expect((restored!.detail as Record<string, unknown>).resolution).toMatchObject({
+      resolvedBy: 'auto-restore',
+      verdict: 'confident-recovery',
+    });
+    const alerts = enqueued.filter((e) => e.kind === 'alerts:dispatch');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.payload.event).toBe('guarantee_restored');
+    // time-to-restore clock = the rollback's createdAt
+    expect(alerts[0]!.payload.clockStartAt).toBe(restored!.createdAt.toISOString());
+  });
+
+  it('non-confident all-clears never restore; the Nth consecutive escalates recovery-unconfirmed ONCE', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0, autoRestore: true }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    // Probe verify (floor 0) to learn the deterministic retention CI, then
+    // pin the floor INSIDE it: all-clear (upper ≥ floor) but NOT confident
+    // (lower < floor).
+    const probe = await verify(clusterId);
+    expect(probe.outcome).toBe('all-clear');
+    const [lo, hi] = probe.retention!.ci95;
+    expect(lo).toBeLessThan(hi); // mock ratios have spread — floor fits between
+    const floor = (lo + hi) / 2;
+    await db.db
+      .update(policies)
+      .set({ config: guaranteeWith({ retentionFloor: floor, autoRestore: true }) })
+      .where(eq(policies.id, PID));
+    const rollbackId = await insertIncident(db.db, {
+      orgId: ORG,
+      kind: 'rollback',
+      createdAt: new Date(Date.now() - 1 * HOURS),
+      detail: { policyId: PID, clusterId, fromStrategy: H_SERVING, toStrategy: H_INCUMBENT },
+    });
+    let unconfirmedAlerts = 0;
+    for (let i = 1; i <= RECOVERY_UNCONFIRMED_AFTER + 1; i++) {
+      const { enqueued, queue } = captureQueue();
+      const r = (await guaranteeSuiteVerifyHandler(
+        { orgId: ORG, policyId: PID, clusterId, servingStrategyHash: H_SERVING, restoreForIncidentId: rollbackId },
+        ctx(queue),
+      )) as GuaranteeSuiteVerifyResult;
+      expect(r.outcome).toBe('all-clear');
+      expect(r.restoredIncidentId).toBeNull(); // uncertainty NEVER auto-restores
+      unconfirmedAlerts += enqueued.filter(
+        (e) => e.kind === 'alerts:dispatch' && e.payload.event === 'guarantee_recovery_unconfirmed',
+      ).length;
+      if (i < RECOVERY_UNCONFIRMED_AFTER) expect(r.recoveryUnconfirmed).toBe(false);
+      if (i === RECOVERY_UNCONFIRMED_AFTER) expect(r.recoveryUnconfirmed).toBe(true);
+    }
+    expect(unconfirmedAlerts).toBe(1); // CAS: once, even past N
+    const rollback = await getIncidentByIdForOrg(db.db, ORG, rollbackId);
+    expect(rollback!.resolvedAt).toBeNull(); // never silently restored
+    expect((rollback!.detail as Record<string, unknown>).recoveryEscalation).toMatchObject({
+      consecutiveNonConfident: RECOVERY_UNCONFIRMED_AFTER,
+    });
+    const attempts = (rollback!.detail as Record<string, unknown>).verifyAttempts as Array<{ outcome: string }>;
+    expect(attempts.every((a) => a.outcome === 'all-clear-not-confident')).toBe(true);
+  });
+
+  it('legacy autoRestore is an honest no-op: active rollback + samples but NO incumbent → no restore verify', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ autoRestore: true }));
+    await insertIncident(db.db, {
+      orgId: ORG,
+      kind: 'rollback',
+      createdAt: new Date(Date.now() - 2 * HOURS),
+      detail: { policyId: PID, clusterId, fromStrategy: H_SERVING, toStrategy: H_INCUMBENT },
+    });
+    await insertQualitySample(db.db, {
+      orgId: ORG,
+      strategyHash: H_INCUMBENT,
+      quality: 0.8,
+      createdAt: new Date(),
+      policyId: PID,
+      clusterId,
+    });
+    const { enqueued, queue } = captureQueue();
+    const handler = createGuaranteeEvaluateHandler({});
+    const r = (await handler({}, ctx(queue))) as { restoreVerifies: unknown[] };
+    expect(r.restoreVerifies).toHaveLength(0);
+    expect(enqueued.filter((e) => e.kind === 'guarantee:suite-verify')).toHaveLength(0);
   });
 });

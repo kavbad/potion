@@ -99,6 +99,7 @@ export {
   guaranteeEvaluateHandler,
   createGuaranteeEvaluateHandler,
   alertsDispatchHandler,
+  createAlertsDispatchHandler,
   dispatchAlertEvent,
   emitAlertEvent,
   alertSlackText,
@@ -145,6 +146,10 @@ export {
   type AgentClusterOutcome,
   ALERT_DISPATCH_ATTEMPTS,
   ALERT_DISPATCH_TIMEOUT_MS,
+  // ---- G2.2 incident SLAs ----
+  GUARANTEE_VERIFY_SLA_MIN,
+  VERIFY_RETRY_MIN,
+  RECOVERY_UNCONFIRMED_AFTER,
   hashStrategy,
   DEFAULT_EVAL_CAP_USD,
   type AlertDispatchDeps,

@@ -23,7 +23,7 @@
 // version = what selectPoint(policy) would have chosen there, falling back
 // to that version's highest-quality point when the policy was infeasible on
 // it (same §8 NULL-fallback rule as the serving path).
-import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import {
   selectPoint,
   type Frontier,
@@ -174,13 +174,21 @@ export async function insertIncident(db: PotionDb, row: NewIncident): Promise<st
   return inserted[0]!.id;
 }
 
+/** insertIncident returning the FULL row (G2.2): SLA emitters need the db
+ * createdAt — the notification clock binds to it, so it must be the stored
+ * value, never a process-clock approximation. */
+export async function insertIncidentRow(db: PotionDb, row: NewIncident): Promise<IncidentRow> {
+  const inserted = await db.insert(incidents).values(row).returning();
+  return inserted[0]!;
+}
+
 /** Cooldown check: an incident already exists for (org, policy, cluster,
  * strategy) within the last windowMin minutes → suppress (no flapping).
  * G0.3: the policy key means two policies breaching on the same strategy
  * each get their own incident (they have independent floors). Pre-G0.3
  * incidents lack detail.policyId and never match — one extra incident per
  * key across the upgrade, then normal cooldown. */
-export async function hasRecentIncident(
+export async function recentContractualIncident(
   db: PotionDb,
   scope: {
     orgId: string;
@@ -190,21 +198,193 @@ export async function hasRecentIncident(
     windowMin: number;
   },
   now: Date = new Date(),
-): Promise<boolean> {
+): Promise<IncidentRow | null> {
   const rows = await db
-    .select({ id: incidents.id })
+    .select()
     .from(incidents)
     .where(
       and(
         eq(incidents.orgId, scope.orgId),
+        // G2.2: CONTRACTUAL kinds only — pre-G2.2 this check had no kind
+        // filter, so an advisory tripwire on the tuple suppressed a later
+        // contractual incident (a real bug, regression-pinned).
+        inArray(incidents.kind, ['quality_breach', 'rollback']),
         gt(incidents.createdAt, new Date(windowCutoff(scope.windowMin, now))),
         sql`${incidents.detail} ->> 'policyId' = ${scope.policyId}`,
         sql`${incidents.detail} ->> 'clusterId' = ${scope.clusterId}`,
         sql`${incidents.detail} ->> 'fromStrategy' = ${scope.fromStrategy}`,
       ),
     )
+    .orderBy(desc(incidents.createdAt))
     .limit(1);
-  return rows.length > 0;
+  return rows[0] ?? null;
+}
+
+/** The OPEN contractual incident for a tuple (G2.2 suite-verify dedupe):
+ * while one is unresolved, retried verifies must not mint duplicates —
+ * the advisory resolves pointing at the EXISTING incident instead. */
+export async function openContractualIncidentForTuple(
+  db: PotionDb,
+  scope: { orgId: string; policyId: string; clusterId: string; fromStrategy: string },
+): Promise<IncidentRow | null> {
+  const rows = await db
+    .select()
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.orgId, scope.orgId),
+        inArray(incidents.kind, ['quality_breach', 'rollback']),
+        isNull(incidents.resolvedAt),
+        sql`${incidents.detail} ->> 'policyId' = ${scope.policyId}`,
+        sql`${incidents.detail} ->> 'clusterId' = ${scope.clusterId}`,
+        sql`${incidents.detail} ->> 'fromStrategy' = ${scope.fromStrategy}`,
+      ),
+    )
+    .orderBy(desc(incidents.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** All OPEN advisories, oldest first (escalation fairness), optionally one
+ * org — the sweep's retry + escalation work set (G2.2). */
+export async function listOpenAdvisories(db: PotionDb, orgId?: string): Promise<IncidentRow[]> {
+  return db
+    .select()
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.kind, 'advisory'),
+        isNull(incidents.resolvedAt),
+        orgId !== undefined ? eq(incidents.orgId, orgId) : undefined,
+      ),
+    )
+    .orderBy(incidents.createdAt);
+}
+
+/** One incident by (org, id) — org-scoped by construction. */
+export async function getIncidentByIdForOrg(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+): Promise<IncidentRow | null> {
+  const rows = await db
+    .select()
+    .from(incidents)
+    .where(and(eq(incidents.id, id), eq(incidents.orgId, orgId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** How many verify attempts an incident's detail ledger keeps (oldest
+ * dropped past this) — enough to compute the recovery-unconfirmed trailing
+ * run while bounding jsonb growth. */
+export const VERIFY_ATTEMPTS_KEPT = 20;
+
+export interface IncidentVerifyAttempt {
+  at: string;
+  outcome: string;
+  detail: string | null;
+}
+
+/**
+ * Append a verify attempt to an OPEN incident's durable ledger (G2.2
+ * starved verification): detail.verifyAttempts (capped) +
+ * detail.lastVerifyAttemptAt. Works for advisory rows (starved suite
+ * verifies) AND rollback rows (restore verifies). Never resolves. Returns
+ * null when the incident is missing/foreign/already resolved.
+ */
+export async function appendIncidentVerifyAttempt(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  attempt: IncidentVerifyAttempt,
+): Promise<IncidentRow | null> {
+  const row = await getIncidentByIdForOrg(db, orgId, id);
+  if (!row || row.resolvedAt !== null) return null;
+  const detail = row.detail as Record<string, unknown>;
+  const attempts = Array.isArray(detail.verifyAttempts)
+    ? (detail.verifyAttempts as IncidentVerifyAttempt[])
+    : [];
+  const kept = [...attempts, attempt].slice(-VERIFY_ATTEMPTS_KEPT);
+  const updated = await db
+    .update(incidents)
+    .set({ detail: { ...detail, verifyAttempts: kept, lastVerifyAttemptAt: attempt.at } })
+    .where(and(eq(incidents.id, id), isNull(incidents.resolvedAt)))
+    .returning();
+  return updated[0] ?? null;
+}
+
+/** Merge a patch into an OPEN incident's detail (G2.2 enqueue-throttle
+ * stamps: verifyEnqueuedAt / restoreVerifyEnqueuedAt / worsened[]). */
+export async function stampIncidentDetail(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<IncidentRow | null> {
+  const row = await getIncidentByIdForOrg(db, orgId, id);
+  if (!row || row.resolvedAt !== null) return null;
+  const updated = await db
+    .update(incidents)
+    .set({ detail: { ...(row.detail as Record<string, unknown>), ...patch } })
+    .where(and(eq(incidents.id, id), isNull(incidents.resolvedAt)))
+    .returning();
+  return updated[0] ?? null;
+}
+
+/**
+ * Once-only escalation CAS (G2.2): a single conditional UPDATE guarded by
+ * `NOT jsonb_exists(detail, key)` — the caller that gets a row back WON the
+ * race and is the one that emits the notification. jsonb_exists() rather
+ * than the `?` operator: `?` collides with parameter placeholders in some
+ * drivers. Returns null when already stamped, resolved, foreign, or absent.
+ */
+async function markIncidentEscalationCas(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  kind: IncidentKind,
+  key: string,
+  stamp: Record<string, unknown>,
+): Promise<IncidentRow | null> {
+  const updated = await db
+    .update(incidents)
+    .set({ detail: sql`${incidents.detail} || ${JSON.stringify({ [key]: stamp })}::jsonb` })
+    .where(
+      and(
+        eq(incidents.id, id),
+        eq(incidents.orgId, orgId),
+        eq(incidents.kind, kind),
+        isNull(incidents.resolvedAt),
+        sql`NOT jsonb_exists(${incidents.detail}, ${key})`,
+      ),
+    )
+    .returning();
+  return updated[0] ?? null;
+}
+
+/** Starved-verification escalation stamp on an OPEN advisory ('guarantee
+ * currently unverifiable'). Once per advisory; a NEW advisory on the same
+ * tuple escalates fresh (its own clock). */
+export async function markAdvisoryEscalated(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  stamp: { at: string; verifySlaMin: number; ageMin: number; verifyAttempts: number },
+): Promise<IncidentRow | null> {
+  return markIncidentEscalationCas(db, orgId, id, 'advisory', 'escalation', stamp);
+}
+
+/** Recovery-unconfirmed stamp on an OPEN rollback (G2.2 owner refinement:
+ * N consecutive non-confident all-clears escalate for human review —
+ * uncertainty never auto-restores and never silently persists). */
+export async function markRecoveryUnconfirmed(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  stamp: { at: string; consecutiveNonConfident: number; floor: number },
+): Promise<IncidentRow | null> {
+  return markIncidentEscalationCas(db, orgId, id, 'rollback', 'recoveryEscalation', stamp);
 }
 
 /**
@@ -462,6 +642,25 @@ export async function resolveAdvisoryWithEvidence(
   id: string,
   resolution: Record<string, unknown>,
 ): Promise<IncidentRow | null> {
+  return resolveIncidentWithEvidence(db, orgId, id, 'advisory', resolution);
+}
+
+/**
+ * Resolve an OPEN incident of the given kind WITH its outcome evidence
+ * (G2.2 generalization of the advisory resolver): the disposition — an
+ * escalated verdict, an all-clear, an auto-restore — merges into the
+ * row's detail as `resolution` before resolvedAt is set, so the incident
+ * itself records how it ended. The merge SPREADS the existing detail, so
+ * verifyAttempts / escalation / worsened stamps survive resolution.
+ * Returns null when no open incident of that kind matches.
+ */
+export async function resolveIncidentWithEvidence(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  kind: IncidentKind,
+  resolution: Record<string, unknown>,
+): Promise<IncidentRow | null> {
   const rows = await db
     .select()
     .from(incidents)
@@ -469,7 +668,7 @@ export async function resolveAdvisoryWithEvidence(
       and(
         eq(incidents.id, id),
         eq(incidents.orgId, orgId),
-        eq(incidents.kind, 'advisory'),
+        eq(incidents.kind, kind),
         isNull(incidents.resolvedAt),
       ),
     );
@@ -586,11 +785,20 @@ export interface GuaranteeEvaluation {
     deduped: boolean;
     floor: number;
     provenance: ServeFloorProvenance;
+    /** The advisory row's db createdAt — the SLA clock start (G2.2). */
+    createdAt: Date | null;
+    /** G2.2: this deduped crossing is confidently WORSE than the open
+     * advisory's recorded evidence (CI separation) — the caller should
+     * re-enqueue the suite verify immediately, throttle bypassed. */
+    worsened: boolean;
   } | null;
   breach: boolean;
   /** The configured action that fired (null when suppressed). */
   action: 'rollback' | 'alert' | null;
   incidentId: string | null;
+  /** The incident's db createdAt (G2.2) — the legacy-path SLA clock the
+   * breach emitters bind. Null when no incident was written. */
+  incidentAt: Date | null;
   /** Why no incident was written (null = an incident was written).
    * 'not-significant' (G0.3): observed mean below the floor but the CI95
    * straddles it — the at-risk state; visible, never an incident. */
@@ -667,6 +875,7 @@ export async function evaluateGuarantee(
     mode: 'legacy' as const,
     advisory: null,
     incidentId: null,
+    incidentAt: null,
     ci95: null,
     seed: null,
     minSamplesRequired: minSamples,
@@ -701,21 +910,32 @@ export async function evaluateGuarantee(
     // reported, no incident.
     return { ...ciBase, breach: false, action: null, suppressed: 'not-significant' };
   }
-  // Cooldown: one incident per (org, policy, cluster, strategy) per window.
-  if (
-    await hasRecentIncident(
-      db,
-      {
-        orgId: input.orgId,
-        policyId: input.policyId,
-        clusterId: input.clusterId,
-        fromStrategy: input.strategyHash,
-        windowMin: guarantee.windowMin,
-      },
-      now,
-    )
-  ) {
-    return { ...ciBase, breach: true, action: null, suppressed: 'cooldown' };
+  // Cooldown: one incident per (org, policy, cluster, strategy) per window
+  // — UNLESS the situation is confidently WORSE than the prior incident
+  // (G2.2 re-fire): new CI95 upper below the prior CI95 lower means the
+  // two evidence windows are separated, not noise. detail.refire carries
+  // the lineage.
+  const prior = await recentContractualIncident(
+    db,
+    {
+      orgId: input.orgId,
+      policyId: input.policyId,
+      clusterId: input.clusterId,
+      fromStrategy: input.strategyHash,
+      windowMin: guarantee.windowMin,
+    },
+    now,
+  );
+  let refire: { priorIncidentId: string; priorCi95: [number, number] } | null = null;
+  if (prior) {
+    const priorCi95 = (prior.detail as Record<string, unknown>).ci95 as
+      | [number, number]
+      | undefined;
+    if (priorCi95 !== undefined && ci95[1] < priorCi95[0]) {
+      refire = { priorIncidentId: prior.id, priorCi95 };
+    } else {
+      return { ...ciBase, breach: true, action: null, suppressed: 'cooldown' };
+    }
   }
 
   const detailBase = {
@@ -730,15 +950,25 @@ export async function evaluateGuarantee(
     minSamples,
     windowMin: guarantee.windowMin,
     samples: evidence.samples,
+    // G2.2: present only when this incident bypassed cooldown because the
+    // evidence is confidently worse than the prior incident's.
+    ...(refire !== null ? { refire } : {}),
   };
 
   if (guarantee.action === 'alert') {
-    const incidentId = await insertIncident(db, {
+    const incident = await insertIncidentRow(db, {
       orgId: input.orgId,
       kind: 'quality_breach' satisfies IncidentKind,
       detail: detailBase,
     });
-    return { ...ciBase, breach: true, action: 'alert', incidentId, suppressed: null };
+    return {
+      ...ciBase,
+      breach: true,
+      action: 'alert',
+      incidentId: incident.id,
+      incidentAt: incident.createdAt,
+      suppressed: null,
+    };
   }
 
   // action === 'rollback'
@@ -752,14 +982,21 @@ export async function evaluateGuarantee(
     // current one, or no frontier at all): the breach is still recorded —
     // as kind='quality_breach' with the intended action + reason, NO
     // operating-point change (documented no-target behavior).
-    const incidentId = await insertIncident(db, {
+    const incident = await insertIncidentRow(db, {
       orgId: input.orgId,
       kind: 'quality_breach' satisfies IncidentKind,
       detail: { ...detailBase, intendedAction: 'rollback', reason: 'no-rollback-target' },
     });
-    return { ...ciBase, breach: true, action: 'rollback', incidentId, suppressed: null };
+    return {
+      ...ciBase,
+      breach: true,
+      action: 'rollback',
+      incidentId: incident.id,
+      incidentAt: incident.createdAt,
+      suppressed: null,
+    };
   }
-  const incidentId = await insertIncident(db, {
+  const incident = await insertIncidentRow(db, {
     orgId: input.orgId,
     kind: 'rollback' satisfies IncidentKind,
     detail: {
@@ -773,7 +1010,8 @@ export async function evaluateGuarantee(
     ...ciBase,
     breach: true,
     action: 'rollback',
-    incidentId,
+    incidentId: incident.id,
+    incidentAt: incident.createdAt,
     suppressed: null,
     rollback: {
       fromStrategy: input.strategyHash,
@@ -819,6 +1057,7 @@ async function evaluateAdvisoryLeg(
     breach: false as const,
     action: null,
     incidentId: null,
+    incidentAt: null,
     ci95: null,
     seed: null,
     minSamplesRequired: minSamples,
@@ -868,13 +1107,42 @@ async function evaluateAdvisoryLeg(
     fromStrategy: input.strategyHash,
   });
   if (open) {
+    // G2.2 worsening: when THIS crossing is confidently worse than the
+    // open advisory's recorded evidence (CI separation — new upper below
+    // the recorded lower), append the observation to the advisory's ledger
+    // and tell the caller to re-enqueue its verify immediately. Still no
+    // second advisory row (one-open-per-tuple invariant).
+    const openCi95 = (open.detail as Record<string, unknown>).ci95 as
+      | [number, number]
+      | undefined;
+    const worsened = openCi95 !== undefined && ci95[1] < openCi95[0];
+    if (worsened) {
+      const detail = open.detail as Record<string, unknown>;
+      const worsenedLog = Array.isArray(detail.worsened)
+        ? (detail.worsened as unknown[])
+        : [];
+      await stampIncidentDetail(db, input.orgId, open.id, {
+        worsened: [
+          ...worsenedLog.slice(-(VERIFY_ATTEMPTS_KEPT - 1)),
+          { at: now.toISOString(), rollingQuality: mean, ci95, seed, samples: evidence.samples },
+        ],
+      });
+    }
     return {
       ...ciBase,
       suppressed: 'cooldown',
-      advisory: { triggered: false, incidentId: open.id, deduped: true, floor, provenance },
+      advisory: {
+        triggered: false,
+        incidentId: open.id,
+        deduped: true,
+        floor,
+        provenance,
+        createdAt: open.createdAt,
+        worsened,
+      },
     };
   }
-  const incidentId = await insertIncident(db, {
+  const incident = await insertIncidentRow(db, {
     orgId: input.orgId,
     kind: 'advisory' satisfies IncidentKind,
     detail: {
@@ -898,7 +1166,16 @@ async function evaluateAdvisoryLeg(
   return {
     ...ciBase,
     suppressed: null,
-    incidentId,
-    advisory: { triggered: true, incidentId, deduped: false, floor, provenance },
+    incidentId: incident.id,
+    incidentAt: incident.createdAt,
+    advisory: {
+      triggered: true,
+      incidentId: incident.id,
+      deduped: false,
+      floor,
+      provenance,
+      createdAt: incident.createdAt,
+      worsened: false,
+    },
   };
 }

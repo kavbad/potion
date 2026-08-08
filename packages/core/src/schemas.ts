@@ -116,6 +116,12 @@ export const GuaranteeConfigSchema = z.object({
    * Relative and scale-free — denominator is the incumbent's measured
    * score on identical items. */
   retentionFloor: z.number().min(0).max(1).optional(),
+  /** Verification SLA bound in minutes (G2.2). Absent → platform 240,
+   * applied at EVALUATION time only. Clock starts at advisory creation. */
+  verifySlaMin: z.number().positive().optional(),
+  /** Auto-restore on CONFIDENT suite-verified recovery (G2.2). Hierarchy
+   * mode only; legacy mode is a surfaced no-op. Default false. */
+  autoRestore: z.boolean().optional(),
 });
 
 export const PolicySchema = z.discriminatedUnion('type', [

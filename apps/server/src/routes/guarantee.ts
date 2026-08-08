@@ -29,6 +29,7 @@ import {
   listIncidents,
   listIncumbents,
   listPoliciesWithGuarantee,
+  openAdvisoryForTuple,
   resolveIncident,
   rollingQualityForPolicy,
   type ClusterIncumbentRow,
@@ -75,6 +76,11 @@ export interface GuaranteePolicyStatus {
    * designation — breach verdicts still use the absolute minQuality path,
    * and retention is unavailable until an incumbent is designated. */
   legacyPath: boolean;
+  /** G2.2 auto-restore posture: configured is the stored flag; effective
+   * tells the truth — on the legacy path (no incumbent) auto-restore is a
+   * structural no-op (serve-side recovery on a rolled-back tuple is
+   * undetectable) and `reason` says so. */
+  autoRestore: { configured: boolean; effective: boolean; reason: string | null };
 }
 
 /** Active designation surfaced org-wide (G2.1). */
@@ -94,6 +100,9 @@ export interface GuaranteeStatus {
   incumbents: IncumbentDto[];
   /** Open serve-leg advisories (tripwires whose suite-verify is pending). */
   openAdvisories: number;
+  /** G2.2: open advisories ESCALATED past their verifySlaMin — the org's
+   * guarantee is currently unverifiable for those tuples. */
+  unverifiableAdvisories: number;
 }
 
 /** Platform default retention floor (G2.1) — evaluation-time only. */
@@ -135,8 +144,10 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
     ]);
     const breaches = incidents.map(incidentDto);
     const incumbents = designations.filter((d) => d.status === 'active').map(incumbentDto);
-    const openAdvisories = incidents.filter(
-      (i) => i.kind === 'advisory' && i.resolvedAt === null,
+    const openAdvisoryRows = incidents.filter((i) => i.kind === 'advisory' && i.resolvedAt === null);
+    const openAdvisories = openAdvisoryRows.length;
+    const unverifiableAdvisories = openAdvisoryRows.filter(
+      (i) => 'escalation' in (i.detail as Record<string, unknown>),
     ).length;
     const statuses: GuaranteePolicyStatus[] = await Promise.all(
       policies.map(async (p) => {
@@ -173,10 +184,24 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
             : null,
           retentionFloor: guarantee.retentionFloor ?? PLATFORM_RETENTION_FLOOR,
           legacyPath: incumbents.length === 0,
+          autoRestore: {
+            configured: guarantee.autoRestore === true,
+            effective: guarantee.autoRestore === true && incumbents.length > 0,
+            reason:
+              guarantee.autoRestore === true && incumbents.length === 0
+                ? 'requires an incumbent designation — serve-side recovery on a rolled-back tuple is structurally undetectable'
+                : null,
+          },
         };
       }),
     );
-    const body: GuaranteeStatus = { orgId: org.orgId, policies: statuses, incumbents, openAdvisories };
+    const body: GuaranteeStatus = {
+      orgId: org.orgId,
+      policies: statuses,
+      incumbents,
+      openAdvisories,
+      unverifiableAdvisories,
+    };
     return reply.send(body);
   });
 
@@ -271,14 +296,24 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
         .code(503)
         .send(openAiError('job queue unavailable', 'server_error', 'queue_unavailable'));
     }
+    // G2.2: thread the OPEN advisory for the tuple so a manual verify
+    // resolves it (pre-G2.2 manual runs rendered verdicts that left the
+    // tripwire dangling open).
+    const openAdvisory = await openAdvisoryForTuple(ctx.db.db, {
+      orgId: org.orgId,
+      policyId: body.policyId,
+      clusterId,
+      fromStrategy: body.servingStrategyHash,
+    });
     const jobId = await ctx.queue.enqueue('guarantee:suite-verify', {
       orgId: org.orgId,
       policyId: body.policyId,
       clusterId,
       servingStrategyHash: body.servingStrategyHash,
+      ...(openAdvisory !== null ? { advisoryIncidentId: openAdvisory.id } : {}),
       ...(typeof body.capUsd === 'number' ? { capUsd: body.capUsd } : {}),
     });
-    return reply.code(202).send({ jobId });
+    return reply.code(202).send({ jobId, advisoryIncidentId: openAdvisory?.id ?? null });
   });
 
   // ---- GET designation history (superseded rows kept, reasons attached) ----

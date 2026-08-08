@@ -23,6 +23,29 @@ function q3(n: number | null): string {
   return n === null ? '—' : n.toFixed(3);
 }
 
+/** G2.2: the starved-verification banner — a named state, never silence. */
+function verificationBanner(e: GuaranteeReportEntry): string {
+  const v = e.verification;
+  if (v.state === 'unverifiable') {
+    const last = v.lastAttempt
+      ? `last attempt: ${esc(v.lastAttempt.outcome)}${v.lastAttempt.detail ? ` — ${esc(v.lastAttempt.detail)}` : ''}`
+      : 'no verify attempt recorded yet';
+    return `
+      <div class="unverifiable">
+        <strong>Guarantee currently unverifiable.</strong>
+        The open advisory is ${v.openAdvisoryAgeMin ?? '?'}min old (SLA bound ${v.verifySlaMin}min),
+        ${v.verifyAttempts} verify attempt(s); ${last}.
+        ${v.escalatedAt ? `Escalated ${esc(v.escalatedAt)}.` : 'Escalation pending the next sweep.'}
+        The SLA clock keeps running from advisory creation.
+      </div>`;
+  }
+  if (v.state === 'pending') {
+    return `<p class="adv">Verification pending — open advisory ${v.openAdvisoryAgeMin ?? 0}min old
+      (bound ${v.verifySlaMin}min, ${v.verifyAttempts} attempt(s)).</p>`;
+  }
+  return '';
+}
+
 function headlineCard(e: GuaranteeReportEntry): string {
   if (e.retention === null) {
     return `
@@ -81,6 +104,7 @@ function entrySection(e: GuaranteeReportEntry): string {
   return `
   <section>
     <h2>${esc(e.policyId)} · ${esc(e.clusterId)}</h2>
+    ${verificationBanner(e)}
     ${headlineCard(e)}
     ${incumbentRow}
     ${floorRow}
@@ -123,6 +147,7 @@ export function renderGuaranteeReportHtml(report: GuaranteeReport): string {
   .muted .v { color: #888; } .muted-text { color: #888; }
   .adv { color: #b26a00; font-weight: 600; }
   .banner { background: #fff8e1; border: 1px solid #f0c36d; padding: 0.5rem 0.75rem; border-radius: 6px; }
+  .unverifiable { background: #fdecea; border: 2px solid #c62828; padding: 0.6rem 0.85rem; border-radius: 6px; margin: 0.5rem 0; font-size: 0.9rem; }
   code { font-size: 0.8rem; background: #f5f5f5; padding: 0 0.2rem; }
   @media print { body { margin: 0.5rem; } }
 </style>

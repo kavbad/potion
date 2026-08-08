@@ -626,7 +626,7 @@ capstone everything else serves.)
       (b) the report's HEADLINE metric is BASELINE RETENTION — candidate strategy's
       score relative to the baseline strategy's score on identical items; raw scores
       available but never headlined. [M]
-- [ ] G2.2 Incident SLAs: emitAlert on the in-process breach path (parity with worker),
+- [x] G2.2 Incident SLAs: emitAlert on the in-process breach path (parity with worker),
       measured breach→notification latency, auto-restore-on-recovery option, cooldown
       that re-fires on worsening. [M]
 - [ ] G2.3 Key role split: serving keys lose incident-resolve and other admin mutations;
@@ -1538,4 +1538,77 @@ DONE (2026-08-07, session g21-guarantee-report):
 - $0 spend — no live leg (live retention proof composes into G2.8's capstone).
   Suite-verify cost note: ~$0.70 cold / ~$0.35 incumbent-cached per verify at the
   25-item cap ($5 default cap, fail-closed).
+
+## G2.2 — Incident SLAs (session 2026-08-08, plan approved)
+
+OWNER SCOPE ADDITION (2026-08-08): the STARVED-VERIFICATION state — an advisory
+whose suite-verify is budget-refused keeps its SLA clock running, escalates past a
+bound as its OWN notifiable condition distinct from breach, and surfaces on the
+report as 'guarantee currently unverifiable', never silently pending. The recorded
+SLA binding stands: clocks start at advisory creation; notification latency is
+measured to the contractual verdict.
+
+OWNER DECISIONS (check-in, 2026-08-08): auto-restore requires CONFIDENT recovery —
+retention CI95 LOWER ≥ floor, symmetric to the breach test. Refinement (verbatim):
+"bound the uncertain zone in time, not outcome — N consecutive non-confident
+all-clears escalate as 'recovery unconfirmed' for human review, mirroring the
+starved-verification escalation. Uncertainty never auto-restores and never
+silently persists."
+
+- [x] a. core+db: verifySlaMin/autoRestore knobs; 0026 (alert_deliveries
+      incident_id/clock_start_at/latency_ms + open-advisory index); AlertEvent +=
+      guarantee_unverifiable/guarantee_restored/guarantee_recovery_unconfirmed
+      (TS-only); insertIncidentRow; recentContractualIncident (kind-filtered —
+      fixes advisory-suppresses-contractual); openContractualIncidentForTuple;
+      listOpenAdvisories; appendIncidentVerifyAttempt (capped ledger);
+      stampIncidentDetail; escalation/recovery CAS (jsonb_exists guard);
+      resolveIncidentWithEvidence; tests
+- [x] b. evaluator: legacy cooldown re-fires on CI SEPARATION (new upper < prior
+      lower; detail.refire lineage); hierarchy worsening appends detail.worsened
+      and signals immediate re-verify (one-open-per-tuple invariant holds);
+      GuaranteeEvaluation.incidentAt + advisory.createdAt/worsened; tests
+- [x] c. workers: dispatch measures latency at the SUCCESSFUL POST vs the
+      emitter-bound clock (clamped ≥0; failures keep the clock, latency NULL) +
+      meter histogram; createAlertsDispatchHandler; sweep passes in
+      guarantee:evaluate (retry throttled on created/attempted/ENQUEUED stamps —
+      H3; escalation once-only CAS → guarantee_unverifiable with the advisory
+      clock; auto-restore enqueue: hierarchy-only, throttled); suite-verify:
+      up-front advisory/rollback fetch (ownership + clock), every open-leaving
+      outcome appends a durable attempt, CONTRACTUAL DEDUPE (H1: open incident on
+      the tuple → resolve advisory to the EXISTING id, no duplicate mint/alert),
+      verdict alert binds the ADVISORY clock (THE SLA BINDING), confident restore
+      (ci95 lower ≥ floor) resolves the rollback + guarantee_restored, Nth
+      non-confident all-clear → recovery-unconfirmed CAS + alert; tests (12 new)
+- [x] d. server+dashboard: in-process breach parity emitAlert (byte-parallel
+      payload + legacy clock); alerts:dispatch registered with the meter; GET
+      /api/alerts/deliveries (audit + latency visible; zero-caller repo fn gets
+      its caller); manual verify threads the open advisory id (202 carries it);
+      status += unverifiableAdvisories + honest autoRestore posture
+      {configured, effective, reason}; report += verification state
+      verified|pending|unverifiable|none (unverifiable computed at REPORT time
+      too — never lags the sweep) + 'guarantee currently unverifiable' reason
+      with last-attempt evidence; HTML + dashboard banners; tests (7 new)
+- [x] e. verify: full sweep + walkthrough step 16 + docs + commit
+
+DONE (2026-08-08, session g22-incident-slas):
+- Verify: 1038 keyless tests green (db 107, workers 66, server 337, observability
+  29, +rest); walkthrough 17/17 incl. NEW step 16 — alert rule → 6 sampled chats →
+  legacy breach → notification DELIVERED to a real local capture endpoint with
+  measured latency (23ms), incident linkage, and the emitter-bound clock on the
+  audit row → verification states on every report entry; 0026 double-migrate
+  idempotency verified.
+- Notification latency lands in three places, all auditable: the
+  alert_deliveries row (incident_id, clock_start_at, latency_ms), the
+  potion_alert_notification_latency_ms histogram (buckets 250ms…4h), and
+  GET /api/alerts/deliveries.
+- Starved verification is now a NAMED, durable, escalating state: refusals land
+  on the advisory's verifyAttempts ledger (the incident row is the lifecycle
+  ledger — no jobs table needed), the sweep retries throttled, the SLA breach
+  escalates once per advisory as guarantee_unverifiable (counter metered), and
+  the report/status/HTML/dashboard all surface 'guarantee currently
+  unverifiable' with age, attempts, and last refusal.
+- Retry-gap fixes folded in (plan-agent holes): contractual dedupe prevents
+  sweep-driven incident/alert storms; manual verifies finally resolve
+  advisories; the wrong "next crossing retries" comment is gone.
+- $0 spend — mock throughout; live starvation/restore proof composes into G2.8.
 

@@ -160,6 +160,26 @@ export interface AlertsDispatchPayload {
   event: AlertEvent;
   /** Event detail (incident detail / budget numbers / breaker key). */
   detail?: Record<string, unknown>;
+  /** G2.2: the incident this notification concerns (audit correlation;
+   * absent for incident-less events — budget_*, breaker_open,
+   * recipe_promoted). */
+  incidentId?: string;
+  /**
+   * G2.2: the SLA clock start the EMITTER binds (ISO). STANDING DECISION,
+   * verbatim: "SLA clocks start at advisory creation; notification latency
+   * is measured to the contractual verdict." Per-event semantics:
+   *   quality_breach/rollback (suite leg)  → the ADVISORY's createdAt when
+   *     one is attached (the binding above), else the verdict incident's;
+   *   quality_breach/rollback (legacy)     → the breach incident's createdAt;
+   *   guarantee_unverifiable               → the advisory's createdAt (the
+   *     clock keeps running while verification starves);
+   *   guarantee_restored / guarantee_recovery_unconfirmed → the rollback
+   *     incident's createdAt (latency = time-to-restore);
+   *   budget_* / breaker_open / recipe_promoted → absent (latency NULL).
+   * Measured at the SUCCESSFUL POST; on the memory queue a long job ahead
+   * of the dispatch inflates it — that is HONEST end-to-end latency.
+   */
+  clockStartAt?: string;
 }
 
 /**
@@ -260,8 +280,13 @@ export interface GuaranteeSuiteVerifyPayload {
   servingStrategyHash: string;
   /** Eval spend cap (live mode; default $5, live-sweep precedent). */
   capUsd?: number;
-  /** The open advisory this verify resolves (absent on manual runs). */
+  /** The open advisory this verify resolves (threaded by the sweep retry
+   * pass AND the manual route since G2.2). */
   advisoryIncidentId?: string;
+  /** G2.2 auto-restore: the active rollback incident this verify may lift
+   * on CONFIDENT recovery (retention CI95 lower ≥ floor). Set only by the
+   * sweep's auto-restore pass. */
+  restoreForIncidentId?: string;
 }
 
 export interface FrontierLiveSweepPayload {

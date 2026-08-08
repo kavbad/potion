@@ -39,6 +39,13 @@ export interface Metrics {
    * emitted by the budget:evaluate worker (post-dedup). OPTIONAL so
    * out-of-tree Metrics impls keep compiling (NoopMetrics no-ops it). */
   observeBudgetEvent?(e: { orgId: string; kind: 'budget_warning' | 'budget_exceeded' }): void;
+  /** G2.2 incident SLAs: SLA-bound notification latency observed at the
+   * SUCCESSFUL alert POST — now − the emitter-bound clock start (advisory
+   * creation on the hierarchy path). OPTIONAL (NoopMetrics no-ops it). */
+  observeAlertNotificationLatency?(o: { orgId: string; event: string; latencyMs: number }): void;
+  /** G2.2 starved verification: one increment per advisory escalated to
+   * 'guarantee currently unverifiable' (post-CAS — the emit winner). */
+  observeGuaranteeUnverifiable?(o: { orgId: string }): void;
 }
 
 export interface MetricsOptions {
@@ -61,6 +68,8 @@ export class PromMetrics implements Metrics {
   private readonly shadowDecisionsTotal: Counter<'cluster_id' | 'sampled'>;
   private readonly guaranteeBreachesTotal: Counter<'org_id' | 'action'>;
   private readonly budgetEventsTotal: Counter<'org_id' | 'kind'>;
+  private readonly alertNotificationLatencyMs: Histogram<'org_id' | 'event'>;
+  private readonly guaranteeUnverifiableTotal: Counter<'org_id'>;
 
   constructor(opts: MetricsOptions = {}) {
     this.registry = opts.registry ?? new Registry();
@@ -126,6 +135,22 @@ export class PromMetrics implements Metrics {
       labelNames: ['org_id', 'kind'],
       registers: [this.registry],
     });
+    this.alertNotificationLatencyMs = new Histogram({
+      name: 'potion_alert_notification_latency_ms',
+      help:
+        'SLA-bound notification latency: successful alert POST minus the emitter-bound ' +
+        'clock start (G2.2; advisory creation on the hierarchy path). Buckets span ' +
+        'ms→hours — an advisory→verdict chain legitimately takes hours.',
+      labelNames: ['org_id', 'event'],
+      buckets: [250, 1000, 5000, 30_000, 60_000, 300_000, 900_000, 3_600_000, 14_400_000],
+      registers: [this.registry],
+    });
+    this.guaranteeUnverifiableTotal = new Counter({
+      name: 'potion_guarantee_unverifiable_total',
+      help: 'Advisories escalated to guarantee-currently-unverifiable (G2.2 starved verification), by org',
+      labelNames: ['org_id'],
+      registers: [this.registry],
+    });
   }
 
   incRequest(route: string, status: number, durationMs: number): void {
@@ -187,6 +212,14 @@ export class PromMetrics implements Metrics {
     this.budgetEventsTotal.inc({ org_id: e.orgId, kind: e.kind });
   }
 
+  observeAlertNotificationLatency(o: { orgId: string; event: string; latencyMs: number }): void {
+    this.alertNotificationLatencyMs.observe({ org_id: o.orgId, event: o.event }, o.latencyMs);
+  }
+
+  observeGuaranteeUnverifiable(o: { orgId: string }): void {
+    this.guaranteeUnverifiableTotal.inc({ org_id: o.orgId });
+  }
+
   /** Prometheus text exposition for GET /metrics. */
   async render(): Promise<string> {
     return this.registry.metrics();
@@ -208,6 +241,8 @@ export class NoopMetrics implements Metrics {
   observeShadow(): void {}
   observeGuaranteeBreach(): void {}
   observeBudgetEvent(): void {}
+  observeAlertNotificationLatency(): void {}
+  observeGuaranteeUnverifiable(): void {}
   async render(): Promise<string> {
     return '';
   }

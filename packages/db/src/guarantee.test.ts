@@ -10,7 +10,7 @@ import {
   evaluateGuarantee,
   equivalentPointOnPrevious,
   GUARANTEE_MIN_SAMPLES,
-  hasRecentIncident,
+  recentContractualIncident,
   highestQualityPoint,
   insertIncident,
   insertQualitySample,
@@ -502,18 +502,67 @@ describe('incidents: resolve + active rollback + org isolation', () => {
     expect(list.slice(1).every((r) => r.resolvedAt !== null)).toBe(true);
   });
 
-  it('hasRecentIncident keys on (org, policy, cluster, fromStrategy) + window', async () => {
+  it('G2.2 re-fire: cooldown yields when the new evidence is confidently WORSE (CI separation)', async () => {
+    await insertPolicy(db(), { id: 'pol-rf', orgId: DEFAULT_ORG_ID, name: 'rf', config: policyWith(ALERT_G) });
+    const input = {
+      orgId: DEFAULT_ORG_ID,
+      policyId: 'pol-rf',
+      clusterId: CID,
+      strategyHash: H_MID,
+      policy: policyWith(ALERT_G),
+    };
+    // Confidently-low evidence (mean ~0.1, tight CI).
+    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.11, 0.09, 0.1, 0.1, 0.11], NOW, { policyId: 'pol-rf' });
+    // Prior incident inside the window, SEPARATED above (its lower 0.5 >
+    // the new upper ~0.11) → re-fire despite cooldown, lineage recorded.
+    const prior = await insertIncident(db(), {
+      orgId: DEFAULT_ORG_ID,
+      kind: 'quality_breach',
+      detail: { policyId: 'pol-rf', clusterId: CID, fromStrategy: H_MID, ci95: [0.5, 0.6] },
+    });
+    const refired = await evaluateGuarantee(db(), input, NOW);
+    expect(refired.breach).toBe(true);
+    expect(refired.suppressed).toBeNull();
+    expect(refired.incidentId).not.toBeNull();
+    expect(refired.incidentAt).toBeInstanceOf(Date);
+    const list = await listIncidents(db(), DEFAULT_ORG_ID);
+    const minted = list.find((i) => i.id === refired.incidentId)!;
+    expect((minted.detail as Record<string, unknown>).refire).toMatchObject({
+      priorIncidentId: prior,
+      priorCi95: [0.5, 0.6],
+    });
+    // OVERLAPPING prior (lower 0.05 < new upper) → still cooldown. The
+    // just-minted re-fire incident itself overlaps (same evidence), so the
+    // next evaluation suppresses — no incident storm.
+    const cooled = await evaluateGuarantee(db(), input, NOW);
+    expect(cooled.suppressed).toBe('cooldown');
+    expect(cooled.incidentId).toBeNull();
+  });
+
+  it('recentContractualIncident keys on (org, policy, cluster, fromStrategy) + window; contractual kinds ONLY', async () => {
     await insertIncident(db(), {
       orgId: DEFAULT_ORG_ID,
       kind: 'rollback',
-      detail: { policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP },
+      detail: { policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP, ci95: [0.2, 0.4] },
     });
     const scope = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, windowMin: 60 };
-    expect(await hasRecentIncident(db(), scope, NOW)).toBe(true);
-    expect(await hasRecentIncident(db(), { ...scope, clusterId: 'other' }, NOW)).toBe(false);
-    expect(await hasRecentIncident(db(), { ...scope, fromStrategy: H_CHEAP }, NOW)).toBe(false);
+    const hit = await recentContractualIncident(db(), scope, NOW);
+    expect(hit).not.toBeNull();
+    // G2.2: the FULL row comes back — prior severity (detail.ci95) readable.
+    expect((hit!.detail as Record<string, unknown>).ci95).toEqual([0.2, 0.4]);
+    expect(await recentContractualIncident(db(), { ...scope, clusterId: 'other' }, NOW)).toBeNull();
+    expect(await recentContractualIncident(db(), { ...scope, fromStrategy: H_CHEAP }, NOW)).toBeNull();
     // G0.3: another policy on the same (cluster, strategy) is NOT cooled down
-    expect(await hasRecentIncident(db(), { ...scope, policyId: 'pol-other' }, NOW)).toBe(false);
+    expect(await recentContractualIncident(db(), { ...scope, policyId: 'pol-other' }, NOW)).toBeNull();
+    // G2.2 regression: an ADVISORY row on the tuple must NOT suppress a
+    // later contractual incident (pre-G2.2 the check had no kind filter).
+    const scope2 = { ...scope, policyId: 'pol-advisory-only' };
+    await insertIncident(db(), {
+      orgId: DEFAULT_ORG_ID,
+      kind: 'advisory',
+      detail: { policyId: 'pol-advisory-only', clusterId: 'code-gen', fromStrategy: H_MID },
+    });
+    expect(await recentContractualIncident(db(), scope2, NOW)).toBeNull();
   });
 });
 

@@ -35,6 +35,7 @@ import {
   type DerivedServeFloor,
   type IncidentRow,
 } from '@potion/db';
+import { GUARANTEE_VERIFY_SLA_MIN } from '@potion/workers';
 import { openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { confidenceFor, type Confidence } from './reports.js';
@@ -61,6 +62,22 @@ export interface RetentionHeadline {
   incidentId: string;
 }
 
+/** G2.2: the tuple's verification state — starved verification is a NAMED
+ * state on the report, never a silent "pending". */
+export interface VerificationState {
+  /** 'unverifiable' = an open advisory is escalated OR has aged past the
+   * SLA bound (computed at REPORT time too, so the report never lags the
+   * sweep); 'pending' = open advisory within bound; 'verified' = a
+   * retention verdict exists and nothing is open; 'none' = no advisory
+   * activity and no verdict. */
+  state: 'verified' | 'pending' | 'unverifiable' | 'none';
+  openAdvisoryAgeMin: number | null;
+  verifyAttempts: number;
+  lastAttempt: { at: string; outcome: string; detail: string | null } | null;
+  escalatedAt: string | null;
+  verifySlaMin: number;
+}
+
 export interface GuaranteeReportEntry {
   policyId: string;
   clusterId: string;
@@ -68,6 +85,8 @@ export interface GuaranteeReportEntry {
   retention: RetentionHeadline | null;
   /** Why retention is unavailable when null (visible rigor). */
   retentionUnavailableReason: string | null;
+  /** G2.2 verification state (SLA clock runs from advisory creation). */
+  verification: VerificationState;
   incumbent: IncumbentDto | null;
   /** Serve-leg advisory floor derived FRESH from the incumbent's serve
    * distribution (null with reason when underivable). */
@@ -240,7 +259,43 @@ export async function loadGuaranteeReport(
     }
     const tupleIncidents = incidents.filter((i) => tupleMatches(i, policyId, clusterId));
     const retention = latestRetentionHeadline(incidents, policyId, clusterId);
-    if (incumbent && retention === null) {
+    // ---- G2.2 verification state ----
+    const slaMin = guarantee.verifySlaMin ?? GUARANTEE_VERIFY_SLA_MIN;
+    const openAdv = tupleIncidents.filter((i) => i.kind === 'advisory' && i.resolvedAt === null);
+    const oldest = openAdv.reduce<IncidentRow | null>(
+      (acc, i) => (acc === null || i.createdAt < acc.createdAt ? i : acc),
+      null,
+    );
+    const oldestDetail = (oldest?.detail ?? {}) as Record<string, unknown>;
+    const ageMin = oldest ? (now.getTime() - oldest.createdAt.getTime()) / 60_000 : null;
+    const escalation = oldestDetail.escalation as { at?: string } | undefined;
+    const attempts = Array.isArray(oldestDetail.verifyAttempts)
+      ? (oldestDetail.verifyAttempts as Array<{ at: string; outcome: string; detail: string | null }>)
+      : [];
+    const lastAttempt = attempts[attempts.length - 1] ?? null;
+    // Unverifiable is computed at report time as well as read from the
+    // sweep's escalation stamp — the report never lags the sweep.
+    const unverifiable = oldest !== null && (escalation !== undefined || (ageMin ?? 0) > slaMin);
+    const verification: VerificationState = {
+      state: unverifiable
+        ? 'unverifiable'
+        : oldest !== null
+          ? 'pending'
+          : retention !== null
+            ? 'verified'
+            : 'none',
+      openAdvisoryAgeMin: ageMin !== null ? Math.round(ageMin) : null,
+      verifyAttempts: attempts.length,
+      lastAttempt,
+      escalatedAt: escalation?.at ?? null,
+      verifySlaMin: slaMin,
+    };
+    if (unverifiable && retention === null) {
+      retentionUnavailableReason =
+        'guarantee currently unverifiable — suite verification has not produced a verdict ' +
+        `within the SLA bound (${slaMin}min)` +
+        (lastAttempt ? ` (last attempt: ${lastAttempt.outcome}${lastAttempt.detail ? ` — ${lastAttempt.detail}` : ''})` : ' (no verify attempt recorded yet)');
+    } else if (incumbent && retention === null) {
       retentionUnavailableReason = 'no suite-verify verdict yet — retention pending the first verify run';
     }
     entries.push({
@@ -248,6 +303,7 @@ export async function loadGuaranteeReport(
       clusterId,
       retention,
       retentionUnavailableReason,
+      verification,
       incumbent: incumbent ? incumbentDtoOf(incumbent) : null,
       derivedFloor,
       openAdvisories: tupleIncidents

@@ -277,6 +277,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
 
 function RetentionSection({ report }: { report: GuaranteeReportDto }) {
   const openAdvisories = report.entries.reduce((n, e) => n + e.openAdvisories.length, 0);
+  const unverifiable = report.entries.filter((e) => e.verification?.state === 'unverifiable');
   return (
     <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
       <div className="mb-2 flex items-baseline justify-between">
@@ -285,6 +286,15 @@ function RetentionSection({ report }: { report: GuaranteeReportDto }) {
           {report.from} → {report.to}
         </span>
       </div>
+      {unverifiable.length > 0 && (
+        <div className="mb-4 rounded-lg border-2 border-warn bg-amber-50 px-4 py-3 text-sm text-warn">
+          <strong>Guarantee currently unverifiable</strong> for {unverifiable.length} workload
+          {unverifiable.length === 1 ? '' : 's'}: suite verification has not produced a verdict
+          within the SLA bound. The clock keeps running from advisory creation; verification
+          retries continue and this state is escalated as its own alert
+          (guarantee_unverifiable), distinct from a breach.
+        </div>
+      )}
       {openAdvisories > 0 && (
         <div className="mb-4 rounded-lg border border-warn bg-amber-50 px-4 py-3 text-sm text-warn">
           {openAdvisories} open advisory tripwire{openAdvisories === 1 ? '' : 's'} — serve-path
@@ -325,6 +335,24 @@ function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
       <div className="mb-1 text-xs text-faint">
         {entry.policyId} · <span className="font-mono">{entry.clusterId}</span>
       </div>
+      {entry.verification && entry.verification.state !== 'none' && (
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide">
+          <span
+            className={
+              entry.verification.state === 'unverifiable'
+                ? 'text-warn'
+                : entry.verification.state === 'pending'
+                  ? 'text-soft'
+                  : 'text-accent'
+            }
+          >
+            {entry.verification.state}
+            {entry.verification.state !== 'verified' &&
+              entry.verification.openAdvisoryAgeMin !== null &&
+              ` · ${entry.verification.openAdvisoryAgeMin}min / ${entry.verification.verifySlaMin}min`}
+          </span>
+        </div>
+      )}
       {r ? (
         <>
           <div className="flex items-baseline gap-3">

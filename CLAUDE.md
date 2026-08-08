@@ -184,9 +184,14 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   designation as the retention baseline, TRUST HIERARCHY — advisory serve
   leg / contractual suite leg via guarantee:suite-verify, retention
   headline report + monthly artifact + CLI, completion-id correlation,
-  serve-path judgeMaxTokens stray closed; walkthrough step 15); (13) incident SLAs — alert on the in-process breach path,
-  breach→notification bound, auto-restore semantics, serving keys must NOT
-  resolve incidents (role split); (14) targeted server tests on the serving
+  serve-path judgeMaxTokens stray closed; walkthrough step 15); (13) [DONE 2026-08-08] incident SLAs (G2.2: measured
+  breach→notification latency bound to the advisory clock, starved
+  verification — durable attempt ledger + sweep retries + once-only
+  'guarantee_unverifiable' escalation + report 'currently unverifiable'
+  state, confident-recovery auto-restore with time-bounded
+  recovery-unconfirmed escalation, worsening re-fire, in-process parity
+  emit; walkthrough step 16); NOTE the role-split item ("serving keys must
+  NOT resolve incidents") moved to G2.3 where it belongs; (14) targeted server tests on the serving
   hot path incl. the mock-eligibility audit of every provider-resolution
   site; (16) compound policy: quality floor + latency bound in one policy;
   (G2.8 CAPSTONE) one real workload end-to-end through the whole pipeline

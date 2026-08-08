@@ -507,7 +507,7 @@ export const incidents = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   },
-  (_t) => [check('incidents_kind_check', sql`kind IN ('quality_breach', 'rollback')`)],
+  (_t) => [check('incidents_kind_check', sql`kind IN ('quality_breach', 'rollback', 'advisory')`)],
 );
 
 /**
@@ -562,7 +562,19 @@ export type AlertEvent =
   // M4b #37 (SPEC §15.4): an autoresearcher promotion published a new
   // frontier version. Pure TS addition — alert_rules.events is text[] with
   // no DB-level CHECK, so no migration is needed for the wider vocabulary.
-  | 'recipe_promoted';
+  | 'recipe_promoted'
+  // G2.2 trust-hierarchy SLA conditions (TS-only widening, same contract):
+  // guarantee_unverifiable — an OPEN advisory aged past its verifySlaMin
+  //   without a contractual verdict (starved verification; distinct from
+  //   breach, escalated once per advisory).
+  // guarantee_restored — auto-restore lifted a rollback on a CONFIDENT
+  //   suite-verified recovery (retention CI95 lower ≥ floor).
+  // guarantee_recovery_unconfirmed — N consecutive NON-confident all-clears
+  //   on a restore verify: uncertainty never auto-restores and never
+  //   silently persists (owner refinement, 2026-08-08); human review.
+  | 'guarantee_unverifiable'
+  | 'guarantee_restored'
+  | 'guarantee_recovery_unconfirmed';
 export const ALERT_EVENTS: readonly AlertEvent[] = [
   'quality_breach',
   'rollback',
@@ -570,6 +582,9 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'budget_exceeded',
   'breaker_open',
   'recipe_promoted',
+  'guarantee_unverifiable',
+  'guarantee_restored',
+  'guarantee_recovery_unconfirmed',
 ];
 
 export const alertRules = pgTable(
@@ -605,6 +620,17 @@ export const alertDeliveries = pgTable('alert_deliveries', {
   lastError: text('last_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  /** G2.2 (0026): the incident this notification concerns — TEXT, not an
+   * FK (audit outlives source, the rule_id contract). NULL for
+   * incident-less events (budget_*, breaker_open, recipe_promoted). */
+  incidentId: text('incident_id'),
+  /** The SLA clock start the EMITTER bound (standing decision: advisory
+   * created_at on the hierarchy path; incident created_at on legacy paths;
+   * rollback created_at for restore/recovery events). NULL = not SLA-bound. */
+  clockStartAt: timestamp('clock_start_at', { withTimezone: true }),
+  /** now() − clock_start_at at the SUCCESSFUL POST, clamped ≥ 0 (clock
+   * skew). NULL on failure — an undelivered notification has no latency. */
+  latencyMs: doublePrecision('latency_ms'),
 });
 
 /**

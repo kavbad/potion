@@ -24,9 +24,19 @@ import {
   activeIncumbent,
   getPolicyById,
   insertIncident,
+  insertIncidentRow,
   pairedQualities,
   resolveAdvisoryWithEvidence,
+  resolveIncidentWithEvidence,
   resolveRollbackTarget,
+  appendIncidentVerifyAttempt,
+  getIncidentByIdForOrg,
+  latestActiveRollback,
+  listOpenAdvisories,
+  markAdvisoryEscalated,
+  markRecoveryUnconfirmed,
+  openContractualIncidentForTuple,
+  stampIncidentDetail,
   strategyConfigs,
   type DbHandle,
   type GuaranteeEvaluation,
@@ -405,7 +415,20 @@ export const shadowJudgeHandler: WorkerHandler<'shadow:judge'> = async (
  * the server passes its observability meter when registering this handler. */
 export interface GuaranteeBreachMeter {
   observeGuaranteeBreach?(b: { orgId: string; action: 'rollback' | 'alert' }): void;
+  /** G2.2: one increment per advisory escalated to unverifiable. */
+  observeGuaranteeUnverifiable?(o: { orgId: string }): void;
 }
+
+/** G2.2 platform SLA consts (evaluation-time; never injected into configs). */
+export const GUARANTEE_VERIFY_SLA_MIN = 240;
+/** Minimum minutes between suite-verify (re-)enqueues for one incident —
+ * throttled on max(createdAt, lastVerifyAttemptAt, verifyEnqueuedAt) so a
+ * queued-but-not-yet-run verify does not re-enqueue every 60s sweep. */
+export const VERIFY_RETRY_MIN = 30;
+/** Consecutive NON-confident all-clears on a restore verify before
+ * 'guarantee_recovery_unconfirmed' escalates for human review (owner
+ * refinement: uncertainty never auto-restores and never silently persists). */
+export const RECOVERY_UNCONFIRMED_AFTER = 3;
 
 export interface GuaranteeEvaluateResult {
   /** Rolling evaluations performed (1 per-target; N in sweep mode). */
@@ -416,6 +439,10 @@ export interface GuaranteeEvaluateResult {
    * with whether a suite-verify was enqueued (queue present) — the
    * contractual leg is never rendered here. */
   advisories: Array<{ orgId: string; incidentId: string; suiteVerifyEnqueued: boolean }>;
+  /** G2.2 sweep passes (sweep mode; empty on per-target jobs). */
+  retriedVerifies: Array<{ orgId: string; incidentId: string }>;
+  escalated: Array<{ orgId: string; incidentId: string; ageMin: number }>;
+  restoreVerifies: Array<{ orgId: string; rollbackIncidentId: string }>;
 }
 
 /** One evaluation target: (org, policy, cluster, strategy, governing policy). */
@@ -487,20 +514,28 @@ export function createGuaranteeEvaluateHandler(opts: {
       // (target carries orgId/policyId/clusterId/strategyHash/policy — the
       // evaluator's exact keyed input shape.)
       evaluations.push(evaluation);
-      // G2.1 trust hierarchy: a NEW advisory tripwire enqueues the
-      // contractual suite re-eval. Enqueue faults never fail the job —
-      // the advisory row is the durable record and stays OPEN, so the
-      // next crossing (or a manual run) retries the verify.
-      if (evaluation.advisory?.triggered && evaluation.advisory.incidentId !== null) {
+      // G2.1/G2.2 trust hierarchy: a NEW advisory tripwire — or a deduped
+      // crossing that is confidently WORSE than the open advisory's
+      // recorded evidence — enqueues the contractual suite re-eval.
+      // Enqueue faults never fail the job: the advisory row is the durable
+      // record and stays OPEN; the sweep's open-advisory retry pass below
+      // is the standing retry mechanism (G2.2).
+      const adv = evaluation.advisory;
+      if (adv && adv.incidentId !== null && (adv.triggered || adv.worsened)) {
         let suiteVerifyEnqueued = false;
         if (ctx.queue) {
           try {
+            // Throttle stamp BEFORE enqueue (worsening bypasses the
+            // throttle by design, but stamps too so the sweep backs off).
+            await stampIncidentDetail(ctx.db, target.orgId, adv.incidentId, {
+              verifyEnqueuedAt: new Date().toISOString(),
+            });
             await ctx.queue.enqueue('guarantee:suite-verify', {
               orgId: target.orgId,
               policyId: target.policyId,
               clusterId: target.clusterId,
               servingStrategyHash: target.strategyHash,
-              advisoryIncidentId: evaluation.advisory.incidentId,
+              advisoryIncidentId: adv.incidentId,
             });
             suiteVerifyEnqueued = true;
           } catch {
@@ -509,7 +544,7 @@ export function createGuaranteeEvaluateHandler(opts: {
         }
         advisories.push({
           orgId: target.orgId,
-          incidentId: evaluation.advisory.incidentId,
+          incidentId: adv.incidentId,
           suiteVerifyEnqueued,
         });
       }
@@ -529,6 +564,13 @@ export function createGuaranteeEvaluateHandler(opts: {
           await emitAlertEvent(ctx, {
             orgId: target.orgId,
             event: evaluation.action === 'rollback' ? 'rollback' : 'quality_breach',
+            // G2.2 SLA clock, legacy path: the breach incident's own
+            // createdAt (hierarchy verdicts bind the ADVISORY clock in
+            // guaranteeSuiteVerifyHandler instead).
+            incidentId: evaluation.incidentId,
+            ...(evaluation.incidentAt !== null
+              ? { clockStartAt: evaluation.incidentAt.toISOString() }
+              : {}),
             detail: {
               incidentId: evaluation.incidentId,
               clusterId: target.clusterId,
@@ -544,8 +586,200 @@ export function createGuaranteeEvaluateHandler(opts: {
         // ---- end M4 #33 alerts emission ----
       }
     }
-    return { evaluations, breaches, advisories };
+
+    // ---- G2.2 sweep passes (sweep mode only — a per-target job names its
+    // exact tuple and must stay cheap). Each pass is fault-isolated: the
+    // 60s cadence retries anything a fault skipped. ----
+    const sweepMode = !(
+      payload.policy &&
+      payload.orgId &&
+      payload.policyId &&
+      payload.clusterId &&
+      payload.strategyHash
+    );
+    const retriedVerifies: GuaranteeEvaluateResult['retriedVerifies'] = [];
+    const escalated: GuaranteeEvaluateResult['escalated'] = [];
+    const restoreVerifies: GuaranteeEvaluateResult['restoreVerifies'] = [];
+    if (sweepMode) {
+      try {
+        await runAdvisorySweepPasses(ctx, payload.orgId, opts.meter, {
+          retriedVerifies,
+          escalated,
+        });
+      } catch {
+        // fault-isolated — next sweep retries
+      }
+      try {
+        await runAutoRestorePass(ctx, payload.orgId, restoreVerifies);
+      } catch {
+        // fault-isolated — next sweep retries
+      }
+    }
+    return { evaluations, breaches, advisories, retriedVerifies, escalated, restoreVerifies };
   };
+}
+
+/** Minutes elapsed since a timestamp. */
+function minutesSince(at: Date | string, now: Date): number {
+  const t = typeof at === 'string' ? Date.parse(at) : at.getTime();
+  return (now.getTime() - t) / 60_000;
+}
+
+/**
+ * G2.2 starved-verification sweep passes over OPEN advisories: (1) RETRY —
+ * re-enqueue the suite verify when nothing has been attempted or enqueued
+ * within VERIFY_RETRY_MIN; (2) ESCALATE — an advisory older than the
+ * policy's verifySlaMin without a verdict becomes 'guarantee currently
+ * unverifiable', its own notifiable condition (once per advisory, CAS-
+ * guarded; the clock KEEPS RUNNING — a later verdict still measures its
+ * notification latency from the same advisory createdAt).
+ */
+async function runAdvisorySweepPasses(
+  ctx: JobContext,
+  orgId: string | undefined,
+  meter: GuaranteeBreachMeter | undefined,
+  out: {
+    retriedVerifies: Array<{ orgId: string; incidentId: string }>;
+    escalated: Array<{ orgId: string; incidentId: string; ageMin: number }>;
+  },
+): Promise<void> {
+  const now = new Date();
+  const open = await listOpenAdvisories(ctx.db, orgId);
+  if (open.length === 0) return;
+  // Guarantee configs resolve per (org, policy) — cache per sweep.
+  const policyCache = new Map<string, Map<string, Policy>>();
+  const policiesFor = async (org: string): Promise<Map<string, Policy>> => {
+    let m = policyCache.get(org);
+    if (!m) {
+      const rows = await listPoliciesWithGuarantee(ctx.db, org);
+      m = new Map(rows.map((r) => [r.id, r.config] as const));
+      policyCache.set(org, m);
+    }
+    return m;
+  };
+  for (const advisory of open) {
+    const detail = advisory.detail as Record<string, unknown>;
+    const policyId = detail.policyId;
+    const clusterId = detail.clusterId;
+    const fromStrategy = detail.fromStrategy;
+    if (typeof policyId !== 'string' || typeof clusterId !== 'string' || typeof fromStrategy !== 'string') {
+      continue; // pre-G2.1 shape — nothing to verify against
+    }
+    const policy = (await policiesFor(advisory.orgId)).get(policyId);
+    const guarantee = policy?.guarantee;
+    if (!guarantee) continue; // policy deleted or guarantee removed — advisory stays for the admin
+    // (1) RETRY, throttled on every signal that a verify is recent/pending.
+    const stamps = [
+      advisory.createdAt,
+      ...(typeof detail.lastVerifyAttemptAt === 'string' ? [detail.lastVerifyAttemptAt] : []),
+      ...(typeof detail.verifyEnqueuedAt === 'string' ? [detail.verifyEnqueuedAt] : []),
+    ];
+    const freshestMin = Math.min(...stamps.map((t) => minutesSince(t, now)));
+    if (ctx.queue && freshestMin >= VERIFY_RETRY_MIN) {
+      await stampIncidentDetail(ctx.db, advisory.orgId, advisory.id, {
+        verifyEnqueuedAt: now.toISOString(),
+      });
+      await ctx.queue.enqueue('guarantee:suite-verify', {
+        orgId: advisory.orgId,
+        policyId,
+        clusterId,
+        servingStrategyHash: fromStrategy,
+        advisoryIncidentId: advisory.id,
+      });
+      out.retriedVerifies.push({ orgId: advisory.orgId, incidentId: advisory.id });
+    }
+    // (2) ESCALATE past the SLA bound — once, CAS-guarded.
+    const slaMin = guarantee.verifySlaMin ?? GUARANTEE_VERIFY_SLA_MIN;
+    const ageMin = minutesSince(advisory.createdAt, now);
+    if (ageMin > slaMin && !('escalation' in detail)) {
+      const attempts = Array.isArray(detail.verifyAttempts) ? detail.verifyAttempts.length : 0;
+      const won = await markAdvisoryEscalated(ctx.db, advisory.orgId, advisory.id, {
+        at: now.toISOString(),
+        verifySlaMin: slaMin,
+        ageMin: Math.round(ageMin),
+        verifyAttempts: attempts,
+      });
+      if (won) {
+        meter?.observeGuaranteeUnverifiable?.({ orgId: advisory.orgId });
+        out.escalated.push({ orgId: advisory.orgId, incidentId: advisory.id, ageMin: Math.round(ageMin) });
+        try {
+          await emitAlertEvent(ctx, {
+            orgId: advisory.orgId,
+            event: 'guarantee_unverifiable',
+            incidentId: advisory.id,
+            clockStartAt: advisory.createdAt.toISOString(),
+            detail: {
+              advisoryIncidentId: advisory.id,
+              policyId,
+              clusterId,
+              fromStrategy,
+              ageMin: Math.round(ageMin),
+              verifySlaMin: slaMin,
+              verifyAttempts: attempts,
+              lastAttempt:
+                Array.isArray(detail.verifyAttempts) && detail.verifyAttempts.length > 0
+                  ? detail.verifyAttempts[detail.verifyAttempts.length - 1]
+                  : null,
+            },
+          });
+        } catch {
+          // the escalation stamp is the durable record; alert faults never fail the sweep
+        }
+      }
+    }
+  }
+}
+
+/**
+ * G2.2 auto-restore sweep pass: for guarantee policies with autoRestore
+ * enabled, clusters holding an ACTIVE rollback AND an active incumbent get
+ * a throttled restore verify on the rolled-back strategy. HIERARCHY ONLY —
+ * without an incumbent there is no suite baseline, and serve-side recovery
+ * on the rolled-back tuple is structurally undetectable (its samples stop
+ * accumulating); the status route surfaces that no-op honestly.
+ */
+async function runAutoRestorePass(
+  ctx: JobContext,
+  orgId: string | undefined,
+  out: Array<{ orgId: string; rollbackIncidentId: string }>,
+): Promise<void> {
+  if (!ctx.queue) return;
+  const now = new Date();
+  const policies = await listPoliciesWithGuarantee(ctx.db, orgId);
+  for (const row of policies) {
+    const guarantee = row.config.guarantee!;
+    if (guarantee.autoRestore !== true) continue;
+    const tuples = await distinctSampledTargets(ctx.db, row.orgId, guarantee.windowMin * 4);
+    const clustersSeen = new Set<string>();
+    for (const t of tuples) {
+      if (t.policyId !== row.id || clustersSeen.has(t.clusterId)) continue;
+      clustersSeen.add(t.clusterId);
+      const rollback = await latestActiveRollback(ctx.db, row.orgId, t.clusterId);
+      if (!rollback) continue;
+      const detail = rollback.detail as Record<string, unknown>;
+      if (detail.policyId !== row.id || typeof detail.fromStrategy !== 'string') continue;
+      const incumbent = await activeIncumbent(ctx.db, row.orgId, t.clusterId);
+      if (!incumbent) continue; // legacy: honest no-op, surfaced on /api/guarantee/status
+      const stamps = [
+        rollback.createdAt,
+        ...(typeof detail.lastVerifyAttemptAt === 'string' ? [detail.lastVerifyAttemptAt] : []),
+        ...(typeof detail.restoreVerifyEnqueuedAt === 'string' ? [detail.restoreVerifyEnqueuedAt] : []),
+      ];
+      const freshestMin = Math.min(...stamps.map((ts) => minutesSince(ts, now)));
+      if (freshestMin < VERIFY_RETRY_MIN) continue;
+      await stampIncidentDetail(ctx.db, row.orgId, rollback.id, {
+        restoreVerifyEnqueuedAt: now.toISOString(),
+      });
+      await ctx.queue.enqueue('guarantee:suite-verify', {
+        orgId: row.orgId,
+        policyId: row.id,
+        clusterId: t.clusterId,
+        servingStrategyHash: detail.fromStrategy,
+        restoreForIncidentId: rollback.id,
+      });
+      out.push({ orgId: row.orgId, rollbackIncidentId: rollback.id });
+    }
+  }
 }
 
 /** Default guarantee:evaluate handler (no meter — the server re-registers
@@ -582,6 +816,8 @@ export interface AlertDispatchDeps {
   now?: () => Date;
   /** Failure/observability log — receives ONLY redacted text. */
   log?: (msg: string) => void;
+  /** G2.2: SLA latency observation per DELIVERED rule (server-registered). */
+  meter?: { observeAlertNotificationLatency?(o: { orgId: string; event: string; latencyMs: number }): void };
 }
 
 /** Slack-compatible text form of an alert event (kind=slack → {text}). */
@@ -666,6 +902,15 @@ async function deliverToRule(
       );
     }
   }
+  // G2.2 SLA latency: measured at the SUCCESSFUL POST against the clock
+  // the EMITTER bound (advisory creation on the hierarchy path). Clamped
+  // ≥ 0 against db/app clock skew. A failed delivery has NO latency —
+  // the row still carries the clock so the gap is auditable.
+  const clockStartMs = payload.clockStartAt !== undefined ? Date.parse(payload.clockStartAt) : NaN;
+  const latencyMs =
+    delivered && Number.isFinite(clockStartMs)
+      ? Math.max(0, now().getTime() - clockStartMs)
+      : null;
   await insertAlertDelivery(db, {
     ruleId: rule.id,
     event: payload.event,
@@ -673,7 +918,17 @@ async function deliverToRule(
     attempts,
     ...(lastError !== null ? { lastError } : {}),
     ...(delivered ? { deliveredAt: now() } : {}),
+    ...(payload.incidentId !== undefined ? { incidentId: payload.incidentId } : {}),
+    ...(Number.isFinite(clockStartMs) ? { clockStartAt: new Date(clockStartMs) } : {}),
+    ...(latencyMs !== null ? { latencyMs } : {}),
   });
+  if (latencyMs !== null) {
+    deps.meter?.observeAlertNotificationLatency?.({
+      orgId: payload.orgId,
+      event: payload.event,
+      latencyMs,
+    });
+  }
   if (!delivered) {
     deps.log?.(
       `alerts: rule ${rule.id} (${rule.kind}) event ${payload.event} FAILED after ` +
@@ -711,12 +966,18 @@ export async function dispatchAlertEvent(
   };
 }
 
-export const alertsDispatchHandler: WorkerHandler<'alerts:dispatch'> = async (
-  payload: AlertsDispatchPayload,
-  ctx: JobContext,
-): Promise<AlertsDispatchResult> => {
-  return dispatchAlertEvent(ctx.db, payload);
-};
+/** alerts:dispatch handler factory (G2.2): the server registers it with
+ * its observability meter + log sink; the meter-less default below keeps
+ * bare workers working. */
+export function createAlertsDispatchHandler(opts: {
+  deps?: AlertDispatchDeps;
+}): WorkerHandler<'alerts:dispatch'> {
+  return async (payload: AlertsDispatchPayload, ctx: JobContext): Promise<AlertsDispatchResult> =>
+    dispatchAlertEvent(ctx.db, payload, opts.deps ?? {});
+}
+
+export const alertsDispatchHandler: WorkerHandler<'alerts:dispatch'> =
+  createAlertsDispatchHandler({});
 
 /**
  * Emit an alert event: enqueue alerts:dispatch when the job context carries
@@ -2539,8 +2800,9 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
 // r_i = serving_i / incumbent_i. Runs in the env's provider mode — mock
 // deployments render mock-LABELED verdicts (providerMode is stamped on
 // every verdict; modes structurally cannot mix in the pairing). Every
-// non-verdict outcome is a RECORDED refusal, never a silent drop, and the
-// advisory stays open so the verify can be retried.
+// non-verdict outcome is a RECORDED refusal — appended to the incident's
+// durable verifyAttempts ledger (G2.2) — never a silent drop; the advisory
+// stays open and the sweep's retry pass re-enqueues the verify.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_SUITE_VERIFY_CAP_USD = 5;
@@ -2614,9 +2876,17 @@ export interface GuaranteeSuiteVerifyResult {
   runId: string | null;
   spendUsd: number;
   retention: SuiteVerifyRetention | null;
-  /** The contractual incident minted on breach (quality_breach/rollback). */
+  /** The contractual incident this verdict lands on. On a DEDUPED breach
+   * (an unresolved contractual incident already covers the tuple — G2.2)
+   * this is the EXISTING incident's id and no new row/alert is produced. */
   verdictIncidentId: string | null;
   advisoryResolved: boolean;
+  /** G2.2 auto-restore: the rollback incident lifted on CONFIDENT recovery
+   * (retention CI95 lower ≥ floor); null otherwise. */
+  restoredIncidentId: string | null;
+  /** G2.2: 'guarantee_recovery_unconfirmed' escalated this run (Nth
+   * consecutive non-confident all-clear on a restore verify). */
+  recoveryUnconfirmed: boolean;
   detail: string | null;
 }
 
@@ -2632,6 +2902,8 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     retention: null,
     verdictIncidentId: null,
     advisoryResolved: false,
+    restoredIncidentId: null,
+    recoveryUnconfirmed: false,
     detail: null,
   };
 
@@ -2647,10 +2919,40 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   const guarantee = policyRow.config.guarantee;
   if (!guarantee) throw new Error(`policy '${payload.policyId}' carries no guarantee config`);
 
+  // G2.2: fetch the attached incidents UP FRONT — org-ownership misuse
+  // throws, and the advisory's db createdAt is the SLA clock the verdict's
+  // notification binds ("clocks start at advisory creation").
+  const advisoryRow = payload.advisoryIncidentId
+    ? await getIncidentByIdForOrg(ctx.db, payload.orgId, payload.advisoryIncidentId)
+    : null;
+  if (payload.advisoryIncidentId && (!advisoryRow || advisoryRow.kind !== 'advisory')) {
+    throw new Error(`advisory '${payload.advisoryIncidentId}' not found for org '${payload.orgId}'`);
+  }
+  const restoreRow = payload.restoreForIncidentId
+    ? await getIncidentByIdForOrg(ctx.db, payload.orgId, payload.restoreForIncidentId)
+    : null;
+  if (payload.restoreForIncidentId && (!restoreRow || restoreRow.kind !== 'rollback')) {
+    throw new Error(`rollback '${payload.restoreForIncidentId}' not found for org '${payload.orgId}'`);
+  }
+  // Every open-leaving outcome records a durable attempt on the attached
+  // incident(s) — the row is the lifecycle ledger (starved verification is
+  // visible evidence, never a lost job result).
+  const recordAttempt = async (outcome: string, detail: string | null): Promise<void> => {
+    const at = new Date().toISOString();
+    if (payload.advisoryIncidentId) {
+      await appendIncidentVerifyAttempt(ctx.db, payload.orgId, payload.advisoryIncidentId, { at, outcome, detail });
+    }
+    if (payload.restoreForIncidentId) {
+      await appendIncidentVerifyAttempt(ctx.db, payload.orgId, payload.restoreForIncidentId, { at, outcome, detail });
+    }
+  };
+
   // Designation — recorded outcomes (the advisory stays open).
   const incumbent = await activeIncumbent(ctx.db, payload.orgId, payload.clusterId);
   if (!incumbent) {
-    return { ...base, outcome: 'no-incumbent', detail: 'no active incumbent designation — designate one to enable retention verdicts' };
+    const detail = 'no active incumbent designation — designate one to enable retention verdicts';
+    await recordAttempt('no-incumbent', detail);
+    return { ...base, outcome: 'no-incumbent', detail };
   }
   const loadCfg = async (hash: string): Promise<StrategyConfig | null> => {
     const rows = await ctx.db.select().from(strategyConfigs).where(eq(strategyConfigs.hash, hash));
@@ -2658,11 +2960,15 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   };
   const incumbentCfg = await loadCfg(incumbent.strategyHash);
   if (!incumbentCfg) {
-    return { ...base, outcome: 'incumbent-unresolvable', detail: `incumbent strategy '${incumbent.strategyHash}' not in strategy_configs — re-designate` };
+    const detail = `incumbent strategy '${incumbent.strategyHash}' not in strategy_configs — re-designate`;
+    await recordAttempt('incumbent-unresolvable', detail);
+    return { ...base, outcome: 'incumbent-unresolvable', detail };
   }
   const servingCfg = await loadCfg(payload.servingStrategyHash);
   if (!servingCfg) {
-    return { ...base, outcome: 'incumbent-unresolvable', detail: `serving strategy '${payload.servingStrategyHash}' not in strategy_configs` };
+    const detail = `serving strategy '${payload.servingStrategyHash}' not in strategy_configs`;
+    await recordAttempt('incumbent-unresolvable', detail);
+    return { ...base, outcome: 'incumbent-unresolvable', detail };
   }
   const floor = guarantee.retentionFloor ?? DEFAULT_RETENTION_FLOOR;
 
@@ -2679,28 +2985,51 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
           floor,
         })) !== null;
     }
-    return { ...base, outcome: 'self-incumbent', advisoryResolved, detail: 'serving strategy IS the incumbent — retention 1.0 by identity' };
+    // G2.2 auto-restore: retention 1.0 by identity IS confident recovery.
+    let restoredIncidentId: string | null = null;
+    if (payload.restoreForIncidentId && restoreRow) {
+      const restored = await resolveIncidentWithEvidence(
+        ctx.db, payload.orgId, payload.restoreForIncidentId, 'rollback',
+        { resolvedBy: 'auto-restore', verdict: 'self-incumbent', providerMode, floor },
+      );
+      if (restored) {
+        restoredIncidentId = restored.id;
+        try {
+          await emitAlertEvent(ctx, {
+            orgId: payload.orgId,
+            event: 'guarantee_restored',
+            incidentId: restored.id,
+            clockStartAt: restoreRow.createdAt.toISOString(),
+            detail: { clusterId: payload.clusterId, fromStrategy: payload.servingStrategyHash, reason: 'self-incumbent', providerMode },
+          });
+        } catch {
+          // resolution is the durable record
+        }
+      }
+    }
+    return { ...base, outcome: 'self-incumbent', advisoryResolved, restoredIncidentId, detail: 'serving strategy IS the incumbent — retention 1.0 by identity' };
   }
 
   const suiteId = `${payload.clusterId}-replays-v1`;
   const loaded = await loadDerivedSuite(ctx.db, suiteId);
   if (!loaded || loaded.items.length === 0) {
-    return { ...base, outcome: 'no-suite', detail: `derived suite '${suiteId}' is empty — nothing to verify against` };
+    const detail = `derived suite '${suiteId}' is empty — nothing to verify against`;
+    await recordAttempt('no-suite', detail);
+    return { ...base, outcome: 'no-suite', detail };
   }
   const capUsd = payload.capUsd ?? DEFAULT_SUITE_VERIFY_CAP_USD;
 
-  // FAIL-CLOSED budget refusal (live spend only) — RECORDED, no throw: the
-  // advisory stays open and the refusal is part of the report.
+  // FAIL-CLOSED budget refusal (live spend only) — RECORDED durably on the
+  // incident's ledger (G2.2 starved verification), no throw: the advisory
+  // stays open, its SLA clock keeps running, and the sweep keeps retrying.
   if (providerMode === 'live') {
     const budget = await getBudget(ctx.db, payload.orgId);
     if (budget !== null && budget.hardStop) {
       const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
       if (mtd + capUsd > budget.monthlyCapUsd) {
-        return {
-          ...base,
-          outcome: 'budget-refused',
-          detail: `hard-stop budget would be exceeded (MTD $${mtd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly $${budget.monthlyCapUsd.toFixed(2)}) — no spend occurred`,
-        };
+        const detail = `hard-stop budget would be exceeded (MTD $${mtd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly $${budget.monthlyCapUsd.toFixed(2)}) — no spend occurred`;
+        await recordAttempt('budget-refused', detail);
+        return { ...base, outcome: 'budget-refused', detail };
       }
     }
   }
@@ -2783,6 +3112,7 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     floor,
   });
   if (computed.retention === null) {
+    await recordAttempt('insufficient-pairs', computed.insufficient);
     return { ...spent, outcome: 'insufficient-pairs', detail: computed.insufficient };
   }
   const retention = computed.retention;
@@ -2814,15 +3144,47 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   // CONTRACTUAL verdict: breach iff the retention CI95 UPPER bound is
   // below the floor (confidently under, the G0.3 rigor).
   if (ci95[1] < floor) {
-    let verdictIncidentId: string;
+    await recordAttempt('contractual-breach', null);
+    // G2.2 dedupe: while an unresolved contractual incident already covers
+    // this tuple (incl. the active rollback a restore verify runs against),
+    // sweep-driven retries must not mint a duplicate incident or alert —
+    // the advisory still resolves, pointing at the EXISTING incident.
+    const existing = await openContractualIncidentForTuple(ctx.db, {
+      orgId: payload.orgId,
+      policyId: payload.policyId,
+      clusterId: payload.clusterId,
+      fromStrategy: payload.servingStrategyHash,
+    });
+    if (existing) {
+      let advisoryResolved = false;
+      if (payload.advisoryIncidentId) {
+        advisoryResolved =
+          (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
+            verdict: 'contractual-breach',
+            escalatedTo: existing.id,
+            deduped: true,
+            retention,
+            providerMode,
+          })) !== null;
+      }
+      return {
+        ...spent,
+        outcome: 'contractual-breach',
+        retention,
+        verdictIncidentId: existing.id,
+        advisoryResolved,
+        detail: 'deduped: an unresolved contractual incident already covers this tuple',
+      };
+    }
+    let verdictIncident: { id: string; createdAt: Date };
     if (guarantee.action === 'rollback') {
       const target = await resolveRollbackTarget(ctx.db, {
         clusterId: payload.clusterId,
         policy: policyRow.config,
         fromStrategyHash: payload.servingStrategyHash,
       });
-      verdictIncidentId = target
-        ? await insertIncident(ctx.db, {
+      verdictIncident = target
+        ? await insertIncidentRow(ctx.db, {
             orgId: payload.orgId,
             kind: 'rollback',
             detail: {
@@ -2832,18 +3194,19 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
               targetSource: target.source,
             },
           })
-        : await insertIncident(ctx.db, {
+        : await insertIncidentRow(ctx.db, {
             orgId: payload.orgId,
             kind: 'quality_breach',
             detail: { ...evidence, intendedAction: 'rollback', reason: 'no-rollback-target' },
           });
     } else {
-      verdictIncidentId = await insertIncident(ctx.db, {
+      verdictIncident = await insertIncidentRow(ctx.db, {
         orgId: payload.orgId,
         kind: 'quality_breach',
         detail: evidence,
       });
     }
+    const verdictIncidentId = verdictIncident.id;
     let advisoryResolved = false;
     if (payload.advisoryIncidentId) {
       advisoryResolved =
@@ -2858,6 +3221,12 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
       await emitAlertEvent(ctx, {
         orgId: payload.orgId,
         event: guarantee.action === 'rollback' ? 'rollback' : 'quality_breach',
+        // THE SLA BINDING lands here: the hierarchy path's notification
+        // latency is measured from ADVISORY CREATION to this verdict's
+        // delivered POST; a manual/no-advisory verify binds the verdict's
+        // own createdAt.
+        incidentId: verdictIncidentId,
+        clockStartAt: (advisoryRow?.createdAt ?? verdictIncident.createdAt).toISOString(),
         detail: { incidentId: verdictIncidentId, clusterId: payload.clusterId, strategyHash: payload.servingStrategyHash, retention: mean, retentionCi95: ci95, floor },
       });
     } catch {
@@ -2877,7 +3246,93 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
         evidence,
       })) !== null;
   }
-  return { ...spent, outcome: 'all-clear', retention, advisoryResolved };
+
+  // G2.2 auto-restore: only CONFIDENT recovery lifts the rollback —
+  // retention CI95 LOWER ≥ floor, the symmetric rigor of the breach test
+  // (owner decision). A non-confident all-clear is recorded, never
+  // restores, and after RECOVERY_UNCONFIRMED_AFTER consecutive ones
+  // escalates 'guarantee_recovery_unconfirmed' for human review — the
+  // uncertain zone is bounded in TIME, not outcome (owner refinement).
+  let restoredIncidentId: string | null = null;
+  let recoveryUnconfirmed = false;
+  if (payload.restoreForIncidentId && restoreRow) {
+    if (ci95[0] >= floor) {
+      const restored = await resolveIncidentWithEvidence(
+        ctx.db, payload.orgId, payload.restoreForIncidentId, 'rollback',
+        { resolvedBy: 'auto-restore', verdict: 'confident-recovery', retention, providerMode, runId: summary.runId, floor },
+      );
+      if (restored) {
+        restoredIncidentId = restored.id;
+        try {
+          await emitAlertEvent(ctx, {
+            orgId: payload.orgId,
+            event: 'guarantee_restored',
+            incidentId: restored.id,
+            clockStartAt: restoreRow.createdAt.toISOString(),
+            detail: {
+              clusterId: payload.clusterId,
+              fromStrategy: payload.servingStrategyHash,
+              toStrategy: (restoreRow.detail as Record<string, unknown>).toStrategy ?? null,
+              retention,
+              floor,
+              providerMode,
+            },
+          });
+        } catch {
+          // the resolution row is the durable record
+        }
+      }
+    } else {
+      const appended = await appendIncidentVerifyAttempt(
+        ctx.db, payload.orgId, payload.restoreForIncidentId,
+        {
+          at: new Date().toISOString(),
+          outcome: 'all-clear-not-confident',
+          detail: `retention CI95 lower ${ci95[0].toFixed(3)} < floor ${floor} — uncertainty never auto-restores`,
+        },
+      );
+      // Trailing consecutive non-confident run (a confident restore or a
+      // breach would have ended the rollback's open ledger by now).
+      const attempts = Array.isArray((appended?.detail as Record<string, unknown> | undefined)?.verifyAttempts)
+        ? ((appended!.detail as Record<string, unknown>).verifyAttempts as Array<{ outcome: string }>)
+        : [];
+      let run = 0;
+      for (let i = attempts.length - 1; i >= 0; i--) {
+        if (attempts[i]!.outcome === 'all-clear-not-confident') run += 1;
+        else break;
+      }
+      if (run >= RECOVERY_UNCONFIRMED_AFTER) {
+        const won = await markRecoveryUnconfirmed(ctx.db, payload.orgId, payload.restoreForIncidentId, {
+          at: new Date().toISOString(),
+          consecutiveNonConfident: run,
+          floor,
+        });
+        if (won) {
+          recoveryUnconfirmed = true;
+          try {
+            await emitAlertEvent(ctx, {
+              orgId: payload.orgId,
+              event: 'guarantee_recovery_unconfirmed',
+              incidentId: payload.restoreForIncidentId,
+              clockStartAt: restoreRow.createdAt.toISOString(),
+              detail: {
+                clusterId: payload.clusterId,
+                fromStrategy: payload.servingStrategyHash,
+                consecutiveNonConfident: run,
+                retention,
+                floor,
+                providerMode,
+                note: 'uncertainty never auto-restores and never silently persists — human review',
+              },
+            });
+          } catch {
+            // the CAS stamp is the durable record
+          }
+        }
+      }
+    }
+  }
+  return { ...spent, outcome: 'all-clear', retention, advisoryResolved, restoredIncidentId, recoveryUnconfirmed };
 };
 
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {

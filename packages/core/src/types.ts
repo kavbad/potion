@@ -275,6 +275,19 @@ export interface GuaranteeConfig {
    * precedent). Scale-free by construction — the incumbent's measured
    * score is the denominator — so it survives "never absolute floors". */
   retentionFloor?: number | undefined;
+  /** Verification SLA bound (G2.2): minutes an OPEN advisory may await its
+   * contractual verdict before 'guarantee currently unverifiable' escalates
+   * as its own notifiable condition (distinct from breach). Absent →
+   * platform 240, applied at EVALUATION time only. The SLA clock starts at
+   * advisory creation (standing decision). */
+  verifySlaMin?: number | undefined;
+  /** Auto-restore on recovery (G2.2): hierarchy mode only — a CONFIDENT
+   * suite-verify recovery (retention CI95 LOWER ≥ floor, symmetric to the
+   * breach test) on the rolled-back strategy auto-resolves the active
+   * rollback. Legacy mode (no incumbent): honest surfaced no-op —
+   * serve-side recovery on a rolled-back tuple is structurally
+   * undetectable (its samples stop accumulating). Default false. */
+  autoRestore?: boolean | undefined;
 }
 
 export type Policy =

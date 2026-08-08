@@ -37,7 +37,7 @@ import { registerReportRoutes } from './routes/reports.js';
 import { registerGuaranteeReportRoutes } from './routes/guarantee-report.js';
 // ---- end M3 #21 shadow imports ----
 // ---- M3 #22 guarantee (m3-guarantee) — appended imports ----
-import { createGuaranteeEvaluateHandler } from '@potion/workers';
+import { createAlertsDispatchHandler, createGuaranteeEvaluateHandler } from '@potion/workers';
 import { registerGuaranteeRoutes } from './routes/guarantee.js';
 import { GUARANTEE_EVALUATE_JOB } from './guarantee.js';
 // ---- end M3 #22 guarantee imports ----
@@ -221,6 +221,12 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
     // runs meter-less; every other kind keeps its default handler).
     handlers: {
       'guarantee:evaluate': createGuaranteeEvaluateHandler({ meter: observability.meter }),
+      // ---- G2.2 incident SLAs: alerts:dispatch with the latency meter +
+      // the app log as the redacted failure sink (the default handler in
+      // @potion/workers runs meter-less/log-less).
+      'alerts:dispatch': createAlertsDispatchHandler({
+        deps: { meter: observability.meter, log: (m: string) => app.log.warn(m) },
+      }),
       // ---- M4 #35 budget (m4-alerts-budget) ----
       // budget:evaluate with the observability meter attached (same pattern
       // as guarantee:evaluate above; alerts:dispatch keeps its default).

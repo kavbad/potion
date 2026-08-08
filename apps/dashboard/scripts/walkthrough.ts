@@ -32,6 +32,8 @@
 //   (requires `pnpm build` first — the walkthrough runs dist/ + .next/)
 // Env: WALK_API_PORT (default 3100), WALK_DASH_PORT (default 3101).
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { copyFile, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -976,6 +978,101 @@ async function main(): Promise<void> {
       return `designated ${incumbentHash.slice(0, 8)} → 3 sampled requests → suite-verify ${verdict.outcome} (mock-labeled, ${verdict.retention?.pairs ?? 0} pairs) → retention report rendered`;
     } finally {
       sessionCookie = savedCookie;
+    }
+  });
+
+
+  await step('16. incident SLAs (alert rule → legacy breach → measured notification latency + verification states)', async () => {
+    // G2.2: the breach→notification chain end to end against a REAL local
+    // capture endpoint — the delivery audit row must carry the incident
+    // linkage, the emitter-bound SLA clock, and a measured latency. Legacy
+    // path (demo org, no incumbent on code-gen): clock = the breach
+    // incident's createdAt. The hierarchy clock (advisory creation) is
+    // pinned in the keyless suite; the report's verification field ships on
+    // every entry.
+    const received: Array<Record<string, unknown>> = [];
+    const capture = createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        try { received.push(JSON.parse(body) as Record<string, unknown>); } catch { /* raw */ }
+        res.writeHead(200).end('ok');
+      });
+    });
+    await new Promise<void>((r) => capture.listen(0, '127.0.0.1', r));
+    try {
+      const captureUrl = `http://127.0.0.1:${(capture.address() as AddressInfo).port}/hook`;
+      // Alert rule on the WIDENED vocabulary (guarantee_unverifiable is a
+      // G2.2 event — creation must accept it).
+      const rule = await fetch(`${API}/api/alerts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(sessionCookie ? { cookie: sessionCookie } : {}) },
+        body: JSON.stringify({ kind: 'webhook', targetUrl: captureUrl, events: ['quality_breach', 'rollback', 'guarantee_unverifiable'] }),
+      });
+      assert(rule.status === 201 || rule.ok, `alert rule → HTTP ${rule.status}: ${await rule.text()}`);
+      // A guarantee policy that MUST breach on mock scores (minQuality .99,
+      // alert action, every request sampled).
+      const pol = await fetch(`${API}/api/policies`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(sessionCookie ? { cookie: sessionCookie } : {}) },
+        body: JSON.stringify({
+          policy: {
+            type: 'max_quality',
+            costCeilingPer1K: 100,
+            guarantee: { minQuality: 0.99, windowMin: 60, sampleRate: 1, action: 'alert' },
+          },
+          createKey: true,
+        }),
+      });
+      const polBody = await pol.json();
+      assert(pol.ok && typeof polBody.apiKey === 'string', `policy+key → HTTP ${pol.status}`);
+      for (let i = 0; i < 6; i++) {
+        const chat = await fetch(`${API}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${polBody.apiKey}` },
+          body: JSON.stringify({ model: 'potion-auto', messages: [{ role: 'user', content: `Write a function that parses row ${i}` }] }),
+        });
+        assert(chat.ok, `chat ${i} → HTTP ${chat.status}`);
+      }
+      // Sampling + evaluation + dispatch are async worker jobs — poll the
+      // delivery audit for the breach notification.
+      let delivery: Record<string, unknown> | undefined;
+      for (let i = 0; i < 60 && delivery === undefined; i++) {
+        const res = await fetch(`${API}/api/alerts/deliveries?limit=100`, {
+          headers: sessionCookie ? { cookie: sessionCookie } : {},
+        });
+        if (res.ok) {
+          const rows = (await res.json()).deliveries as Array<Record<string, unknown>>;
+          delivery = rows.find((d) => d.event === 'quality_breach' && d.status === 'delivered');
+        }
+        if (delivery === undefined) await new Promise((r) => setTimeout(r, 500));
+      }
+      assert(delivery !== undefined, 'no delivered quality_breach notification within 30s');
+      assert(typeof delivery.incidentId === 'string', 'delivery row missing incident linkage');
+      assert(typeof delivery.clockStartAt === 'string', 'delivery row missing the SLA clock');
+      assert(typeof delivery.latencyMs === 'number' && (delivery.latencyMs as number) >= 0, `latency not measured: ${JSON.stringify(delivery.latencyMs)}`);
+      assert(received.some((p) => p.event === 'quality_breach'), 'capture endpoint never received the webhook POST');
+      // Report entries now carry the G2.2 verification state; status carries
+      // the unverifiable count + honest autoRestore posture.
+      const today = new Date().toISOString().slice(0, 10);
+      const report = await (
+        await fetch(`${API}/api/reports/guarantee?from=${today}&to=${today}`, {
+          headers: sessionCookie ? { cookie: sessionCookie } : {},
+        })
+      ).json();
+      assert(Array.isArray(report.entries) && report.entries.length >= 1, 'no report entries');
+      assert(
+        report.entries.every((e: { verification?: { state?: string } }) => typeof e.verification?.state === 'string'),
+        'report entries missing verification state',
+      );
+      const status = await (
+        await fetch(`${API}/api/guarantee/status`, { headers: sessionCookie ? { cookie: sessionCookie } : {} })
+      ).json();
+      assert(typeof status.unverifiableAdvisories === 'number', 'status missing unverifiableAdvisories');
+      assert(status.policies.every((p: { autoRestore?: unknown }) => p.autoRestore !== undefined), 'status missing autoRestore posture');
+      return `rule → 6 sampled chats → breach notification delivered (latency ${(delivery.latencyMs as number).toFixed(0)}ms, clock+incident linked) → verification states on report`;
+    } finally {
+      await new Promise<void>((r) => void capture.close(() => r()));
     }
   });
 
