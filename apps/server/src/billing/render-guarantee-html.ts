@@ -122,6 +122,53 @@ function entrySection(e: GuaranteeReportEntry): string {
   </section>`;
 }
 
+/**
+ * The realized latency premium (G2.6). Renders BELOW the retention entries
+ * on purpose: retention is the thesis this report exists to prove, and the
+ * cost of a latency bound is a second, separable question. Omitted entirely
+ * when the org runs no compound policies, so the common report is unchanged.
+ */
+function premiumSection(report: GuaranteeReport): string {
+  const rows = report.latencyPremiums ?? [];
+  if (rows.length === 0) return '';
+  const body = rows
+    .map((r) => {
+      const relax =
+        r.relaxLatencyToMs === null
+          ? '—'
+          : `${Math.round(r.relaxLatencyToMs)} ms (−${(r.projectedSavingsPct * 100).toFixed(0)}%)`;
+      const provisional =
+        r.latencySource === 'harness'
+          ? ' <span class="adv" title="bound evaluated against benchmark latency, not served traffic">PROVISIONAL</span>'
+          : '';
+      return `<tr>
+        <td><code>${esc(r.policyId)}</code> · ${esc(r.clusterId)}${provisional}</td>
+        <td class="num">${r.boundMs} ms</td>
+        <td class="num">${r.qualityFloor.toFixed(2)}</td>
+        <td class="num">${r.requests}</td>
+        <td class="num">$${r.actualSpendUsd.toFixed(4)}</td>
+        <td class="num">${r.unboundedSpendUsd === null ? '—' : `$${r.unboundedSpendUsd.toFixed(4)}`}</td>
+        <td class="num"><strong>$${r.premiumUsd.toFixed(4)}</strong></td>
+        <td>${relax}</td>
+      </tr>`;
+    })
+    .join('\n');
+  const total = rows.reduce((a, r) => a + r.premiumUsd, 0);
+  return `<h2>Latency premium (compound policies)</h2>
+<p class="prov">A latency bound is a hard constraint: strategies whose measured p95 exceeds it are
+excluded, never traded off. That exclusion has a price, and this is it — what the bound cost over
+this window, and what relaxing it would return at the <em>same</em> quality floor.</p>
+<table>
+<tr><th>Policy · cluster</th><th>Bound</th><th>Floor</th><th>Requests</th><th>Actual</th>
+    <th>Unbounded</th><th>Premium</th><th>Relax to</th></tr>
+${body}
+</table>
+<p class="prov">Total realized premium this window: <strong>$${total.toFixed(4)}</strong>.
+A row marked PROVISIONAL was evaluated against harness latency (a spread over benchmark items on a
+strategy-only span), not the served end-to-end distribution — it is an estimate until the cluster
+accumulates enough served requests.</p>`;
+}
+
 export function renderGuaranteeReportHtml(report: GuaranteeReport): string {
   const legacyBanner = report.legacyPath
     ? `<p class="banner">This org has NO incumbent designations: every verdict below uses the
@@ -158,6 +205,7 @@ export function renderGuaranteeReportHtml(report: GuaranteeReport): string {
    generated ${esc(report.generatedAt)}</p>
 ${legacyBanner}
 ${report.entries.length === 0 ? '<p>No guarantee evidence in this window.</p>' : report.entries.map(entrySection).join('\n')}
+${premiumSection(report)}
 <p class="prov">Headline metric: baseline retention — the serving strategy's score relative to the
 designated incumbent on identical derived-suite items. Raw scores are workload-specific
 (reference-anchored scales) and appear only as drill-down. Serve-leg advisories are tripwires;

@@ -117,8 +117,20 @@ export interface FrontierDiff {
 export type Policy =
   | { type: 'max_quality'; costCeilingPer1K: number }
   | { type: 'min_cost'; qualityFloor: number }
-  | { type: 'latency_bound'; p95Ms: number };   // then max quality
+  | { type: 'latency_bound'; p95Ms: number }    // then max quality
+  | { type: 'compound'; qualityFloor: number; p95Ms: number };  // G2.6: both, then min cost
 export function selectPoint(policy: Policy, frontier: Frontier): FrontierPoint | null;
+export function fastestQualityQualifyingPoint(pts: FrontierPoint[], floor: number): FrontierPoint | null;
+
+// ---- G2.6 serving-grade latency + the cost premium a bound charges ----
+export const SERVING_LATENCY_MIN_SAMPLES: number;   // 30
+export interface LatencyEvidence {
+  source: 'serving' | 'harness'; p95Ms: number; n: number;
+  provisional: boolean; windowMin?: number;
+  span: 'end-to-end' | 'strategy-only';             // the two sources are DIFFERENT clocks
+}
+export function resolveLatency(pts: FrontierPoint[], serving: ServingLatencySample[], windowMin: number): ResolvedLatency;
+export function latencyPremium(policy: Policy, pts: FrontierPoint[]): LatencyPremium;
 
 // ---- prices ----
 export interface PriceEntry { alias: string; provider: ProviderId; model: string; inputPer1M: number; outputPer1M: number; }
@@ -130,6 +142,28 @@ zod schemas for every public type above (StrategyConfig, Policy, EvalItem, Price
 `selectPoint` semantics: max_quality → feasible = costPer1K ≤ ceiling, pick max quality, tie→lower cost;
 min_cost → feasible = quality ≥ floor, pick min cost, tie→higher quality; latency_bound → feasible =
 latencyP95 ≤ p95Ms, pick max quality. Empty feasible → null (caller falls back per server rule §8).
+
+**compound (G2.6)** → feasible = quality ≥ floor **AND** latencyP95 ≤ p95Ms (a HARD intersect), pick
+min cost, tie→higher quality. A latency bound in a guarantee is an SLO the customer stated, not a
+preference: a point whose measured p95 exceeds it is EXCLUDED, never traded off against cost. Because
+that exclusion prunes exactly the serial compositions (cascade, draft-verify) that make the cost
+frontier valuable, the consequence must be visible — every latency-dimensioned policy reports the
+**cost premium** its bound is charging and the p95 it would have to relax to. Infeasibility splits
+three ways: (i) no point clears the floor → the existing highest-quality fallback, `binding=quality`,
+and the latency bound is never blamed; (ii) points clear the floor but none clears the bound → serve
+the **fastest QUALITY-qualifying** point and label the violation everywhere (violate the
+customer-observable dimension, never the customer-invisible one — detecting quality degradation is
+the product), plus a deduped standing policy-level condition on `/api/guarantee/status` that
+auto-resolves with evidence; (iii) no frontier → the mode-aware fallback as today.
+
+Latency evidence is **serving-grade where it exists**: `resolveLatency` substitutes a p95 rolled up
+from the org's own `request_logs` (`percentile_disc`, `status='ok'` only, ≥ 30 samples) into the
+points BEFORE `selectPoint` runs, and marks anything else **provisional**. The harness `latencyP95`
+is a nearest-rank p95 across eval ITEMS on a strategy-only span — an optimistic lower bound on what
+an end-to-end SLO experiences — so binding it silently to a customer's stated deadline is exactly
+the substitution this platform exists to detect. `FrontierPointEvidence` carries `latencyN`,
+`latencyP95Ci95` (a `[lo,hi]` PAIR: the sampling distribution of a p95 is asymmetric) and
+`latencySeed`, so a latency-driven selection is as auditable as a quality-driven one.
 
 ## 2. packages/providers
 

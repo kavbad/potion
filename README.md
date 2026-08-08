@@ -6,6 +6,14 @@ Potion clusters your prompts by task type, benchmarks single models and composit
 (quality, cost, p95 latency), and serves every request from the frontier point your policy picks.
 When a new model ships, the frontier is recomputed and the diff is narrated in plain language.
 
+Policies: `max_quality` (best quality under a cost ceiling), `min_cost` (cheapest above a quality
+floor), `latency_bound` (best quality inside a p95 budget), and `compound` — a quality floor **and**
+a hard latency bound, cheapest among the survivors. The latency bound excludes rather than trades
+off, because a bound stated in a guarantee is an SLO, not a preference; since that exclusion prunes
+exactly the cheap serial compositions, Potion reports what your deadline is costing you and the p95
+it would have to relax to. A bound binds against **your own served latency** once the cluster has
+enough traffic, and says so plainly while it is still working off benchmark numbers.
+
 - [SPEC.md](SPEC.md) — the engineering contract (types, routes, pipeline)
 - [FRONTIER.md](FRONTIER.md) — the buyer-facing explanation (3-minute read, no jargon)
 - [tasks/todo.md](tasks/todo.md) — phase plan, gate proofs, spend ledger

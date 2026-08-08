@@ -1105,6 +1105,116 @@ async function main(): Promise<void> {
     }
   });
 
+  await step('17. compound policy (quality floor + hard latency bound → premium, then a labeled violation)', async () => {
+    // G2.6. The bound is DERIVED from the live frontier rather than
+    // hard-coded, so this leg cannot go stale when the mock frontier's
+    // latencies change — a hard-coded 1500ms would silently stop pruning
+    // anything and the step would keep passing while proving nothing.
+    const fr = await (
+      await fetch(`${API}/api/frontiers/code-gen`, {
+        headers: sessionCookie ? { cookie: sessionCookie } : {},
+      })
+    ).json();
+    const points = (fr.frontier?.points ?? []) as Array<{
+      strategyHash: string;
+      quality: number;
+      costPer1K: number;
+      latencyP95: number;
+    }>;
+    assert(points.length >= 2, `need >= 2 frontier points, got ${points.length}`);
+
+    // Floor = the median quality, so at least one point clears it and at
+    // least one does not. Bound = tight enough to exclude the slowest
+    // qualifying point but admit the fastest one.
+    const qualities = [...points.map((p) => p.quality)].sort((a, b) => a - b);
+    const floor = qualities[Math.floor(qualities.length / 2)]!;
+    const qualifying = points.filter((p) => p.quality >= floor).sort((a, b) => a.latencyP95 - b.latencyP95);
+    assert(qualifying.length >= 1, 'no qualifying point at the derived floor');
+    const fastest = qualifying[0]!;
+    const bound = Math.ceil(fastest.latencyP95) + 1;
+
+    const mk = async (policy: Record<string, unknown>): Promise<string> => {
+      const res = await fetch(`${API}/api/policies`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(sessionCookie ? { cookie: sessionCookie } : {}) },
+        body: JSON.stringify({ policy, createKey: true }),
+      });
+      const body = await res.json();
+      assert(res.ok && typeof body.apiKey === 'string', `policy+key → HTTP ${res.status}: ${JSON.stringify(body)}`);
+      return body.apiKey as string;
+    };
+    const traceOf = async (key: string): Promise<Record<string, string>> => {
+      const res = await fetch(`${API}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: 'potion-auto', messages: [{ role: 'user', content: 'Write a python function that reverses a string' }] }),
+      });
+      assert(res.ok, `compound chat → HTTP ${res.status}: ${await res.text()}`);
+      const raw = res.headers.get('x-frontier-trace') ?? '';
+      return Object.fromEntries(
+        raw.split(';').filter(Boolean).map((kv) => {
+          const i = kv.indexOf('=');
+          return [kv.slice(0, i), kv.slice(i + 1)];
+        }),
+      );
+    };
+
+    // (a) FEASIBLE: the bound admits the fastest qualifying point.
+    const feasibleKey = await mk({ type: 'compound', qualityFloor: floor, p95Ms: bound });
+    const t = await traceOf(feasibleKey);
+    assert(t.policy === 'compound', `policy type not on the trace: ${JSON.stringify(t)}`);
+    assert(t.fallback === '0', `feasible compound should not fall back: ${JSON.stringify(t)}`);
+    // The latency SOURCE is declared on every latency-dimensioned policy —
+    // a bound evaluated against benchmark numbers must say so.
+    assert(
+      t.latency_src === 'serving' || t.latency_src === 'harness',
+      `missing latency_src on the trace: ${JSON.stringify(t)}`,
+    );
+    // The served point must actually respect the bound.
+    const served = points.find((p) => p.strategyHash.startsWith(t.strategy ?? '~'));
+    assert(served !== undefined, `served strategy ${t.strategy} is not a frontier point`);
+    assert(served.latencyP95 <= bound, `served p95 ${served.latencyP95} exceeds the bound ${bound}`);
+
+    // The DTO carries the provenance a latency-driven selection needs.
+    const dto = await (
+      await fetch(`${API}/api/frontiers/code-gen`, { headers: { authorization: `Bearer ${feasibleKey}` } })
+    ).json();
+    const ev = dto.operatingPoint?.latencyEvidence;
+    assert(ev && typeof ev.n === 'number' && typeof ev.provisional === 'boolean' && typeof ev.span === 'string',
+      `operating point missing latency evidence: ${JSON.stringify(dto.operatingPoint)}`);
+
+    // (b) INFEASIBLE: tighten below EVERY qualifying p95. The owner's rule —
+    // violate the customer-observable dimension, never the invisible one.
+    const tooTight = Math.max(1, Math.floor(Math.min(...qualifying.map((p) => p.latencyP95))) - 1);
+    const violKey = await mk({ type: 'compound', qualityFloor: floor, p95Ms: tooTight });
+    const vt = await traceOf(violKey);
+    assert(vt.latency_violated === '1', `violation not labeled on the trace: ${JSON.stringify(vt)}`);
+    const violServed = points.find((p) => p.strategyHash.startsWith(vt.strategy ?? '~'));
+    assert(violServed !== undefined, `violating served strategy ${vt.strategy} is not a frontier point`);
+    // Quality was NOT sacrificed to meet the clock.
+    assert(violServed.quality >= floor, `served ${violServed.quality} below the floor ${floor} — quality was traded for latency`);
+
+    // …and the standing policy-level condition is on the guarantee status,
+    // deduped, carrying BOTH relaxation directions.
+    await traceOf(violKey);
+    await traceOf(violKey);
+    const status = await (
+      await fetch(`${API}/api/guarantee/status`, { headers: sessionCookie ? { cookie: sessionCookie } : {} })
+    ).json();
+    const conds = (status.infeasiblePolicies ?? []) as Array<Record<string, unknown>>;
+    assert(conds.length === 1, `expected exactly ONE standing condition after 3 violating requests, got ${conds.length}`);
+    const c = conds[0]!;
+    assert(c.condition === 'latency_bound_infeasible', `wrong condition: ${JSON.stringify(c)}`);
+    assert(c.relaxLatencyToMs !== null, 'condition missing the latency relaxation');
+    assert(typeof c.latencySource === 'string', 'condition missing the latency source');
+
+    return (
+      `floor ${floor.toFixed(2)} derived from the live frontier; bound ${bound}ms serves ` +
+      `${t.strategy} (latency_src=${t.latency_src}${t.latency_premium ? `, premium ${t.latency_premium}, relax ${t.relax_ms}ms` : ''}) → ` +
+      `tightened to ${tooTight}ms: violation labeled, quality floor held, ONE standing condition`
+    );
+  });
+
   const total = elapsed(t0);
   console.log('────────────────────────────────────────────────────────────────');
   console.log(

@@ -183,7 +183,7 @@ describe('policy → strategy resolution (known frontier)', () => {
     const res = await chat(KEY_C, {});
     expect(res.statusCode).toBe(200);
     expect(res.headers['x-frontier-trace']).toBe(
-      `cluster=code-gen;strategy=${H_CHEAP};frontier=v1;policy=latency_bound;fallback=0;provenance=mock`,
+      `cluster=code-gen;strategy=${H_CHEAP};frontier=v1;policy=latency_bound;fallback=0;provenance=mock;latency_src=harness`,
     );
   });
 
@@ -191,7 +191,7 @@ describe('policy → strategy resolution (known frontier)', () => {
     const res = await chat(KEY_D, {});
     expect(res.statusCode).toBe(200);
     expect(res.headers['x-frontier-trace']).toBe(
-      `cluster=code-gen;strategy=${H_BON};frontier=v1;policy=latency_bound;fallback=1;provenance=mock`,
+      `cluster=code-gen;strategy=${H_BON};frontier=v1;policy=latency_bound;fallback=1;provenance=mock;latency_src=harness`,
     );
   });
 
@@ -227,7 +227,7 @@ describe('streaming contract', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(res.headers['x-frontier-trace']).toBe(
-      `cluster=code-gen;strategy=${H_CHEAP};frontier=v1;policy=latency_bound;fallback=0;provenance=mock`,
+      `cluster=code-gen;strategy=${H_CHEAP};frontier=v1;policy=latency_bound;fallback=0;provenance=mock;latency_src=harness`,
     );
     const frames = res.body.split('\n\n').filter((f) => f.trim() !== '');
     expect(frames.length).toBeGreaterThanOrEqual(3); // role + ≥1 content + stop + [DONE]

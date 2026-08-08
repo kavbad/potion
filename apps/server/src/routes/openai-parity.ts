@@ -21,6 +21,12 @@ import { execute, type ExecContext } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError, type AuthResult } from '../auth.js';
 import { assignmentCacheKey, fallbackStrategyFor, type PotionContext } from '../context.js';
 import { guardFrontierProvenance, resolveOperatingPoint, traceHeaderValue } from './chat.js';
+import {
+  bindServingLatency,
+  latencyTraceFields,
+  maintainPolicyCondition,
+} from '../latency-policy.js';
+import { emitAlert } from '../alerts.js';
 
 /** chars/4 token estimate (same convention as the mock provider). */
 function estTokens(chars: number): number {
@@ -299,7 +305,22 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
         ctx.providerMode,
         (msg) => app.log.warn(msg),
       );
-      const op = resolveOperatingPoint(policy, frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+      // G2.6: the SAME serving-grade latency binding as /v1/chat/completions.
+      // A bound enforced only on the chat route would be silently non-binding
+      // here — the "handled in one route is not handled" class.
+      const latency = await bindServingLatency(
+        ctx,
+        policy,
+        frontier,
+        auth.org.orgId,
+        assignment.clusterId,
+        (msg) => app.log.warn(msg),
+      );
+      const op = resolveOperatingPoint(
+        policy,
+        latency.frontier,
+        fallbackStrategyFor(ctx.providerMode, ctx.prices),
+      );
       if (op.config === null) {
         // G2.4: a live server never falls back to a mock alias (see chat.ts).
         throw new NoLiveStrategyError();
@@ -313,7 +334,30 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
           policyType: policy.type,
           fallback: op.fallback,
           provenance,
-        }) + (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '');
+        }) +
+        (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
+        latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
+      void maintainPolicyCondition(
+        ctx,
+        {
+          orgId: auth.org.orgId,
+          policyId: auth.policyId ?? null,
+          clusterId: assignment.clusterId,
+          policy,
+          binding: latency,
+          violation: op.latencyViolation,
+          emit: (_created, detail) => {
+            void emitAlert(ctx, {
+              orgId: auth.org.orgId,
+              event: 'policy_infeasible',
+              detail,
+            }).catch((e: unknown) =>
+              app.log.warn(`policy_infeasible alert emit failed — swallowed: ${String(e)}`),
+            );
+          },
+        },
+        (msg) => app.log.warn(msg),
+      );
       plans.push({
         messages,
         clusterId: assignment.clusterId,

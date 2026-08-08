@@ -245,8 +245,16 @@ export async function openContractualIncidentForTuple(
   return rows[0] ?? null;
 }
 
-/** All OPEN advisories, oldest first (escalation fairness), optionally one
- * org — the sweep's retry + escalation work set (G2.2). */
+/** All OPEN SERVE-LEG advisories, oldest first (escalation fairness),
+ * optionally one org — the sweep's retry + escalation work set (G2.2).
+ *
+ * G2.6 added a second advisory species: the policy-level standing condition
+ * (detail.leg='policy'), which has no fromStrategy and nothing to
+ * suite-verify. It is excluded here rather than filtered at each call site —
+ * this list IS the sweep's work set, and handing it a row with no strategy to
+ * verify would burn a verifyAttempt on every pass and eventually escalate a
+ * starved-verification incident for a condition that was never verifiable.
+ * Read policy-level conditions with listOpenPolicyConditions. */
 export async function listOpenAdvisories(db: PotionDb, orgId?: string): Promise<IncidentRow[]> {
   return db
     .select()
@@ -255,6 +263,7 @@ export async function listOpenAdvisories(db: PotionDb, orgId?: string): Promise<
       and(
         eq(incidents.kind, 'advisory'),
         isNull(incidents.resolvedAt),
+        sql`(${incidents.detail} ->> 'leg') IS DISTINCT FROM 'policy'`,
         orgId !== undefined ? eq(incidents.orgId, orgId) : undefined,
       ),
     )
@@ -1178,4 +1187,138 @@ async function evaluateAdvisoryLeg(
       worsened: false,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// G2.6 — the standing POLICY-LEVEL condition (compound-policy infeasibility)
+// ---------------------------------------------------------------------------
+
+/**
+ * The condition a compound policy raises when its latency bound admits no
+ * quality-qualifying point (owner refinement: "persistent infeasibility
+ * escalates as a standing policy-level condition on the guarantee status —
+ * deduped, like advisories — not just per-request labels").
+ *
+ * Deliberately built on the EXISTING advisory machinery rather than a new
+ * table or kind: an infeasible policy is a standing, deduped, evidence-
+ * carrying, auto-resolving tripwire, which is exactly what an advisory
+ * already is. `detail.leg = 'policy'` distinguishes it from the serve-leg
+ * advisories G2.1 mints, so the two never dedupe against each other and the
+ * report can separate them.
+ */
+export const POLICY_INFEASIBLE = 'latency_bound_infeasible';
+
+export interface PolicyConditionScope {
+  orgId: string;
+  policyId: string;
+  clusterId: string;
+}
+
+/** Detail carried on a policy-level condition. Both relaxation directions
+ * ride here so every surface reads them from one place. */
+export interface PolicyInfeasibleDetail extends Record<string, unknown> {
+  leg: 'policy';
+  condition: string;
+  policyId: string;
+  clusterId: string;
+  boundMs: number;
+  qualityFloor: number;
+  /** What the policy actually served instead, and how far over the bound. */
+  servedStrategy: string | null;
+  servedP95Ms: number | null;
+  /** Which clock the served p95 came off — a provisional (harness) number
+   * must not read as a measured SLO violation. */
+  latencySource: 'serving' | 'harness';
+  /** Relax latency to this p95 → feasible. */
+  relaxLatencyToMs: number | null;
+  /** Relax the quality floor to this → feasible inside the current bound. */
+  relaxQualityToFloor: number | null;
+}
+
+/** The open policy-level condition for this (org, policy, cluster), if any.
+ * The dedupe key — one standing condition per tuple, however many requests
+ * hit it. */
+export async function openPolicyCondition(
+  db: PotionDb,
+  scope: PolicyConditionScope,
+  condition: string = POLICY_INFEASIBLE,
+): Promise<IncidentRow | null> {
+  const rows = await db
+    .select()
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.orgId, scope.orgId),
+        eq(incidents.kind, 'advisory'),
+        isNull(incidents.resolvedAt),
+        sql`${incidents.detail} ->> 'leg' = 'policy'`,
+        sql`${incidents.detail} ->> 'condition' = ${condition}`,
+        sql`${incidents.detail} ->> 'policyId' = ${scope.policyId}`,
+        sql`${incidents.detail} ->> 'clusterId' = ${scope.clusterId}`,
+      ),
+    )
+    .orderBy(desc(incidents.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Raise the standing condition, or return the already-open one unchanged.
+ * Deduped per (org, policyId, clusterId, condition) — a policy serving a
+ * thousand violating requests mints ONE row, the same discipline advisories
+ * use. Returns { incident, created } so the caller can fire the alert event
+ * exactly once.
+ */
+export async function raisePolicyCondition(
+  db: PotionDb,
+  detail: PolicyInfeasibleDetail,
+  orgId: string,
+): Promise<{ incident: IncidentRow; created: boolean }> {
+  const existing = await openPolicyCondition(db, {
+    orgId,
+    policyId: detail.policyId,
+    clusterId: detail.clusterId,
+  }, detail.condition);
+  if (existing) return { incident: existing, created: false };
+  const id = await insertIncident(db, { orgId, kind: 'advisory', detail });
+  const rows = await db.select().from(incidents).where(eq(incidents.id, id));
+  return { incident: rows[0]!, created: true };
+}
+
+/**
+ * Clear the standing condition when a later evaluation finds the policy
+ * feasible again, recording WHAT made it feasible. Auto-resolution with
+ * evidence, not deletion: the row remains the durable record that the policy
+ * was infeasible for a period, which is what the monthly report reads.
+ * Returns null when nothing was open.
+ */
+export async function clearPolicyCondition(
+  db: PotionDb,
+  scope: PolicyConditionScope,
+  resolution: Record<string, unknown>,
+  condition: string = POLICY_INFEASIBLE,
+): Promise<IncidentRow | null> {
+  const open = await openPolicyCondition(db, scope, condition);
+  if (!open) return null;
+  return resolveIncidentWithEvidence(db, scope.orgId, open.id, 'advisory', resolution);
+}
+
+/** Every open policy-level condition for an org — the /api/guarantee/status
+ * `infeasiblePolicies` block. */
+export async function listOpenPolicyConditions(
+  db: PotionDb,
+  orgId: string,
+): Promise<IncidentRow[]> {
+  return db
+    .select()
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.orgId, orgId),
+        eq(incidents.kind, 'advisory'),
+        isNull(incidents.resolvedAt),
+        sql`${incidents.detail} ->> 'leg' = 'policy'`,
+      ),
+    )
+    .orderBy(desc(incidents.createdAt));
 }

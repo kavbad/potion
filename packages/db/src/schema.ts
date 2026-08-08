@@ -575,7 +575,13 @@ export type AlertEvent =
   //   silently persists (owner refinement, 2026-08-08); human review.
   | 'guarantee_unverifiable'
   | 'guarantee_restored'
-  | 'guarantee_recovery_unconfirmed';
+  | 'guarantee_recovery_unconfirmed'
+  // G2.6: a COMPOUND policy's latency bound admits no quality-qualifying
+  // point, so the fastest qualifying point is served and the SLO is knowingly
+  // missed. Fires ONCE per episode, on the standing condition's raise — the
+  // per-request labels are on the trace and the DTO. Same TS-only widening
+  // (alert_rules.events is text[] with no DB CHECK), so no migration.
+  | 'policy_infeasible';
 export const ALERT_EVENTS: readonly AlertEvent[] = [
   'quality_breach',
   'rollback',
@@ -586,6 +592,7 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'guarantee_unverifiable',
   'guarantee_restored',
   'guarantee_recovery_unconfirmed',
+  'policy_infeasible',
 ];
 
 export const alertRules = pgTable(

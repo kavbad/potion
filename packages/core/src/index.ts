@@ -2,6 +2,8 @@ export * from './types.js';
 export * from './hash.js';
 export * from './prices.js';
 export * from './select.js';
+export * from './latency.js';
+export * from './premium.js';
 export * from './schemas.js';
 // Additive (M2-security): prompt-injection defense primitives.
 export * from './safety.js';

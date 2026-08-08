@@ -1,6 +1,6 @@
 'use client';
 
-// /policy interactivity (SPEC §9 flow 4): three policy cards → POST
+// /policy interactivity (SPEC §9 flow 4): four policy cards → POST
 // /api/policies (creates a fresh api key bound to the policy) → show the
 // endpoint URL + curl / openai-node snippets from /api/endpoint-snippet.
 import { useState } from 'react';
@@ -29,6 +29,14 @@ const CARDS: Array<{
     title: 'Fastest under a deadline',
     blurb: 'Best quality among strategies whose p95 latency fits your budget.',
   },
+  {
+    kind: 'compound',
+    title: 'Both: floor and deadline',
+    blurb:
+      'Cheapest strategy that clears your quality floor AND fits your p95 budget. ' +
+      'The deadline is a hard limit — anything slower is excluded, not discounted — ' +
+      'so we show you what that limit costs and what relaxing it would save.',
+  },
 ];
 
 export function PolicyPicker() {
@@ -49,6 +57,8 @@ export function PolicyPicker() {
         return { type: 'min_cost', qualityFloor: floor };
       case 'latency_bound':
         return { type: 'latency_bound', p95Ms: Number(p95) };
+      case 'compound':
+        return { type: 'compound', qualityFloor: floor, p95Ms: Number(p95) };
     }
   }
 
@@ -141,7 +151,7 @@ export function PolicyPicker() {
                     />
                   </label>
                 )}
-                {card.kind === 'latency_bound' && (
+                {(card.kind === 'latency_bound' || card.kind === 'compound') && (
                   <label className="block">
                     <span className="mb-1 block text-xs text-faint">p95 budget (ms)</span>
                     <input
@@ -152,6 +162,23 @@ export function PolicyPicker() {
                       onChange={(e) => setP95(e.target.value)}
                       disabled={!active}
                       className={inputCls}
+                    />
+                  </label>
+                )}
+                {card.kind === 'compound' && (
+                  <label className="mt-2 block">
+                    <span className="mb-1 block text-xs text-faint">
+                      Quality floor — {floor.toFixed(2)}
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={floor}
+                      onChange={(e) => setFloor(Number(e.target.value))}
+                      disabled={!active}
+                      className="w-full accent-accent"
                     />
                   </label>
                 )}

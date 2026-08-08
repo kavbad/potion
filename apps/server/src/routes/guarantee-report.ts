@@ -34,8 +34,12 @@ import {
   type ClusterIncumbentRow,
   type DerivedServeFloor,
   type IncidentRow,
+  listPolicies,
+  servedSpendByPolicyCluster,
 } from '@potion/db';
+import { loadCurrentFrontier } from '@potion/pareto';
 import { GUARANTEE_VERIFY_SLA_MIN } from '@potion/workers';
+import { bindServingLatency } from '../latency-policy.js';
 import { openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { confidenceFor, type Confidence } from './reports.js';
@@ -104,11 +108,53 @@ export interface GuaranteeReportEntry {
   qualitySeries: Array<{ day: string; mean: number | null; samples: number }>;
 }
 
+/**
+ * The REALIZED latency premium for one compound policy over the period
+ * (G2.6, owner decision 2: "fold the premium into the existing guarantee
+ * report as a section — the month's realized latency premium in dollars,
+ * alongside the nearest-feasible relaxation and its projected savings at the
+ * same quality floor. The DTO serves the developer per-request; the report
+ * serves the policy owner per-month — same computation, both surfaces.").
+ *
+ * Realized, not projected: `actualSpendUsd` is what the org actually paid on
+ * served requests under this policy, and `unboundedSpendUsd` is what the
+ * SAME volume would have cost on the strategy the bound pruned. The
+ * difference is a bill, not a model.
+ */
+export interface LatencyPremiumSection {
+  policyId: string;
+  clusterId: string;
+  boundMs: number;
+  qualityFloor: number;
+  requests: number;
+  actualSpendUsd: number;
+  /** Null when the bound pruned nothing — there is no cheaper alternative
+   * whose absence could be charged for. */
+  unboundedStrategy: string | null;
+  unboundedSpendUsd: number | null;
+  /** actualSpendUsd − unboundedSpendUsd. The month's bill for the bound. */
+  premiumUsd: number;
+  /** Relax the bound to this p95 and the savings become available at the
+   * SAME quality floor — the batch-tolerant customer's action item. */
+  relaxLatencyToMs: number | null;
+  projectedSavingsPct: number;
+  /** The other direction: the quality floor reachable inside the current
+   * bound. Surfaced both ways per the owner's refinement. */
+  relaxQualityToFloor: number | null;
+  /** Whether the frontier latency behind this was measured on served
+   * traffic or is still the harness benchmark. */
+  latencySource: 'serving' | 'harness';
+}
+
 export interface GuaranteeReport {
   orgId: string;
   from: string;
   to: string;
   entries: GuaranteeReportEntry[];
+  /** G2.6: one section per compound policy that served traffic in the
+   * period. Empty when the org runs no compound policies — the retention
+   * thesis stays the report's headline. */
+  latencyPremiums: LatencyPremiumSection[];
   /** True when the org has no incumbent designations at all — the whole
    * report is on the labeled legacy path. */
   legacyPath: boolean;
@@ -322,9 +368,75 @@ export async function loadGuaranteeReport(
     from: range.fromDay,
     to: range.toDay,
     entries,
+    latencyPremiums: await loadLatencyPremiums(ctx, orgId, range, now),
     legacyPath: !anyIncumbent,
     generatedAt: now.toISOString(),
   };
+}
+
+/**
+ * The month's REALIZED latency premium per compound policy (G2.6).
+ *
+ * Same computation as the per-request DTO — latencyPremium() over the same
+ * serving-grade-resolved points — priced against the period's ACTUAL served
+ * volume instead of a single request. One code path, two time horizons; a
+ * second implementation here is exactly how the two surfaces would drift.
+ */
+async function loadLatencyPremiums(
+  ctx: PotionContext,
+  orgId: string,
+  range: { fromDay: string; toDay: string },
+  now: Date,
+): Promise<LatencyPremiumSection[]> {
+  // ALL the org's policies, not just guarantee-carrying ones: a latency bound
+  // is a cost question, and a compound policy is a perfectly ordinary
+  // configuration without a quality guarantee attached. Scoping this to
+  // listPoliciesWithGuarantee would silently omit the premium for exactly the
+  // customers most likely to have set a bound and never looked at it again.
+  const all = await listPolicies(ctx.db.db, orgId);
+  const compound = all
+    .map((p) => ({ id: p.id, config: p.config as Policy }))
+    .filter((p) => p.config.type === 'compound');
+  if (compound.length === 0) return [];
+  const served = await servedSpendByPolicyCluster(ctx.db.db, orgId, range.fromDay, range.toDay);
+  const out: LatencyPremiumSection[] = [];
+  for (const p of compound) {
+    const policy = p.config;
+    if (policy.type !== 'compound') continue;
+    const clusters = [...new Set(served.filter((s) => s.policyId === p.id).map((s) => s.clusterId))];
+    for (const clusterId of clusters.sort()) {
+      const rows = served.filter((s) => s.policyId === p.id && s.clusterId === clusterId);
+      const requests = rows.reduce((a, r) => a + r.requests, 0);
+      const actualSpendUsd = rows.reduce((a, r) => a + r.costUsd, 0);
+      const frontier = await loadCurrentFrontier(ctx.db.db, clusterId, orgId);
+      if (!frontier || frontier.points.length === 0 || requests === 0) continue;
+      const binding = await bindServingLatency(ctx, policy, frontier, orgId, clusterId, () => {}, now);
+      const premium = binding.premium;
+      // costPer1K is per 1000 REQUESTS, so the counterfactual for `requests`
+      // requests is (requests / 1000) × costPer1K.
+      const unboundedSpendUsd =
+        premium.unbounded === null ? null : (requests / 1000) * premium.unbounded.costPer1K;
+      out.push({
+        policyId: p.id,
+        clusterId,
+        boundMs: policy.p95Ms,
+        qualityFloor: policy.qualityFloor,
+        requests,
+        actualSpendUsd,
+        unboundedStrategy: premium.binding === 'latency' ? (premium.unbounded?.strategyHash ?? null) : null,
+        unboundedSpendUsd: premium.binding === 'latency' ? unboundedSpendUsd : null,
+        premiumUsd:
+          premium.binding === 'latency' && unboundedSpendUsd !== null
+            ? Math.max(0, actualSpendUsd - unboundedSpendUsd)
+            : 0,
+        relaxLatencyToMs: premium.relaxLatencyToMs,
+        projectedSavingsPct: premium.savingsPct,
+        relaxQualityToFloor: premium.relaxQualityToFloor,
+        latencySource: binding.source,
+      });
+    }
+  }
+  return out;
 }
 
 export function registerGuaranteeReportRoutes(app: FastifyInstance, ctx: PotionContext): void {

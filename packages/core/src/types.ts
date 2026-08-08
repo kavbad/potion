@@ -164,6 +164,23 @@ export interface FrontierPointEvidence {
   runIds: string[];
   n: number;
   qualityCi95: number;
+  /**
+   * G2.6 latency provenance — the same discipline quality already carried, so
+   * a latency-bounded selection is auditable, not merely asserted.
+   *
+   * A [lo, hi] PAIR rather than qualityCi95's half-width: the sampling
+   * distribution of a p95 is asymmetric, and a half-width would assert a
+   * symmetry that does not hold. `latencySeed` makes the interval
+   * re-derivable from (latencies, seed, BOOTSTRAP_RESAMPLES).
+   *
+   * This is HARNESS-grade provenance — a spread over eval ITEMS, not a
+   * distribution of one call under load. SERVING-grade latency is a property
+   * of the operating point, not of the frontier, and rides separately as
+   * LatencyEvidence. Do not "unify" the two: they measure different spans.
+   */
+  latencyN?: number;
+  latencyP95Ci95?: [number, number];
+  latencySeed?: number;
   suiteId?: string;
   suiteVersion?: string;
   /** The rubric the llm-judge evidence was scored under (0022 identity). */
@@ -307,6 +324,28 @@ export type Policy =
     }
   | {
       type: 'latency_bound'; // then max quality
+      p95Ms: number;
+      shadow?: ShadowConfig | undefined;
+      guarantee?: GuaranteeConfig | undefined;
+    }
+  /**
+   * G2.6 — a COMPOUND policy: a quality floor AND a hard latency bound, with
+   * cost as the remaining objective.
+   *
+   * The latency bound is a HARD CONSTRAINT (owner's call): a bound stated in a
+   * guarantee is an SLO the customer declared, not a preference, so a point
+   * whose measured p95 exceeds it is excluded — never traded off against cost.
+   *
+   * A distinct union member rather than an optional `p95Ms` on min_cost:
+   * `policy.type` is what lands in request_logs.policy_type, the `policy=`
+   * field of x-frontier-trace and incidents.detail, so an optional field would
+   * make a latency-bounded policy indistinguishable from an unbounded one in
+   * every audit surface — failing the "the consequence must be visible"
+   * requirement at the first surface where it matters.
+   */
+  | {
+      type: 'compound';
+      qualityFloor: number;
       p95Ms: number;
       shadow?: ShadowConfig | undefined;
       guarantee?: GuaranteeConfig | undefined;

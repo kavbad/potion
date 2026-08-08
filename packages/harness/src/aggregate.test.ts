@@ -77,3 +77,54 @@ describe('aggregateResults', () => {
     expect(agg.costPer1K).toBeGreaterThan(1.0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// G2.6 — latency provenance parity (owner requirement 2): a latency-driven
+// selection must carry the same evidence a quality-driven one does.
+// ---------------------------------------------------------------------------
+
+describe('aggregateResults — latency provenance (G2.6)', () => {
+  const CFG = { type: 'single', model: 'mock-cheap' } as const;
+  const results = (latencies: number[]): EvalResult[] =>
+    latencies.map((ms) => fakeResult(0.8, 0.001, ms));
+
+  it('records latencyN, a bootstrap CI and the seed alongside the p95', () => {
+    const agg = aggregateResults('code-gen', 'h1', CFG, results([100, 120, 140, 160, 900]), 'pv');
+    expect(agg.evidence!.latencyN).toBe(5);
+    expect(agg.evidence!.latencySeed).toBeGreaterThan(0);
+    const [lo, hi] = agg.evidence!.latencyP95Ci95!;
+    expect(lo).toBeLessThanOrEqual(hi);
+  });
+
+  it('the CI brackets the reported p95', () => {
+    const agg = aggregateResults(
+      'code-gen',
+      'h1',
+      CFG,
+      results([100, 110, 120, 130, 140, 150, 160, 170, 180, 900]),
+      'pv',
+    );
+    const [lo, hi] = agg.evidence!.latencyP95Ci95!;
+    expect(lo).toBeLessThanOrEqual(agg.latencyP95);
+    expect(hi).toBeGreaterThanOrEqual(agg.latencyP95);
+  });
+
+  it('is exactly reproducible — same rows → same interval and seed', () => {
+    const rows = results([210, 190, 250, 300, 205, 260, 220]);
+    const a = aggregateResults('code-gen', 'h1', CFG, rows, 'pv');
+    const b = aggregateResults('code-gen', 'h1', CFG, rows, 'pv');
+    expect(a.evidence!.latencyP95Ci95).toEqual(b.evidence!.latencyP95Ci95);
+    expect(a.evidence!.latencySeed).toBe(b.evidence!.latencySeed);
+  });
+
+  it('the seed is derived from the EVIDENCE, so different latencies reseed', () => {
+    const a = aggregateResults('code-gen', 'h1', CFG, results([100, 200, 300]), 'pv');
+    const b = aggregateResults('code-gen', 'h1', CFG, results([100, 200, 301]), 'pv');
+    expect(a.evidence!.latencySeed).not.toBe(b.evidence!.latencySeed);
+  });
+
+  it('no rows → no evidence block at all (nothing to attest)', () => {
+    const agg = aggregateResults('code-gen', 'h1', CFG, [], 'pv');
+    expect(agg.evidence).toBeUndefined();
+  });
+});

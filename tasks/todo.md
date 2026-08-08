@@ -1801,3 +1801,100 @@ DONE (2026-08-08, session g24-carryover-isolation-fixture):
 - Verify: 1165 keyless tests green (server 459); typecheck clean; walkthrough
   17/17; lint at its pre-existing baseline (21 no-unused-vars errors that
   predate this change, none in files it touched). $0 spend.
+
+## G2.6 — Compound policy: quality floor + HARD latency bound (session 2026-08-08)
+
+THE DESIGN FORK, resolved by the owner and binding: a latency bound is a HARD
+CONSTRAINT that excludes any strategy whose measured latency exceeds it —
+"a latency bound in a guarantee is an SLO the customer stated, not a
+preference" — BUT the consequence must be visible, not silent. Because a bound
+prunes exactly the serial compositions that create the frontier's value (the
+M1b result: cascade near-frontier quality at a third the cost is a two-call
+latency profile when it escalates), the policy result surfaces the COST
+PREMIUM: "at your latency bound the cheapest qualifying strategy is X;
+relaxing to Y unlocks Z% savings." That trade is a product feature — it is how
+batch-tolerant customers discover they should relax the bound.
+
+OWNER DECISIONS (these OVERRODE the design agent's opposite recommendations):
+1. Infeasible → SERVE FASTEST QUALITY-QUALIFYING, LABEL THE VIOLATION.
+   Verbatim rationale: "violate the customer-observable dimension (latency),
+   never the customer-invisible one (quality) — detecting quality degradation
+   is the product itself." Refinement: persistent infeasibility escalates as a
+   STANDING policy-level condition on the guarantee status (deduped, like
+   advisories), with nearest-feasible relaxations in BOTH directions.
+2. Premium surfaces on the dashboard DTO + a compact trace marker, AND folded
+   into the guarantee report as a section — the month's realized premium in
+   dollars. "The DTO serves the developer per-request; the report serves the
+   policy owner per-month — same computation, both surfaces."
+
+OWNER REQUIREMENTS: (1) latency evidence must be SERVING-GRADE, not
+harness-grade — bind against serving-path p95 where it exists, treat the
+harness number as provisional and say so where it does not; (2) SAME FRONTIER
+DISCIPLINE AS QUALITY — a latency-driven selection carries the same provenance
+(which evidence, what n, what CI) as a quality-driven one.
+
+- [x] a. core: quantileNearestRank + generalized bootstrapCi(values, stat,
+      seed) in stats.ts with bootstrapMeanCi delegating (BIT-IDENTITY pinned
+      against the pre-refactor implementation on fixed vectors — G0.3 breach
+      verdicts are re-derivable from stored evidence); `compound` as a 4th
+      discriminated Policy member; selectPoint's hard-intersect case;
+      fastestQualityQualifyingPoint; NEW latency.ts (resolveLatency,
+      SERVING_LATENCY_MIN_SAMPLES=30, LatencyEvidence with `span`); NEW
+      premium.ts (latencyPremium, both-direction relaxations); harness
+      aggregate emits latencyN / latencyP95Ci95 / latencySeed
+- [x] b. db: migration 0027 partial index on (org, cluster, strategy, ts)
+      WHERE status='ok'; servingLatencyP95 via percentile_disc;
+      servedSpendByPolicyCluster for the realized-dollar premium; standing
+      policy-condition helpers on the G2.2 advisory machinery
+      (raise/clear/list, deduped per (org, policy, cluster))
+- [x] c. server: all THREE resolveOperatingPoint call sites bind through one
+      seam (latency-policy.ts); case (ii) serves the fastest quality-
+      qualifying point + labels the violation; deduped standing condition +
+      `policy_infeasible` alert event; trace keys; dashboard DTO; guarantee
+      report section (JSON + HTML)
+- [x] d. dashboard: 4th policy card, PROVISIONAL badge, the "you are here"
+      sentence in the owner's words; walkthrough step 17
+
+DONE (2026-08-08, session g26-compound-policy):
+- WHY `compound` is its own union member and not an optional p95Ms on
+  min_cost: policy.type is what lands in request_logs.policy_type, the trace's
+  `policy=` field and incidents.detail. An optional field would make a
+  latency-bounded policy INDISTINGUISHABLE from an unbounded one in every
+  audit surface — failing the "consequence must be visible" requirement at the
+  first surface where it matters.
+- THE ESTIMATOR PARITY IS A TESTABLE CLAIM, not a convention: percentile_disc
+  and quantileNearestRank are the same ceil(p·n)-th order statistic, asserted
+  against randomized vectors at eight sample sizes straddling the rank
+  boundaries. percentile_cont interpolates and is a DIFFERENT estimator; using
+  it would make the SQL and TS p95 disagree for reasons unrelated to latency.
+- The evidence stores latencyP95Ci95 as a [lo,hi] PAIR, not qualityCi95's
+  half-width: the sampling distribution of a p95 is asymmetric, and a
+  half-width would assert a symmetry that does not hold. Pinned by a test on
+  right-skewed latencies.
+- TWO DEFECTS FOUND WHILE BUILDING:
+  (1) The G2.2 sweep's work set (listOpenAdvisories) would have picked up the
+      new policy-leg advisories and tried to suite-verify them — burning a
+      verifyAttempt every pass and eventually escalating a
+      starved-verification incident for a condition that was never
+      verifiable. Excluded at the query, not per call site, with the
+      separation asserted in both directions (a policy condition never
+      satisfies the serve-leg dedupe; a serve-leg advisory never satisfies
+      the policy-condition dedupe; a pre-G2.6 advisory with no `leg` field
+      stays in the work set).
+  (2) The report's premium section was initially scoped to
+      listPoliciesWithGuarantee, which would have silently omitted the
+      premium for every compound policy without a quality guarantee attached
+      — exactly the customers most likely to have set a bound and forgotten
+      it. Now reads all the org's policies.
+- The latency_bound policy gets the SAME serving-grade binding as compound;
+  shipping two meanings of "p95" would be worse than shipping one that is
+  sometimes provisional. Its trace gained `latency_src=`, which is the visible
+  consequence the owner asked for (three existing exact-trace assertions
+  updated to match).
+- Verify: 1255 keyless tests green (+90: core 69, db 132, harness 164, server
+  481); typecheck clean; walkthrough 18/18 — step 17 derives the bound from
+  the LIVE frontier (a hard-coded bound would stop pruning and pass while
+  proving nothing) and observed a real 74% premium relaxing 1801ms → 2400ms.
+  Living gate green WITHOUT touching route-inventory.ts (no route added — the
+  premium rides existing routes by design). Lint at its pre-existing baseline.
+  $0 spend (mock throughout).

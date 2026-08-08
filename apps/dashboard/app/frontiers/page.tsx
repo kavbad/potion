@@ -19,6 +19,7 @@ import type {
   FrontierPointDto,
   FrontierResponse,
   GuaranteeStatusDto,
+  OperatingPointDto,
 } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -134,6 +135,7 @@ export default async function FrontiersPage({
               Your current policy (
               <span className="font-mono text-xs">{data.operatingPoint.policy.type}</span>) runs{' '}
               {describeStrategy(data.operatingPoint.strategyConfig)}.
+              <LatencyNote op={data.operatingPoint} />
             </>
           ) : (
             <>
@@ -144,6 +146,75 @@ export default async function FrontiersPage({
         </p>
       </div>
     </PageShell>
+  );
+}
+
+/**
+ * The G2.6 latency story, in the owner's terms: a latency bound is a hard
+ * constraint, so when it prunes the cheaper composition the customer is
+ * paying a premium — and that premium is the product feature, not a footnote.
+ * It is how a batch-tolerant customer discovers they should relax the bound.
+ *
+ * PROVISIONAL is the same discipline as the SIMULATED badge: a bound
+ * evaluated against harness latency (a spread over benchmark items, on a
+ * strategy-only span) has not been measured against served traffic, and
+ * saying so is the difference between evidence and a claim.
+ */
+function LatencyNote({ op }: { op: OperatingPointDto }) {
+  const ev = op.latencyEvidence;
+  const premium = op.latencyPremium;
+  const violation = op.latencyViolation;
+  if (!ev && !premium && !violation) return null;
+  return (
+    <>
+      {ev?.provisional ? (
+        <>
+          {' '}
+          <span className="inline-block rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-warn">
+            PROVISIONAL
+          </span>{' '}
+          <span className="text-xs">
+            the p95 above comes from benchmark runs, not your served traffic — it firms up once
+            this cluster has enough requests.
+          </span>
+        </>
+      ) : ev ? (
+        <>
+          {' '}
+          <span className="text-xs">
+            Latency measured on {ev.n} of your own served requests
+            {ev.windowMin ? ` over the last ${ev.windowMin} minutes` : ''}.
+          </span>
+        </>
+      ) : null}
+      {violation ? (
+        <>
+          {' '}
+          <span className="font-medium text-warn">
+            Your {violation.boundMs}ms deadline cannot be met on this cluster.
+          </span>{' '}
+          We are serving the fastest strategy that still clears your quality floor (
+          {Math.round(violation.servedP95Ms)}ms) rather than dropping quality to hit the clock
+          {violation.relaxLatencyToMs !== null
+            ? `; a ${Math.round(violation.relaxLatencyToMs)}ms deadline would be met`
+            : ''}
+          {violation.relaxQualityToFloor !== null
+            ? `, or a ${violation.relaxQualityToFloor.toFixed(2)} quality floor would fit the current one`
+            : ''}
+          .
+        </>
+      ) : premium?.binding === 'latency' && premium.savingsPct > 0 ? (
+        <>
+          {' '}
+          Your deadline is costing{' '}
+          <span className="font-medium text-ink">
+            {(premium.savingsPct * 100).toFixed(0)}%
+          </span>
+          : relaxing it to {Math.round(premium.relaxLatencyToMs ?? 0)}ms would serve the same
+          quality floor for less.
+        </>
+      ) : null}
+    </>
   );
 }
 

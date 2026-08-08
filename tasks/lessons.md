@@ -172,3 +172,26 @@ target, a seeded row, a bypass destination). If it is, construct a plain one.
 Then encode the rule as a meta-test over the test tree — a convention honoured
 by one file is a convention a new file will not know about. Scope the meta-test
 narrowly enough that its exemption map stays smaller than the fix.
+
+## An optional field erases a distinction every audit surface needs
+
+**What happened (2026-08-08, G2.6):** the obvious way to add a latency bound to
+a quality-floor policy was an optional `p95Ms` on `min_cost`. It was rejected
+for a reason that only shows up downstream: `policy.type` is what lands in
+`request_logs.policy_type`, the `policy=` field of `x-frontier-trace`, and
+`incidents.detail`. With an optional field, a bounded policy and an unbounded
+one are the same string in every one of those places — so "was this request
+subject to a latency SLO?" becomes unanswerable from the audit trail, and the
+requirement that the bound's consequence be visible fails at the first surface
+where it matters.
+
+**Why:** a type discriminator is not just a compile-time convenience; in a
+system that logs the discriminator, it is the only thing that survives into the
+record. Optionality inside a variant is invisible to everything downstream that
+stores the variant's NAME.
+
+**How to apply:** before adding an optional field to an existing variant, ask
+what gets persisted about that variant. If the answer is "its type tag", and
+the new field changes the meaning of the behavior, it needs its own tag. The
+extra union member also buys compiler-enforced exhaustiveness — the TS errors
+at each switch become the worklist of surfaces that must be updated.

@@ -9,10 +9,14 @@
 // more than epsilon on at least one axis (and may not be worse by more than
 // epsilon on any axis). This keeps float noise (e.g. aggregated cost means)
 // from creating or destroying domination relationships.
-import type { FrontierPoint, StrategyAggregate } from '@potion/core';
+import { SELECTION_EPSILON, type FrontierPoint, type StrategyAggregate } from '@potion/core';
 
-/** Epsilon band for near-tie handling in all dominance comparisons. */
-export const DOMINANCE_EPSILON = 1e-9;
+/** Epsilon band for near-tie handling in all dominance comparisons. G2.6
+ * moved the value to @potion/core (SELECTION_EPSILON) so the frontier's
+ * "these coordinates are equal" and the premium's "this relaxation target is
+ * reachable" cannot drift apart; re-exported here verbatim under the name
+ * every existing caller uses. */
+export const DOMINANCE_EPSILON = SELECTION_EPSILON;
 
 /**
  * isDominated(p, others) → the first point in `others` that dominates p, or

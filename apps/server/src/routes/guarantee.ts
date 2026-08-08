@@ -31,6 +31,7 @@ import {
   latestJudgeCalibration,
   listIncidents,
   listIncumbents,
+  listOpenPolicyConditions,
   listPoliciesWithGuarantee,
   openAdvisoryForTuple,
   resolveIncident,
@@ -107,6 +108,31 @@ export interface GuaranteeStatus {
   /** G2.2: open advisories ESCALATED past their verifySlaMin — the org's
    * guarantee is currently unverifiable for those tuples. */
   unverifiableAdvisories: number;
+  /** G2.6: STANDING policy-level conditions — compound policies whose
+   * latency bound currently admits no quality-qualifying point. Deduped per
+   * (policy, cluster), not per request; each carries both relaxation
+   * directions so the policy owner can act from the status alone. */
+  infeasiblePolicies: InfeasiblePolicyDto[];
+}
+
+/** A standing compound-policy infeasibility (G2.6). */
+export interface InfeasiblePolicyDto {
+  incidentId: string;
+  condition: string;
+  policyId: string;
+  clusterId: string;
+  boundMs: number;
+  qualityFloor: number;
+  /** What was served instead — the fastest QUALITY-qualifying point. */
+  servedStrategy: string | null;
+  servedP95Ms: number | null;
+  /** A provisional (harness) source means the violation is inferred from a
+   * benchmark, not measured on served traffic — say so rather than implying
+   * a measured SLO miss. */
+  latencySource: 'serving' | 'harness';
+  relaxLatencyToMs: number | null;
+  relaxQualityToFloor: number | null;
+  since: string;
 }
 
 /** Platform default retention floor (G2.1) — evaluation-time only. */
@@ -141,10 +167,14 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
         .code(401)
         .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
-    const [policies, incidents, designations] = await Promise.all([
+    const [policies, incidents, designations, policyConditions] = await Promise.all([
       listPoliciesWithGuarantee(ctx.db.db, org.orgId),
       listIncidents(ctx.db.db, org.orgId),
       listIncumbents(ctx.db.db, org.orgId),
+      // G2.6: the STANDING policy-level conditions (owner refinement —
+      // persistent infeasibility is a condition on the guarantee status, not
+      // just a per-request label).
+      listOpenPolicyConditions(ctx.db.db, org.orgId),
     ]);
     const breaches = incidents.map(incidentDto);
     const incumbents = designations.filter((d) => d.status === 'active').map(incumbentDto);
@@ -205,6 +235,25 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
       incumbents,
       openAdvisories,
       unverifiableAdvisories,
+      // Each entry carries BOTH relaxation directions, so the policy owner
+      // can act on it without a second request.
+      infeasiblePolicies: policyConditions.map((row) => {
+        const d = row.detail as Record<string, unknown>;
+        return {
+          incidentId: row.id,
+          condition: String(d.condition ?? ''),
+          policyId: String(d.policyId ?? ''),
+          clusterId: String(d.clusterId ?? ''),
+          boundMs: Number(d.boundMs ?? 0),
+          qualityFloor: Number(d.qualityFloor ?? 0),
+          servedStrategy: (d.servedStrategy as string | null) ?? null,
+          servedP95Ms: (d.servedP95Ms as number | null) ?? null,
+          latencySource: (d.latencySource as 'serving' | 'harness') ?? 'harness',
+          relaxLatencyToMs: (d.relaxLatencyToMs as number | null) ?? null,
+          relaxQualityToFloor: (d.relaxQualityToFloor as number | null) ?? null,
+          since: row.createdAt.toISOString(),
+        };
+      }),
     };
     return reply.send(body);
   });

@@ -24,7 +24,9 @@ import {
   ChatMessageSchema,
   ToolChoiceSchema,
   ToolSchema,
+  fastestQualityQualifyingPoint,
   highestQualityPoint,
+  latencyPremium,
   selectPoint,
   strategyHash,
   type ChatMessage,
@@ -58,6 +60,11 @@ import {
 // ---- end M3 #22 guarantee imports ----
 // ---- M4 #33/#35 alerts + budget (m4-alerts-budget) — appended imports ----
 import { emitAlert } from '../alerts.js';
+import {
+  bindServingLatency,
+  latencyTraceFields,
+  maintainPolicyCondition,
+} from '../latency-policy.js';
 import { checkBudgetHardStop } from './budgets.js';
 import { recordBudgetEvent } from '@potion/db';
 import { ProviderError, breakerStates } from '@potion/providers';
@@ -119,6 +126,29 @@ export interface OperatingPoint {
   fallback: 0 | 1;
   frontierVersion: number;
   frontier: Frontier | null;
+  /**
+   * G2.6 — set ONLY in the compound-policy latency-infeasible case: points
+   * cleared the quality floor but none cleared the latency bound, so the
+   * FASTEST quality-qualifying point was served and the SLO was knowingly
+   * missed. Owner's rule: violate the customer-observable dimension
+   * (latency), never the customer-invisible one (quality) — detecting quality
+   * degradation is the product itself. Never silent: it rides the trace, the
+   * DTO, the playground response, and a standing policy condition.
+   */
+  latencyViolation?: LatencyViolation;
+}
+
+/** The labeled consequence of an unmeetable latency bound (G2.6). */
+export interface LatencyViolation {
+  boundMs: number;
+  qualityFloor: number;
+  /** The p95 actually served — always > boundMs. */
+  servedP95Ms: number;
+  servedStrategyHash: string;
+  /** Relax the bound to this and the policy is feasible on cost again. */
+  relaxLatencyToMs: number | null;
+  /** Or relax quality to this and the CURRENT bound is feasible. */
+  relaxQualityToFloor: number | null;
 }
 
 /** Highest-quality point (tie → lower cost) — the documented NULL fallback. */
@@ -152,6 +182,38 @@ export function resolveOperatingPoint(
       frontierVersion: frontier.version,
       frontier,
     };
+  }
+  // G2.6 case (ii) — LATENCY-side infeasibility on a compound policy. Points
+  // clear the quality floor; none clear the bound. Serving the highest-quality
+  // point (the generic fallback below) would ignore the SLO entirely; refusing
+  // would break serving. So: serve the FASTEST point that still meets the
+  // quality floor, and label the violation everywhere. Quality is never traded
+  // away to meet latency — that is the one substitution the customer cannot
+  // detect for themselves.
+  //
+  // Case (i), quality-side infeasibility, falls through to the existing
+  // highest-quality fallback: no latency SLO is violated by serving the best
+  // quality available, and blaming the bound would send the customer to relax
+  // the wrong knob.
+  if (policy.type === 'compound') {
+    const fastest = fastestQualityQualifyingPoint(frontier.points, policy.qualityFloor);
+    if (fastest) {
+      const premium = latencyPremium(policy, frontier.points);
+      return {
+        config: fastest.strategyConfig,
+        fallback: 1,
+        frontierVersion: frontier.version,
+        frontier,
+        latencyViolation: {
+          boundMs: policy.p95Ms,
+          qualityFloor: policy.qualityFloor,
+          servedP95Ms: fastest.latencyP95,
+          servedStrategyHash: fastest.strategyHash,
+          relaxLatencyToMs: premium.relaxLatencyToMs,
+          relaxQualityToFloor: premium.relaxQualityToFloor,
+        },
+      };
+    }
   }
   const best = highestQualityPoint(frontier.points);
   if (!best) {
@@ -479,7 +541,24 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       ctx.providerMode,
       (msg) => app.log.warn(msg),
     );
-    let op = resolveOperatingPoint(policy, frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+    // G2.6: a latency-dimensioned policy binds against SERVING-grade p95 where
+    // the evidence supports it; otherwise the harness number, marked
+    // provisional. Substitution happens on the points BEFORE selection so the
+    // selector stays pure and "which latency did we bind against" has one
+    // answerable seam. A rollup failure never breaks serving.
+    const latency = await bindServingLatency(
+      ctx,
+      policy,
+      frontier,
+      auth.org.orgId,
+      clusterId,
+      (msg) => app.log.warn(msg),
+    );
+    let op = resolveOperatingPoint(
+      policy,
+      latency.frontier,
+      fallbackStrategyFor(ctx.providerMode, ctx.prices),
+    );
     // ---- M3 #22 guarantee (m3-guarantee) — rollback operating-point override ----
     // The LATEST UNRESOLVED kind='rollback' incident for (org, cluster) IS the
     // org's operating point for that cluster (SPEC §12.5; the incident row
@@ -514,9 +593,34 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         policyType: policy.type,
         fallback: op.fallback,
         provenance,
-      }) + (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '');
+      }) +
+      (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
+      latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
     logBase.trace = trace;
     void reply.header('x-frontier-trace', trace);
+    // G2.6: the standing policy-level condition. Deduped in the repo, so it
+    // is safe per-request; the alert fires once per episode, on the raise.
+    void maintainPolicyCondition(
+      ctx,
+      {
+        orgId: auth.org.orgId,
+        policyId: auth.policyId ?? null,
+        clusterId,
+        policy,
+        binding: latency,
+        violation: op.latencyViolation,
+        emit: (_created, detail) => {
+          void emitAlert(ctx, {
+            orgId: auth.org.orgId,
+            event: 'policy_infeasible',
+            detail,
+          }).catch((e: unknown) =>
+            app.log.warn(`policy_infeasible alert emit failed — swallowed: ${String(e)}`),
+          );
+        },
+      },
+      (msg) => app.log.warn(msg),
+    );
     // ---- M3 #26 observability (m3-observability) ----
     // One frontier-decision observation per served request, next to where
     // the trace header is built (same inputs).

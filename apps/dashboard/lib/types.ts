@@ -6,7 +6,11 @@ export type ProviderId = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'moc
 export type Policy =
   | { type: 'max_quality'; costCeilingPer1K: number }
   | { type: 'min_cost'; qualityFloor: number }
-  | { type: 'latency_bound'; p95Ms: number };
+  | { type: 'latency_bound'; p95Ms: number }
+  /** G2.6: a quality floor AND a hard latency bound, cheapest among the
+   * survivors. The bound EXCLUDES — it is an SLO the customer stated, not a
+   * preference — so the UI's job is to show what that exclusion costs. */
+  | { type: 'compound'; qualityFloor: number; p95Ms: number };
 
 export type StrategyConfig =
   | { type: 'single'; model: string }
@@ -89,6 +93,37 @@ export interface FrontierPointDto {
   dominated: boolean;
 }
 
+/** Which clock a latency number came off, over what evidence (G2.6). The two
+ * sources measure different SPANS, so the badge says which. */
+export interface LatencyEvidenceDto {
+  source: 'serving' | 'harness';
+  p95Ms: number;
+  n: number;
+  provisional: boolean;
+  windowMin?: number;
+  span: 'end-to-end' | 'strategy-only';
+}
+
+/** What a latency bound is costing, and what relaxing it would return (G2.6). */
+export interface LatencyPremiumDto {
+  binding: 'latency' | 'quality' | 'none';
+  savingsPct: number;
+  deltaCostPer1K: number;
+  relaxLatencyToMs: number | null;
+  relaxQualityToFloor: number | null;
+}
+
+/** The bound admitted no quality-qualifying point: the fastest QUALIFYING
+ * point was served and the SLO was knowingly missed (G2.6). */
+export interface LatencyViolationDto {
+  boundMs: number;
+  qualityFloor: number;
+  servedP95Ms: number;
+  servedStrategyHash: string;
+  relaxLatencyToMs: number | null;
+  relaxQualityToFloor: number | null;
+}
+
 export interface OperatingPointDto {
   strategyHash: string;
   strategyConfig: StrategyConfig;
@@ -97,6 +132,9 @@ export interface OperatingPointDto {
   latencyP95: number;
   policy: Policy;
   fallback: 0 | 1;
+  latencyEvidence?: LatencyEvidenceDto | null;
+  latencyPremium?: LatencyPremiumDto | null;
+  latencyViolation?: LatencyViolationDto | null;
 }
 
 export interface FrontierResponse {

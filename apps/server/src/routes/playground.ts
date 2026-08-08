@@ -35,6 +35,7 @@ import {
   type ChatMessage,
   type Frontier,
   type FrontierPoint,
+  type LatencyPremium,
   type Policy,
 } from '@potion/core';
 import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
@@ -42,7 +43,13 @@ import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
 import { openAiError } from '../auth.js';
 import { fallbackStrategyFor, type PotionContext } from '../context.js';
-import { highestQualityPoint, resolveOperatingPoint, traceHeaderValue } from './chat.js';
+import {
+  highestQualityPoint,
+  resolveOperatingPoint,
+  traceHeaderValue,
+  type LatencyViolation,
+} from './chat.js';
+import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 
 const PlaygroundChatSchema = z
   .object({
@@ -61,6 +68,16 @@ interface ResolvedPoint {
    * no-policy/highest-quality fallback shapes — still frontier points). */
   point: FrontierPoint | null;
   fallback: 0 | 1;
+  /** G2.6: the labeled consequence when a compound policy's latency bound
+   * admits no quality-qualifying point. The playground is where a developer
+   * TUNES a policy, so it is the surface where seeing the violation matters
+   * most — showing a served answer with no note would teach them the bound
+   * is being met. */
+  latencyViolation?: LatencyViolation;
+  /** Which clock the bound was evaluated against. */
+  latencySource?: 'serving' | 'harness';
+  /** What the bound is costing at this quality floor, if anything. */
+  latencyPremium?: LatencyPremium;
 }
 
 /** Point selection: explicit strategyHash, else potion-auto policy routing. */
@@ -89,16 +106,28 @@ async function resolvePlaygroundPoint(
   if (policy) {
     // G2.4: the playground shares the serving path's mode-aware fallback —
     // under a live server it never resolves to a mock alias.
-    const op = resolveOperatingPoint(policy, frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+    // G2.6: …and the same serving-grade latency binding, so a policy tuned
+    // here behaves identically when it serves.
+    const latency = await bindServingLatency(ctx, policy, frontier, orgId, frontier.clusterId);
+    const op = resolveOperatingPoint(
+      policy,
+      latency.frontier,
+      fallbackStrategyFor(ctx.providerMode, ctx.prices),
+    );
     if (op.config === null) {
       return { error: 'no live strategy is resolvable — a live server never serves mock output' };
     }
     const opConfig = op.config;
     const hash = strategyHash(opConfig);
+    const boundPoints = latency.frontier?.points ?? frontier.points;
     return {
       config: opConfig,
-      point: frontier.points.find((p) => p.strategyHash === hash) ?? null,
+      point: boundPoints.find((p) => p.strategyHash === hash) ?? null,
       fallback: op.fallback,
+      ...(op.latencyViolation ? { latencyViolation: op.latencyViolation } : {}),
+      ...(policyHasLatencyDimension(policy)
+        ? { latencySource: latency.source, latencyPremium: latency.premium }
+        : {}),
     };
   }
   const best = highestQualityPoint(frontier.points);
@@ -155,7 +184,15 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       policyType: 'playground',
       fallback: resolved.fallback,
       provenance,
-    });
+    }) +
+      // G2.6: the same latency markers the serving path emits, so a policy
+      // tuned in the playground reads exactly as it will when it serves.
+      (resolved.latencySource !== undefined ? `;latency_src=${resolved.latencySource}` : '') +
+      (resolved.latencyPremium?.binding === 'latency' && resolved.latencyPremium.savingsPct > 0
+        ? `;latency_premium=${resolved.latencyPremium.savingsPct.toFixed(2)}` +
+          `;relax_ms=${Math.round(resolved.latencyPremium.relaxLatencyToMs ?? 0)}`
+        : '') +
+      (resolved.latencyViolation !== undefined ? ';latency_violated=1' : '');
 
     const t0 = performance.now();
     const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 24)}`;
@@ -218,6 +255,22 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         cost_usd: result.usage.costUsd,
         strategy_hash: sh,
         provenance,
+        // G2.6: the compare view reads this meta chunk, so the latency
+        // consequence travels with the answer rather than only in a header.
+        ...(resolved.latencySource !== undefined ? { latency_source: resolved.latencySource } : {}),
+        ...(resolved.latencyViolation !== undefined
+          ? { latency_violation: resolved.latencyViolation }
+          : {}),
+        ...(resolved.latencyPremium !== undefined && resolved.latencyPremium.binding === 'latency'
+          ? {
+              latency_premium: {
+                savings_pct: resolved.latencyPremium.savingsPct,
+                delta_cost_per_1k: resolved.latencyPremium.deltaCostPer1K,
+                relax_latency_to_ms: resolved.latencyPremium.relaxLatencyToMs,
+                relax_quality_to_floor: resolved.latencyPremium.relaxQualityToFloor,
+              },
+            }
+          : {}),
       });
     } catch (err) {
       writeData(openAiError((err as Error).message, 'service_unavailable', 'service_unavailable'));

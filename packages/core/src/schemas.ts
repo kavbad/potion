@@ -143,6 +143,15 @@ export const PolicySchema = z.discriminatedUnion('type', [
     shadow: ShadowConfigSchema.optional(),
     guarantee: GuaranteeConfigSchema.optional(),
   }),
+  /** G2.6 compound: quality floor AND hard latency bound, min cost among the
+   * survivors. See the Policy union comment for why this is its own type. */
+  z.object({
+    type: z.literal('compound'),
+    qualityFloor: z.number().min(0).max(1),
+    p95Ms: z.number().positive(),
+    shadow: ShadowConfigSchema.optional(),
+    guarantee: GuaranteeConfigSchema.optional(),
+  }),
 ]);
 
 export const ScoringMethodSchema = z.discriminatedUnion('kind', [

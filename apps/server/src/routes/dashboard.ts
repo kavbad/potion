@@ -10,7 +10,13 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { sha256, PolicySchema, selectPoint, type Policy } from '@potion/core';
+import {
+  sha256,
+  PolicySchema,
+  fastestQualityQualifyingPoint,
+  selectPoint,
+  type Policy,
+} from '@potion/core';
 import {
   DEFAULT_ORG_ID,
   getApiKeyById,
@@ -31,6 +37,7 @@ import {
   roleAtLeast, authenticate, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { highestQualityPoint } from './chat.js';
+import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 
 // ---------- POST /api/workloads ----------
 
@@ -78,6 +85,8 @@ const POLICY_DEFAULTS: Record<Policy['type'], Policy> = {
   max_quality: { type: 'max_quality', costCeilingPer1K: 1.0 },
   min_cost: { type: 'min_cost', qualityFloor: 0.8 },
   latency_bound: { type: 'latency_bound', p95Ms: 1000 },
+  // G2.6: the two existing single-constraint defaults, stated together.
+  compound: { type: 'compound', qualityFloor: 0.8, p95Ms: 1000 },
 };
 
 /** Parse the ?policy= query: a JSON-encoded Policy, or a bare type name
@@ -354,8 +363,26 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
 
     let operatingPoint: unknown = null;
     if (policy && frontier.points.length > 0) {
-      const selected = selectPoint(policy, frontier);
-      const point = selected ?? highestQualityPoint(frontier.points);
+      // G2.6: the DTO runs the SAME serving-grade latency binding the serving
+      // path runs, so the number a developer reads here is the number their
+      // requests are actually evaluated against. A DTO computed off harness
+      // latency while serving binds against measured latency would be a
+      // dashboard that quietly disagrees with production.
+      const latency = await bindServingLatency(
+        ctx,
+        policy,
+        frontier,
+        orgId,
+        frontier.clusterId,
+        (msg) => app.log.warn(msg),
+      );
+      const bound = latency.frontier ?? frontier;
+      const selected = selectPoint(policy, bound);
+      const violated =
+        selected === null && policy.type === 'compound'
+          ? fastestQualityQualifyingPoint(bound.points, policy.qualityFloor)
+          : null;
+      const point = selected ?? violated ?? highestQualityPoint(bound.points);
       if (point) {
         operatingPoint = {
           strategyHash: point.strategyHash,
@@ -365,6 +392,24 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
           latencyP95: point.latencyP95,
           policy,
           fallback: selected ? 0 : 1,
+          // Which clock, over what n, on which span — the provenance parity
+          // the owner asked for: a latency-driven selection is as auditable
+          // as a quality-driven one.
+          latencyEvidence: latency.evidence[point.strategyHash] ?? null,
+          // What the bound is costing at this quality floor, and what
+          // relaxing it would unlock. Present for every latency-dimensioned
+          // policy so 'binding: none' is itself informative.
+          latencyPremium: policyHasLatencyDimension(policy) ? latency.premium : null,
+          latencyViolation: violated
+            ? {
+                boundMs: (policy as { p95Ms: number }).p95Ms,
+                qualityFloor: (policy as { qualityFloor: number }).qualityFloor,
+                servedP95Ms: violated.latencyP95,
+                servedStrategyHash: violated.strategyHash,
+                relaxLatencyToMs: latency.premium.relaxLatencyToMs,
+                relaxQualityToFloor: latency.premium.relaxQualityToFloor,
+              }
+            : null,
         };
       }
     }
