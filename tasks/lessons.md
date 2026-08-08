@@ -119,3 +119,33 @@ confusing-at-a-distance failure.
 **How to apply:** One file per scripted edit block, ending in an explicit write + a
 grep-back verification of the NEW text. When a test fails in a way that contradicts
 an edit "already made," first verify the edit is actually in the file.
+
+## An exhaustive sweep needs a control arm, not just a target arm
+
+**What happened (2026-08-08, G2.4):** The tenancy sweep compared "org B hits org
+A's real id" against "org B hits an unknown id" and asserted both 404. It passed
+everywhere — until a third arm (a MALFORMED id) was added, which immediately
+found three routes returning 500 with a raw SQL string in the body. The
+two-arm version had missed them because both of its arms happened to be
+well-formed uuids.
+
+**Why:** A property test is only as strong as the input classes it varies. The
+security property is "no observable difference across resource states"; the
+input space includes malformed, well-formed-but-absent, foreign, and owned —
+omitting one hides a whole failure class.
+
+**How to apply:** When asserting an indistinguishability property, enumerate the
+input classes explicitly and probe each. For id params: owned, foreign,
+absent-but-well-formed, malformed. A refusal that crashes is both an
+availability bug and an oracle.
+
+## "Already handled" in one route is not "handled"
+
+**What happened (2026-08-08, G2.4):** rubrics.ts had carried an inline uuid-shape
+guard since G1.5. Three sibling routes taking the same uuid params (share
+revoke, alert delete, incident resolve) never got one and crashed on malformed
+input. The pattern existed; it just hadn't been made shared.
+
+**How to apply:** When a route needs a guard, ask which OTHER routes take the
+same shape of input, and promote the guard to a shared helper in the same
+change. An inline fix at one call site is how a defect class survives.

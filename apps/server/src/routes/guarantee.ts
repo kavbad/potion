@@ -39,7 +39,8 @@ import {
   type IncidentRow,
 } from '@potion/db';
 import { defaultServeJudgeModel } from '@potion/harness';
-import { openAiError, roleAtLeast } from '../auth.js';
+import {
+  isUuidParam, openAiError, roleAtLeast } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
 export interface IncidentDto {
@@ -367,6 +368,12 @@ export function registerGuaranteeRoutes(app: FastifyInstance, ctx: PotionContext
         );
     }
     const { id } = req.params as { id: string };
+    // G2.4: a malformed id must not reach the db (500 + raw SQL + oracle).
+    if (!isUuidParam(id)) {
+      return reply
+        .code(404)
+        .send(openAiError('incident not found', 'invalid_request_error', 'not_found'));
+    }
     const resolved = await resolveIncident(ctx.db.db, org.orgId, id);
     if (!resolved) {
       // Unknown id FOR THIS ORG, or already resolved (both 404 — neither

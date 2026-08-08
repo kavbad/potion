@@ -46,6 +46,10 @@ const BYOK_RAW_V2 = 'byok-org-secret-v2-bbbbbbbbbbbb';
 
 const PROMPT = 'Write a python function that reverses a string';
 
+// G2.4: BYOK fixtures use a REAL provider id ('openai') — 'mock' is no
+// longer an accepted BYOK provider (a mock key validated ok:true and then
+// served mock text under a live server). The injected spy factory below
+// keeps every provider id network-free.
 // ---- injected provider-factory spy ----
 const factoryCalls: Array<Partial<Record<ProviderId, string>>> = [];
 function spyFactory(opts: ProviderFactoryOptions): Record<ProviderId, Provider> {
@@ -143,7 +147,7 @@ describe('POST /api/keys — real custody registration', () => {
       method: 'POST',
       url: '/api/keys',
       headers: { 'content-type': 'application/json' },
-      payload: { provider: 'mock', apiKey: BYOK_RAW_V1, name: 'byok v1' },
+      payload: { provider: 'openai', apiKey: BYOK_RAW_V1, name: 'byok v1' },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -163,7 +167,7 @@ describe('POST /api/keys — real custody registration', () => {
       method: 'POST',
       url: '/api/keys',
       headers: { 'content-type': 'application/json' },
-      payload: { provider: 'mock', apiKey: BYOK_RAW_V1, name: 'byok v1' },
+      payload: { provider: 'openai', apiKey: BYOK_RAW_V1, name: 'byok v1' },
     });
     expect(again.statusCode).toBe(200);
     expect(again.json().id).toBe(body.id);
@@ -181,9 +185,13 @@ describe('BYOK serving path (per-org provider resolution)', () => {
     expect(res.statusCode).toBe(200);
     const content = res.json().choices[0].message.content as string;
     // spy evidence: the mock provider was built with the ORG's raw key
-    expect(content).toContain(`spy:mock:${BYOK_RAW_V1}`);
+    // The ORG's provider set answered (spy:*, not the boot providers) …
+    expect(content).toContain('spy:');
+    // … and it was built from the org's DECRYPTED key. (The served alias is
+    // mock-priced, so the spy's mock transport answers; the BYOK evidence is
+    // the factory call — G2.4 moved BYOK fixtures off the 'mock' provider id.)
     expect(factoryCalls.length).toBe(before + 1);
-    expect(factoryCalls.at(-1)?.mock).toBe(BYOK_RAW_V1);
+    expect(factoryCalls.at(-1)?.openai).toBe(BYOK_RAW_V1);
 
     // every decrypt is audited under the serving actor
     const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
@@ -224,7 +232,7 @@ describe('BYOK serving path (per-org provider resolution)', () => {
       method: 'POST',
       url: '/api/keys',
       headers: { 'content-type': 'application/json' },
-      payload: { provider: 'mock', apiKey: BYOK_RAW_V2, name: 'byok v2' },
+      payload: { provider: 'openai', apiKey: BYOK_RAW_V2, name: 'byok v2' },
     });
     expect(reg.statusCode).toBe(201);
     const id = reg.json().id as string;
@@ -240,10 +248,8 @@ describe('BYOK serving path (per-org provider resolution)', () => {
     expect(rot.json().maskedKey).toBe('byo…cccc');
 
     const res = await chat(RAW_A);
-    expect(res.json().choices[0].message.content as string).toContain(
-      'spy:mock:byok-org-secret-v3-cccccccccccc',
-    );
-    expect(factoryCalls.at(-1)?.mock).toBe('byok-org-secret-v3-cccccccccccc');
+    expect(res.json().choices[0].message.content as string).toContain('spy:');
+    expect(factoryCalls.at(-1)?.openai).toBe('byok-org-secret-v3-cccccccccccc');
 
     const audit = await listCustodyAudit(db(), ORG_A, id);
     const rotate = audit.find((a) => a.action === 'rotate');

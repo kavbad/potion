@@ -196,7 +196,7 @@ describe('key lifecycle routes publish invalidations (integration)', () => {
       scopes: 'serve+admin',
     });
 
-    const created = await authed('/api/keys', { provider: 'mock', apiKey: 'ha-byok-v1-aaaaaaaaaaaaaaaa' });
+    const created = await authed('/api/keys', { provider: 'openai', apiKey: 'ha-byok-v1-aaaaaaaaaaaaaaaa' });
     expect(created.statusCode).toBe(201);
     const keyId = (created.json() as { id: string }).id;
     expect(published).toEqual([DEFAULT_ORG_ID]);

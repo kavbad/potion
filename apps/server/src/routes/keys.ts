@@ -113,7 +113,12 @@ function keyDto(row: ProviderKeyRow) {
 // ---------- provider keys ----------
 
 const PostKeyBodySchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'google', 'openrouter', 'mock']),
+  // G2.4: 'mock' is NOT a BYOK provider. Pre-G2.4 a customer could register
+  // a mock provider key and have it validate ok:true under a live server
+  // (createProviders always carries a working mock transport), producing a
+  // custody-audited "verified" key that serves nothing real. The mock
+  // transport stays reachable only through the test-only providerFactory.
+  provider: z.enum(['anthropic', 'openai', 'google', 'openrouter']),
   apiKey: z.string().min(8),
   name: z.string().min(1).max(200).optional(),
 });

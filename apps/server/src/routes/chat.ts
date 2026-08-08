@@ -40,6 +40,7 @@ import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
+  fallbackStrategyFor,
   DEFAULT_STRATEGY,
   assignmentCacheKey,
   type PotionContext,
@@ -109,7 +110,10 @@ export const ChatCompletionsRequestSchema = z.object({
 });
 
 export interface OperatingPoint {
-  config: StrategyConfig;
+  /** null = no strategy is resolvable for this server's mode (live server,
+   * no non-mock price entry) — the caller REFUSES rather than serving mock
+   * output on a live path (G2.4). */
+  config: StrategyConfig | null;
   /** 1 when the policy was infeasible (or no frontier exists) and the
    * documented fallback fired. */
   fallback: 0 | 1;
@@ -122,13 +126,23 @@ export interface OperatingPoint {
 // and re-exported here for the dashboard route's existing import.
 export { highestQualityPoint };
 
-/** selectPoint(policy) with the §8 NULL fallback applied. */
+/**
+ * selectPoint(policy) with the §8 NULL fallback applied.
+ *
+ * G2.4: `fallbackStrategy` is the LAST-RESORT config for this server's
+ * provider mode — DEFAULT_STRATEGY (mock-mid) under mock, the designated
+ * live default under live (fallbackStrategyFor in context.ts). It is null
+ * only when a live server's price table has no non-mock entry; callers turn
+ * that into an honest refusal instead of serving mock text as a live 200
+ * (the fifth false-live instance, first on the serving path).
+ */
 export function resolveOperatingPoint(
   policy: Policy,
   frontier: Frontier | null,
+  fallbackStrategy: StrategyConfig | null = DEFAULT_STRATEGY,
 ): OperatingPoint {
   if (!frontier || frontier.points.length === 0) {
-    return { config: DEFAULT_STRATEGY, fallback: 1, frontierVersion: 0, frontier };
+    return { config: fallbackStrategy, fallback: 1, frontierVersion: 0, frontier };
   }
   const selected = selectPoint(policy, frontier);
   if (selected) {
@@ -141,7 +155,7 @@ export function resolveOperatingPoint(
   }
   const best = highestQualityPoint(frontier.points);
   if (!best) {
-    return { config: DEFAULT_STRATEGY, fallback: 1, frontierVersion: frontier.version, frontier };
+    return { config: fallbackStrategy, fallback: 1, frontierVersion: frontier.version, frontier };
   }
   return { config: best.strategyConfig, fallback: 1, frontierVersion: frontier.version, frontier };
 }
@@ -465,7 +479,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       ctx.providerMode,
       (msg) => app.log.warn(msg),
     );
-    let op = resolveOperatingPoint(policy, frontier);
+    let op = resolveOperatingPoint(policy, frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
     // ---- M3 #22 guarantee (m3-guarantee) — rollback operating-point override ----
     // The LATEST UNRESOLVED kind='rollback' incident for (org, cluster) IS the
     // org's operating point for that cluster (SPEC §12.5; the incident row
@@ -542,6 +556,25 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // (fan-out, judges, decomposers) and cannot guarantee tool semantics, so
     // a tool request routed to one is a client-visible 400, not a silent
     // degradation. tool_choice without tools is meaningless (OpenAI 400s too).
+    // G2.4 (fifth false-live instance, serving path): a LIVE server with no
+    // resolvable live strategy refuses honestly rather than falling back to
+    // a mock alias and returning mock text as a live 200. Reaching here
+    // means the price table carries no non-mock entry — a deployment fault,
+    // not a customer error.
+    if (op.config === null) {
+      await logRequest({ ...logBase, status: 'error', latencyMs: elapsed() });
+      return reply
+        .code(503)
+        .send(
+          openAiError(
+            'no live strategy is resolvable for this cluster — the price table has no non-mock ' +
+              'entry, and a live server never serves mock output',
+            'service_unavailable',
+            'service_unavailable',
+          ),
+        );
+    }
+    const opConfig = op.config;
     if (body.tool_choice !== undefined && body.tools === undefined) {
       await logRequest({ ...logBase, status: 'invalid_request', latencyMs: elapsed() });
       return reply

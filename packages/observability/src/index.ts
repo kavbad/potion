@@ -4,6 +4,7 @@ export {
   NoopMetrics,
   PromMetrics,
   createMetrics,
+  orgLabel,
   type BreakerState,
   type Metrics,
   type MetricsOptions,

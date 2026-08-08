@@ -210,6 +210,18 @@ export function roleAtLeast(role: Role, required: Role): boolean {
 // admin-scoping change. Session/dev-bypass credentials are unaffected.
 // ---------------------------------------------------------------------------
 
+/**
+ * uuid-shaped-param gate (G2.4). Several tables key on uuid columns, so a
+ * malformed :id reached the db and threw — a 500 carrying a raw SQL string,
+ * AND an existence oracle in reverse (malformed → 500, another org's real
+ * id → 404). Routes shape-check first so every non-resource takes the same
+ * uniform 404. Found by the tenancy sweep on three routes; rubrics.ts had
+ * the check inline since G1.5, which is why it never crashed.
+ */
+export function isUuidParam(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 /** Parse api_keys.scopes into a token set (delegates to the shared
  * fail-closed parser in @potion/db). */
 export function apiKeyScopes(key: ApiKeyRow): Set<string> {

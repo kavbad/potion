@@ -631,7 +631,7 @@ capstone everything else serves.)
       that re-fires on worsening. [M]
 - [x] G2.3 Key role split: serving keys lose incident-resolve and other admin mutations;
       explicit admin scope for humans. [S]
-- [ ] G2.4 Targeted server hot-path tests: guarantee override gating, pre-auth log
+- [x] G2.4 Targeted server hot-path tests: guarantee override gating, pre-auth log
       attribution, policy override, provenance guard branches. Incl. the
       mock-eligibility audit: sweep EVERY provider-resolution site with the proven
       guard — live excludes mock entries, keyless live fails loudly (the fourth
@@ -1664,4 +1664,78 @@ DONE (2026-08-08, session g23-key-role-split):
   must write+verify per file (esbuild silently ignores extra args against an
   unedited signature).
 - $0 spend.
+
+## G2.4 — Exhaustive tenancy sweep + mock-eligibility audit (session 2026-08-08)
+
+OWNER INPUTS (binding): (1) the tenancy lens PROBES, it doesn't classify — org
+B acts against org A's real resources and the uniform no-existence-oracle 404
+is asserted everywhere, making it a property rather than a habit; (2) the
+output is a committed human-readable ARTIFACT generated from the fixture (the
+security-questionnaire answer / diligence exhibit), regenerated on change;
+(3) the mock-eligibility audit is a SEPARATE leg with a grep-derived inventory
+and its own completeness argument; (4) budget for FINDINGS — "if the sweep
+comes back clean on first run, that's a smell in the sweep."
+
+OWNER POSTURE DECISIONS: /metrics org labels HASHED via the existing orgHash6
+(so labels correlate with agent-<orgHash6>-* cluster ids) PLUS the deployment
+note; demo credential gated behind POTION_SEED_DEMO matching the
+POTION_SELF_SERVE polarity (off unless set, no implicit exceptions); the live
+last resort is a REAL strategy — a designated platform live default with mock
+aliases excluded — refusing only when no live strategy resolves.
+
+- [x] a. tenancy fixes: D1 (bearer-only resolver served org_demo to EVERY
+      dashboard cookie caller on /api/usage* and /api/reports/savings* —
+      helper DELETED, not patched), D2 (platform sweep jobs with no orgId were
+      readable by any viewer, returning cross-tenant result bodies), D5
+      (viewer-reachable invoice triggered a GLOBAL usage_daily rewrite — now
+      org-scoped), recipes lineage leak (the third of three cycle readers)
+- [x] b. mock-eligibility + posture fixes: F8 (mock/* scan listings stamped
+      'openrouter' → invisible to every provider==='mock' guard → eligible as
+      LIVE class reps), live research cycle (unfiltered registry → mock
+      candidates → died mid-run leaving the ledger row stuck 'running'; now
+      reachable()-filtered AND settled on failure), calibrate (--provider live
+      stamped mock-cheap answers provider_mode='live'), mock BYOK (validated
+      ok:true under live), /metrics hashed labels, POTION_SEED_DEMO gate +
+      login-copy correction, mock-under-live serving → live default
+- [x] c. THE SWEEP: route-inventory extended with the tenancy lens
+      (tenancyClass / resourceParam / seededResource / crossOrgProbe) across
+      all 81 rows; tenancy-sweep.test.ts seeds one of each org-owned resource
+      in ORG_A (deliberately NOT org_demo — the assumption that hid D1) and
+      probes as ORG_B under BOTH bearer and cookie credentials, asserting
+      identical status AND identical body SHAPE across four input classes
+      (owned / foreign / absent-well-formed / MALFORMED)
+- [x] d. mock-eligibility inventory + grep-derived completeness meta-test
+      (re-greps packages/*/src + apps/server/src, diffs both ways, every
+      exemption justified)
+- [x] e. classification exhibit: artifacts/tenancy-classification.md generated
+      from both inventories by a pure renderer + CLI, with an up-to-date
+      meta-test; ENTERPRISE.md deployment notes; single commit
+
+DONE (2026-08-08, session g24-tenancy-sweep):
+- FOURTEEN defects found and fixed (the owner's fourth input was right —
+  the exhaustive pass found more than the incidental ones):
+  TENANCY (4): D1 demo-org fallback for every cookie caller; D2 platform-job
+  cross-tenant result bodies; D5 viewer-triggered global rollup rewrite;
+  recipes cycle-lineage leak.
+  FALSE-LIVE (4): F8 mock listings stamped openrouter; live research cycle
+  mock candidates + stuck 'running' row; live calibration recording mock
+  answers as live; mock accepted as a BYOK provider.
+  POSTURE (3): raw org ids in unauthenticated /metrics labels; demo API
+  credential seeded on every boot + advertised on the login page; mock-mid
+  served as a live 200 on the serving path.
+  FOUND BY THE SWEEP ITSELF (3): share revoke, alert delete and incident
+  resolve all crashed with a raw SQL string on a malformed uuid param —
+  a 500 that was also an existence oracle in reverse. rubrics.ts had carried
+  the guard inline since G1.5; it is now a shared isUuidParam helper.
+- The fifth FALSE-LIVE instance is recorded as the first on the SERVING path:
+  a live server with an absent or provenance-blocked frontier executed the
+  mock-alias DEFAULT_STRATEGY and returned mock text as a live 200. It now
+  falls back to a designated live default and refuses honestly when none
+  resolves.
+- Demo-credential-on-boot is recorded as the same router-era posture species
+  as the self-serve hole G2.7 closed: a deterministic published credential
+  that seeded on every empty boot under an operator-only posture.
+- Verify: 1161 keyless tests green (server 454 — the sweep alone contributes
+  66); walkthrough 17/17; artifacts/tenancy-classification.md committed and
+  meta-tested. $0 spend.
 

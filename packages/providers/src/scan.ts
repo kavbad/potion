@@ -101,6 +101,12 @@ export interface ScanDiff {
  * parseable pricing become candidate registry entries (SPEC: "with
  * provider-reported pricing when present" — without it there is nothing to
  * cost against, so they are reported and skipped). */
+/** A listing that came from the mock fixture source ('mock/…'), whatever
+ * scan source reported it — the provider id must reflect that (G2.4). */
+export function isMockListingId(id: string): boolean {
+  return id.startsWith('mock/');
+}
+
 export function diffModelListings(listings: ModelListing[], prices: PriceTable): ScanDiff {
   const knownModels = new Set(prices.entries.map((e) => e.model));
   const knownAliases = new Set(prices.entries.map((e) => e.alias));
@@ -121,7 +127,14 @@ export function diffModelListings(listings: ModelListing[], prices: PriceTable):
     knownModels.add(l.id);
     added.push({
       alias,
-      provider: 'openrouter',
+      // G2.4 (false-live class): a MOCK-namespaced listing keeps the 'mock'
+      // provider id. Pre-G2.4 every scanned listing — including the
+      // mock/* fixtures the mock scan source emits — was stamped
+      // 'openrouter', which made the entries INVISIBLE to every
+      // provider === 'mock' guard (reachable(), classRepresentative's
+      // excludeProvider, MockAliasInLiveRunError) and therefore eligible
+      // as live class representatives.
+      provider: isMockListingId(l.id) ? 'mock' : 'openrouter',
       model: l.id,
       // per-token × 1e6 → per-1M (Number arithmetic, never string-concat).
       inputPer1M: l.promptPerToken * 1e6,

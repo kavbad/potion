@@ -28,7 +28,8 @@ import {
   estimateJudgeScoringCall,
 } from './estimate.js';
 import { scoreAnswer, scoreLlmJudge, type ScorerDeps } from './scorers.js';
-import { unrunnableReason } from './runner.js';
+import {
+  MockAliasInLiveRunError, unrunnableReason } from './runner.js';
 
 export const CALIBRATION_JUDGES = ['mock-judge-a', 'mock-judge-b'] as const;
 export const CALIBRATION_ANSWERER = 'mock-cheap';
@@ -222,6 +223,12 @@ export interface CalibrationDeps {
    * here also raises the projection — the bound follows the config
    * (G0.5 truncation lesson, second instance). */
   judgeMaxTokens?: number;
+  /** G2.4: the provider mode this calibration is RECORDED as. In 'live'
+   * mode every resolved alias — judges AND the answerer — must be non-mock,
+   * or the run refuses (MockAliasInLiveRunError). Pre-G2.4 `--provider live`
+   * without an explicit answerer silently used mock-cheap and stamped the
+   * resulting record provider_mode='live'. */
+  providerMode?: 'mock' | 'live';
   /** G1.4: keep item references in the judge view (REFERENCE-ANCHORED
    * calibration — the replay-judging configuration). Default false:
    * reference-FREE, serve-parity, comparable with all recorded r/ρ/mAE. */
@@ -251,6 +258,16 @@ export async function runJudgeCalibration(
   const judges = deps.judgeModels ?? [...CALIBRATION_JUDGES];
   if (judges.length === 0) throw new Error('calibration requires at least one judge model');
   const answerer = deps.answererModel ?? CALIBRATION_ANSWERER;
+  // G2.4 (false-live class): a LIVE-recorded calibration may not resolve ANY
+  // mock alias — not the judges, and not the answerer whose default is
+  // mock-cheap. Refuse before any provider call, the runner's convention.
+  if (deps.providerMode === 'live') {
+    const mockAliases = new Set(
+      prices.entries.filter((e) => e.provider === 'mock').map((e) => e.alias),
+    );
+    const offending = [...judges, answerer].filter((a) => mockAliases.has(a));
+    if (offending.length > 0) throw new MockAliasInLiveRunError([...new Set(offending)]);
+  }
 
   const disqualified = items.filter((i) => i.scoring.kind === 'llm-judge');
   if (disqualified.length > 0) {

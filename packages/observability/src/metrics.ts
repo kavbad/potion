@@ -1,6 +1,7 @@
 // Metrics surface (SPEC §12.3, ROADMAP #26): a prom-client registry behind
 // the small `Metrics` contract so serving code never touches Prometheus
 // directly. All series are prefixed `potion_`.
+import { createHash } from 'node:crypto';
 import { Counter, Gauge, Histogram, Registry } from 'prom-client';
 
 /** Circuit-breaker states (mirrors SPEC §12.1; re-declared here so this
@@ -13,6 +14,20 @@ export const BREAKER_STATE_VALUE: Record<BreakerState, number> = {
   'half-open': 1,
   open: 2,
 };
+
+/**
+ * G2.4: metric labels carry the org's 6-char SHA1 prefix, never the raw org
+ * id. /metrics is an unauthenticated Prometheus scrape surface by
+ * convention, so raw ids there would let any reachable scraper enumerate
+ * tenants and their breach/budget activity. The hash is the SAME one the
+ * agent-<orgHash6>-* cluster ids already use, so an operator can correlate
+ * metrics with cluster ids across surfaces without either exposing the id.
+ * DEPLOYMENT NOTE (defense in depth): /metrics must still be
+ * network-restricted — see docs/ENTERPRISE.md.
+ */
+export function orgLabel(orgId: string): string {
+  return createHash('sha1').update(orgId).digest('hex').slice(0, 6);
+}
 
 export interface Metrics {
   incRequest(route: string, status: number, durationMs: number): void;
@@ -205,19 +220,19 @@ export class PromMetrics implements Metrics {
   }
 
   observeGuaranteeBreach(b: { orgId: string; action: 'rollback' | 'alert' }): void {
-    this.guaranteeBreachesTotal.inc({ org_id: b.orgId, action: b.action });
+    this.guaranteeBreachesTotal.inc({ org_id: orgLabel(b.orgId), action: b.action });
   }
 
   observeBudgetEvent(e: { orgId: string; kind: 'budget_warning' | 'budget_exceeded' }): void {
-    this.budgetEventsTotal.inc({ org_id: e.orgId, kind: e.kind });
+    this.budgetEventsTotal.inc({ org_id: orgLabel(e.orgId), kind: e.kind });
   }
 
   observeAlertNotificationLatency(o: { orgId: string; event: string; latencyMs: number }): void {
-    this.alertNotificationLatencyMs.observe({ org_id: o.orgId, event: o.event }, o.latencyMs);
+    this.alertNotificationLatencyMs.observe({ org_id: orgLabel(o.orgId), event: o.event }, o.latencyMs);
   }
 
   observeGuaranteeUnverifiable(o: { orgId: string }): void {
-    this.guaranteeUnverifiableTotal.inc({ org_id: o.orgId });
+    this.guaranteeUnverifiableTotal.inc({ org_id: orgLabel(o.orgId) });
   }
 
   /** Prometheus text exposition for GET /metrics. */

@@ -271,6 +271,10 @@ export async function main(argv: string[]): Promise<number> {
         ...(args.calibrateAnswerer !== undefined ? { answererModel: args.calibrateAnswerer } : {}),
         ...(args.judgeMaxTokens !== undefined ? { judgeMaxTokens: args.judgeMaxTokens } : {}),
         ...(args.referenceAnchored ? { referenceAnchored: true } : {}),
+        // G2.4: the recorded mode gates alias eligibility — a live-stamped
+        // calibration refuses mock judges/answerers instead of silently
+        // calibrating against mock-cheap output.
+        providerMode: args.provider,
         budgetCapUsd: args.cap,
       });
     } catch (e) {

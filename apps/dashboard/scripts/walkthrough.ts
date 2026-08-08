@@ -146,6 +146,10 @@ async function main(): Promise<void> {
       // G2.7: the operator credential for step 14 (fail-closed — without it
       // the operator surface does not exist).
       POTION_OPERATOR_TOKEN: OPERATOR_TOKEN,
+      // G2.4: the demo credential is gated OFF by default (operator-only
+      // posture); the walkthrough opts in EXPLICITLY, like every other
+      // dev-scoped affordance.
+      POTION_SEED_DEMO: '1',
     });
     await waitFor(`${API}/healthz`, 120_000, 'api');
     const health = (await (await fetch(`${API}/healthz`)).json()) as { seeded?: boolean };

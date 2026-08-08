@@ -30,7 +30,8 @@ import {
   type AlertRuleRow,
 } from '@potion/db';
 import { alertRequestBody, ALERT_DISPATCH_TIMEOUT_MS } from '@potion/workers';
-import { openAiError, roleAtLeast } from '../auth.js';
+import {
+  isUuidParam, openAiError, roleAtLeast } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
 /** scheme://host/••• — never the path (Slack secrets live there). */
@@ -180,6 +181,12 @@ export function registerAlertRoutes(app: FastifyInstance, ctx: PotionContext): v
         );
     }
     const { id } = req.params as { id: string };
+    // G2.4: a malformed id must not reach the db (500 + raw SQL + oracle).
+    if (!isUuidParam(id)) {
+      return reply
+        .code(404)
+        .send(openAiError('alert rule not found', 'invalid_request_error', 'not_found'));
+    }
     const deleted = await deleteAlertRule(ctx.db.db, org.orgId, id);
     if (!deleted) {
       // Unknown id FOR THIS ORG (uniform 404 — no existence oracle).

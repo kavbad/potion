@@ -238,7 +238,10 @@ export function registerResearchRoutes(
     }
 
     // Cycle membership per hash (recent cycles, candidates jsonb).
-    const cycles = await listResearchCycles(db, 200);
+    // G2.4: org-scoped — G1.8 scoped two of this route's three cycle readers;
+    // this one stayed global and leaked other tenants' cycle ids and focus
+    // aliases through the lineage block.
+    const cycles = await listResearchCycles(db, 200, { orgId: req.potionOrg!.orgId });
     const cyclesByHash = new Map<string, { id: string; trigger: string; focusAlias: string | null; createdAt: Date }[]>();
     for (const c of cycles) {
       for (const cfg of c.candidates as StrategyConfig[]) {

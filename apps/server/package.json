@@ -31,7 +31,8 @@
     "loadtest": "tsx test/load.ts",
     "aggregate": "tsx src/jobs/aggregate-usage.ts",
     "invoice": "tsx src/billing/cli.ts",
-    "guarantee-report": "tsx src/billing/guarantee-report-cli.ts"
+    "guarantee-report": "tsx src/billing/guarantee-report-cli.ts",
+    "tenancy-report": "tsx src/security/tenancy-report-cli.ts"
   },
   "dependencies": {
     "@potion/artifacts": "workspace:^",

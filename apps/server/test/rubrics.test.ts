@@ -19,6 +19,10 @@ import { orgHashOf, toolSignatureSlug } from '@potion/workers';
 import { buildServer } from '../src/server.js';
 import { DEMO_API_KEY } from '../src/seed.js';
 
+// G2.4: the demo credential is gated (POTION_SEED_DEMO); this suite uses it
+// deliberately, matching the POTION_SELF_SERVE polarity — no implicit exceptions.
+process.env.POTION_SEED_DEMO = '1';
+
 let app: FastifyInstance;
 
 const ADMIN = { cookie: 'potion_session=ps_r_admin' };

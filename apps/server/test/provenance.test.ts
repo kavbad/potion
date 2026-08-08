@@ -17,7 +17,7 @@ import {
 import { DEFAULT_ORG_ID, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { guardFrontierProvenance } from '../src/routes/chat.js';
-import { DEFAULT_STRATEGY } from '../src/context.js';
+import { DEFAULT_STRATEGY, liveDefaultStrategy } from '../src/context.js';
 import { buildServer } from '../src/server.js';
 
 const KEY = 'pk_prov_test_key';
@@ -115,16 +115,33 @@ describe('provenance guard over HTTP', () => {
       await app.close();
     });
 
-    it('falls back per the no-frontier rule with provenance=blocked in the trace', async () => {
+    it('falls back to the LIVE default — never the mock alias (G2.4)', async () => {
       const res = await chat(app);
-      expect(res.statusCode).toBe(200);
       const trace = res.headers['x-frontier-trace'];
       expect(trace).toContain('provenance=blocked');
       expect(trace).toContain('fallback=1');
       expect(trace).toContain('frontier=v0');
-      expect(trace).toContain(`strategy=${strategyHash(DEFAULT_STRATEGY).slice(0, 8)}`);
-      // request is still served (200) — evidence is blocked, not the customer
-      expect(res.json().choices[0].message.content).toBeTruthy();
+      // G2.4 (fifth false-live instance, serving path): the blocked-frontier
+      // fallback on a LIVE server resolves the designated live default, NOT
+      // the mock-alias DEFAULT_STRATEGY that used to serve mock text as a
+      // live 200.
+      const liveDefault = liveDefaultStrategy(app.potion.prices);
+      expect(liveDefault).not.toBeNull();
+      expect(liveDefault!.type === 'single' && liveDefault!.model).not.toMatch(/^mock-/);
+      expect(trace).toContain(`strategy=${strategyHash(liveDefault!).slice(0, 8)}`);
+      expect(trace).not.toContain(`strategy=${strategyHash(DEFAULT_STRATEGY).slice(0, 8)}`);
+      // Keyless test env: the real provider call fails loudly. The contract
+      // is that a live server NEVER answers with mock content.
+      if (res.statusCode === 200) {
+        expect(res.json().choices[0].message.content).toBeTruthy();
+      } else {
+        // Refused loudly on a REAL provider (no key in the keyless test env)
+        // — the honest failure. What must never happen is mock CONTENT
+        // returned as a live answer.
+        expect(res.statusCode).toBe(503);
+        expect(res.json().error.type).toBe('service_unavailable');
+        expect(res.json().choices).toBeUndefined();
+      }
     });
   });
 

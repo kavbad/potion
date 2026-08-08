@@ -41,6 +41,7 @@ import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { scoreServedAnswer, SERVE_JUDGE_SCALE } from '@potion/harness';
 import type { OrgProviders } from '../src/context.js';
+import { orgLabel } from '@potion/observability';
 import {
   GUARANTEE_EVALUATE_JOB,
   GUARANTEE_JUDGE_LOG_STATUS,
@@ -452,9 +453,17 @@ describe('rollback integration (2 frontier versions)', () => {
   it('increments potion_guarantee_breaches_total', async () => {
     const res = await app.inject({ method: 'GET', url: '/metrics' });
     expect(res.statusCode).toBe(200);
+    // G2.4: /metrics labels carry the 6-char org HASH, never the raw id
+    // (unauthenticated scrape surface — raw ids would let any reachable
+    // scraper enumerate tenants).
+    expect(res.body).not.toContain(`org_id="${ORG_RB}"`);
     const line = res.body
       .split('\n')
-      .find((l) => l.startsWith('potion_guarantee_breaches_total') && l.includes(`org_id="${ORG_RB}"`));
+      .find(
+        (l) =>
+          l.startsWith('potion_guarantee_breaches_total') &&
+          l.includes(`org_id="${orgLabel(ORG_RB)}"`),
+      );
     expect(line).toBeTruthy();
     expect(line).toContain('action="rollback"');
   });

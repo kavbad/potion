@@ -148,9 +148,13 @@ function toRollupRow(r: Record<string, unknown>): UsageRollupRow {
 export async function aggregateUsage(
   db: PotionDb,
   range: UsageRange,
+  /** G2.4: scope the refresh to ONE org. The customer-reachable invoice path
+   * passes its own org so a viewer-grade GET can never rewrite every
+   * tenant's rollup; the batch CLI/admin trigger omits it (global). */
+  orgId?: string,
 ): Promise<UsageRollupRow[]> {
   assertDayRange(range);
-  const rolled = await db.execute(rollupQuery(range));
+  const rolled = await db.execute(rollupQuery(range, orgId));
   const rows = (rolled.rows as Array<Record<string, unknown>>).map(toRollupRow);
   for (const r of rows) {
     await db

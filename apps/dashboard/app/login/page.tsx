@@ -104,10 +104,15 @@ function LoginForm() {
         )}
       </div>
 
-      <p className="mt-6 text-xs leading-relaxed text-faint">
-        Demo workspace? Sign in as <code className="font-mono">demo@potion.dev</code> — the seeded
-        admin of the demo org.
-      </p>
+      {/* G2.4: the demo credential is seeded only when POTION_SEED_DEMO is
+          set, so this advertisement ships only when the demo tenant really
+          has one — never in the operator-only production posture. */}
+      {process.env.NEXT_PUBLIC_SEED_DEMO === '1' && (
+        <p className="mt-6 text-xs leading-relaxed text-faint">
+          Demo workspace? Sign in as <code className="font-mono">demo@potion.dev</code> — the seeded
+          admin of the demo org.
+        </p>
+      )}
     </div>
   );
 }

@@ -41,7 +41,7 @@ import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
 import { openAiError } from '../auth.js';
-import type { PotionContext } from '../context.js';
+import { fallbackStrategyFor, type PotionContext } from '../context.js';
 import { highestQualityPoint, resolveOperatingPoint, traceHeaderValue } from './chat.js';
 
 const PlaygroundChatSchema = z
@@ -87,10 +87,16 @@ async function resolvePlaygroundPoint(
     policy = row?.config ?? null;
   }
   if (policy) {
-    const op = resolveOperatingPoint(policy, frontier);
-    const hash = strategyHash(op.config);
+    // G2.4: the playground shares the serving path's mode-aware fallback —
+    // under a live server it never resolves to a mock alias.
+    const op = resolveOperatingPoint(policy, frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+    if (op.config === null) {
+      return { error: 'no live strategy is resolvable — a live server never serves mock output' };
+    }
+    const opConfig = op.config;
+    const hash = strategyHash(opConfig);
     return {
-      config: op.config,
+      config: opConfig,
       point: frontier.points.find((p) => p.strategyHash === hash) ?? null,
       fallback: op.fallback,
     };

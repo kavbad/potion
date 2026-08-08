@@ -24,6 +24,7 @@
 // share page can badge SIMULATED — a shared simulated frontier is never
 // presented as live.
 import { randomUUID } from 'node:crypto';
+
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { sha256 } from '@potion/core';
@@ -37,7 +38,8 @@ import {
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
-import { openAiError, roleAtLeast } from '../auth.js';
+import {
+  isUuidParam, openAiError, roleAtLeast } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { loadReport, type SavingsReport } from './reports.js';
 
@@ -210,6 +212,15 @@ export function registerShareRoutes(app: FastifyInstance, ctx: PotionContext): v
         );
     }
     const { id } = req.params as { id: string };
+    // G2.4 (D6, found by the tenancy sweep): share_tokens.id is a uuid, so a
+    // malformed id made the UPDATE throw — a raw SQL error in a 500 body,
+    // and an existence oracle in reverse (unknown → 500, foreign → 404).
+    // Shape-validate first; every non-uuid takes the SAME uniform 404.
+    if (!isUuidParam(id)) {
+      return reply
+        .code(404)
+        .send(openAiError('share link not found', 'invalid_request_error', 'not_found'));
+    }
     const revoked = await revokeShareToken(ctx.db.db, org.orgId, id);
     if (!revoked) {
       // Unknown id FOR THIS ORG, or already revoked (both 404 — no oracle).

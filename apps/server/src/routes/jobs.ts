@@ -83,9 +83,16 @@ export function registerJobRoutes(
     if (!status) {
       return reply.code(404).send({ error: 'job_not_found' });
     }
-    // Org scope: jobs carrying an orgId are only readable by that org.
+    // Org scope (G2.4, D2): a job is readable ONLY by the org named in its
+    // payload. Pre-G2.4 the check fired solely on a STRING mismatch, so the
+    // PLATFORM sweeps — enqueued with {} (guarantee:evaluate, research:scan,
+    // traces:cluster, traces:purge, budget:evaluate) — passed the guard and
+    // returned cross-tenant result bodies (per-org breach, budget, cluster
+    // and purge rows) to any viewer, with sequential job ids. Platform jobs
+    // now 404 here; they remain visible on the operator mirror
+    // GET /operator/jobs/:id, which is token-gated by design.
     const payloadOrg = (status.payload as { orgId?: unknown } | null)?.orgId;
-    if (typeof payloadOrg === 'string' && payloadOrg !== req.potionOrg!.orgId) {
+    if (typeof payloadOrg !== 'string' || payloadOrg !== req.potionOrg!.orgId) {
       return reply.code(404).send({ error: 'job_not_found' });
     }
     return reply.send({

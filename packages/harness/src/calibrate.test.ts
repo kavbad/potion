@@ -285,3 +285,32 @@ describe('runRubricProbeCalibration (G1.5)', () => {
     ).rejects.toThrow(BudgetCapError);
   });
 });
+
+describe('G2.4: a LIVE-recorded calibration refuses mock aliases', () => {
+  // Pre-fix: `--provider live` without --calibrate-answerer silently used
+  // the mock-cheap default to GENERATE answers, then stamped the record
+  // provider_mode='live' — mock output presented as live calibration
+  // evidence.
+  it('refuses the default (mock) judges and answerer under providerMode live', async () => {
+    await expect(
+      runJudgeCalibration(loadSuite('code-gen', SIMULATED_SUITES_DIR).slice(0, 2), { providerMode: 'live', prices: loadPrices(PRICES_PATH).table, budgetCapUsd: 0 }),
+    ).rejects.toThrow(/resolve to the mock provider/);
+  });
+
+  it('refuses a live run whose ANSWERER is a mock alias even with live judges', async () => {
+    await expect(
+      runJudgeCalibration(loadSuite('code-gen', SIMULATED_SUITES_DIR).slice(0, 2), {
+        providerMode: 'live',
+        prices: loadPrices(PRICES_PATH).table,
+        judgeModels: ['judge-class'],
+        answererModel: 'mock-cheap',
+        budgetCapUsd: 0,
+      }),
+    ).rejects.toThrow(/mock-cheap/);
+  });
+
+  it('mock mode is unaffected (the guard is live-only)', async () => {
+    const report = await runJudgeCalibration(loadSuite('code-gen', SIMULATED_SUITES_DIR).slice(0, 2), { prices: loadPrices(PRICES_PATH).table, budgetCapUsd: 0 });
+    expect(report.n).toBeGreaterThan(0);
+  });
+});

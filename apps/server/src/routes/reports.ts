@@ -30,7 +30,6 @@ import {
 } from '@potion/db';
 import { openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
-import { resolveRequestOrg } from './usage.js';
 
 // ---- report contract (SPEC §12.4) ----
 
@@ -209,11 +208,14 @@ function parseWindow(query: unknown): { fromDay: string; toDay: string } {
 export function registerReportRoutes(app: FastifyInstance, ctx: PotionContext): void {
   // ---- GET /api/reports/savings — org-scoped SavingsReport ----
   app.get('/api/reports/savings', async (req, reply) => {
-    const org = await resolveRequestOrg(ctx, req);
+    // G2.4: the /api hook already resolved bearer OR cookie OR dev bypass.
+    // The old bearer-only helper silently served the demo org to every
+    // dashboard (cookie) caller.
+    const org = req.potionOrg;
     if (!org) {
       return reply
         .code(401)
-        .send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
     const range = parseWindow(req.query);
     if (!isDayString(range.fromDay) || !isDayString(range.toDay)) {
@@ -224,11 +226,14 @@ export function registerReportRoutes(app: FastifyInstance, ctx: PotionContext): 
 
   // ---- GET /api/reports/savings.csv — same alternatives, CSV download ----
   app.get('/api/reports/savings.csv', async (req, reply) => {
-    const org = await resolveRequestOrg(ctx, req);
+    // G2.4: the /api hook already resolved bearer OR cookie OR dev bypass.
+    // The old bearer-only helper silently served the demo org to every
+    // dashboard (cookie) caller.
+    const org = req.potionOrg;
     if (!org) {
       return reply
         .code(401)
-        .send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
     const range = parseWindow(req.query);
     if (!isDayString(range.fromDay) || !isDayString(range.toDay)) {

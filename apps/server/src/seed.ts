@@ -19,15 +19,31 @@ import {
   createUser,
   insertApiKey,
   insertPolicy,
-  listApiKeys,
+  listPolicies,
 } from '@potion/db';
 import { runEval } from '@potion/harness';
 import { computeFrontier, saveFrontier } from '@potion/pareto';
 import { DEFAULT_PRICES_PATH, type PotionContext } from './context.js';
 
 /** Well-known demo key (documented; deterministic so the quickstart works on
- * any fresh boot). Only its sha256 is stored. */
+ * any fresh boot). Only its sha256 is stored.
+ *
+ * G2.4: minting it is GATED behind POTION_SEED_DEMO — a deterministic,
+ * published credential that seeded on every empty boot was a standing
+ * production credential under the operator-only posture (the same
+ * router-era species as the self-serve hole G2.7 closed). */
 export const DEMO_API_KEY = 'pk_demo_3f1a9c27b4e84d56a0c2e7f1953bd681';
+
+/**
+ * Demo-credential gate (G2.4), matching the POTION_SELF_SERVE polarity: OFF
+ * unless explicitly set. Dev, tests and the walkthrough set it deliberately;
+ * there are no implicit exceptions (no NODE_ENV sniffing). The org_demo ROW
+ * still seeds keylessly — it is the unauthenticated-request-log fallback and
+ * is undeletable by design — but it carries no usable credential.
+ */
+export function demoSeedEnabled(): boolean {
+  return process.env.POTION_SEED_DEMO === '1' || process.env.POTION_SEED_DEMO === 'true';
+}
 
 /** Demo tenant (M2 #13): the default org is created by migration 0003 (it is
  * the backfill target); the seed adds the demo user + admin membership. */
@@ -87,16 +103,21 @@ export const SEED_STRATEGIES: StrategyConfig[] = [
 export const SEED_BUDGET_CAP_USD = 15;
 
 /**
- * Seed the demo dataset when (and only when) the demo org has no api keys
- * yet. Returns true when seeding happened. Idempotent across boots.
+ * Seed the demo dataset when (and only when) it has not been seeded yet.
+ * Returns true when seeding happened. Idempotent across boots.
+ *
+ * G2.4: the "already seeded" marker is the demo POLICIES, not the demo api
+ * key — the key is now gated behind POTION_SEED_DEMO, so keying idempotency
+ * off it would re-run the whole seed on every boot in the default
+ * (credential-free) posture.
  */
 export async function seedIfEmpty(
   ctx: PotionContext,
   opts: { log?: (msg: string) => void } = {},
 ): Promise<boolean> {
   const log = opts.log ?? (() => {});
-  const existing = await listApiKeys(ctx.db.db, DEMO_ORG_ID);
-  if (existing.length > 0) return false;
+  const existingPolicies = await listPolicies(ctx.db.db, DEMO_ORG_ID);
+  if (existingPolicies.length > 0) return false;
 
   // ---- demo tenant: org (idempotent — migration 0003 already created it),
   // demo user + admin membership ----
@@ -109,14 +130,21 @@ export async function seedIfEmpty(
   for (const p of DEMO_POLICIES) {
     await insertPolicy(ctx.db.db, { id: p.id, orgId: DEMO_ORG_ID, name: p.name, config: p.config });
   }
-  await insertApiKey(ctx.db.db, {
-    id: `key-${randomUUID().slice(0, 8)}`,
-    keyHash: sha256(DEMO_API_KEY),
-    name: 'demo',
-    orgId: DEMO_ORG_ID,
-    policyId: DEMO_POLICY_ID,
-  });
-  log(`seeded demo api key (${DEMO_API_KEY.slice(0, 12)}…) + ${DEMO_POLICIES.length} policies`);
+  if (demoSeedEnabled()) {
+    await insertApiKey(ctx.db.db, {
+      id: `key-${randomUUID().slice(0, 8)}`,
+      keyHash: sha256(DEMO_API_KEY),
+      name: 'demo',
+      orgId: DEMO_ORG_ID,
+      policyId: DEMO_POLICY_ID,
+    });
+    log(`seeded demo api key (${DEMO_API_KEY.slice(0, 12)}…) + ${DEMO_POLICIES.length} policies`);
+  } else {
+    log(
+      `seeded ${DEMO_POLICIES.length} demo policies; demo API KEY withheld ` +
+        '(set POTION_SEED_DEMO=1 for the quickstart credential — G2.4)',
+    );
+  }
 
   // ---- frontiers via harness + pareto on the mock provider (capped) ----
   // M1a quarantine: code-gen/extraction now resolve under suites/simulated/

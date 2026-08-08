@@ -7,15 +7,15 @@
 //   POST /api/usage/aggregate {from,to}            trigger the batch rollup
 //   GET  /api/usage/invoice?period&margin_pct&format=json|html
 //
-// Auth / tenant scope: a valid Bearer api key pins the org (Wave-1 semantics
-// — org keys carry full org power). With no Authorization header the local-
-// tool default org (org_demo) is used, matching the other /api dashboard
-// routes. SESSION-TOLERANT RESOLVER: when the Wave-2 auth agent lands
-// dashboard sessions (#14), extend resolveRequestOrg() to try the session
-// cookie FIRST via resolveOrgContext(db, { kind: 'session', userId, orgId })
-// and fall back to the bearer path — handlers below only see OrgContext and
-// need no further changes. Every query is org-scoped; cross-org reads are
-// impossible by construction.
+// Auth / tenant scope (G2.4): every handler reads req.potionOrg — the org the
+// /api auth hook already resolved from bearer key OR session cookie OR dev
+// bypass. The pre-G2.4 bearer-only resolveRequestOrg() lived here and fell
+// back to {orgId: DEFAULT_ORG_ID} whenever no Authorization header was
+// present, so EVERY dashboard caller (cookies only) read the demo org's
+// usage, exports and invoices. It is deleted rather than fixed so it cannot
+// come back; the hook is the single resolution point (it also enforces the
+// revoked/expired checks the old helper's resolveOrgContext path skipped).
+// Every query is org-scoped; cross-org reads are impossible by construction.
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -62,22 +62,6 @@ function defaultRange(): { fromDay: string; toDay: string } {
   const to = new Date();
   const from = new Date(to.getTime() - 29 * 24 * 3600 * 1000);
   return { fromDay: from.toISOString().slice(0, 10), toDay: to.toISOString().slice(0, 10) };
-}
-
-/**
- * Session-tolerant org resolver (see file header). Bearer key → its org; no
- * credentials → the local-tool default org; a PRESENT but invalid bearer
- * token → null (the route answers 401, never silently widening scope).
- */
-export async function resolveRequestOrg(
-  ctx: PotionContext,
-  req: FastifyRequest,
-): Promise<OrgContext | null> {
-  const token = bearerToken(req.headers.authorization);
-  if (token) {
-    return resolveOrgContext(ctx.db.db, { kind: 'apiKey', apiKey: token });
-  }
-  return { orgId: DEFAULT_ORG_ID, role: 'admin' };
 }
 
 interface UsageClusterSlice {
@@ -168,9 +152,11 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
 
   // ---- GET /api/usage — usage_daily, org-scoped ----
   app.get('/api/usage', async (req, reply) => {
-    const org = await resolveRequestOrg(ctx, req);
+    const org = req.potionOrg;
     if (!org) {
-      return reply.code(401).send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
     const q = UsageQuerySchema.safeParse(req.query);
     const dflt = defaultRange();
@@ -194,9 +180,11 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
   // the in-flight day is not yet rolled up by the batch job, so this endpoint
   // runs the same rollup math read-only. ----
   app.get('/api/usage/current', async (req, reply) => {
-    const org = await resolveRequestOrg(ctx, req);
+    const org = req.potionOrg;
     if (!org) {
-      return reply.code(401).send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
     const today = utcDay();
     const monthStart = `${today.slice(0, 7)}-01`;
@@ -211,9 +199,11 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
 
   // ---- GET /api/usage/export.csv — day × cluster CSV download ----
   app.get('/api/usage/export.csv', async (req, reply) => {
-    const org = await resolveRequestOrg(ctx, req);
+    const org = req.potionOrg;
     if (!org) {
-      return reply.code(401).send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
     const dflt = defaultRange();
     const q = req.query as Record<string, unknown>;
@@ -260,9 +250,11 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
   // JSON (or print-friendly HTML). Refreshes the period rollup first so the
   // invoice is current to the cent (idempotent upsert — see billing/cli). ----
   app.get('/api/usage/invoice', async (req, reply) => {
-    const org = await resolveRequestOrg(ctx, req);
+    const org = req.potionOrg;
     if (!org) {
-      return reply.code(401).send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
+      return reply
+        .code(401)
+        .send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     }
     const parsed = InvoiceQuerySchema.safeParse(req.query);
     if (!parsed.success || !isPeriodString(parsed.data.period)) {
@@ -270,7 +262,10 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
     }
     const { period, format } = parsed.data;
     const range = { fromDay: periodFromDay(period), toDay: periodToDay(period) };
-    await aggregateUsage(db(), range);
+    // G2.4 (D5): refresh THIS ORG's rollup only. Pre-G2.4 this called the
+    // global aggregateUsage(db, range) — a full usage_daily rewrite across
+    // every tenant, reachable by any viewer on a GET.
+    await aggregateUsage(db(), range, org.orgId);
     try {
       const invoice = await generateInvoice(
         db(),

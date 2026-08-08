@@ -20,6 +20,10 @@ import { createMockProvider } from '@potion/providers';
 import { buildServer } from '../src/server.js';
 import { DEMO_API_KEY } from '../src/seed.js';
 
+// G2.4: the demo credential is gated (POTION_SEED_DEMO); this suite uses it
+// deliberately, matching the POTION_SELF_SERVE polarity — no implicit exceptions.
+process.env.POTION_SEED_DEMO = '1';
+
 const RPS = 50;
 const DURATION_S = 10;
 const TOTAL = RPS * DURATION_S;

@@ -113,6 +113,29 @@ serve-only keys get 403, same as every admin route (M2 #15 discipline).
 | member | + write methods (playground, share links, eval runs)       |
 | admin  | + key lifecycle, invites, budget, alert rules, **audit reads/exports**, incident resolve |
 
+### Tenant isolation & the classification exhibit (G2.4)
+
+`artifacts/tenancy-classification.md` is the route-by-route answer to a
+security questionnaire: every route with its tenancy class, the credential it
+requires, and the cross-org posture that is **enforced by tests** — org B
+probing org A's real resource ids must be indistinguishable from probing ids
+that never existed (same status, same body shape), under both api-key and
+session-cookie credentials. Regenerate it with
+`pnpm --filter @potion/server tenancy-report`; a stale copy fails CI.
+
+Deployment notes carried there and repeated here:
+
+- `/metrics` is an unauthenticated Prometheus scrape surface by convention.
+  Org identifiers in labels are **hashed** (the same 6-character hash used in
+  `agent-<orgHash6>-*` cluster ids, so operators can still correlate), and the
+  endpoint must additionally be network-restricted.
+- The demo tenant's API credential seeds only when `POTION_SEED_DEMO` is set;
+  a production boot carries no demo credential and the dashboard advertises no
+  demo workspace.
+- A live server never answers with mock output: when a frontier is absent or
+  provenance-blocked it falls back to a designated **live** default, and
+  refuses honestly if none is resolvable.
+
 Api-key credentials (G2.3 key role split): the key's ROLE derives from its
 scopes at resolution. `serve` (the default) resolves to **member grade** —
 serving, org reads, and self-service mutations (policy create, workloads,

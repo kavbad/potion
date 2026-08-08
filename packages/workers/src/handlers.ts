@@ -1417,8 +1417,30 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
         ),
       );
     const evaluatedHashes = new Set<string>(evalRows.map((r) => r.hash));
+    // G2.4 (false-live class): a LIVE cycle generates candidates over the
+    // REACHABLE registry only. Pre-G2.4 the unfiltered registry made mock
+    // aliases the deterministic class representatives (they are $0 and
+    // classRepresentative picks cheapest), so every live cycle built
+    // mock-alias candidates and then died on MockAliasInLiveRunError,
+    // leaving its ledger row stuck at 'running'. reachable() is the G1.7
+    // pattern.
+    const candidateRegistry =
+      provider === 'live'
+        ? buildRegistry(prices).filter(
+            (e) =>
+              e.provider !== 'mock' &&
+              process.env[ENV_VAR_BY_PROVIDER[e.provider as Exclude<ProviderId, 'mock'>]] !==
+                undefined,
+          )
+        : buildRegistry(prices);
+    if (provider === 'live' && candidateRegistry.length === 0) {
+      throw new Error(
+        'live research cycle refused: no provider API keys in env (set OPENROUTER_API_KEY or ' +
+          'peers) — a live cycle over mock aliases would stamp mock output as live evidence',
+      );
+    }
     candidates = generateCandidatesExplained({
-      registry: buildRegistry(prices),
+      registry: candidateRegistry,
       ...(payload.focusAlias !== undefined ? { focusAlias: payload.focusAlias } : {}),
       existingHashes,
       evaluatedHashes,
@@ -1449,280 +1471,292 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     seed,
     orgId: payload.orgId ?? null,
   });
+  // G2.4: from here the ledger row EXISTS, so EVERY failure must settle it.
+  // Pre-G2.4 a throw — e.g. MockAliasInLiveRunError from a live cycle whose
+  // candidates were mock aliases — escaped the handler and left the row at
+  // 'running' forever: an unfalsifiable in-progress claim.
+  try {
 
-  // Register every candidate: content-addressed strategy_configs row +
-  // recipe_status 'candidate' (firstCycleId sticky on later cycles).
-  // G1.8: ORG cycles register configs (content-addressed, shared, harmless)
-  // but NEVER touch recipe_status — that table is the PLATFORM library
-  // lifecycle, keyed by hash alone; an org cycle mutating it would flip
-  // every tenant's view.
-  const candidateHashes: string[] = [];
-  for (const config of candidates) {
-    const hash = strategyHash(config);
-    candidateHashes.push(hash);
-    await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
-    if (payload.orgId === undefined) {
-      await upsertRecipeStatus(ctx.db, hash, 'candidate', cycle.id);
-    }
-  }
-
-  if (candidates.length === 0) {
-    await updateResearchCycle(ctx.db, cycle.id, {
-      status: 'completed',
-      completedAt: new Date(),
-    });
-    return {
-      cycleId: cycle.id,
-      trigger,
-      candidates: 0,
-      candidateHashes,
-      suitesRun: [],
-      spendUsd: 0,
-      provenance: 'unknown',
-      promotions: [],
-      stoppedEarly: false,
-      stopReason: 'no new candidates — registry and eval cache already cover the template grammar',
-      artifactKey: null,
-    };
-  }
-
-  // ---- sweep over the validated suite set (graceful stop at the cap) ----
-  const suiteV2Ids = cycleSuiteIds;
-  const suitesRun: string[] = [];
-  const clusterIds = new Set<string>();
-  let spendUsd = 0;
-  let provenance: ProviderMode | 'unknown' = 'unknown';
-  let stoppedEarly = false;
-  let stopReason: string | null = null;
-
-  for (const suiteId of suiteV2Ids) {
-    const suiteItems = suiteItemsById.get(suiteId)!;
-    for (const item of suiteItems) clusterIds.add(item.clusterId);
-    const remaining = budgetCapUsd - spendUsd;
-    const projected = projectRunCostUsd(candidates, suiteItems, prices);
-    if (projected > remaining + BUDGET_TOLERANCE) {
-      stoppedEarly = true;
-      stopReason =
-        `suite '${suiteId}' projected $${projected.toFixed(4)} does not fit the remaining ` +
-        `$${remaining.toFixed(4)} of the $${budgetCapUsd.toFixed(2)} cap — stopping gracefully ` +
-        `(${suitesRun.length}/${suiteV2Ids.length} suites completed)`;
-      break;
-    }
-    const summary: RunSummary = await runEval(
-      {
-        suiteIds: [],
-        suiteV2Ids: [suiteId],
-        strategies: candidates,
-        budgetCapUsd: remaining,
-        provider,
-        // G1.8: org cycles produce org-attributed evidence under |org cache
-        // keys (G1.6/G1.7 conventions) — never platform rows.
-        ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
-      },
-      {
-        db: ctx.dbHandle,
-        pricesPath: ctx.pricesPath,
-        ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
-      },
-    );
-    spendUsd += summary.spendUsd;
-    provenance = summary.providerMode;
-    suitesRun.push(suiteId);
-  }
-
-  // G1.8: live ORG cycle spend is customer-attributable (G1.7 convention) —
-  // one aggregate eval_live row through the rollup chokepoint.
-  if (payload.orgId !== undefined && provider === 'live' && spendUsd > 0) {
-    await insertRequestLog(ctx.db, {
-      orgId: payload.orgId,
-      model: 'research-cycle',
-      usage: { inputTokens: 0, outputTokens: 0, costUsd: spendUsd, latencyMs: 0 } as Usage,
-      latencyMs: 0,
-      status: 'eval_live',
-    });
-  }
-
-  await updateResearchCycle(ctx.db, cycle.id, {
-    status: 'completed',
-    spendUsd,
-    provenance,
-    completedAt: new Date(),
-  });
-
-  // ---- §15.4 promotion gate, per cluster ----
-  // Publish ONLY from live-provenance evidence: the gate's heldout pairs are
-  // live eval rows by construction (liveHeldoutPairs), so mock cycles —
-  // which never produce live rows — structurally cannot promote; they
-  // shortlist recipes into 'candidate' and stop (SPEC §15.3).
-  const promotions: CyclePromotion[] = [];
-  const thresholds = promotionThresholdsFromEnv();
-  for (const clusterId of clusterIds) {
-    const current = await loadCurrentFrontier(ctx.db, clusterId, payload.orgId);
-    const pool: StrategyConfig[] = [];
-    const poolHashes = new Set<string>();
-    for (const p of current?.points ?? []) {
-      if (!poolHashes.has(p.strategyHash)) {
-        poolHashes.add(p.strategyHash);
-        pool.push(p.strategyConfig);
+    // Register every candidate: content-addressed strategy_configs row +
+    // recipe_status 'candidate' (firstCycleId sticky on later cycles).
+    // G1.8: ORG cycles register configs (content-addressed, shared, harmless)
+    // but NEVER touch recipe_status — that table is the PLATFORM library
+    // lifecycle, keyed by hash alone; an org cycle mutating it would flip
+    // every tenant's view.
+    const candidateHashes: string[] = [];
+    for (const config of candidates) {
+      const hash = strategyHash(config);
+      candidateHashes.push(hash);
+      await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
+      if (payload.orgId === undefined) {
+        await upsertRecipeStatus(ctx.db, hash, 'candidate', cycle.id);
       }
     }
-    for (const c of candidates) {
-      const h = strategyHash(c);
-      if (!poolHashes.has(h)) {
-        poolHashes.add(h);
-        pool.push(c);
-      }
+
+    if (candidates.length === 0) {
+      await updateResearchCycle(ctx.db, cycle.id, {
+        status: 'completed',
+        completedAt: new Date(),
+      });
+      return {
+        cycleId: cycle.id,
+        trigger,
+        candidates: 0,
+        candidateHashes,
+        suitesRun: [],
+        spendUsd: 0,
+        provenance: 'unknown',
+        promotions: [],
+        stoppedEarly: false,
+        stopReason: 'no new candidates — registry and eval cache already cover the template grammar',
+        artifactKey: null,
+      };
     }
-    // G1.8: org-scoped, provenance-pure aggregation — a live org cycle
-    // aggregates live-only (the G1.7 taint rule); mock cycles keep their
-    // scope's mock rows.
-    const aggregates = await aggregatesFromEvalResults(ctx.db, clusterId, pool, prices.version, {
-      ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
-      ...(payload.orgId !== undefined && provider === 'live'
-        ? { providerMode: 'live' as const }
-        : {}),
-    });
-    if (aggregates.length === 0) continue;
-    const points: FrontierPoint[] = computeFrontier(aggregates);
-    const pointByHash = new Map(points.map((pt) => [pt.strategyHash, pt]));
-    const incumbent = current ? highestQualityPoint(current.points) : null;
 
-    for (const hash of candidateHashes) {
-      const candidatePoint = pointByHash.get(hash);
-      if (!candidatePoint) continue; // candidate didn't make the frontier
-      if (candidatePoint.strategyHash === incumbent?.strategyHash) continue;
+    // ---- sweep over the validated suite set (graceful stop at the cap) ----
+    const suiteV2Ids = cycleSuiteIds;
+    const suitesRun: string[] = [];
+    const clusterIds = new Set<string>();
+    let spendUsd = 0;
+    let provenance: ProviderMode | 'unknown' = 'unknown';
+    let stoppedEarly = false;
+    let stopReason: string | null = null;
 
-      let path: CyclePromotion['path'];
-      let reason: string;
-      if (incumbent === null) {
-        // No incumbent: first live frontier ever for this cluster.
-        const pairs = await liveHeldoutPairs(ctx, clusterId, hash, hash, prices.version, payload.orgId);
-        if (pairs.length === 0) continue; // still live-evidence-gated
-        path = 'bootstrap';
-        reason = 'first live-provenance frontier for cluster (no incumbent)';
-      } else {
-        const pairs = await liveHeldoutPairs(
-          ctx,
-          clusterId,
-          hash,
-          incumbent.strategyHash,
-          prices.version,
-          payload.orgId,
-        );
-        const verdict = evaluatePromotion(pairs, {
-          candidateCostPer1K: candidatePoint.costPer1K,
-          incumbentCostPer1K: incumbent.costPer1K,
-          seed,
-          thresholds,
-        });
-        if (!verdict.promote) continue; // CI overlaps → stays 'candidate'
-        path = verdict.path!;
-        reason = verdict.reason;
+    for (const suiteId of suiteV2Ids) {
+      const suiteItems = suiteItemsById.get(suiteId)!;
+      for (const item of suiteItems) clusterIds.add(item.clusterId);
+      const remaining = budgetCapUsd - spendUsd;
+      const projected = projectRunCostUsd(candidates, suiteItems, prices);
+      if (projected > remaining + BUDGET_TOLERANCE) {
+        stoppedEarly = true;
+        stopReason =
+          `suite '${suiteId}' projected $${projected.toFixed(4)} does not fit the remaining ` +
+          `$${remaining.toFixed(4)} of the $${budgetCapUsd.toFixed(2)} cap — stopping gracefully ` +
+          `(${suitesRun.length}/${suiteV2Ids.length} suites completed)`;
+        break;
       }
-
-      // A candidate cleared the gate → publish the recomputed frontier as
-      // the next version (saveFrontier chains parentId automatically —
-      // scope-exact per G1.6), flip lifecycle states (PLATFORM cycles only),
-      // fan out the alert (org cycles: owning org only). One publish per
-      // cluster.
-      let provenanceCtx: { suiteId?: string; suiteVersion?: string; rubricHash?: string; calibrationId?: string } = {};
-      if (payload.orgId !== undefined && clusterId.startsWith('agent-')) {
-        const derivedSuiteId = `${clusterId}-replays-v1`;
-        const derivedRow = await loadDerivedSuite(ctx.db, derivedSuiteId);
-        const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
-        provenanceCtx = {
-          suiteId: derivedSuiteId,
-          ...(derivedRow !== null ? { suiteVersion: derivedRow.suite.version } : {}),
-          ...(approvedRubric !== null
-            ? {
-                rubricHash: approvedRubric.rubricHash,
-                ...(approvedRubric.calibrationId !== null
-                  ? { calibrationId: approvedRubric.calibrationId }
-                  : {}),
-              }
-            : {}),
-        };
-      }
-      const saved = await saveFrontier(
-        ctx.db,
-        clusterId,
-        points,
-        trigger === 'scan' ? 'new-model' : 'recompute',
-        prices.version,
+      const summary: RunSummary = await runEval(
         {
+          suiteIds: [],
+          suiteV2Ids: [suiteId],
+          strategies: candidates,
+          budgetCapUsd: remaining,
+          provider,
+          // G1.8: org cycles produce org-attributed evidence under |org cache
+          // keys (G1.6/G1.7 conventions) — never platform rows.
           ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
-          ...(Object.keys(provenanceCtx).length > 0 ? { provenance: provenanceCtx } : {}),
+        },
+        {
+          db: ctx.dbHandle,
+          pricesPath: ctx.pricesPath,
+          ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
         },
       );
-      const newHashes = new Set(points.map((pt) => pt.strategyHash));
-      if (payload.orgId === undefined) {
-        for (const pt of points) {
-          await upsertRecipeStatus(ctx.db, pt.strategyHash, 'frontier');
-        }
-        for (const prev of current?.points ?? []) {
-          if (!newHashes.has(prev.strategyHash)) {
-            await upsertRecipeStatus(ctx.db, prev.strategyHash, 'archived');
-          }
+      spendUsd += summary.spendUsd;
+      provenance = summary.providerMode;
+      suitesRun.push(suiteId);
+    }
+
+    // G1.8: live ORG cycle spend is customer-attributable (G1.7 convention) —
+    // one aggregate eval_live row through the rollup chokepoint.
+    if (payload.orgId !== undefined && provider === 'live' && spendUsd > 0) {
+      await insertRequestLog(ctx.db, {
+        orgId: payload.orgId,
+        model: 'research-cycle',
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: spendUsd, latencyMs: 0 } as Usage,
+        latencyMs: 0,
+        status: 'eval_live',
+      });
+    }
+
+    await updateResearchCycle(ctx.db, cycle.id, {
+      status: 'completed',
+      spendUsd,
+      provenance,
+      completedAt: new Date(),
+    });
+
+    // ---- §15.4 promotion gate, per cluster ----
+    // Publish ONLY from live-provenance evidence: the gate's heldout pairs are
+    // live eval rows by construction (liveHeldoutPairs), so mock cycles —
+    // which never produce live rows — structurally cannot promote; they
+    // shortlist recipes into 'candidate' and stop (SPEC §15.3).
+    const promotions: CyclePromotion[] = [];
+    const thresholds = promotionThresholdsFromEnv();
+    for (const clusterId of clusterIds) {
+      const current = await loadCurrentFrontier(ctx.db, clusterId, payload.orgId);
+      const pool: StrategyConfig[] = [];
+      const poolHashes = new Set<string>();
+      for (const p of current?.points ?? []) {
+        if (!poolHashes.has(p.strategyHash)) {
+          poolHashes.add(p.strategyHash);
+          pool.push(p.strategyConfig);
         }
       }
-      await emitPromotionAlerts(
-        ctx,
-        {
+      for (const c of candidates) {
+        const h = strategyHash(c);
+        if (!poolHashes.has(h)) {
+          poolHashes.add(h);
+          pool.push(c);
+        }
+      }
+      // G1.8: org-scoped, provenance-pure aggregation — a live org cycle
+      // aggregates live-only (the G1.7 taint rule); mock cycles keep their
+      // scope's mock rows.
+      const aggregates = await aggregatesFromEvalResults(ctx.db, clusterId, pool, prices.version, {
+        ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
+        ...(payload.orgId !== undefined && provider === 'live'
+          ? { providerMode: 'live' as const }
+          : {}),
+      });
+      if (aggregates.length === 0) continue;
+      const points: FrontierPoint[] = computeFrontier(aggregates);
+      const pointByHash = new Map(points.map((pt) => [pt.strategyHash, pt]));
+      const incumbent = current ? highestQualityPoint(current.points) : null;
+
+      for (const hash of candidateHashes) {
+        const candidatePoint = pointByHash.get(hash);
+        if (!candidatePoint) continue; // candidate didn't make the frontier
+        if (candidatePoint.strategyHash === incumbent?.strategyHash) continue;
+
+        let path: CyclePromotion['path'];
+        let reason: string;
+        if (incumbent === null) {
+          // No incumbent: first live frontier ever for this cluster.
+          const pairs = await liveHeldoutPairs(ctx, clusterId, hash, hash, prices.version, payload.orgId);
+          if (pairs.length === 0) continue; // still live-evidence-gated
+          path = 'bootstrap';
+          reason = 'first live-provenance frontier for cluster (no incumbent)';
+        } else {
+          const pairs = await liveHeldoutPairs(
+            ctx,
+            clusterId,
+            hash,
+            incumbent.strategyHash,
+            prices.version,
+            payload.orgId,
+          );
+          const verdict = evaluatePromotion(pairs, {
+            candidateCostPer1K: candidatePoint.costPer1K,
+            incumbentCostPer1K: incumbent.costPer1K,
+            seed,
+            thresholds,
+          });
+          if (!verdict.promote) continue; // CI overlaps → stays 'candidate'
+          path = verdict.path!;
+          reason = verdict.reason;
+        }
+
+        // A candidate cleared the gate → publish the recomputed frontier as
+        // the next version (saveFrontier chains parentId automatically —
+        // scope-exact per G1.6), flip lifecycle states (PLATFORM cycles only),
+        // fan out the alert (org cycles: owning org only). One publish per
+        // cluster.
+        let provenanceCtx: { suiteId?: string; suiteVersion?: string; rubricHash?: string; calibrationId?: string } = {};
+        if (payload.orgId !== undefined && clusterId.startsWith('agent-')) {
+          const derivedSuiteId = `${clusterId}-replays-v1`;
+          const derivedRow = await loadDerivedSuite(ctx.db, derivedSuiteId);
+          const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
+          provenanceCtx = {
+            suiteId: derivedSuiteId,
+            ...(derivedRow !== null ? { suiteVersion: derivedRow.suite.version } : {}),
+            ...(approvedRubric !== null
+              ? {
+                  rubricHash: approvedRubric.rubricHash,
+                  ...(approvedRubric.calibrationId !== null
+                    ? { calibrationId: approvedRubric.calibrationId }
+                    : {}),
+                }
+              : {}),
+          };
+        }
+        const saved = await saveFrontier(
+          ctx.db,
+          clusterId,
+          points,
+          trigger === 'scan' ? 'new-model' : 'recompute',
+          prices.version,
+          {
+            ...(payload.orgId !== undefined ? { orgId: payload.orgId } : {}),
+            ...(Object.keys(provenanceCtx).length > 0 ? { provenance: provenanceCtx } : {}),
+          },
+        );
+        const newHashes = new Set(points.map((pt) => pt.strategyHash));
+        if (payload.orgId === undefined) {
+          for (const pt of points) {
+            await upsertRecipeStatus(ctx.db, pt.strategyHash, 'frontier');
+          }
+          for (const prev of current?.points ?? []) {
+            if (!newHashes.has(prev.strategyHash)) {
+              await upsertRecipeStatus(ctx.db, prev.strategyHash, 'archived');
+            }
+          }
+        }
+        await emitPromotionAlerts(
+          ctx,
+          {
+            clusterId,
+            strategyHash: hash,
+            path,
+            reason,
+            frontierId: saved.id,
+            frontierVersion: saved.version,
+            cycleId: cycle.id,
+          },
+          payload.orgId,
+        );
+        promotions.push({
           clusterId,
           strategyHash: hash,
           path,
           reason,
           frontierId: saved.id,
           frontierVersion: saved.version,
-          cycleId: cycle.id,
-        },
-        payload.orgId,
-      );
-      promotions.push({
-        clusterId,
-        strategyHash: hash,
-        path,
-        reason,
-        frontierId: saved.id,
-        frontierVersion: saved.version,
-      });
-      break; // one publish per cluster per cycle
+        });
+        break; // one publish per cluster per cycle
+      }
     }
-  }
 
-  const artifactKey = await writeJsonArtifact(
-    ctx.artifacts,
-    `research/cycle-${cycle.id}.json`,
-    {
+    const artifactKey = await writeJsonArtifact(
+      ctx.artifacts,
+      `research/cycle-${cycle.id}.json`,
+      {
+        cycleId: cycle.id,
+        trigger,
+        focusAlias: payload.focusAlias ?? null,
+        candidates,
+        candidateHashes,
+        suiteV2Ids,
+        suitesRun,
+        spendUsd,
+        provenance,
+        seed,
+        promotions,
+        stoppedEarly,
+        stopReason,
+      },
+    );
+
+    return {
       cycleId: cycle.id,
       trigger,
-      focusAlias: payload.focusAlias ?? null,
-      candidates,
+      candidates: candidates.length,
       candidateHashes,
-      suiteV2Ids,
       suitesRun,
       spendUsd,
       provenance,
-      seed,
       promotions,
       stoppedEarly,
       stopReason,
-    },
-  );
-
-  return {
-    cycleId: cycle.id,
-    trigger,
-    candidates: candidates.length,
-    candidateHashes,
-    suitesRun,
-    spendUsd,
-    provenance,
-    promotions,
-    stoppedEarly,
-    stopReason,
-    artifactKey,
-  };
+      artifactKey,
+    };
+  } catch (err) {
+    await updateResearchCycle(ctx.db, cycle.id, {
+      status: 'failed',
+      completedAt: new Date(),
+    }).catch(() => {});
+    throw err;
+  }
 };
 
 /** The default handler set, one per JobKind. */

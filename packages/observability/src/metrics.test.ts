@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NoopMetrics, PromMetrics, createMetrics } from './index.js';
+import { NoopMetrics, PromMetrics, createMetrics, orgLabel } from './index.js';
 
 describe('PromMetrics', () => {
   it('moves request counter + histogram and renders Prometheus text', async () => {
@@ -92,8 +92,15 @@ describe('PromMetrics', () => {
     m.observeGuaranteeBreach?.({ orgId: 'org_demo', action: 'rollback' });
     m.observeGuaranteeBreach?.({ orgId: 'org_demo', action: 'alert' });
     const text = await m.render();
-    expect(text).toContain('potion_guarantee_breaches_total{org_id="org_demo",action="rollback"} 2');
-    expect(text).toContain('potion_guarantee_breaches_total{org_id="org_demo",action="alert"} 1');
+    // G2.4: labels carry the 6-char org HASH, never the raw id — /metrics is
+    // an unauthenticated scrape surface, so raw ids would let any reachable
+    // scraper enumerate tenants. It is the SAME hash the
+    // agent-<orgHash6>-* cluster ids use, so operators keep correlating.
+    const label = orgLabel('org_demo');
+    expect(label).toHaveLength(6);
+    expect(text).not.toContain('org_id="org_demo"');
+    expect(text).toContain(`potion_guarantee_breaches_total{org_id="${label}",action="rollback"} 2`);
+    expect(text).toContain(`potion_guarantee_breaches_total{org_id="${label}",action="alert"} 1`);
   });
 
   it('uses an injected registry when provided', async () => {

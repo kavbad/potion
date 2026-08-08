@@ -14,12 +14,12 @@ import { performance } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { strategyHash, type ChatMessage, type Usage } from '@potion/core';
+import { strategyHash, type ChatMessage, type StrategyConfig, type Usage } from '@potion/core';
 import { DEFAULT_ORG_ID, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute, type ExecContext } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError, type AuthResult } from '../auth.js';
-import { assignmentCacheKey, type PotionContext } from '../context.js';
+import { assignmentCacheKey, fallbackStrategyFor, type PotionContext } from '../context.js';
 import { guardFrontierProvenance, resolveOperatingPoint, traceHeaderValue } from './chat.js';
 
 /** chars/4 token estimate (same convention as the mock provider). */
@@ -163,10 +163,16 @@ const LegacyCompletionsRequestSchema = z.object({
   stream: z.boolean().optional(),
 });
 
+/** G2.4: raised when a LIVE server has no resolvable live strategy — the
+ * request is refused (503) instead of falling back to a mock alias. */
+class NoLiveStrategyError extends Error {}
+
 interface CompletionPlan {
   messages: ChatMessage[];
   clusterId: string;
-  op: ReturnType<typeof resolveOperatingPoint>;
+  /** config is non-null by construction: a plan is only pushed after the
+   * live-strategy check above (G2.4). */
+  op: Omit<ReturnType<typeof resolveOperatingPoint>, 'config'> & { config: StrategyConfig };
   trace: string;
   strategyHash: string;
 }
@@ -278,6 +284,7 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
       resolve: orgProviders.resolve,
     };
     const plans: CompletionPlan[] = [];
+    try {
     for (const prompt of prompts) {
       const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
       const cacheKey = assignmentCacheKey([prompt]);
@@ -292,7 +299,11 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
         ctx.providerMode,
         (msg) => app.log.warn(msg),
       );
-      const op = resolveOperatingPoint(policy, frontier);
+      const op = resolveOperatingPoint(policy, frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+      if (op.config === null) {
+        // G2.4: a live server never falls back to a mock alias (see chat.ts).
+        throw new NoLiveStrategyError();
+      }
       const sh = strategyHash(op.config);
       const trace =
         traceHeaderValue({
@@ -303,7 +314,27 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
           fallback: op.fallback,
           provenance,
         }) + (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '');
-      plans.push({ messages, clusterId: assignment.clusterId, op, trace, strategyHash: sh });
+      plans.push({
+        messages,
+        clusterId: assignment.clusterId,
+        op: { ...op, config: op.config },
+        trace,
+        strategyHash: sh,
+      });
+    }
+    } catch (err) {
+      if (!(err instanceof NoLiveStrategyError)) throw err;
+      await logRequest({ ...logBase, status: 'error', latencyMs: elapsed() });
+      return reply
+        .code(503)
+        .send(
+          openAiError(
+            'no live strategy is resolvable for this cluster — the price table has no non-mock ' +
+              'entry, and a live server never serves mock output',
+            'service_unavailable',
+            'service_unavailable',
+          ),
+        );
     }
     const first = plans[0]!;
     void reply.header('x-frontier-trace', first.trace);

@@ -197,7 +197,15 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   route-inventory fixture (apps/server/test/fixtures/route-inventory.ts —
   all routes classified, completeness-diffed, 27 admin routes probed per-key;
   G2.4 extends the same fixture with its lenses); walkthrough step-16 leg;
-  (14) targeted server tests on the serving
+  [DONE 2026-08-08] G2.4 exhaustive tenancy sweep +
+  mock-eligibility audit: 14 defects fixed (cross-tenant demo-org fallback,
+  platform-job leakage, global rollup rewrite, cycle-lineage leak, four
+  false-live sites incl. the FIRST on the serving path, three posture items,
+  three uuid-param crash/oracles found by the sweep); route inventory gains
+  the tenancy lens + a cross-org probe suite (both credential kinds, four
+  input classes); grep-derived mock-eligibility inventory with its own
+  completeness meta-test; committed diligence exhibit
+  artifacts/tenancy-classification.md; (14) targeted server tests on the serving
   hot path incl. the mock-eligibility audit of every provider-resolution
   site; (16) compound policy: quality floor + latency bound in one policy;
   (G2.8 CAPSTONE) one real workload end-to-end through the whole pipeline
