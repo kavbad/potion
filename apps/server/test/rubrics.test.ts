@@ -12,22 +12,22 @@ import {
   createMembership,
   createSession,
   createUser,
+  insertApiKey,
   loadDerivedSuite,
-  DEFAULT_ORG_ID,
 } from '@potion/db';
 import { orgHashOf, toolSignatureSlug } from '@potion/workers';
 import { buildServer } from '../src/server.js';
-import { DEMO_API_KEY } from '../src/seed.js';
-
-// G2.4: the demo credential is gated (POTION_SEED_DEMO); this suite uses it
-// deliberately, matching the POTION_SELF_SERVE polarity — no implicit exceptions.
-process.env.POTION_SEED_DEMO = '1';
+// G2.4 carryover: the subject tenant is a real, distinct org from the shared
+// fixture — never the demo org, whose dev-bypass/seeded specialness lets a
+// tenancy failure pass for reasons that have nothing to do with tenancy.
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
 let app: FastifyInstance;
 
 const ADMIN = { cookie: 'potion_session=ps_r_admin' };
 const VIEWER = { cookie: 'potion_session=ps_r_viewer' };
-const KEY = { authorization: `Bearer ${DEMO_API_KEY}`, 'content-type': 'application/json' };
+const RAW_A = 'pk_rubrics_org_a';
+const KEY = { authorization: `Bearer ${RAW_A}`, 'content-type': 'application/json' };
 
 let clusterId: string;
 let suiteId: string;
@@ -46,22 +46,24 @@ async function waitJob(jobId: string, timeoutMs = 120_000): Promise<{ state: str
 beforeAll(async () => {
   app = await buildServer();
   const db = app.potion.db.db;
+  await seedIsolationOrgs(db);
+  await insertApiKey(db, { id: 'key-rubrics-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A });
   await createUser(db, { id: 'usr_r_admin', email: 'radmin@t.dev', name: 'admin' });
-  await createMembership(db, { orgId: DEFAULT_ORG_ID, userId: 'usr_r_admin', role: 'admin' });
+  await createMembership(db, { orgId: ORG_A, userId: 'usr_r_admin', role: 'admin' });
   await createSession(db, {
     id: 'ses_r_admin',
     userId: 'usr_r_admin',
     tokenHash: sha256('ps_r_admin'),
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     expiresAt: new Date(Date.now() + 3_600_000),
   });
   await createUser(db, { id: 'usr_r_viewer', email: 'rviewer@t.dev', name: 'viewer' });
-  await createMembership(db, { orgId: DEFAULT_ORG_ID, userId: 'usr_r_viewer', role: 'viewer' });
+  await createMembership(db, { orgId: ORG_A, userId: 'usr_r_viewer', role: 'viewer' });
   await createSession(db, {
     id: 'ses_r_viewer',
     userId: 'usr_r_viewer',
     tokenHash: sha256('ps_r_viewer'),
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     expiresAt: new Date(Date.now() + 3_600_000),
   });
 
@@ -104,7 +106,7 @@ beforeAll(async () => {
   expect(trigger.statusCode).toBe(202);
   const job = await waitJob((trigger.json() as { jobId: string }).jobId, 180_000);
   expect(job.state).toBe('completed');
-  clusterId = `agent-${orgHashOf(DEFAULT_ORG_ID)}-${toolSignatureSlug(['search'])}`;
+  clusterId = `agent-${orgHashOf(ORG_A)}-${toolSignatureSlug(['search'])}`;
   suiteId = `${clusterId}-replays-v1`;
 }, 240_000);
 
@@ -191,16 +193,15 @@ describe('G1.5 rubric review surface', () => {
 
   it('cross-org isolation: another org gets 404 on generate/approve and an empty list', async () => {
     const db = app.potion.db.db;
-    const { createOrg: mkOrg, insertApiKey: mkKey } = await import('@potion/db');
-    await mkOrg(db, { id: 'org_rub_b', name: 'RubB' });
-    await mkKey(db, { id: 'key-rub-b', keyHash: sha256('pk_rub_b'), name: 'rb', orgId: 'org_rub_b' });
+    const { insertApiKey: mkKey } = await import('@potion/db');
+    await mkKey(db, { id: 'key-rub-b', keyHash: sha256('pk_rub_b'), name: 'rb', orgId: ORG_B });
     await createUser(db, { id: 'usr_rb', email: 'rb@t.dev', name: 'rb' });
-    await createMembership(db, { orgId: 'org_rub_b', userId: 'usr_rb', role: 'admin' });
+    await createMembership(db, { orgId: ORG_B, userId: 'usr_rb', role: 'admin' });
     await createSession(db, {
       id: 'ses_rb',
       userId: 'usr_rb',
       tokenHash: sha256('ps_rb'),
-      orgId: 'org_rub_b',
+      orgId: ORG_B,
       expiresAt: new Date(Date.now() + 3_600_000),
     });
     const B = { cookie: 'potion_session=ps_rb' };

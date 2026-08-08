@@ -8,23 +8,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, type FrontierPoint } from '@potion/core';
-import {
-  clusters,
-  createMembership,
-  createOrg,
-  createSession,
-  createUser,
-  DEFAULT_ORG_ID,
-} from '@potion/db';
+import { clusters, createMembership, createSession, createUser } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: two distinct NON-DEFAULT orgs — the demo org is never the
+// probed subject (see the fixture header; that assumption hid defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
 let app: FastifyInstance;
 
 const ADMIN = { cookie: 'potion_session=ps_of_admin' };
 const B_ADMIN = { cookie: 'potion_session=ps_of_b' };
 
-const ORG_B = 'org_of_b';
 const AGENT_CLUSTER = 'agent-aaaaaa-bbbbbb';
 
 function point(over: Partial<FrontierPoint> = {}): FrontierPoint {
@@ -45,16 +40,16 @@ function point(over: Partial<FrontierPoint> = {}): FrontierPoint {
 beforeAll(async () => {
   app = await buildServer();
   const db = app.potion.db.db;
+  await seedIsolationOrgs(db);
   await createUser(db, { id: 'usr_of_admin', email: 'of@t.dev', name: 'a' });
-  await createMembership(db, { orgId: DEFAULT_ORG_ID, userId: 'usr_of_admin', role: 'admin' });
+  await createMembership(db, { orgId: ORG_A, userId: 'usr_of_admin', role: 'admin' });
   await createSession(db, {
     id: 'ses_of_admin',
     userId: 'usr_of_admin',
     tokenHash: sha256('ps_of_admin'),
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     expiresAt: new Date(Date.now() + 3_600_000),
   });
-  await createOrg(db, { id: ORG_B, name: 'OF B' });
   await createUser(db, { id: 'usr_of_b', email: 'ofb@t.dev', name: 'b' });
   await createMembership(db, { orgId: ORG_B, userId: 'usr_of_b', role: 'admin' });
   await createSession(db, {
@@ -71,10 +66,10 @@ beforeAll(async () => {
     id: AGENT_CLUSTER,
     name: 'agent: search (of)',
     description: 'test agent cluster',
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
   });
   await saveFrontier(db, AGENT_CLUSTER, [point()], 'recompute', 'test-prices', {
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
   });
 }, 120_000);
 
@@ -122,12 +117,12 @@ describe('G1.6 per-org frontier surfaces', () => {
     // viewer session for org_demo
     const db = app.potion.db.db;
     await createUser(db, { id: 'usr_of_v', email: 'ofv@t.dev', name: 'v' });
-    await createMembership(db, { orgId: DEFAULT_ORG_ID, userId: 'usr_of_v', role: 'viewer' });
+    await createMembership(db, { orgId: ORG_A, userId: 'usr_of_v', role: 'viewer' });
     await createSession(db, {
       id: 'ses_of_v',
       userId: 'usr_of_v',
       tokenHash: sha256('ps_of_v'),
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       expiresAt: new Date(Date.now() + 3_600_000),
     });
     const VIEWER = { cookie: 'potion_session=ps_of_v' };
@@ -173,7 +168,7 @@ describe('G1.6 per-org frontier surfaces', () => {
     const db = app.potion.db.db;
     // give code-gen an ORG frontier too — share must still serve platform
     await saveFrontier(db, 'code-gen', [point({ clusterId: 'code-gen', quality: 0.111 })], 'recompute', 'test-prices', {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
     });
     const mint = await app.inject({
       method: 'POST',

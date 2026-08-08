@@ -39,6 +39,7 @@ import {
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
+import { ORG_A, seedIsolationOrgs } from './fixtures/orgs.js';
 import { scoreServedAnswer, SERVE_JUDGE_SCALE } from '@potion/harness';
 import type { OrgProviders } from '../src/context.js';
 import { orgLabel } from '@potion/observability';
@@ -121,6 +122,7 @@ async function waitFor<T>(fn: () => Promise<T>, pred: (v: T) => boolean, timeout
 
 beforeAll(async () => {
   app = await buildServer({ seed: false });
+  await seedIsolationOrgs(db());
   await saveFrontier(db(), 'code-gen', V1_POINTS, 'manual', '2026-08-04');
   await saveFrontier(db(), 'code-gen', V2_POINTS, 'recompute', '2026-08-04');
   for (const [org, name] of [
@@ -579,8 +581,12 @@ describe('guarantee API', () => {
   });
 
   it('POST /api/incidents/:id/resolve — cross-org is 404 (existence does not leak)', async () => {
+    // G2.4 carryover: the probed subject is a REAL tenant, not the demo org.
+    // A demo-org subject would let a resolver that falls back to the demo org
+    // pass this probe for reasons that have nothing to do with tenancy — the
+    // exact shape that hid defect D1.
     const incidentId = await insertIncident(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       kind: 'quality_breach',
       detail: { clusterId: 'code-gen', fromStrategy: H_MID },
     });

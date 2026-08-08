@@ -9,11 +9,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
-import { createOrg, evalResults, insertApiKey, DEFAULT_ORG_ID } from '@potion/db';
+import { evalResults, insertApiKey } from '@potion/db';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID; // 'org_demo'
-const ORG_B = 'org_jobs_b';
 const RAW_A = 'pk_jobs_org_a';
 const RAW_B = 'pk_jobs_org_b';
 
@@ -54,7 +56,7 @@ async function pollJob(jobId: string, rawKey: string, timeoutMs = 30_000): Promi
 
 beforeAll(async () => {
   app = await buildServer({ seed: false });
-  await createOrg(db(), { id: ORG_B, name: 'Jobs Org B' });
+  await seedIsolationOrgs(db());
   await insertApiKey(db(), { id: 'key-jobs-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A });
   await insertApiKey(db(), { id: 'key-jobs-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B });
 });

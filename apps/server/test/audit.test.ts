@@ -10,9 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
   createMembership,
-  createOrg,
   createSession,
   createUser,
   insertApiKey,
@@ -21,9 +19,15 @@ import {
   insertIncident,
 } from '@potion/db';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID;
-const ORG_B = 'org_audit_b';
+/** ORG_A admin credential. These calls used to be unauthenticated and rode the
+ * dev bypass onto the demo org — which silently happened to be the seeded
+ * subject org. The subject tenant is named explicitly now. */
+const KEY_A = 'pk_audit_org_a';
 const KEY_B = 'pk_audit_org_b';
 
 const T = {
@@ -38,7 +42,14 @@ const db = () => app.potion.db.db;
 
 beforeAll(async () => {
   app = await buildServer({ seed: false });
-  await createOrg(db(), { id: ORG_B, name: 'Audit Org B' });
+  await seedIsolationOrgs(db());
+  await insertApiKey(db(), {
+    id: 'key-audit-a',
+    keyHash: sha256(KEY_A),
+    name: 'a',
+    orgId: ORG_A,
+    scopes: 'serve+admin',
+  });
   await insertApiKey(db(), {
     id: 'key-audit-b',
     keyHash: sha256(KEY_B),
@@ -104,7 +115,11 @@ const TO = '2026-07-02T00:00:00Z';
 
 describe('GET /api/audit', () => {
   it('merges the three sources newest-first, org-scoped', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/audit' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/audit',
+      headers: { authorization: `Bearer ${KEY_A}` },
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.orgId).toBe(ORG_A);
@@ -166,6 +181,7 @@ describe('GET /api/audit/export.jsonl', () => {
     const res = await app.inject({
       method: 'GET',
       url: `/api/audit/export.jsonl?from=${encodeURIComponent(FROM)}&to=${encodeURIComponent(TO)}`,
+      headers: { authorization: `Bearer ${KEY_A}` },
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('application/x-ndjson');

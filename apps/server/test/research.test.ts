@@ -20,7 +20,6 @@ import {
   createMembership,
   createSession,
   createUser,
-  DEFAULT_ORG_ID,
   evalResults,
   clusters,
   orgs,
@@ -29,6 +28,9 @@ import {
 import { saveFrontier } from '@potion/pareto';
 import { eq } from 'drizzle-orm';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: two distinct NON-DEFAULT orgs — the demo org is never the
+// probed subject (see the fixture header; that assumption hid defect D1).
+import { ORG_A, ORG_A_NAME, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
 
@@ -58,18 +60,19 @@ beforeAll(async () => {
   // point it at the tmp copy so tests never touch the repo prices.json.
   process.env.POTION_PRICES_PATH = tmpPrices;
   app = await buildServer({ seed: false, pricesPath: tmpPrices });
+  await seedIsolationOrgs(db());
 
   // Cluster row for the leaderboard iteration (seed:false → empty taxonomy).
   await db().insert(clusters).values({ id: 'code-gen', name: 'Code generation', description: 'js' });
 
   // Viewer session for the role gates.
   await createUser(db(), { id: 'usr_r_viewer', email: 'viewer@r.dev', name: 'viewer' });
-  await createMembership(db(), { orgId: DEFAULT_ORG_ID, userId: 'usr_r_viewer', role: 'viewer' });
+  await createMembership(db(), { orgId: ORG_A, userId: 'usr_r_viewer', role: 'viewer' });
   await createSession(db(), {
     id: 'ses_r_viewer',
     userId: 'usr_r_viewer',
     tokenHash: sha256('ps_r_viewer'),
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   });
 });
@@ -250,7 +253,7 @@ describe('GET /api/leaderboard with live evidence (§13.4)', () => {
     );
 
     // Org opts into public publishing (names only).
-    await db().update(orgs).set({ publishToLeaderboard: true }).where(eq(orgs.id, DEFAULT_ORG_ID));
+    await db().update(orgs).set({ publishToLeaderboard: true }).where(eq(orgs.id, ORG_A));
 
     const res = await app.inject({ method: 'GET', url: '/api/leaderboard' });
     expect(res.statusCode).toBe(200);
@@ -271,7 +274,7 @@ describe('GET /api/leaderboard with live evidence (§13.4)', () => {
     expect(entry!.strategyHash).toBe(hash);
     expect(entry!.strategyLabel).toBe('single · mock-frontier');
     expect(entry!.verificationRunId).toBe('live-run-lb');
-    expect(body.adoptingOrgs).toContain('Demo Org');
+    expect(body.adoptingOrgs).toContain(ORG_A_NAME);
   });
 });
 
@@ -282,15 +285,15 @@ describe('GET /api/leaderboard with live evidence (§13.4)', () => {
 describe('G1.8 per-org research surfaces', () => {
   it('POST /api/research/cycle: viewer 403; cross-org/unknown suite 404; owned 202 with forced org', async () => {
     const d = db();
-    const { createOrg, insertResearchCycle } = await import('@potion/db');
-    // admin session on org_demo
+    const { insertResearchCycle } = await import('@potion/db');
+    // admin session on the subject org
     await createUser(d, { id: 'usr_rc_admin', email: 'rcadmin@r.dev', name: 'a' });
-    await createMembership(d, { orgId: DEFAULT_ORG_ID, userId: 'usr_rc_admin', role: 'admin' });
+    await createMembership(d, { orgId: ORG_A, userId: 'usr_rc_admin', role: 'admin' });
     await createSession(d, {
       id: 'ses_rc_admin',
       userId: 'usr_rc_admin',
       tokenHash: sha256('ps_rc_admin'),
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       expiresAt: new Date(Date.now() + 3_600_000),
     });
     const ADMIN = { cookie: 'potion_session=ps_rc_admin' };
@@ -305,12 +308,11 @@ describe('G1.8 per-org research surfaces', () => {
     expect(forbidden.statusCode).toBe(403);
 
     // unknown agent cluster → 404 (no oracle); another org's → same 404
-    await createOrg(d, { id: 'org_rc_x', name: 'RCX' });
     await d.insert(clusters).values({
       id: 'agent-ffffff-eeeeee',
       name: 'agent: x',
       description: 'x',
-      orgId: 'org_rc_x',
+      orgId: ORG_B,
     });
     for (const clusterId of ['agent-nosuch-cluster', 'agent-ffffff-eeeeee']) {
       const res = await app.inject({
@@ -327,7 +329,7 @@ describe('G1.8 per-org research surfaces', () => {
       id: 'agent-dddddd-cccccc',
       name: 'agent: owned',
       description: 'o',
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
     });
     const ok = await app.inject({
       method: 'POST',
@@ -340,13 +342,13 @@ describe('G1.8 per-org research surfaces', () => {
 
     // cycles listing hides other orgs' cycles, shows platform + own
     await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 1 });
-    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 2, orgId: DEFAULT_ORG_ID });
-    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 3, orgId: 'org_rc_x' });
+    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 2, orgId: ORG_A });
+    await insertResearchCycle(d, { trigger: 'manual', candidates: [], status: 'completed', seed: 3, orgId: ORG_B });
     const list = await app.inject({ method: 'GET', url: '/api/research/cycles', headers: VIEWER });
     expect(list.statusCode).toBe(200);
     const { cycles } = list.json() as { cycles: Array<{ orgId: string | null }> };
-    expect(cycles.some((c) => c.orgId === 'org_rc_x')).toBe(false);
-    expect(cycles.some((c) => c.orgId === DEFAULT_ORG_ID)).toBe(true);
+    expect(cycles.some((c) => c.orgId === ORG_B)).toBe(false);
+    expect(cycles.some((c) => c.orgId === ORG_A)).toBe(true);
     expect(cycles.some((c) => c.orgId === null)).toBe(true);
   });
 
@@ -376,8 +378,8 @@ describe('G1.8 per-org research surfaces', () => {
       .values({ hash: 'h-lineage', config: { type: 'single', model: 'mock-mid' } })
       .onConflictDoNothing();
     await insertEvalResult(d, mk('lin-platform', 'code-gen'));
-    await insertEvalResult(d, mk('lin-own', 'agent-dddddd-cccccc', DEFAULT_ORG_ID));
-    await insertEvalResult(d, mk('lin-foreign', 'agent-ffffff-eeeeee', 'org_rc_x'));
+    await insertEvalResult(d, mk('lin-own', 'agent-dddddd-cccccc', ORG_A));
+    await insertEvalResult(d, mk('lin-foreign', 'agent-ffffff-eeeeee', ORG_B));
     const res = await app.inject({ method: 'GET', url: '/api/recipes', headers: VIEWER });
     expect(res.statusCode).toBe(200);
     const raw = res.body;

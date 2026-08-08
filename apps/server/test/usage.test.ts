@@ -9,16 +9,17 @@ import type { FastifyInstance } from 'fastify';
 import { sha256, type Usage } from '@potion/core';
 import {
   aggregateUsage,
-  createOrg,
   insertApiKey,
   insertRequestLog,
   listUsageDaily,
   DEFAULT_ORG_ID,
 } from '@potion/db';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID; // 'org_demo'
-const ORG_B = 'org_usage_b';
 const RAW_A = 'pk_usage_org_a';
 const RAW_B = 'pk_usage_org_b';
 const RAW_BAD = 'pk_usage_nope';
@@ -40,7 +41,7 @@ function usage(inTok: number, outTok: number, cost: number): Usage {
 
 beforeAll(async () => {
   app = await buildServer({ seed: false });
-  await createOrg(db(), { id: ORG_B, name: 'Usage Org B' });
+  await seedIsolationOrgs(db());
   await insertApiKey(db(), { id: 'key-usage-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A });
   await insertApiKey(db(), { id: 'key-usage-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B });
 
@@ -171,9 +172,11 @@ describe('usage read routes (org isolation)', () => {
   });
 
   it('GET /api/usage without credentials falls back to the default org (local tool)', async () => {
+    // G2.4 carryover: this asserted ORG_A back when ORG_A *was* the default
+    // org. The claim is about the fallback target, so name it.
     const res = await authedGet('/api/usage?from=2026-08-02&to=2026-08-02');
     expect(res.statusCode).toBe(200);
-    expect(res.json().orgId).toBe(ORG_A);
+    expect(res.json().orgId).toBe(DEFAULT_ORG_ID);
   });
 
   it('GET /api/usage with an invalid key is 401 (never silently widened)', async () => {

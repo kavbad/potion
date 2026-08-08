@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import {
   createDb,
-  DEFAULT_ORG_ID,
   evaluateGuarantee,
   equivalentPointOnPrevious,
   GUARANTEE_MIN_SAMPLES,
@@ -26,7 +25,10 @@ import {
   type DbHandle,
 } from './index.js';
 import { insertFrontier } from './repos/frontiers.js';
-import { createOrg } from './repos/orgs.js';
+// G2.4 carryover: the subject tenant is a real, distinct org — never the demo
+// org, whose seeded/dev-bypass specialness lets a tenancy failure pass for
+// reasons that have nothing to do with tenancy (see the fixture header).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './test-fixtures/orgs.js';
 import { insertPolicy } from './repos/api-keys.js';
 
 const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
@@ -115,6 +117,7 @@ const ALERT_G = { ...ROLLBACK_G, action: 'alert' as const };
 beforeEach(async () => {
   handle = await createDb();
   await migrate(handle.db);
+  await seedIsolationOrgs(handle.db);
 });
 
 afterEach(async () => {
@@ -124,7 +127,7 @@ afterEach(async () => {
 describe('quality_samples judge evidence (G0.1, migration 0016)', () => {
   it('round-trips scorer / judgeModel / judgeCostUsd; stub-era rows carry NULLs', async () => {
     const id = await insertQualitySample(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       requestId: 'chatcmpl-evidence-1',
       strategyHash: H_CHEAP,
       quality: 0.8,
@@ -133,14 +136,14 @@ describe('quality_samples judge evidence (G0.1, migration 0016)', () => {
       judgeCostUsd: 0.000615,
     });
     expect(id).toBeTruthy();
-    const rows = await listQualitySamples(db(), DEFAULT_ORG_ID);
+    const rows = await listQualitySamples(db(), ORG_A);
     const row = rows.find((r) => r.requestId === 'chatcmpl-evidence-1')!;
     expect(row.scorer).toBe('llm-judge:judge-class');
     expect(row.judgeModel).toBe('judge-class');
     expect(row.judgeCostUsd).toBeCloseTo(0.000615, 12);
     // additive: rows inserted without evidence fields (stub era) are NULL
-    await insertQualitySample(db(), { orgId: DEFAULT_ORG_ID, strategyHash: H_CHEAP, quality: 0.5 });
-    const legacy = (await listQualitySamples(db(), DEFAULT_ORG_ID)).find((r) => r.requestId === null)!;
+    await insertQualitySample(db(), { orgId: ORG_A, strategyHash: H_CHEAP, quality: 0.5 });
+    const legacy = (await listQualitySamples(db(), ORG_A)).find((r) => r.requestId === null)!;
     expect(legacy.scorer).toBeNull();
     expect(legacy.judgeModel).toBeNull();
     expect(legacy.judgeCostUsd).toBeNull();
@@ -148,15 +151,14 @@ describe('quality_samples judge evidence (G0.1, migration 0016)', () => {
 });
 
 describe('windowEvidence (strictly keyed, G0.3)', () => {
-  const SCOPE = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: CID, strategyHash: H_CHEAP, windowMin: 60 };
+  const SCOPE = { orgId: ORG_A, policyId: PID, clusterId: CID, strategyHash: H_CHEAP, windowMin: 60 };
 
   it('returns keyed in-window qualities; other orgs/strategies/old samples excluded', async () => {
-    await createOrg(db(), { id: 'org_other', name: 'Other' });
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.2, 0.4, 0.6]);
+    await seedSamples(ORG_A, H_CHEAP, [0.2, 0.4, 0.6]);
     // outside the 60-min window
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.99], new Date(NOW.getTime() - 61 * 60_000));
-    await seedSamples('org_other', H_CHEAP, [0.99]);
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.99]);
+    await seedSamples(ORG_A, H_CHEAP, [0.99], new Date(NOW.getTime() - 61 * 60_000));
+    await seedSamples(ORG_B, H_CHEAP, [0.99]);
+    await seedSamples(ORG_A, H_MID, [0.99]);
     const r = await windowEvidence(db(), SCOPE, NOW);
     expect(r.samples).toBe(3);
     expect(r.mean).toBeCloseTo(0.4, 10);
@@ -164,10 +166,10 @@ describe('windowEvidence (strictly keyed, G0.3)', () => {
   });
 
   it('STRICT keys: other-policy, other-cluster, and NULL-key (pre-G0.3) rows are not evidence', async () => {
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1], NOW, { policyId: 'pol-other' });
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1], NOW, { clusterId: 'extraction' });
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1], NOW, { policyId: null, clusterId: null });
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.8]);
+    await seedSamples(ORG_A, H_CHEAP, [0.1], NOW, { policyId: 'pol-other' });
+    await seedSamples(ORG_A, H_CHEAP, [0.1], NOW, { clusterId: 'extraction' });
+    await seedSamples(ORG_A, H_CHEAP, [0.1], NOW, { policyId: null, clusterId: null });
+    await seedSamples(ORG_A, H_CHEAP, [0.8]);
     const r = await windowEvidence(db(), SCOPE, NOW);
     expect(r.samples).toBe(1);
     expect(r.qualities).toEqual([0.8]);
@@ -181,10 +183,10 @@ describe('windowEvidence (strictly keyed, G0.3)', () => {
 
 describe('rollingQualityForPolicy (status rollup)', () => {
   it('pools the policy across strategies/clusters; other policies excluded', async () => {
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.2, 0.4]);
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.9], NOW, { clusterId: 'extraction' });
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.0], NOW, { policyId: 'pol-other' });
-    const r = await rollingQualityForPolicy(db(), { orgId: DEFAULT_ORG_ID, policyId: PID, windowMin: 60 }, NOW);
+    await seedSamples(ORG_A, H_CHEAP, [0.2, 0.4]);
+    await seedSamples(ORG_A, H_MID, [0.9], NOW, { clusterId: 'extraction' });
+    await seedSamples(ORG_A, H_CHEAP, [0.0], NOW, { policyId: 'pol-other' });
+    const r = await rollingQualityForPolicy(db(), { orgId: ORG_A, policyId: PID, windowMin: 60 }, NOW);
     expect(r.samples).toBe(3);
     expect(r.mean).toBeCloseTo(0.5, 10);
   });
@@ -228,10 +230,10 @@ describe('evaluateGuarantee', () => {
     await seedFrontiers();
     // breaching strategy = mid (0.7 on both versions); previous version's
     // equivalent point for min_cost floor 0 = cheap.
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.2, 0.3, 0.2, 0.2]);
+    await seedSamples(ORG_A, H_MID, [0.1, 0.2, 0.3, 0.2, 0.2]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result.breach).toBe(true);
@@ -243,7 +245,7 @@ describe('evaluateGuarantee', () => {
       toFrontierVersion: 1,
       source: 'previous-version',
     });
-    const incidents = await listIncidents(db(), DEFAULT_ORG_ID);
+    const incidents = await listIncidents(db(), ORG_A);
     expect(incidents).toHaveLength(1);
     expect(incidents[0]!.kind).toBe('rollback');
     expect(incidents[0]!.detail).toMatchObject({
@@ -270,10 +272,10 @@ describe('evaluateGuarantee', () => {
       pricesVersion: '2026-08-04',
       createdAt: '2026-08-04T00:00:00.000Z',
     });
-    await seedSamples(DEFAULT_ORG_ID, H_CHEAP, [0.1, 0.1, 0.1, 0.1, 0.1]);
+    await seedSamples(ORG_A, H_CHEAP, [0.1, 0.1, 0.1, 0.1, 0.1]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_CHEAP, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_CHEAP, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result.rollback).toEqual({
@@ -286,76 +288,76 @@ describe('evaluateGuarantee', () => {
 
   it('<5 samples → insufficient evidence, no incident', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.0, 0.0, 0.0, 0.0]);
+    await seedSamples(ORG_A, H_MID, [0.0, 0.0, 0.0, 0.0]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: false, suppressed: 'insufficient-evidence', samples: 4 });
     expect(GUARANTEE_MIN_SAMPLES).toBe(5);
-    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(0);
+    expect(await listIncidents(db(), ORG_A)).toHaveLength(0);
   });
 
   it('recovery (rolling mean back above the floor) → no new incident', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.9, 0.8, 0.95, 0.85, 0.9]);
+    await seedSamples(ORG_A, H_MID, [0.9, 0.8, 0.95, 0.85, 0.9]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: false, suppressed: 'no-breach' });
-    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(0);
+    expect(await listIncidents(db(), ORG_A)).toHaveLength(0);
   });
 
   it('cooldown suppresses a duplicate incident within the window', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.2, 0.2, 0.2, 0.2]);
+    await seedSamples(ORG_A, H_MID, [0.1, 0.2, 0.2, 0.2, 0.2]);
     const first = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(first.incidentId).not.toBeNull();
     // same window, still breaching → suppressed by cooldown
     const second = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       new Date(NOW.getTime() + 5 * 60_000),
     );
     expect(second).toMatchObject({ breach: true, action: null, suppressed: 'cooldown' });
-    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(1);
+    expect(await listIncidents(db(), ORG_A)).toHaveLength(1);
     // …but AFTER the window the cooldown has expired (samples aged out too,
     // so re-seed a fresh breaching window).
     await seedSamples(
-      DEFAULT_ORG_ID,
+      ORG_A,
       H_MID,
       [0.1, 0.1, 0.1, 0.1, 0.1],
       new Date(NOW.getTime() + 61 * 60_000),
     );
     const later = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       new Date(NOW.getTime() + 62 * 60_000),
     );
     expect(later.suppressed).toBeNull();
-    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(2);
+    expect(await listIncidents(db(), ORG_A)).toHaveLength(2);
   });
 
   it('alert mode: incident only, no rollback target', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.2, 0.2, 0.2]);
+    await seedSamples(ORG_A, H_MID, [0.1, 0.1, 0.2, 0.2, 0.2]);
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ALERT_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ALERT_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: true, action: 'alert', rollback: null });
-    const incidents = await listIncidents(db(), DEFAULT_ORG_ID);
+    const incidents = await listIncidents(db(), ORG_A);
     expect(incidents[0]!.kind).toBe('quality_breach');
     expect(incidents[0]!.detail.toStrategy).toBeUndefined();
-    expect(await latestActiveRollback(db(), DEFAULT_ORG_ID, 'code-gen')).toBeNull();
+    expect(await latestActiveRollback(db(), ORG_A, 'code-gen')).toBeNull();
   });
 
   it('no rollback target (v1, already top) → quality_breach with reason, no move', async () => {
@@ -369,14 +371,14 @@ describe('evaluateGuarantee', () => {
       pricesVersion: 'p',
       createdAt: 'x',
     });
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.1, 0.1, 0.1]); // mid tops v1
+    await seedSamples(ORG_A, H_MID, [0.1, 0.1, 0.1, 0.1, 0.1]); // mid tops v1
     const result = await evaluateGuarantee(
       db(),
-      { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
+      { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(ROLLBACK_G) },
       NOW,
     );
     expect(result).toMatchObject({ breach: true, action: 'rollback', rollback: null });
-    const incidents = await listIncidents(db(), DEFAULT_ORG_ID);
+    const incidents = await listIncidents(db(), ORG_A);
     expect(incidents[0]!.kind).toBe('quality_breach');
     expect(incidents[0]!.detail).toMatchObject({ intendedAction: 'rollback', reason: 'no-rollback-target' });
   });
@@ -385,7 +387,7 @@ describe('evaluateGuarantee', () => {
     await expect(
       evaluateGuarantee(
         db(),
-        { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(undefined) },
+        { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID, policy: policyWith(undefined) },
         NOW,
       ),
     ).rejects.toThrow('guarantee');
@@ -393,18 +395,18 @@ describe('evaluateGuarantee', () => {
 });
 
 describe('evaluateGuarantee CI decision (G0.3)', () => {
-  const INPUT = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID };
+  const INPUT = { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', strategyHash: H_MID };
 
   it('confident breach: decisively-low evidence → ciUpper < floor, incident carries ci95 + seed', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.2, 0.3, 0.2, 0.2]);
+    await seedSamples(ORG_A, H_MID, [0.1, 0.2, 0.3, 0.2, 0.2]);
     const result = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ROLLBACK_G) }, NOW);
     expect(result.breach).toBe(true);
     expect(result.ci95).not.toBeNull();
     expect(result.ci95![1]).toBeLessThan(ROLLBACK_G.minQuality); // the decision bound
     expect(result.seed).not.toBeNull();
     expect(result.minSamplesRequired).toBe(5);
-    const incident = (await listIncidents(db(), DEFAULT_ORG_ID))[0]!;
+    const incident = (await listIncidents(db(), ORG_A))[0]!;
     expect(incident.detail).toMatchObject({
       policyId: PID,
       ci95: result.ci95,
@@ -418,19 +420,19 @@ describe('evaluateGuarantee CI decision (G0.3)', () => {
     await seedFrontiers();
     // mean 0.58 < 0.6 floor, but high variance across 5 samples: resamples
     // heavy in 0.95s push the CI upper bound above the floor.
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.4, 0.95, 0.95, 0.5]);
+    await seedSamples(ORG_A, H_MID, [0.1, 0.4, 0.95, 0.95, 0.5]);
     const result = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ROLLBACK_G) }, NOW);
     expect(result.rollingQuality).toBeCloseTo(0.58, 10);
     expect(result.breach).toBe(false);
     expect(result.suppressed).toBe('not-significant');
     expect(result.ci95).not.toBeNull();
     expect(result.ci95![1]).toBeGreaterThanOrEqual(ROLLBACK_G.minQuality);
-    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(0);
+    expect(await listIncidents(db(), ORG_A)).toHaveLength(0);
   });
 
   it('is exactly reproducible: same evidence → same ci95 and seed', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.4, 0.95, 0.95, 0.5]);
+    await seedSamples(ORG_A, H_MID, [0.1, 0.4, 0.95, 0.95, 0.5]);
     const a = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ALERT_G) }, NOW);
     const b = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ALERT_G) }, NOW);
     expect(a.ci95).toEqual(b.ci95);
@@ -439,7 +441,7 @@ describe('evaluateGuarantee CI decision (G0.3)', () => {
 
   it('configured minSamples raises the evidence floor', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]); // 6 samples
+    await seedSamples(ORG_A, H_MID, [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]); // 6 samples
     const result = await evaluateGuarantee(
       db(),
       { ...INPUT, policy: policyWith({ ...ROLLBACK_G, minSamples: 8 }) },
@@ -449,13 +451,13 @@ describe('evaluateGuarantee CI decision (G0.3)', () => {
     expect(result.suppressed).toBe('insufficient-evidence');
     expect(result.minSamplesRequired).toBe(8);
     expect(result.samples).toBe(6);
-    expect(await listIncidents(db(), DEFAULT_ORG_ID)).toHaveLength(0);
+    expect(await listIncidents(db(), ORG_A)).toHaveLength(0);
   });
 
   it('evidence from another policy or cluster never feeds this window', async () => {
     await seedFrontiers();
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1, 0.1], NOW, { policyId: 'pol-other' });
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.1], NOW, { clusterId: 'extraction' });
+    await seedSamples(ORG_A, H_MID, [0.1, 0.1, 0.1], NOW, { policyId: 'pol-other' });
+    await seedSamples(ORG_A, H_MID, [0.1, 0.1], NOW, { clusterId: 'extraction' });
     const result = await evaluateGuarantee(db(), { ...INPUT, policy: policyWith(ROLLBACK_G) }, NOW);
     expect(result.samples).toBe(0); // 5 rows exist, none are THIS window's evidence
     expect(result.suppressed).toBe('insufficient-evidence');
@@ -464,38 +466,37 @@ describe('evaluateGuarantee CI decision (G0.3)', () => {
 
 describe('incidents: resolve + active rollback + org isolation', () => {
   it('resolveIncident sets resolved_at, lifts the override, and is org-scoped', async () => {
-    await createOrg(db(), { id: 'org_b', name: 'B' });
     const id = await insertIncident(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       kind: 'rollback',
       detail: { clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP },
     });
-    expect((await latestActiveRollback(db(), DEFAULT_ORG_ID, 'code-gen'))?.id).toBe(id);
+    expect((await latestActiveRollback(db(), ORG_A, 'code-gen'))?.id).toBe(id);
     // cross-org resolve is impossible by construction
-    expect(await resolveIncident(db(), 'org_b', id)).toBeNull();
-    expect((await latestActiveRollback(db(), DEFAULT_ORG_ID, 'code-gen'))?.id).toBe(id);
-    const resolved = await resolveIncident(db(), DEFAULT_ORG_ID, id);
+    expect(await resolveIncident(db(), ORG_B, id)).toBeNull();
+    expect((await latestActiveRollback(db(), ORG_A, 'code-gen'))?.id).toBe(id);
+    const resolved = await resolveIncident(db(), ORG_A, id);
     expect(resolved?.resolvedAt).not.toBeNull();
-    expect(await latestActiveRollback(db(), DEFAULT_ORG_ID, 'code-gen')).toBeNull();
+    expect(await latestActiveRollback(db(), ORG_A, 'code-gen')).toBeNull();
     // resolving twice → null (idempotent 404 at the API layer)
-    expect(await resolveIncident(db(), DEFAULT_ORG_ID, id)).toBeNull();
+    expect(await resolveIncident(db(), ORG_A, id)).toBeNull();
   });
 
   it('listIncidents returns all unresolved + last 20 resolved, unresolved first', async () => {
     for (let i = 0; i < 25; i++) {
       const id = await insertIncident(db(), {
-        orgId: DEFAULT_ORG_ID,
+        orgId: ORG_A,
         kind: 'quality_breach',
         detail: { clusterId: 'code-gen', fromStrategy: H_MID, n: i },
       });
-      await resolveIncident(db(), DEFAULT_ORG_ID, id);
+      await resolveIncident(db(), ORG_A, id);
     }
     await insertIncident(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       kind: 'rollback',
       detail: { clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP },
     });
-    const list = await listIncidents(db(), DEFAULT_ORG_ID);
+    const list = await listIncidents(db(), ORG_A);
     expect(list).toHaveLength(21); // 1 unresolved + 20 resolved
     expect(list[0]!.kind).toBe('rollback');
     expect(list[0]!.resolvedAt).toBeNull();
@@ -503,20 +504,20 @@ describe('incidents: resolve + active rollback + org isolation', () => {
   });
 
   it('G2.2 re-fire: cooldown yields when the new evidence is confidently WORSE (CI separation)', async () => {
-    await insertPolicy(db(), { id: 'pol-rf', orgId: DEFAULT_ORG_ID, name: 'rf', config: policyWith(ALERT_G) });
+    await insertPolicy(db(), { id: 'pol-rf', orgId: ORG_A, name: 'rf', config: policyWith(ALERT_G) });
     const input = {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       policyId: 'pol-rf',
       clusterId: CID,
       strategyHash: H_MID,
       policy: policyWith(ALERT_G),
     };
     // Confidently-low evidence (mean ~0.1, tight CI).
-    await seedSamples(DEFAULT_ORG_ID, H_MID, [0.1, 0.11, 0.09, 0.1, 0.1, 0.11], NOW, { policyId: 'pol-rf' });
+    await seedSamples(ORG_A, H_MID, [0.1, 0.11, 0.09, 0.1, 0.1, 0.11], NOW, { policyId: 'pol-rf' });
     // Prior incident inside the window, SEPARATED above (its lower 0.5 >
     // the new upper ~0.11) → re-fire despite cooldown, lineage recorded.
     const prior = await insertIncident(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       kind: 'quality_breach',
       detail: { policyId: 'pol-rf', clusterId: CID, fromStrategy: H_MID, ci95: [0.5, 0.6] },
     });
@@ -525,7 +526,7 @@ describe('incidents: resolve + active rollback + org isolation', () => {
     expect(refired.suppressed).toBeNull();
     expect(refired.incidentId).not.toBeNull();
     expect(refired.incidentAt).toBeInstanceOf(Date);
-    const list = await listIncidents(db(), DEFAULT_ORG_ID);
+    const list = await listIncidents(db(), ORG_A);
     const minted = list.find((i) => i.id === refired.incidentId)!;
     expect((minted.detail as Record<string, unknown>).refire).toMatchObject({
       priorIncidentId: prior,
@@ -541,11 +542,11 @@ describe('incidents: resolve + active rollback + org isolation', () => {
 
   it('recentContractualIncident keys on (org, policy, cluster, fromStrategy) + window; contractual kinds ONLY', async () => {
     await insertIncident(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       kind: 'rollback',
       detail: { policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, toStrategy: H_CHEAP, ci95: [0.2, 0.4] },
     });
-    const scope = { orgId: DEFAULT_ORG_ID, policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, windowMin: 60 };
+    const scope = { orgId: ORG_A, policyId: PID, clusterId: 'code-gen', fromStrategy: H_MID, windowMin: 60 };
     const hit = await recentContractualIncident(db(), scope, NOW);
     expect(hit).not.toBeNull();
     // G2.2: the FULL row comes back — prior severity (detail.ci95) readable.
@@ -558,7 +559,7 @@ describe('incidents: resolve + active rollback + org isolation', () => {
     // later contractual incident (pre-G2.2 the check had no kind filter).
     const scope2 = { ...scope, policyId: 'pol-advisory-only' };
     await insertIncident(db(), {
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       kind: 'advisory',
       detail: { policyId: 'pol-advisory-only', clusterId: 'code-gen', fromStrategy: H_MID },
     });
@@ -570,13 +571,13 @@ describe('sweep support', () => {
   it('listPoliciesWithGuarantee finds only guarantee-carrying policies (org filter)', async () => {
     await insertPolicy(db(), {
       id: 'pol-g',
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       name: 'g',
       config: policyWith(ROLLBACK_G),
     });
     await insertPolicy(db(), {
       id: 'pol-plain',
-      orgId: DEFAULT_ORG_ID,
+      orgId: ORG_A,
       name: 'p',
       config: policyWith(undefined),
     });

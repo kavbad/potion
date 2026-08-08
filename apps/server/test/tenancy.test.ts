@@ -6,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, type Policy } from '@potion/core';
 import {
-  createOrg,
   createUser,
   createMembership,
   DEFAULT_ORG_ID,
@@ -21,9 +20,11 @@ import {
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID; // 'org_demo' (created by migration 0003)
-const ORG_B = 'org_b';
 
 const RAW_A = 'pk_tenancy_org_a';
 const RAW_B = 'pk_tenancy_org_b';
@@ -49,7 +50,7 @@ beforeAll(async () => {
   app = await buildServer({ seed: false });
 
   // ---- tenant B (org_demo already exists from the migration) ----
-  await createOrg(db(), { id: ORG_B, name: 'Org B' });
+  await seedIsolationOrgs(db());
   await createUser(db(), { id: 'usr_b', email: 'b@tenant.dev', name: 'B User' });
   await createMembership(db(), { orgId: ORG_B, userId: 'usr_b', role: 'member' });
 
@@ -213,11 +214,16 @@ describe('org isolation via inject', () => {
   });
 
   it('unauthenticated dashboard traffic is scoped to the default org', async () => {
-    // no bearer → default org (documented local-tool surface until Wave-2 #14)
+    // No bearer → the DEFAULT org (documented local-tool surface until Wave-2
+    // #14). G2.4 carryover: this used to assert 'a openai' is visible, which
+    // only held because ORG_A *was* the default org — the coincidence that hid
+    // tenancy defect D1. With distinct subjects the real claim is visible: the
+    // fallback lands on the demo org and sees NEITHER tenant's rows.
     const res = await app.inject({ method: 'GET', url: '/api/keys' });
     expect(res.statusCode).toBe(200);
     const names = res.json().keys.map((k: { name: string }) => k.name);
-    expect(names).toContain('a openai'); // org A == default org
+    expect(names).not.toContain('a openai'); // org A is a real tenant, not the fallback
     expect(names).not.toContain('b copy'); // org B's copy stays hidden
+    expect(await listProviderKeys(db(), DEFAULT_ORG_ID)).toEqual([]);
   });
 });

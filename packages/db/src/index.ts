@@ -28,3 +28,7 @@ export * from './repos/auth-events.js';
 export * from './repos/audit-export.js';
 export * from './repos/research.js';
 export * from './repos/traces.js';
+// G2.4 carryover: the ONE definition of the isolation-org constants, shared by
+// cross-tenant tests in both packages/db and apps/server (see the module
+// header for why the demo org must never be an isolation subject).
+export * from './test-fixtures/orgs.js';

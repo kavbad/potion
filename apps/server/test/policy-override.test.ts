@@ -5,15 +5,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
-import {
-  DEFAULT_ORG_ID,
-  createOrg,
-  insertApiKey,
-  insertPolicy,
-  listRequestLogs,
-} from '@potion/db';
+import { insertApiKey, insertPolicy, listRequestLogs } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: two distinct NON-DEFAULT orgs — the demo org is never the
+// probed subject (see the fixture header; that assumption hid defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
 const CFG_MID = { type: 'single', model: 'mock-mid' } as const;
 const CFG_STRONG = { type: 'single', model: 'mock-frontier' } as const;
@@ -45,7 +42,7 @@ const POLICY_BOUND: Policy = { type: 'max_quality', costCeilingPer1K: 1.5 };
 // Override policy: min_cost floor 0.8 → strong point.
 const POLICY_OVERRIDE: Policy = { type: 'min_cost', qualityFloor: 0.8 };
 const OVERRIDE_NAME = 'quality-first';
-const OTHER_ORG = 'org_override_other';
+const OTHER_ORG = ORG_B;
 
 const PROMPT = 'Write a python function that reverses a string';
 
@@ -63,16 +60,17 @@ function chat(rawKey: string, headers: Record<string, string> = {}) {
 beforeAll(async () => {
   app = await buildServer({ seed: false });
   const db = app.potion.db.db;
+  await seedIsolationOrgs(db);
 
   await insertPolicy(db, {
     id: 'pol-bound',
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     name: 'bound-default',
     config: POLICY_BOUND,
   });
   await insertPolicy(db, {
     id: 'pol-override',
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     name: OVERRIDE_NAME,
     config: POLICY_OVERRIDE,
   });
@@ -80,12 +78,11 @@ beforeAll(async () => {
     id: 'key-override-base',
     keyHash: sha256(KEY),
     name: 'key-override-base',
-    orgId: DEFAULT_ORG_ID,
+    orgId: ORG_A,
     policyId: 'pol-bound',
   });
 
   // A second org whose policy id/name must NOT resolve from the first org.
-  await createOrg(db, { id: OTHER_ORG, name: 'Other Org' });
   await insertPolicy(db, {
     id: 'pol-other-org',
     orgId: OTHER_ORG,
@@ -115,7 +112,7 @@ describe('X-Potion-Policy override (M4 #30)', () => {
     expect(trace).toContain(`strategy=${H_MID}`);
     expect(trace).toContain('policy=max_quality');
     expect(trace).not.toContain('policy_override=');
-    const logs = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID, 1);
+    const logs = await listRequestLogs(app.potion.db.db, ORG_A, 1);
     expect(logs[0]?.policyType).toBe('max_quality');
     expect(logs[0]?.policyId).toBe('pol-bound');
   });
@@ -127,7 +124,7 @@ describe('X-Potion-Policy override (M4 #30)', () => {
     expect(trace).toContain(`strategy=${H_STRONG}`);
     expect(trace).toContain('policy=min_cost');
     expect(trace).toContain(`policy_override=${OVERRIDE_NAME}`);
-    const logs = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID, 1);
+    const logs = await listRequestLogs(app.potion.db.db, ORG_A, 1);
     expect(logs[0]?.policyType).toBe('min_cost');
     expect(logs[0]?.policyId).toBe('pol-override');
   });
@@ -138,7 +135,7 @@ describe('X-Potion-Policy override (M4 #30)', () => {
     const trace = res.headers['x-frontier-trace'] as string;
     expect(trace).toContain(`strategy=${H_STRONG}`);
     expect(trace).toContain(`policy_override=${OVERRIDE_NAME}`);
-    const logs = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID, 1);
+    const logs = await listRequestLogs(app.potion.db.db, ORG_A, 1);
     expect(logs[0]?.policyId).toBe('pol-override');
   });
 
@@ -149,7 +146,7 @@ describe('X-Potion-Policy override (M4 #30)', () => {
     expect(body.error.type).toBe('invalid_request_error');
     expect(body.error.code).toBe('policy_not_found');
     expect(body.error.param).toBe('X-Potion-Policy');
-    const logs = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID, 1);
+    const logs = await listRequestLogs(app.potion.db.db, ORG_A, 1);
     expect(logs[0]?.status).toBe('policy_not_found');
   });
 
@@ -185,7 +182,7 @@ describe('X-Potion-Policy override (M4 #30)', () => {
     const trace = res.headers['x-frontier-trace'] as string;
     expect(trace).toContain(`strategy=${H_STRONG}`);
     expect(trace).toContain(`policy_override=${OVERRIDE_NAME}`);
-    const logs = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID, 1);
+    const logs = await listRequestLogs(app.potion.db.db, ORG_A, 1);
     expect(logs[0]?.policyId).toBe('pol-override');
   });
 

@@ -11,8 +11,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type Usage } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
-  createOrg,
   findShareTokenByHash,
   insertApiKey,
   insertRequestLog,
@@ -23,9 +21,15 @@ import {
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { shareUrlPath } from '../src/routes/share.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_A_NAME, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID;
-const ORG_B = 'org_share_b';
+/** ORG_A admin credential. Mints used to be unauthenticated and rode the dev
+ * bypass onto the demo org — which silently happened to be the seeded subject
+ * org. The subject tenant is named explicitly now. */
+const RAW_A = 'pk_share_org_a';
 const RAW_B = 'pk_share_org_b';
 
 const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
@@ -67,8 +71,9 @@ const db = () => app.potion.db.db;
 beforeAll(async () => {
   app = await buildServer({ seed: false });
   await saveFrontier(db(), 'code-gen', POINTS, 'manual', 'test-prices');
-  await createOrg(db(), { id: ORG_B, name: 'Share Org B' });
+  await seedIsolationOrgs(db());
   // G2.3: probes the admin revoke route cross-org — explicit admin scope.
+  await insertApiKey(db(), { id: 'key-share-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A, scopes: 'serve+admin' });
   await insertApiKey(db(), { id: 'key-share-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B, scopes: 'serve+admin' });
   await upsertStrategyConfig(db(), H_CHEAP, CFG_CHEAP);
 
@@ -88,14 +93,14 @@ afterAll(async () => {
   await app.close();
 });
 
-async function mintShare(body: Record<string, unknown>, bearer?: string): Promise<{
+async function mintShare(body: Record<string, unknown>, bearer: string = RAW_A): Promise<{
   status: number;
   json: Record<string, unknown>;
 }> {
   const res = await app.inject({
     method: 'POST',
     url: '/api/share',
-    headers: bearer ? { authorization: `Bearer ${bearer}` } : {},
+    headers: { authorization: `Bearer ${bearer}` },
     payload: body,
   });
   return { status: res.statusCode, json: res.json() as Record<string, unknown> };
@@ -146,7 +151,11 @@ describe('POST /api/share (mint)', () => {
 describe('GET /api/share (list, masked)', () => {
   it('lists the org’s tokens with kind/payload/revocation state — never the raw token', async () => {
     const { json: minted } = await mintShare({ kind: 'frontier', clusterId: 'code-gen' });
-    const res = await app.inject({ method: 'GET', url: '/api/share' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/share',
+      headers: { authorization: `Bearer ${RAW_A}` },
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { tokens: Array<Record<string, unknown>> };
     const entry = body.tokens.find((t) => t.id === minted.id)!;
@@ -227,7 +236,7 @@ describe('public endpoints (NO session)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(body.redacted).toBe(false);
-    expect(body.organization).toEqual({ id: ORG_A, name: 'Demo Org' });
+    expect(body.organization).toEqual({ id: ORG_A, name: ORG_A_NAME });
     expect((body.report as { orgId: string }).orgId).toBe(ORG_A);
   });
 
@@ -242,12 +251,20 @@ describe('public endpoints (NO session)', () => {
     expect(wrong.statusCode).toBe(404);
     expect(wrong.json()).toEqual(unknown.json()); // no existence oracle via body either
     // revoke → 404
-    const revoke = await app.inject({ method: 'POST', url: `/api/share/${minted.id as string}/revoke` });
+    const revoke = await app.inject({
+      method: 'POST',
+      url: `/api/share/${minted.id as string}/revoke`,
+      headers: { authorization: `Bearer ${RAW_A}` },
+    });
     expect(revoke.statusCode).toBe(200);
     const after = await app.inject({ method: 'GET', url: `/api/public/share/${token}/frontier` });
     expect(after.statusCode).toBe(404);
     // double revoke → 404
-    const again = await app.inject({ method: 'POST', url: `/api/share/${minted.id as string}/revoke` });
+    const again = await app.inject({
+      method: 'POST',
+      url: `/api/share/${minted.id as string}/revoke`,
+      headers: { authorization: `Bearer ${RAW_A}` },
+    });
     expect(again.statusCode).toBe(404);
   });
 });

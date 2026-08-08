@@ -13,9 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, type Policy } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
   createMembership,
-  createOrg,
   createSession,
   createUser,
   insertApiKey,
@@ -28,9 +26,11 @@ import {
   utcDay,
 } from '@potion/db';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID; // 'org_demo'
-const ORG_B = 'org_iso_b';
 
 const RAW_A = 'pk_iso_org_a';
 const RAW_A_ADMIN = 'pk_iso_org_a_admin'; // scopes 'serve+admin' → reaches org-scoped lookups
@@ -68,7 +68,7 @@ beforeAll(async () => {
   process.env.POTION_DEV_AUTH = '0'; // bypass OFF — bad credentials MUST 401
   app = await buildServer({ seed: false });
 
-  await createOrg(db(), { id: ORG_B, name: 'Isolation Org B' });
+  await seedIsolationOrgs(db());
   await createUser(db(), { id: 'usr_iso_a', email: 'a@iso.dev', name: 'A' });
   await createUser(db(), { id: 'usr_iso_b', email: 'b@iso.dev', name: 'B' });
   await createMembership(db(), { orgId: ORG_A, userId: 'usr_iso_a', role: 'member' });

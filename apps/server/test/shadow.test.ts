@@ -10,8 +10,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
-  createOrg,
   insertApiKey,
   insertPolicy,
   listShadowResults,
@@ -23,6 +21,10 @@ import { chaosProvider, createMockProvider, type Provider } from '@potion/provid
 import { loadPrices } from '@potion/providers';
 import { buildServer } from '../src/server.js';
 import { DEFAULT_PRICES_PATH } from '../src/context.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 import {
   MAX_SHADOW_CANDIDATES,
   candidateModelOf,
@@ -32,8 +34,6 @@ import {
   shouldSample,
 } from '../src/shadow.js';
 
-const ORG_A = DEFAULT_ORG_ID;
-const ORG_B = 'org_shadow_b';
 
 const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
 const CFG_MID = { type: 'single', model: 'mock-mid' } as const;
@@ -112,7 +112,7 @@ async function waitFor<T>(fn: () => Promise<T>, pred: (v: T) => boolean, timeout
 beforeAll(async () => {
   app = await buildServer({ seed: false });
   await saveFrontier(db(), 'code-gen', POINTS, 'manual', '2026-08-04');
-  await createOrg(db(), { id: ORG_B, name: 'Shadow Org B' });
+  await seedIsolationOrgs(db());
 
   // min_cost floor 0 → the cheapest point (mock-cheap) serves as primary.
   await policy('pol-shadow-frontier', ORG_A, KEY_FRONTIER, {
@@ -384,6 +384,10 @@ describe('primary latency is not blocked by a slow shadow candidate', () => {
       providers: { anthropic: fast, openai: fast, google: fast, openrouter: fast, mock: slow },
     });
     const db2 = slowApp.potion.db.db;
+    // A second server = a second database: the isolation orgs do not exist
+    // for free here (unlike the migration-seeded demo org — the whole point
+    // of the fixture rule).
+    await seedIsolationOrgs(db2);
     await saveFrontier(
       db2,
       'code-gen',

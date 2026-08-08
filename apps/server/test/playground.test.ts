@@ -10,7 +10,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
-import { DEFAULT_ORG_ID, createOrg, insertApiKey, insertPolicy } from '@potion/db';
+import { DEFAULT_ORG_ID, insertApiKey, insertPolicy } from '@potion/db';
+// G2.4 carryover: multi-org arms name their tenant from the shared fixture —
+// the demo org is never the probed subject (see the fixture header).
+import { ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 
@@ -213,8 +216,8 @@ describe('POST /api/playground/chat — point selection', () => {
       else process.env.POTION_DEV_AUTH = prev;
     }
     // A second org authenticates and chats within its own org context.
-    await createOrg(db(), { id: 'org_pg_b', name: 'Playground Org B' });
-    await insertApiKey(db(), { id: 'key-pg-b', keyHash: sha256('pk_pg_b'), name: 'b', orgId: 'org_pg_b' });
+    await seedIsolationOrgs(db());
+    await insertApiKey(db(), { id: 'key-pg-b', keyHash: sha256('pk_pg_b'), name: 'b', orgId: ORG_B });
     const ok = await app.inject({
       method: 'POST',
       url: '/api/playground/chat',

@@ -9,8 +9,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type Usage } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
-  createOrg,
   insertApiKey,
   insertRequestLog,
   insertShadowResult,
@@ -18,6 +16,10 @@ import {
   type ShadowResultRow,
 } from '@potion/db';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 import {
   buildSavingsReport,
   confidenceFor,
@@ -25,8 +27,11 @@ import {
   savingsCsv,
 } from '../src/routes/reports.js';
 
-const ORG_A = DEFAULT_ORG_ID;
-const ORG_B = 'org_reports_b';
+/** ORG_A credential. These route tests used to call unauthenticated and ride
+ * the dev bypass onto the demo org, which silently happened to be the org they
+ * seeded — the accident the isolation fixture exists to expose. The subject
+ * tenant is now named explicitly on every request. */
+const RAW_A = 'pk_reports_org_a';
 const RAW_B = 'pk_reports_org_b';
 
 const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
@@ -144,7 +149,8 @@ const db = () => app.potion.db.db;
 
 beforeAll(async () => {
   app = await buildServer({ seed: false });
-  await createOrg(db(), { id: ORG_B, name: 'Reports Org B' });
+  await seedIsolationOrgs(db());
+  await insertApiKey(db(), { id: 'key-reports-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A });
   await insertApiKey(db(), { id: 'key-reports-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B });
   await upsertStrategyConfig(db(), H_CHEAP, CFG_CHEAP);
 
@@ -171,8 +177,12 @@ afterAll(async () => {
 const QS = 'from=2026-08-02&to=2026-08-03';
 
 describe('GET /api/reports/savings', () => {
-  it('returns the hand-computed SavingsReport for the org (default org with no bearer)', async () => {
-    const res = await app.inject({ method: 'GET', url: `/api/reports/savings?${QS}` });
+  it('returns the hand-computed SavingsReport for the calling org', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/reports/savings?${QS}`,
+      headers: { authorization: `Bearer ${RAW_A}` },
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.orgId).toBe(ORG_A);
@@ -218,7 +228,11 @@ describe('GET /api/reports/savings', () => {
   });
 
   it('empty window → zeroed report', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/reports/savings?from=2020-01-01&to=2020-01-02' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/reports/savings?from=2020-01-01&to=2020-01-02',
+      headers: { authorization: `Bearer ${RAW_A}` },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       orgId: ORG_A,
@@ -237,10 +251,16 @@ describe('GET /api/reports/savings', () => {
 
 describe('GET /api/reports/savings.csv', () => {
   it('exports the same alternatives as CSV with attachment disposition', async () => {
-    const res = await app.inject({ method: 'GET', url: `/api/reports/savings.csv?${QS}` });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/reports/savings.csv?${QS}`,
+      headers: { authorization: `Bearer ${RAW_A}` },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/csv');
-    expect(res.headers['content-disposition']).toContain('attachment; filename="potion-savings_org_demo_2026-08-02_2026-08-03.csv"');
+    expect(res.headers['content-disposition']).toContain(
+      `attachment; filename="potion-savings_${ORG_A}_2026-08-02_2026-08-03.csv"`,
+    );
     const lines = res.body.trim().split('\n');
     expect(lines[0]).toBe(
       'strategy_hash,label,sample_size,confidence,projected_spend_usd,projected_quality,delta_usd,actual_spend_usd',

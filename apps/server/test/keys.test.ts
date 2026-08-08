@@ -16,9 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, type Policy, type ProviderId } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
   createMembership,
-  createOrg,
   createSession,
   createUser,
   getProviderKeyById,
@@ -28,12 +26,19 @@ import {
 } from '@potion/db';
 import type { Provider, ProviderFactoryOptions } from '@potion/providers';
 import { buildServer } from '../src/server.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID;
-const ORG_B = 'org_b';
 
 // serving keys (chat) — 'serve' scope is the default
 const RAW_A = 'pk_keys_test_serve_a';
+/** ORG_A admin credential. Before the G2.4 carryover these tests called admin
+ * routes UNAUTHENTICATED and rode the dev bypass onto the demo org — which
+ * happened to be the org they seeded. With a distinct subject org the accident
+ * is visible, so the tenant is now named explicitly. */
+const RAW_A_ADMIN = 'pk_keys_test_admin_a';
 const RAW_B = 'pk_keys_test_serve_b';
 // org-B ADMIN key (scope 'serve+admin') for mutation/isolation tests
 const RAW_B_ADMIN = 'pk_keys_test_admin_b';
@@ -99,7 +104,7 @@ function authed(method: 'GET' | 'POST', url: string, rawKey: string, payload?: u
 beforeAll(async () => {
   app = await buildServer({ seed: false, providerFactory: spyFactory });
 
-  await createOrg(db(), { id: ORG_B, name: 'Org B' });
+  await seedIsolationOrgs(db());
   await insertPolicy(db(), { id: 'pol-a', orgId: ORG_A, name: 'a', config: POLICY });
   await insertApiKey(db(), {
     id: 'key-a',
@@ -107,6 +112,14 @@ beforeAll(async () => {
     name: 'a',
     orgId: ORG_A,
     policyId: 'pol-a',
+  });
+  await insertApiKey(db(), {
+    id: 'key-a-admin',
+    keyHash: sha256(RAW_A_ADMIN),
+    name: 'a-admin',
+    orgId: ORG_A,
+    policyId: 'pol-a',
+    scopes: 'serve+admin',
   });
   await insertPolicy(db(), { id: 'pol-b', orgId: ORG_B, name: 'b', config: POLICY });
   await insertApiKey(db(), {
@@ -142,12 +155,12 @@ afterAll(async () => {
 
 describe('POST /api/keys — real custody registration', () => {
   it('encrypts + stores: servingEnabled TRUE, raw key never in response or db row', async () => {
-    // dev bypass → org_demo admin (documented test path)
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/keys',
-      headers: { 'content-type': 'application/json' },
-      payload: { provider: 'openai', apiKey: BYOK_RAW_V1, name: 'byok v1' },
+    // G2.4 carryover: register AS ORG_A explicitly. This used to ride the dev
+    // bypass onto the demo org, which silently happened to be ORG_A.
+    const res = await authed('POST', '/api/keys', RAW_A_ADMIN, {
+      provider: 'openai',
+      apiKey: BYOK_RAW_V1,
+      name: 'byok v1',
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -163,11 +176,10 @@ describe('POST /api/keys — real custody registration', () => {
     expect(row.keyVersion).toBe(1);
 
     // idempotent: same raw key → same row, 200, no second row
-    const again = await app.inject({
-      method: 'POST',
-      url: '/api/keys',
-      headers: { 'content-type': 'application/json' },
-      payload: { provider: 'openai', apiKey: BYOK_RAW_V1, name: 'byok v1' },
+    const again = await authed('POST', '/api/keys', RAW_A_ADMIN, {
+      provider: 'openai',
+      apiKey: BYOK_RAW_V1,
+      name: 'byok v1',
     });
     expect(again.statusCode).toBe(200);
     expect(again.json().id).toBe(body.id);
@@ -194,7 +206,7 @@ describe('BYOK serving path (per-org provider resolution)', () => {
     expect(factoryCalls.at(-1)?.openai).toBe(BYOK_RAW_V1);
 
     // every decrypt is audited under the serving actor
-    const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
+    const keys = (await authed('GET', '/api/keys', RAW_A_ADMIN)).json().keys;
     const audit = await listCustodyAudit(db(), ORG_A, keys[0].id);
     expect(audit.some((a) => a.action === 'decrypt' && a.actor === 'system:serve')).toBe(true);
   });
@@ -209,9 +221,9 @@ describe('BYOK serving path (per-org provider resolution)', () => {
   });
 
   it('revoke stops serving IMMEDIATELY (no TTL wait)', async () => {
-    const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
+    const keys = (await authed('GET', '/api/keys', RAW_A_ADMIN)).json().keys;
     const id = keys[0].id as string;
-    const revoke = await app.inject({ method: 'POST', url: `/api/keys/${id}/revoke` });
+    const revoke = await authed('POST', `/api/keys/${id}/revoke`, RAW_A_ADMIN);
     expect(revoke.statusCode).toBe(200);
     expect(revoke.json().status).toBe('revoked');
     expect(revoke.json().servingEnabled).toBe(false);
@@ -228,20 +240,16 @@ describe('BYOK serving path (per-org provider resolution)', () => {
 
   it('rotate swaps material: key_version bump, old key dead, serving uses the new key', async () => {
     // re-register (v1 was revoked; v2 is a new row — same provider, new raw)
-    const reg = await app.inject({
-      method: 'POST',
-      url: '/api/keys',
-      headers: { 'content-type': 'application/json' },
-      payload: { provider: 'openai', apiKey: BYOK_RAW_V2, name: 'byok v2' },
+    const reg = await authed('POST', '/api/keys', RAW_A_ADMIN, {
+      provider: 'openai',
+      apiKey: BYOK_RAW_V2,
+      name: 'byok v2',
     });
     expect(reg.statusCode).toBe(201);
     const id = reg.json().id as string;
 
-    const rot = await app.inject({
-      method: 'POST',
-      url: `/api/keys/${id}/rotate`,
-      headers: { 'content-type': 'application/json' },
-      payload: { apiKey: 'byok-org-secret-v3-cccccccccccc' },
+    const rot = await authed('POST', `/api/keys/${id}/rotate`, RAW_A_ADMIN, {
+      apiKey: 'byok-org-secret-v3-cccccccccccc',
     });
     expect(rot.statusCode).toBe(200);
     expect(rot.json().keyVersion).toBe(2);
@@ -260,9 +268,9 @@ describe('BYOK serving path (per-org provider resolution)', () => {
 
 describe('POST /api/keys/:id/validate', () => {
   it('probes through the provider with the DECRYPTED key + records last_validated_at', async () => {
-    const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
+    const keys = (await authed('GET', '/api/keys', RAW_A_ADMIN)).json().keys;
     const active = keys.find((k: { status: string }) => k.status === 'active');
-    const res = await app.inject({ method: 'POST', url: `/api/keys/${active.id}/validate` });
+    const res = await authed('POST', `/api/keys/${active.id}/validate`, RAW_A_ADMIN);
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.ok).toBe(true);
@@ -278,7 +286,7 @@ describe('POST /api/keys/:id/validate', () => {
     expect((validate!.metadata as Record<string, unknown>).ok).toBe(true);
 
     // the audit endpoint serves the trail to the dashboard
-    const trail = await app.inject({ method: 'GET', url: `/api/keys/${active.id}/audit` });
+    const trail = await authed('GET', `/api/keys/${active.id}/audit`, RAW_A_ADMIN);
     expect(trail.statusCode).toBe(200);
     const actions = trail.json().audit.map((a: { action: string }) => a.action);
     expect(actions).toContain('encrypt');
@@ -286,16 +294,16 @@ describe('POST /api/keys/:id/validate', () => {
   });
 
   it('refuses to validate a revoked key (409)', async () => {
-    const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
+    const keys = (await authed('GET', '/api/keys', RAW_A_ADMIN)).json().keys;
     const revoked = keys.find((k: { status: string }) => k.status === 'revoked');
-    const res = await app.inject({ method: 'POST', url: `/api/keys/${revoked.id}/validate` });
+    const res = await authed('POST', `/api/keys/${revoked.id}/validate`, RAW_A_ADMIN);
     expect(res.statusCode).toBe(409);
   });
 });
 
 describe('RBAC + tenant isolation on key mutations', () => {
   it('member role may NOT rotate/revoke (403 insufficient_role)', async () => {
-    const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
+    const keys = (await authed('GET', '/api/keys', RAW_A_ADMIN)).json().keys;
     const id = keys[0].id as string;
     const cookie = { cookie: 'potion_session=ps_keys_member_token' };
     const rot = await app.inject({
@@ -311,7 +319,7 @@ describe('RBAC + tenant isolation on key mutations', () => {
   });
 
   it("org B's admin key can NEVER touch org A's provider keys (404)", async () => {
-    const keys = (await app.inject({ method: 'GET', url: '/api/keys' })).json().keys;
+    const keys = (await authed('GET', '/api/keys', RAW_A_ADMIN)).json().keys;
     const id = keys[0].id as string;
     const rot = await authed('POST', `/api/keys/${id}/rotate`, RAW_B_ADMIN, {
       apiKey: 'cross-org-attempt-1234',
@@ -324,11 +332,10 @@ describe('RBAC + tenant isolation on key mutations', () => {
 
 describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
   it('mint → serve → revoke → 401 in the auth hot path', async () => {
-    const mint = await app.inject({
-      method: 'POST',
-      url: '/api/api-keys',
-      headers: { 'content-type': 'application/json' },
-      payload: { name: 'lifecycle demo', env: 'test', policyId: 'pol-a' },
+    const mint = await authed('POST', '/api/api-keys', RAW_A_ADMIN, {
+      name: 'lifecycle demo',
+      env: 'test',
+      policyId: 'pol-a',
     });
     expect(mint.statusCode).toBe(201);
     const { id, apiKey: raw } = mint.json();
@@ -339,7 +346,7 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
     const ok = await chat(raw);
     expect(ok.statusCode).toBe(200);
 
-    const revoke = await app.inject({ method: 'POST', url: `/api/api-keys/${id}/revoke` });
+    const revoke = await authed('POST', `/api/api-keys/${id}/revoke`, RAW_A_ADMIN);
     expect(revoke.statusCode).toBe(200);
     expect(revoke.json().revokedAt).toBeTruthy();
 
@@ -351,15 +358,10 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
   });
 
   it('expired keys 401 in the auth hot path', async () => {
-    const mint = await app.inject({
-      method: 'POST',
-      url: '/api/api-keys',
-      headers: { 'content-type': 'application/json' },
-      payload: {
-        name: 'already expired',
-        policyId: 'pol-a',
-        expiresAt: new Date(Date.now() - 60_000).toISOString(),
-      },
+    const mint = await authed('POST', '/api/api-keys', RAW_A_ADMIN, {
+      name: 'already expired',
+      policyId: 'pol-a',
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
     });
     expect(mint.statusCode).toBe(201);
     const res = await chat(mint.json().apiKey);
@@ -368,11 +370,9 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
   });
 
   it("a 'serve'-scoped key may NOT perform admin mutations (403 insufficient_role)", async () => {
-    const mint = await app.inject({
-      method: 'POST',
-      url: '/api/api-keys',
-      headers: { 'content-type': 'application/json' },
-      payload: { name: 'serve only', policyId: 'pol-a' },
+    const mint = await authed('POST', '/api/api-keys', RAW_A_ADMIN, {
+      name: 'serve only',
+      policyId: 'pol-a',
     });
     const raw = mint.json().apiKey as string;
     const res = await authed('POST', '/api/api-keys', raw, { name: 'should fail' });
@@ -384,7 +384,7 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
   });
 
   it('lists keys with lifecycle fields (raw keys never listed)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/api-keys' });
+    const res = await authed('GET', '/api/api-keys', RAW_A_ADMIN);
     expect(res.statusCode).toBe(200);
     const keys = res.json().keys as Array<Record<string, unknown>>;
     expect(keys.length).toBeGreaterThanOrEqual(3);

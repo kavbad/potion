@@ -16,9 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
 import {
-  DEFAULT_ORG_ID,
   createMembership,
-  createOrg,
   createSession,
   createUser,
   insertApiKey,
@@ -31,9 +29,15 @@ import {
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { clearBudgetHardStopCache } from '../src/routes/budgets.js';
+// G2.4 carryover: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the
+// shared fixture — the demo org must never be the probed subject (see the
+// fixture header; that assumption is what hid tenancy defect D1).
+import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
-const ORG_A = DEFAULT_ORG_ID;
-const ORG_B = 'org_alerts_b';
+/** ORG_A admin credential. These calls used to be unauthenticated and rode the
+ * dev bypass onto the demo org — which silently happened to be the seeded
+ * subject org (the accident the isolation fixture exists to expose). */
+const KEY_A_ADMIN = 'pk_alerts_org_a_admin';
 const KEY_B = 'pk_alerts_org_b';
 
 const CFG = { type: 'single', model: 'mock-mid' } as const;
@@ -78,6 +82,7 @@ beforeAll(async () => {
   sinkUrl = `http://127.0.0.1:${(sink.address() as AddressInfo).port}/hook?secret=abc123`;
 
   app = await buildServer({ seed: false });
+  await seedIsolationOrgs(db());
   await saveFrontier(db(), 'code-gen', [POINT], 'manual', 'test-prices');
   await insertPolicy(db(), {
     id: 'pol-alerts',
@@ -92,8 +97,8 @@ beforeAll(async () => {
     orgId: ORG_A,
     policyId: 'pol-alerts',
   });
-  await createOrg(db(), { id: ORG_B, name: 'Alerts Org B' });
   // G2.3: probes admin routes cross-org — explicit admin scope.
+  await insertApiKey(db(), { id: 'key-alerts-a-admin', keyHash: sha256(KEY_A_ADMIN), name: 'a-admin', orgId: ORG_A, scopes: 'serve+admin' });
   await insertApiKey(db(), { id: 'key-alerts-b', keyHash: sha256(KEY_B), name: 'b', orgId: ORG_B, scopes: 'serve+admin' });
   // Viewer session on org A (role gates).
   await createUser(db(), { id: 'usr_al_viewer', email: 'viewer@al.dev', name: 'viewer' });
@@ -115,10 +120,11 @@ afterAll(async () => {
 });
 
 const VIEWER_COOKIE = { cookie: 'potion_session=ps_al_viewer' };
+const ADMIN_A = { authorization: `Bearer ${KEY_A_ADMIN}` };
 
 describe('alert rules CRUD + masking', () => {
   it('GET /api/alerts starts empty', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/alerts' });
+    const res = await app.inject({ method: 'GET', url: '/api/alerts', headers: ADMIN_A });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ rules: [] });
   });
@@ -127,6 +133,7 @@ describe('alert rules CRUD + masking', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/alerts',
+      headers: ADMIN_A,
       payload: { kind: 'webhook', targetUrl: sinkUrl, events: ['budget_exceeded', 'breaker_open'] },
     });
     expect(res.statusCode).toBe(201);
@@ -135,7 +142,7 @@ describe('alert rules CRUD + masking', () => {
     expect(rule.targetMasked).not.toContain('secret');
     expect(rule.events).toEqual(['budget_exceeded', 'breaker_open']);
 
-    const list = await app.inject({ method: 'GET', url: '/api/alerts' });
+    const list = await app.inject({ method: 'GET', url: '/api/alerts', headers: ADMIN_A });
     const rules = list.json().rules as Array<{ targetMasked: string }>;
     expect(rules).toHaveLength(1);
     expect(rules[0]!.targetMasked).not.toContain('secret');
@@ -148,18 +155,21 @@ describe('alert rules CRUD + masking', () => {
     const bad1 = await app.inject({
       method: 'POST',
       url: '/api/alerts',
+      headers: ADMIN_A,
       payload: { kind: 'webhook', targetUrl: 'not-a-url', events: ['budget_exceeded'] },
     });
     expect(bad1.statusCode).toBe(400);
     const bad2 = await app.inject({
       method: 'POST',
       url: '/api/alerts',
+      headers: ADMIN_A,
       payload: { kind: 'webhook', targetUrl: sinkUrl, events: [] },
     });
     expect(bad2.statusCode).toBe(400);
     const bad3 = await app.inject({
       method: 'POST',
       url: '/api/alerts',
+      headers: ADMIN_A,
       payload: { kind: 'webhook', targetUrl: sinkUrl, events: ['nope'] },
     });
     expect(bad3.statusCode).toBe(400);
@@ -175,7 +185,7 @@ describe('alert rules CRUD + masking', () => {
       payload: { kind: 'webhook', targetUrl: sinkUrl, events: ['rollback'] },
     });
     expect(post.statusCode).toBe(403);
-    const rules = (await app.inject({ method: 'GET', url: '/api/alerts' })).json().rules;
+    const rules = (await app.inject({ method: 'GET', url: '/api/alerts', headers: ADMIN_A })).json().rules;
     const del = await app.inject({
       method: 'DELETE',
       url: `/api/alerts/${rules[0].id}`,
@@ -192,7 +202,7 @@ describe('alert rules CRUD + masking', () => {
   });
 
   it('org isolation: org B cannot delete org A’s rule (uniform 404); org A can', async () => {
-    const rules = (await app.inject({ method: 'GET', url: '/api/alerts' })).json().rules;
+    const rules = (await app.inject({ method: 'GET', url: '/api/alerts', headers: ADMIN_A })).json().rules;
     const id = rules[0].id as string;
     const cross = await app.inject({
       method: 'DELETE',
@@ -205,9 +215,10 @@ describe('alert rules CRUD + masking', () => {
     const second = await app.inject({
       method: 'POST',
       url: '/api/alerts',
+      headers: ADMIN_A,
       payload: { kind: 'webhook', targetUrl: sinkUrl, events: ['rollback'] },
     });
-    const own = await app.inject({ method: 'DELETE', url: `/api/alerts/${second.json().rule.id}` });
+    const own = await app.inject({ method: 'DELETE', url: `/api/alerts/${second.json().rule.id}`, headers: ADMIN_A });
     expect(own.statusCode).toBe(200);
     expect(own.json()).toMatchObject({ deleted: true });
   });
@@ -219,6 +230,7 @@ describe('POST /api/alerts/test', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/alerts/test',
+      headers: ADMIN_A,
       payload: { url: sinkUrl },
     });
     expect(res.statusCode).toBe(200);
@@ -239,6 +251,7 @@ describe('POST /api/alerts/test', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/alerts/test',
+      headers: ADMIN_A,
       payload: { url: sinkUrl, kind: 'slack' },
     });
     expect(res.statusCode).toBe(200);
@@ -253,6 +266,7 @@ describe('POST /api/alerts/test', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/alerts/test',
+      headers: ADMIN_A,
       payload: { url: 'http://127.0.0.1:1/hook?secret=abc123' },
     });
     expect(res.statusCode).toBe(200);

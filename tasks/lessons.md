@@ -149,3 +149,26 @@ input. The pattern existed; it just hadn't been made shared.
 **How to apply:** When a route needs a guard, ask which OTHER routes take the
 same shape of input, and promote the guard to a shared helper in the same
 change. An inline fix at one call site is how a defect class survives.
+
+## A test fixture's convenient default can be the thing hiding the bug
+
+**What happened (2026-08-08, G2.4 carryover):** every pre-G2.4 isolation suite
+set `ORG_A = DEFAULT_ORG_ID` because the demo org exists for free (migration
+0003 seeds it, the dev-auth bypass resolves to it, pre-auth logs attribute to
+it). That convenience is exactly what hid tenancy defect D1 for the entire life
+of the suite: a bearer-only resolver that fell back to the demo org LOOKS
+correct when the org under test IS the demo org. Making the subject a distinct
+org broke 20 tests in one class — six suites had been calling admin routes
+unauthenticated, riding the bypass onto the org they had seeded. They were
+asserting tenant-scoped behavior while authenticating as nobody.
+
+**Why:** a fixture value that the system treats specially cannot be used as the
+subject of a test about that system's handling of ordinary values. The
+specialness is a second, invisible reason for the assertion to pass.
+
+**How to apply:** when a test needs an instance of X, ask whether the instance
+you reached for is special to the code under test (a default, a fallback
+target, a seeded row, a bypass destination). If it is, construct a plain one.
+Then encode the rule as a meta-test over the test tree — a convention honoured
+by one file is a convention a new file will not know about. Scope the meta-test
+narrowly enough that its exemption map stays smaller than the fix.

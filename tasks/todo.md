@@ -1739,3 +1739,65 @@ DONE (2026-08-08, session g24-tenancy-sweep):
   66); walkthrough 17/17; artifacts/tenancy-classification.md committed and
   meta-tested. $0 spend.
 
+
+## G2.4 carryover — the isolation-fixture rule, made structural (session 2026-08-08)
+
+OWNER INPUT (binding, asked as a confirmation before G2.6): the isolation-test
+fixture rule is STRUCTURAL — cross-tenant tests must use two distinct
+non-default orgs and never DEFAULT_ORG_ID as a subject, "because that
+assumption is exactly what hid the demo-org fallback from the entire prior
+suite" — and it must be a SHARED FIXTURE CONSTRAINT, not a fix applied only to
+the routes G2.4 happened to touch. Confirmed NOT green when asked (the guard
+existed inside tenancy-sweep.test.ts and guarded only its own local constant),
+so it was built here.
+
+- [x] a. ONE definition of the constants: packages/db/src/test-fixtures/orgs.ts
+      (db is the lowest package both test trees import) exporting
+      ORG_A='org_fixture_a', ORG_B='org_fixture_b', ORG_DEMO_AS_PEER,
+      seedIsolationOrgs(db) and a runtime assertNonDefaultSubject() guard;
+      re-exported from apps/server/test/fixtures/orgs.ts. The header states
+      WHY in the concrete: the demo org is the dev-bypass target, the pre-auth
+      log-attribution target and a migration-seeded row, so a probe against it
+      can pass for reasons that have nothing to do with tenancy.
+- [x] b. THE GATE: apps/server/test/isolation-fixture.test.ts, following the
+      mock-eligibility precedent (enumerate → detect → require fixture or
+      justified exemption). Three rules, deliberately narrow — there are ~230
+      DEFAULT_ORG_ID references across the test tree and most are legitimate
+      single-org suites, so a blanket ban would produce an exemption map bigger
+      than the thing it protects.
+      R1 (no exemptions): no MULTI-ORG file may bind an ORG_* constant to
+      DEFAULT_ORG_ID. R2 (justified exemptions, keyed `path::test name` with a
+      staleness check so a rename forces re-justification): a test whose NAME
+      claims isolation may not reference the default org in its body.
+      R3 (positive): a file with isolation-named tests imports the fixture.
+      The gate excludes itself — it is the enforcer, and its own body
+      necessarily names the pattern it bans.
+- [x] c. Migrated 16 suites onto the fixture: the 10 identified up front
+      (tenant-isolation, keys, alerts, share, tenancy, usage, reports, audit,
+      jobs, shadow) plus SIX the gate itself found on first run
+      (guarantee, org-frontiers, playground, policy-override, research,
+      rubrics, and packages/db/src/guarantee.test.ts).
+
+DONE (2026-08-08, session g24-carryover-isolation-fixture):
+- The migration EXPOSED the accident it was built to expose. Twenty tests
+  failed on the first full run, all one class: those suites had been calling
+  admin routes UNAUTHENTICATED, riding the dev-auth bypass onto org_demo —
+  which silently happened to be the org they had seeded as ORG_A. With a
+  distinct subject org the free ride is gone and every one of them now names
+  its tenant explicitly with a minted credential. That is not migration
+  fallout; it is the finding. Six suites (keys, share, audit, alerts, reports,
+  rubrics) were asserting tenant-scoped behavior while authenticating as
+  nobody.
+- Two tests were legitimately ABOUT the default org and now say so:
+  "unauthenticated dashboard traffic is scoped to the default org" (tenancy)
+  and "GET /api/usage without credentials falls back to the default org"
+  (usage) assert against DEFAULT_ORG_ID explicitly. The first got STRONGER in
+  the process — it used to assert that org A's key is visible, which only held
+  because ORG_A *was* the default org; it now asserts the fallback org sees
+  NEITHER tenant's rows.
+- The R2 exemption map is EMPTY. The one exemption drafted in the plan (the
+  migration-0003 contract test in packages/db/src/tenancy.test.ts) turned out
+  not to be needed once the rule was scoped to isolation-NAMED tests.
+- Verify: 1165 keyless tests green (server 459); typecheck clean; walkthrough
+  17/17; lint at its pre-existing baseline (21 no-unused-vars errors that
+  predate this change, none in files it touched). $0 spend.
