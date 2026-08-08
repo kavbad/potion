@@ -41,7 +41,7 @@ import {
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
-import { ROUTE_INVENTORY, type RouteInventoryRow } from './fixtures/route-inventory.js';
+import { ROUTE_INVENTORY, type RouteInventoryRow } from '../src/security/route-inventory.js';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
 

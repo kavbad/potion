@@ -18,7 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import { sha256, type Policy } from '@potion/core';
 import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { buildServer } from '../src/server.js';
-import { ROUTE_INVENTORY } from './fixtures/route-inventory.js';
+import { ROUTE_INVENTORY } from '../src/security/route-inventory.js';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
 

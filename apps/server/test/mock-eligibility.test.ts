@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK_ELIGIBILITY_INVENTORY } from './fixtures/mock-eligibility-inventory.js';
+import { MOCK_ELIGIBILITY_INVENTORY } from '../src/security/mock-eligibility-inventory.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -37,7 +37,15 @@ function sourceFiles(): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) out.push(full);
+      // The audit's OWN files quote every pattern by construction — scanning
+      // them would be self-referential noise, not a resolution site.
+      else if (
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.test.ts') &&
+        !full.includes(path.join('src', 'security'))
+      ) {
+        out.push(full);
+      }
     }
   };
   for (const r of roots) walk(r);
@@ -122,7 +130,7 @@ describe('mock-eligibility inventory completeness (grep-derived)', () => {
     expect(
       unclassified,
       'provider-resolution sites with NO inventory row and no stated exemption — classify them in ' +
-        `fixtures/mock-eligibility-inventory.ts: ${unclassified.join(', ')}`,
+        `src/security/mock-eligibility-inventory.ts: ${unclassified.join(', ')}`,
     ).toEqual([]);
 
     // …and the inventory has no phantom rows.

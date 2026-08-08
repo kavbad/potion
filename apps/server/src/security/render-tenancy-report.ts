@@ -6,8 +6,8 @@
 // Deterministic by construction (fixed ordering, no clock, no environment),
 // so the committed artifact is byte-stable and a stale checkout fails the
 // up-to-date test rather than drifting silently.
-import type { RouteInventoryRow } from '../../test/fixtures/route-inventory.js';
-import type { MockEligibilityRow } from '../../test/fixtures/mock-eligibility-inventory.js';
+import type { RouteInventoryRow } from './route-inventory.js';
+import type { MockEligibilityRow } from './mock-eligibility-inventory.js';
 
 const SURFACE_ORDER = ['v1', 'api', 'auth', 'operator', 'infra'] as const;
 
@@ -99,8 +99,8 @@ export function renderTenancyReport(
   return `# Potion — route tenancy & isolation classification
 
 Generated from the committed inventories
-(\`apps/server/test/fixtures/route-inventory.ts\`,
-\`apps/server/test/fixtures/mock-eligibility-inventory.ts\`).
+(\`apps/server/src/security/route-inventory.ts\`,
+\`apps/server/src/security/mock-eligibility-inventory.ts\`).
 Regenerate with \`pnpm --filter @potion/server tenancy-report\`; a stale copy
 fails \`apps/server/test/tenancy-report.test.ts\`.
 

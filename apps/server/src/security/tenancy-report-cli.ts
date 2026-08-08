@@ -6,8 +6,8 @@
 // the committed artifact drifts from the inventories.
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_INVENTORY } from '../../test/fixtures/route-inventory.js';
-import { MOCK_ELIGIBILITY_INVENTORY } from '../../test/fixtures/mock-eligibility-inventory.js';
+import { ROUTE_INVENTORY } from './route-inventory.js';
+import { MOCK_ELIGIBILITY_INVENTORY } from './mock-eligibility-inventory.js';
 import { renderTenancyReport } from './render-tenancy-report.js';
 
 const OUT = fileURLToPath(new URL('../../../../artifacts/tenancy-classification.md', import.meta.url));

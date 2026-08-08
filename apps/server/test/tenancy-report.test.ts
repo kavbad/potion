@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_INVENTORY } from './fixtures/route-inventory.js';
-import { MOCK_ELIGIBILITY_INVENTORY } from './fixtures/mock-eligibility-inventory.js';
+import { ROUTE_INVENTORY } from '../src/security/route-inventory.js';
+import { MOCK_ELIGIBILITY_INVENTORY } from '../src/security/mock-eligibility-inventory.js';
 import { renderTenancyReport } from '../src/security/render-tenancy-report.js';
 
 const ARTIFACT = fileURLToPath(
