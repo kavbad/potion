@@ -113,6 +113,18 @@ serve-only keys get 403, same as every admin route (M2 #15 discipline).
 | member | + write methods (playground, share links, eval runs)       |
 | admin  | + key lifecycle, invites, budget, alert rules, **audit reads/exports**, incident resolve |
 
+Api-key credentials (G2.3 key role split): the key's ROLE derives from its
+scopes at resolution. `serve` (the default) resolves to **member grade** —
+serving, org reads, and self-service mutations (policy create, workloads,
+evals, share mint), but **no admin mutations**: a serving key cannot resolve
+incidents, designate incumbents, toggle budgets, manage alert rules, run
+rubric/research/trace operations, or trigger spend-bearing live sweeps.
+`serve+admin` resolves to **admin grade** — the explicit choice at mint.
+FAIL CLOSED: an empty, malformed, or unrecognized scopes value resolves to
+serve-only; a typo can never mint an admin credential. The full route-by-
+route classification lives in `apps/server/test/fixtures/route-inventory.ts`
+and is enforced by an exhaustive test.
+
 ## Related surfaces
 
 - Operator onboarding + org offboarding (TRUE-CASCADE deletion): `docs/ONBOARDING-RUNBOOK.md`.

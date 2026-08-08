@@ -32,6 +32,7 @@
 import { sha256, type Policy } from '@potion/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
+  parseApiKeyScopes,
   DEFAULT_ORG_ID,
   findSessionByTokenHash,
   getApiKeyByKeyHash,
@@ -190,31 +191,36 @@ export function roleAtLeast(role: Role, required: Role): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Api-key scopes (M2 Wave 2, ROADMAP #15, migration 0005) — MINIMAL v1.
+// Api-key scopes (M2 Wave 2 #15, migration 0005; G2.3 KEY ROLE SPLIT).
 //
-// Vocabulary (space-separated tokens in api_keys.scopes):
-//   'serve'       (DEFAULT) — the key serves /v1/chat/completions and keeps
-//                 the Wave-1 dashboard-surface behavior (org keys carry full
-//                 org power there — unchanged, documented above).
-//   'serve+admin' — additionally may perform key-LIFECYCLE admin mutations
-//                 (provider-key rotate/revoke, api-key create/revoke) via
-//                 requireRole('admin') routes.
+// Vocabulary (tokens in api_keys.scopes, '+'/whitespace separated):
+//   'serve'       (DEFAULT) — serving + org reads + member-grade
+//                 self-service mutations. NO admin mutations: since G2.3 the
+//                 api-key ROLE derives from its scopes (roleForApiKey in
+//                 @potion/db org-context — the single source), so a serve
+//                 key resolves to role 'member' and every inline
+//                 roleAtLeast(org.role,'admin') check excludes it.
+//   'serve+admin' — resolves to role 'admin': the explicit admin credential.
 //
-// Enforcement point v1: requireRole('admin') only. Session/dev-bypass
-// credentials are unaffected (their role comes from memberships / the
-// bypass). Deliberately NOT enforced on the serving path — a 'serve' key
-// must never lose chat access because of an admin-scoping change.
+// FAIL CLOSED: empty/malformed/unrecognized scope values resolve to
+// serve-only (a typo can never mint an admin credential). Enforcement is
+// therefore role-first everywhere; requireRole('admin')'s explicit scope
+// gate below stays as defense in depth. Deliberately NOT enforced on the
+// serving path — a 'serve' key must never lose chat access because of an
+// admin-scoping change. Session/dev-bypass credentials are unaffected.
 // ---------------------------------------------------------------------------
 
-/** Parse api_keys.scopes into a token set ('+' and whitespace both split, so
- * 'serve+admin' yields {serve, admin}). */
+/** Parse api_keys.scopes into a token set (delegates to the shared
+ * fail-closed parser in @potion/db). */
 export function apiKeyScopes(key: ApiKeyRow): Set<string> {
-  return new Set(key.scopes.split(/[\s+]+/).filter(Boolean));
+  return new Set(parseApiKeyScopes(key.scopes).tokens);
 }
 
-/** True when an api-key credential carries the 'admin' scope. */
+/** True when an api-key credential VALIDLY carries the 'admin' scope —
+ * unrecognized tokens invalidate the whole value (fail closed). */
 export function apiKeyHasAdminScope(key: ApiKeyRow): boolean {
-  return apiKeyScopes(key).has('admin');
+  const { tokens, valid } = parseApiKeyScopes(key.scopes);
+  return valid && tokens.includes('admin');
 }
 
 /**

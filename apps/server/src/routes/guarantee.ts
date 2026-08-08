@@ -8,10 +8,13 @@
 // attaches req.potionOrg — the handlers below read THAT context, so session
 // roles (viewer/member/admin) are honored exactly like the other guarded
 // routes. Every query filters org_id; cross-org reads/resolves are
-// impossible by construction (resolveIncident is keyed (id, orgId)). The
-// resolve route's admin check is a plain ROLE check (not requireRole's
-// additional apiKey admin-SCOPE gate — resolving an incident is an incident
-// workflow action, not key-lifecycle admin).
+// impossible by construction (resolveIncident is keyed (id, orgId)).
+// G2.3 KEY ROLE SPLIT: the api-key role now derives from its scopes
+// (roleForApiKey — serve keys resolve to 'member'), so these plain ROLE
+// checks exclude serving keys from every admin mutation here — incident
+// resolve included. The pre-G2.3 carve-out ("incident workflow, not
+// key-lifecycle admin") is REVERSED: serving keys must not resolve
+// incidents; mint a 'serve+admin' key for automation that needs to.
 //
 // Status shape (per the contract): one entry per guarantee-carrying policy
 // of the org — { policyId, guarantee, rollingQuality, samples, breaches }.

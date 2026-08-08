@@ -44,10 +44,13 @@ curl -s -X POST "$POTION_API/api/policies" \
   -d '{"policy": {"type": "min_cost", "qualityFloor": 0.85}, "name": "prod", "createKey": true}'
 ```
 
-The response returns the raw `pk_...` key **exactly once**. Scopes note: keys default
-to the `serve` scope — enough for `/v1/chat/completions` and `/v1/traces`. Admin
-actions from an api-key credential need a `serve+admin` key. (G2.3 will split these
-further; state the choice when issuing, don't assume.)
+The response returns the raw `pk_...` key **exactly once**. Scopes (ENFORCED since
+G2.3): keys default to the `serve` scope — serving, org reads, and self-service
+policy/workload operations, at **member grade**. Admin mutations (incident resolve,
+incumbent designation, budgets, alert rules, rubric/research/trace ops, live
+sweeps) require a **`serve+admin`** key — mint one deliberately via
+`POST /api/api-keys {"name": "...", "scopes": "serve+admin"}` when the partner's
+automation genuinely needs it. Unknown scope values fail closed to serve-only.
 
 ## 3. BYOK provider key (optional, 1 min)
 

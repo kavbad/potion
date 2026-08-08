@@ -191,7 +191,13 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   state, confident-recovery auto-restore with time-bounded
   recovery-unconfirmed escalation, worsening re-fire, in-process parity
   emit; walkthrough step 16); NOTE the role-split item ("serving keys must
-  NOT resolve incidents") moved to G2.3 where it belongs; (14) targeted server tests on the serving
+  NOT resolve incidents") moved to G2.3 where it belongs; [DONE 2026-08-08]
+  G2.3 key role split: api-key role derives from scopes (serve → member,
+  serve+admin → admin, FAIL CLOSED on unknown values); exhaustive
+  route-inventory fixture (apps/server/test/fixtures/route-inventory.ts —
+  all routes classified, completeness-diffed, 27 admin routes probed per-key;
+  G2.4 extends the same fixture with its lenses); walkthrough step-16 leg;
+  (14) targeted server tests on the serving
   hot path incl. the mock-eligibility audit of every provider-resolution
   site; (16) compound policy: quality floor + latency bound in one policy;
   (G2.8 CAPSTONE) one real workload end-to-end through the whole pipeline

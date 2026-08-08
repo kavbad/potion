@@ -61,6 +61,9 @@ beforeAll(async () => {
     name: 'a',
     orgId: ORG_A,
     policyId: 'pol-a',
+    // G2.3: these fixtures probe admin-grade actions (key rebinding) —
+    // explicit admin scope, per the never-soften-the-gate rule.
+    scopes: 'serve+admin',
   });
   await insertPolicy(db(), { id: 'pol-b', orgId: ORG_B, name: 'b', config: POLICY_B });
   await insertApiKey(db(), {
@@ -69,6 +72,7 @@ beforeAll(async () => {
     name: 'b',
     orgId: ORG_B,
     policyId: 'pol-b',
+    scopes: 'serve+admin',
   });
 }, 90_000);
 
@@ -165,10 +169,11 @@ describe('org isolation via inject', () => {
     const { boundKeyId, apiKey } = res.json();
     expect((await listApiKeys(db(), ORG_B)).map((k) => k.id)).toContain(boundKeyId);
     expect((await listApiKeys(db(), ORG_A)).map((k) => k.id)).not.toContain(boundKeyId);
-    // and it authenticates into org B
+    // and it authenticates into org B — MEMBER grade (G2.3): minted keys
+    // default to the 'serve' scope; admin is an explicit choice.
     expect(await resolveOrgContext(db(), { kind: 'apiKey', apiKey })).toEqual({
       orgId: ORG_B,
-      role: 'admin',
+      role: 'member',
     });
   });
 

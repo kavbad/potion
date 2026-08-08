@@ -220,7 +220,8 @@ describe('resolution order: api key → session → dev bypass → 401', () => {
     });
     expect(me.json().org.id).toBe('org_key');
     expect(me.json().kind).toBe('apiKey');
-    expect(me.json().role).toBe('admin');
+    // G2.3 key role split: a default 'serve' key resolves to member.
+    expect(me.json().role).toBe('member');
   });
 
   it('a session pinned to an org resolves THAT org with the membership role', async () => {

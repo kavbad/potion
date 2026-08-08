@@ -264,10 +264,11 @@ export const apiKeys = pgTable('api_keys', {
     .references(() => orgs.id),
   policyId: text('policy_id').references(() => policies.id),
   // ---- lifecycle (M2 Wave 2, ROADMAP #15, migration 0005) ----
-  /** Space-separated scopes. Minimal v1 vocabulary: 'serve' (default —
-   * /v1/chat/completions only) and 'serve+admin' (adds key-lifecycle admin
-   * mutations via requireRole). Enforcement documented in
-   * apps/server/src/auth.ts (API_KEY_ADMIN_SCOPE). */
+  /** Scope tokens ('+'/space separated). Closed vocabulary: 'serve'
+   * (default) and 'admin'. G2.3 KEY ROLE SPLIT: the api-key ROLE derives
+   * from this column at resolution (roleForApiKey, org-context.ts) —
+   * 'serve+admin' resolves to role 'admin', everything else (incl.
+   * malformed/unrecognized values) FAILS CLOSED to 'member'. */
   scopes: text('scopes').notNull().default('serve'),
   /** 'live' (default) | 'test' — a label: test keys serve identically but are
    * badgeable in the dashboard/billing exports. */

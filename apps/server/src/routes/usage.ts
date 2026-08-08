@@ -34,7 +34,8 @@ import {
   type OrgContext,
   type UsageDailyRow,
 } from '@potion/db';
-import { bearerToken, openAiError } from '../auth.js';
+import {
+  roleAtLeast, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { generateInvoice } from '../billing/invoice.js';
 import { renderInvoiceHtml } from '../billing/render-html.js';
@@ -231,6 +232,20 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
   // ---- POST /api/usage/aggregate — the batch rollup trigger (same function
   // the `aggregate` CLI job runs; idempotent). ----
   app.post('/api/usage/aggregate', async (req, reply) => {
+    // G2.3: an ops-grade GLOBAL rollup refresh — admin only (previously it
+    // had no check at all; full route classification is G2.4's sweep).
+    const org = req.potionOrg;
+    if (!org || !roleAtLeast(org.role, 'admin')) {
+      return reply
+        .code(403)
+        .send(
+          openAiError(
+            `role '${org?.role ?? 'none'}' may not trigger the usage rollup — requires 'admin'`,
+            'invalid_request_error',
+            'insufficient_role',
+          ),
+        );
+    }
     const parsed = AggregateBodySchema.safeParse(req.body);
     if (!parsed.success || !isDayString(parsed.data.from) || !isDayString(parsed.data.to)) {
       return reply.code(400).send(openAiError('body must be {from, to} as YYYY-MM-DD', 'invalid_request_error'));

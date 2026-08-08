@@ -36,7 +36,11 @@ export function registerPolicyRoutes(app: FastifyInstance, ctx: PotionContext): 
     return reply.send({ policy: { id: auth.policyId, config: auth.policy } });
   });
 
-  /** Create + bind a policy for the authenticated key. */
+  /** Create + bind a policy for the authenticated key.
+   * G2.3 DELIBERATE: this stays reachable by a plain 'serve' key — it
+   * rebinds the CALLING key's OWN policy (a self-scoped serving-onboarding
+   * mutation), never another key's. Admin mutations on other keys live on
+   * the /api surface behind the admin scope. */
   app.post('/v1/policies', async (req, reply) => {
     const auth = await requireAuth(ctx, req.headers.authorization);
     if (!auth) {

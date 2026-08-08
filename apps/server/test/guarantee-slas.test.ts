@@ -89,7 +89,8 @@ beforeAll(async () => {
     await createOrg(db(), { id, name });
   }
   await insertPolicy(db(), { id: PID, orgId: ORG, name: PID, config: POLICY });
-  await insertApiKey(db(), { id: `key-${PID}`, keyHash: sha256(KEY), name: PID, orgId: ORG, policyId: PID });
+  // G2.3: this key drives the ADMIN manual-verify route — explicit scope.
+  await insertApiKey(db(), { id: `key-${PID}`, keyHash: sha256(KEY), name: PID, orgId: ORG, policyId: PID, scopes: 'serve+admin' });
   await upsertStrategyConfig(db(), H_SERVING, CFG_SERVING);
   await upsertStrategyConfig(db(), H_INCUMBENT, CFG_INCUMBENT);
   await db().insert(clusters).values({ id: CLUSTER, name: 'billing', description: 'sla test cluster', orgId: ORG });

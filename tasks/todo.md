@@ -629,7 +629,7 @@ capstone everything else serves.)
 - [x] G2.2 Incident SLAs: emitAlert on the in-process breach path (parity with worker),
       measured breach→notification latency, auto-restore-on-recovery option, cooldown
       that re-fires on worsening. [M]
-- [ ] G2.3 Key role split: serving keys lose incident-resolve and other admin mutations;
+- [x] G2.3 Key role split: serving keys lose incident-resolve and other admin mutations;
       explicit admin scope for humans. [S]
 - [ ] G2.4 Targeted server hot-path tests: guarantee override gating, pre-auth log
       attribution, policy override, provenance guard branches. Incl. the
@@ -1611,4 +1611,57 @@ DONE (2026-08-08, session g22-incident-slas):
   sweep-driven incident/alert storms; manual verifies finally resolve
   advisories; the wrong "next crossing retries" comment is gone.
 - $0 spend — mock throughout; live starvation/restore proof composes into G2.8.
+
+## G2.3 — Key role split (session 2026-08-08, plan approved with owner requirements)
+
+OWNER REQUIREMENTS (binding, from the check-in): (1) the proof is EXHAUSTIVE —
+an enumerated route inventory as a SHARED FIXTURE (G2.4's tenancy/self-serve
+sweep extends the same artifact with additional lenses), with a completeness
+diff that fails on any route added without classification; (2) seeded and
+walkthrough credentials audited up front — admin-performing api keys get
+explicit scope UPGRADES, the gate is never softened; (3) FAIL CLOSED on
+unknown scopes — malformed/empty/unrecognized resolves to serve-only (the
+operator-token polarity); a typo can never mint an admin credential.
+
+- [x] a. chokepoint: roleForApiKey derives the api-key ROLE from its scopes
+      ('serve+admin' → admin; everything else incl. malformed → member, FAIL
+      CLOSED via the shared parseApiKeyScopes); auth.ts delegates; requireRole's
+      scope gate stays as defense in depth; mint-time vocabulary closed
+      (serve required, tokens ⊆ {serve, admin}); /api/policies createKey/keyId
+      branches admin-gated; /api/usage/aggregate admin-gated (had NO check);
+      carve-out comments in guarantee.ts/share.ts REVERSED; /v1/policies
+      self-rebind documented as deliberate
+- [x] b. route inventory: apps/server/test/fixtures/route-inventory.ts — all 81
+      routes enumerated+classified (surface/mutating/guard/probe); exhaustive
+      test: printRoutes completeness diff BOTH ways, serve key → 403 on every
+      one of the 27 admin-guarded /api routes (each probed individually),
+      serve+admin never authz-blocked, serving sanity leg, fail-closed scope
+      probes straight into the column
+- [x] c. credential audit + fixture upgrades: walkthrough/seed keys perform NO
+      admin ops via api keys (verified — sessions carry all admin mutations);
+      six test fixtures upgraded to explicit 'serve+admin' (guarantee-slas,
+      guarantee ORG_B, alerts KEY_B, share RAW_B, tenant-isolation a+b,
+      tenancy a+b); walkthrough step 16 tail proves the split live
+- [x] d. docs (ENTERPRISE RBAC + runbook enforced-reality note) + sweep + commit
+
+DONE (2026-08-08, session g23-key-role-split):
+- PRE-FIX STATE (recorded per owner instruction): a plain serve key could
+  resolve incidents, designate incumbents, and trigger spend-bearing live
+  sweeps — the SEVENTH authz/isolation-class defect of this run, all found as
+  half-built enforcement rather than missing design. That is the pattern
+  G2.4's exhaustive sweep exists to close out. (The half-built half here:
+  api_keys.scopes + apiKeyHasAdminScope existed since migration 0005 but were
+  enforced only on 8 requireRole routes while API_KEY_ROLE='admin' let serve
+  keys through all 19 inline admin checks; two source comments carved
+  incident-resolve/share-revoke out of the gate ON PURPOSE.)
+- Verify: 1077 keyless tests green (server 370 incl. 40 new split tests — 27
+  per-route 403 probes among them); walkthrough 17/17 with the step-16 G2.3
+  leg (serve key 403 on the live breach incident's resolve; freshly minted
+  serve+admin key resolves 200); repo prices.json confirmed clean post-sweep.
+- Two build-time traps recorded in lessons.md: route-sweeping tests execute
+  handlers and need side-effect isolation (the scan probe merged mock models
+  into the repo prices.json and poisoned research.test); multi-edit scripts
+  must write+verify per file (esbuild silently ignores extra args against an
+  unedited signature).
+- $0 spend.
 

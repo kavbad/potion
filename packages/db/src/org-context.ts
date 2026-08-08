@@ -36,15 +36,43 @@ export type OrgCredential =
   | { kind: 'apiKey'; /** raw bearer token (pk_…) */ apiKey: string }
   | { kind: 'session'; userId: string; /** pin an org, else the user's first membership wins */ orgId?: string };
 
-/** Wave-1 role for org API keys: full org power (documented — Wave-2 #15
- * introduces scoped key roles). */
-export const API_KEY_ROLE: Role = 'admin';
+/** The api-key scope vocabulary (G2.3). Anything outside it is UNRECOGNIZED
+ * and fails closed — a typo in the scopes column must never mint an admin
+ * credential (the operator-token polarity). */
+export const API_KEY_SCOPE_VOCABULARY = ['serve', 'admin'] as const;
+
+/** Parse api_keys.scopes ('+' and whitespace both split, so 'serve+admin'
+ * yields [serve, admin]). valid=false when empty or ANY token is outside the
+ * vocabulary — callers must treat invalid as serve-only. */
+export function parseApiKeyScopes(raw: string): { tokens: string[]; valid: boolean } {
+  const tokens = raw.split(/[\s+]+/).filter(Boolean);
+  const valid =
+    tokens.length > 0 &&
+    tokens.every((t) => (API_KEY_SCOPE_VOCABULARY as readonly string[]).includes(t));
+  return { tokens, valid };
+}
+
+/**
+ * G2.3 KEY ROLE SPLIT — the chokepoint. An api-key credential's role derives
+ * FROM its scopes: 'admin' only for a VALID scope set carrying the 'admin'
+ * token; everything else — the default 'serve', empty, malformed, or any
+ * unrecognized token ('serve+admin+root' included) — resolves to 'member',
+ * FAIL CLOSED. Member grade keeps serving + org reads + self-service
+ * mutations (policy create, workloads, evals, share mint) working; every
+ * inline roleAtLeast(org.role,'admin') check now excludes serve keys
+ * (incident resolve, incumbent designation, budgets, rubric lifecycle,
+ * spend-bearing live sweeps, …). Sessions/dev-bypass/operator are untouched.
+ */
+export function roleForApiKey(key: ApiKeyRow): Role {
+  const { tokens, valid } = parseApiKeyScopes(key.scopes);
+  return valid && tokens.includes('admin') ? 'admin' : 'member';
+}
 
 /** Pure helper for the hot path: build the OrgContext from an ALREADY
  * fetched api_keys row (auth.ts fetches the row once for policy binding —
  * no second query). */
 export function orgContextForApiKey(key: ApiKeyRow): OrgContext {
-  return { orgId: key.orgId, role: API_KEY_ROLE };
+  return { orgId: key.orgId, role: roleForApiKey(key) };
 }
 
 /**

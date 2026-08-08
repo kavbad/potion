@@ -86,7 +86,7 @@ const KEY = (org: string) => `pk_g_${org}`;
 let app: FastifyInstance;
 const db = () => app.potion.db.db;
 
-async function policy(id: string, orgId: string, key: string, config: Policy): Promise<void> {
+async function policy(id: string, orgId: string, key: string, config: Policy, scopes?: string): Promise<void> {
   await insertPolicy(db(), { id, orgId, name: id, config });
   await insertApiKey(db(), {
     id: `key-${id}`,
@@ -94,6 +94,7 @@ async function policy(id: string, orgId: string, key: string, config: Policy): P
     name: id,
     orgId,
     policyId: id,
+    ...(scopes !== undefined ? { scopes } : {}),
   });
 }
 
@@ -150,11 +151,14 @@ beforeAll(async () => {
     type: 'max_quality',
     costCeilingPer1K: 100,
   });
+  // G2.3: org B's key probes ADMIN routes cross-org (incident resolve) —
+  // explicit admin scope so the 404 no-existence-oracle assertions keep
+  // testing org isolation, not the new role gate.
   await policy('pol-g-b', ORG_B, KEY(ORG_B), {
     type: 'max_quality',
     costCeilingPer1K: 100,
     guarantee: G_ROLLBACK,
-  });
+  }, 'serve+admin');
 }, 90_000);
 
 afterAll(async () => {

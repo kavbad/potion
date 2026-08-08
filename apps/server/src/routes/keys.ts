@@ -129,7 +129,16 @@ const PostApiKeyBodySchema = z.object({
   scopes: z
     .string()
     .max(200)
-    .regex(/^[\w+\- ]+$/, 'scopes must be space-separated tokens')
+    .refine(
+      (raw) => {
+        const tokens = raw.split(/[\s+]+/).filter(Boolean);
+        return tokens.length > 0 && tokens.includes('serve') && tokens.every((t) => t === 'serve' || t === 'admin');
+      },
+      // G2.3: the vocabulary is closed — 'serve' (required) and 'admin'.
+      // Unknown tokens are rejected at mint; anything that slips into the
+      // column anyway fails closed to serve-only at resolution.
+      { message: "scopes must be 'serve' or 'serve+admin' (vocabulary: serve, admin; serve required)" },
+    )
     .optional(),
   env: z.enum(['live', 'test']).optional(),
   expiresAt: z.string().datetime({ offset: true }).optional(),

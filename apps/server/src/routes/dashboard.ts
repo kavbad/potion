@@ -27,7 +27,8 @@ import {
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { isDominated } from '@potion/pareto';
-import { authenticate, bearerToken, openAiError } from '../auth.js';
+import {
+  roleAtLeast, authenticate, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { highestQualityPoint } from './chat.js';
 
@@ -415,6 +416,21 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     }
     const { policy, name, keyId, createKey } = parsed.data;
     const org = req.potionOrg!; // resolved by the dashboard auth hook (#14)
+    // G2.3: key lifecycle is the ADMIN domain (parity with POST
+    // /api/api-keys). Plain policy creation stays member+; minting a new
+    // key or rebinding an existing one requires admin — a serve-scoped
+    // api key (role 'member' since the role split) is refused here.
+    if ((createKey || keyId !== undefined) && !roleAtLeast(org.role, 'admin')) {
+      return reply
+        .code(403)
+        .send(
+          openAiError(
+            `role '${org.role}' may not mint or rebind api keys — requires 'admin' (plain policy creation without createKey/keyId is allowed)`,
+            'invalid_request_error',
+            'insufficient_role',
+          ),
+        );
+    }
     const id = `pol-${randomUUID().slice(0, 8)}`;
     const policyName = name ?? `${policy.type}-${id.slice(4)}`;
     // Tenant scope (M2 #13): the policy row lives in the resolved org.

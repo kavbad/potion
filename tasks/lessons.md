@@ -89,3 +89,33 @@ created, then recorded (lessons/todo) and dropped from session-end summaries.
 Applies generally: after the owner acknowledges a standing risk and takes
 ownership of it, repeating the warning each session is a correction-worthy habit,
 not thoroughness.
+
+## Enforcement tests that EXECUTE handlers need side-effect isolation
+
+**What happened (2026-08-08, G2.3):** The exhaustive route-inventory test probes
+every admin route with a serve+admin key — and the probes EXECUTE. The research-scan
+probe ran against the default price registry and MERGED its mock fixture models into
+the repo's prices.json (a dirty working-tree file one `git add -A` away from being
+committed), which then poisoned research.test.ts (fixtures "already known" → zero
+cycles fanned out → 120s hang).
+
+**Why:** A 2xx from an authorization probe is still a real handler run. Any test that
+sweeps mutating routes inherits the union of ALL their side effects — including
+writes to repo files behind env-var defaults (POTION_PRICES_PATH).
+
+**How to apply:** Route-sweeping tests point every file-backed dependency at a
+throwaway copy (tmp prices.json, tmp suites dir) BEFORE buildServer, same as
+research.test.ts. And check `git status` for unexpected repo-file mutations after
+adding any test that executes handlers broadly.
+
+## Multi-edit python scripts must write after EVERY logical edit
+
+**What happened (2026-08-08, twice this run):** A scripted edit block computed a
+replacement, asserted the anchor, but never called write() for one of its files —
+the later call-site edit landed against the unchanged function (esbuild strips types,
+so the extra argument was silently ignored at runtime) and produced a
+confusing-at-a-distance failure.
+
+**How to apply:** One file per scripted edit block, ending in an explicit write + a
+grep-back verification of the NEW text. When a test fails in a way that contradicts
+an edit "already made," first verify the edit is actually in the file.

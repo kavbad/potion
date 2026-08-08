@@ -30,6 +30,8 @@ import {
   listRequestLogs,
   migrate,
   orgContextForApiKey,
+  parseApiKeyScopes,
+  roleForApiKey,
   resolveOrgContext,
   type DbHandle,
 } from './index.js';
@@ -259,11 +261,24 @@ describe('resolveOrgContext (Wave-2 contract)', () => {
         policyId: null,
       });
       const ctx = await resolveOrgContext(db, { kind: 'apiKey', apiKey: 'pk_a' });
-      expect(ctx).toEqual({ orgId: DEFAULT_ORG_ID, role: 'admin' });
+      // G2.3 key role split: the default 'serve' scope resolves to MEMBER —
+      // serving keys are no longer admin credentials.
+      expect(ctx).toEqual({ orgId: DEFAULT_ORG_ID, role: 'member' });
       expect(await resolveOrgContext(db, { kind: 'apiKey', apiKey: 'pk_nope' })).toBeNull();
       // orgContextForApiKey matches (the hot-path variant used by auth)
       const key = await getApiKeyById(db, DEFAULT_ORG_ID, 'key-a');
       expect(orgContextForApiKey(key!)).toEqual(ctx);
+      // roleForApiKey derivation pins (G2.3), incl. FAIL CLOSED: a
+      // malformed/unrecognized scopes value must never mint admin.
+      const withScopes = (scopes: string) => ({ ...key!, scopes });
+      expect(roleForApiKey(withScopes('serve'))).toBe('member');
+      expect(roleForApiKey(withScopes('serve+admin'))).toBe('admin');
+      expect(roleForApiKey(withScopes('serve admin'))).toBe('admin'); // whitespace form
+      expect(roleForApiKey(withScopes('admin'))).toBe('admin');
+      for (const bad of ['', '   ', 'root', 'serve+admin+root', 'admin;drop', 'Admin', 'serve,admin']) {
+        expect(roleForApiKey(withScopes(bad))).toBe('member');
+      }
+      expect(parseApiKeyScopes('serve+admin+root').valid).toBe(false);
     } finally {
       await handle.close();
     }

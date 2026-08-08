@@ -76,7 +76,9 @@ beforeAll(async () => {
 
   await insertPolicy(db(), { id: 'pol-iso-a', orgId: ORG_A, name: 'a', config: POLICY_A });
   await insertPolicy(db(), { id: 'pol-iso-b', orgId: ORG_B, name: 'b', config: { type: 'min_cost', qualityFloor: 0.2 } });
-  await insertApiKey(db(), { id: 'key-iso-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A, policyId: 'pol-iso-a' });
+  // G2.3: isolation probes exercise admin routes (createKey, revoke) —
+  // explicit admin scope so 404-not-403 assertions keep testing isolation.
+  await insertApiKey(db(), { id: 'key-iso-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A, policyId: 'pol-iso-a', scopes: 'serve+admin' });
   await insertApiKey(db(), {
     id: 'key-iso-a-admin',
     keyHash: sha256(RAW_A_ADMIN),
@@ -85,7 +87,7 @@ beforeAll(async () => {
     policyId: 'pol-iso-a',
     scopes: 'serve+admin',
   });
-  await insertApiKey(db(), { id: 'key-iso-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B, policyId: 'pol-iso-b' });
+  await insertApiKey(db(), { id: 'key-iso-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B, policyId: 'pol-iso-b', scopes: 'serve+admin' });
 
   // A live dashboard session pinned to org A.
   await createSession(db(), {

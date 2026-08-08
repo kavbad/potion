@@ -1070,7 +1070,32 @@ async function main(): Promise<void> {
       ).json();
       assert(typeof status.unverifiableAdvisories === 'number', 'status missing unverifiableAdvisories');
       assert(status.policies.every((p: { autoRestore?: unknown }) => p.autoRestore !== undefined), 'status missing autoRestore posture');
-      return `rule → 6 sampled chats → breach notification delivered (latency ${(delivery.latencyMs as number).toFixed(0)}ms, clock+incident linked) → verification states on report`;
+      // G2.3 KEY ROLE SPLIT, proven live on the incident just minted: the
+      // SERVING key (default 'serve' scope) must NOT resolve incidents; an
+      // explicitly minted 'serve+admin' key may.
+      const denied = await fetch(`${API}/api/incidents/${delivery.incidentId}/resolve`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${polBody.apiKey}` },
+      });
+      assert(denied.status === 403, `serve key must 403 on incident resolve, got ${denied.status}`);
+      const deniedBody = await denied.json();
+      assert(
+        ['insufficient_role', 'insufficient_scope'].includes(deniedBody.error?.code),
+        `wrong refusal code: ${JSON.stringify(deniedBody)}`,
+      );
+      const adminMint = await fetch(`${API}/api/api-keys`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(sessionCookie ? { cookie: sessionCookie } : {}) },
+        body: JSON.stringify({ name: 'walkthrough-admin', scopes: 'serve+admin' }),
+      });
+      const adminMintBody = await adminMint.json();
+      assert(adminMint.ok && typeof adminMintBody.apiKey === 'string', `admin key mint → HTTP ${adminMint.status}`);
+      const resolved = await fetch(`${API}/api/incidents/${delivery.incidentId}/resolve`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${adminMintBody.apiKey}` },
+      });
+      assert(resolved.status === 200, `serve+admin resolve → HTTP ${resolved.status}`);
+      return `rule → 6 sampled chats → breach notification delivered (latency ${(delivery.latencyMs as number).toFixed(0)}ms, clock+incident linked) → verification states on report → serve key 403 on resolve, serve+admin key 200 (G2.3)`;
     } finally {
       await new Promise<void>((r) => void capture.close(() => r()));
     }

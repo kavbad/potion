@@ -68,7 +68,8 @@ beforeAll(async () => {
   app = await buildServer({ seed: false });
   await saveFrontier(db(), 'code-gen', POINTS, 'manual', 'test-prices');
   await createOrg(db(), { id: ORG_B, name: 'Share Org B' });
-  await insertApiKey(db(), { id: 'key-share-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B });
+  // G2.3: probes the admin revoke route cross-org — explicit admin scope.
+  await insertApiKey(db(), { id: 'key-share-b', keyHash: sha256(RAW_B), name: 'b', orgId: ORG_B, scopes: 'serve+admin' });
   await upsertStrategyConfig(db(), H_CHEAP, CFG_CHEAP);
 
   // Savings-report evidence: org A — 2 ok requests ($0.03) + 2 shadow samples;

@@ -361,7 +361,7 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
     expect(res.json().error.code).toBe('invalid_api_key');
   });
 
-  it("a 'serve'-scoped key may NOT perform admin mutations (403 insufficient_scope)", async () => {
+  it("a 'serve'-scoped key may NOT perform admin mutations (403 insufficient_role)", async () => {
     const mint = await app.inject({
       method: 'POST',
       url: '/api/api-keys',
@@ -371,7 +371,10 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
     const raw = mint.json().apiKey as string;
     const res = await authed('POST', '/api/api-keys', raw, { name: 'should fail' });
     expect(res.statusCode).toBe(403);
-    expect(res.json().error.code).toBe('insufficient_scope');
+    // G2.3: the ROLE gate fires first now (serve keys resolve to member
+    // before requireRole's scope stage is ever reached); the scope gate
+    // remains as defense in depth behind it.
+    expect(res.json().error.code).toBe('insufficient_role');
   });
 
   it('lists keys with lifecycle fields (raw keys never listed)', async () => {

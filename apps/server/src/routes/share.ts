@@ -187,9 +187,10 @@ export function registerShareRoutes(app: FastifyInstance, ctx: PotionContext): v
   });
 
   // ---- POST /api/share/:id/revoke — admin role ----
-  // Plain ROLE check (not requireRole's apiKey admin-SCOPE gate): revoking a
-  // share link is a share workflow action, not key-lifecycle admin — same
-  // reasoning as POST /api/incidents/:id/resolve (routes/guarantee.ts).
+  // G2.3: the api-key role derives from its scopes, so this plain ROLE
+  // check now excludes serving keys too (the pre-G2.3 "share workflow, not
+  // key-lifecycle admin" carve-out is reversed — admin mutations require
+  // the admin scope, whatever the workflow).
   app.post('/api/share/:id/revoke', async (req, reply) => {
     const org = req.potionOrg;
     if (!org) {

@@ -93,7 +93,8 @@ beforeAll(async () => {
     policyId: 'pol-alerts',
   });
   await createOrg(db(), { id: ORG_B, name: 'Alerts Org B' });
-  await insertApiKey(db(), { id: 'key-alerts-b', keyHash: sha256(KEY_B), name: 'b', orgId: ORG_B });
+  // G2.3: probes admin routes cross-org — explicit admin scope.
+  await insertApiKey(db(), { id: 'key-alerts-b', keyHash: sha256(KEY_B), name: 'b', orgId: ORG_B, scopes: 'serve+admin' });
   // Viewer session on org A (role gates).
   await createUser(db(), { id: 'usr_al_viewer', email: 'viewer@al.dev', name: 'viewer' });
   await createMembership(db(), { orgId: ORG_A, userId: 'usr_al_viewer', role: 'viewer' });
