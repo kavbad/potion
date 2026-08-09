@@ -208,9 +208,28 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   artifacts/tenancy-classification.md; (14) targeted server tests on the serving
   hot path incl. the mock-eligibility audit of every provider-resolution
   site; (16) compound policy: quality floor + latency bound in one policy;
-  (G2.8 CAPSTONE) one real workload end-to-end through the whole pipeline
-  — ingest to customer-visible guarantee report — as a single committed,
-  ledgered run (workload chosen at its check-in); (15-LAST, deferred)
+  (G2.8 CAPSTONE) [DONE 2026-08-09] one real workload end-to-end: 48 Claude
+  Code subagent sessions → converter (scrub-then-truncate, --verify-scrub) →
+  ingest → 7 clusters (real embedder @0.2; the toy embedder @0.62 fragmented
+  the same corpus into 30) → 23-item derived suite → live rubric + probe →
+  live org frontier → incumbent → suite-verify **contractual-breach, retention
+  0.2707 CI95 [0.1754, 0.3743], 23 pairs, floor 0.9**, confidence LOW
+  structurally (confidenceFor's line is 30; a cluster cannot exceed its
+  tool-signature bucket). SIX defects found: tool signature unusable on real
+  agents (45 sigs/48 sessions), verify-scrub flagging its own placeholders,
+  truncate-before-scrub leaking key fragments, verifier scanning serialized
+  JSON, the G0.5 threshold fix never reaching agent clustering, correlation
+  CIs persisted at one of two sites. Parameter report
+  artifacts/g28-parameters.md — notably REFUSES switching the judge gate to
+  Spearman: the point estimates argue for it (r 0.605 fails / rho 0.811
+  clears) but the intervals show rho STRADDLES the bar. POST-CAPSTONE QUEUE:
+  (1) per-call metering — BLOCKS design-partner traffic (60% of capstone
+  spend never reached request_logs; must carry provider and reconcile both
+  directions); (2) step-level item synthesis — session-level replay is
+  RECORDED INVALID for agentic workloads (live means 0.2000/0.0491/0.0000,
+  frontier collapsed to 1 point of 3); (3) incumbent self-retention as a
+  suite-validity gate, certified on the review surface like rubrics;
+  (4) swarm adversarial pass; (15-LAST, deferred)
   Redis rate limiting + shared caches — only incorrect across replicas,
   build when deployment demands it (seam documented).
 - **DEMOTED indefinitely:** public model/pricing page, catalog breadth,

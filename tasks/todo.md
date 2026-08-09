@@ -1938,6 +1938,29 @@ and the org's cap never trips.
 at every instant rather than only on the success path. Handler completion then
 reconciles rather than being the sole write.
 
+**SECOND REQUIREMENT, from the G2.8 post-leg reconcile: metering must carry the
+PROVIDER and reconcile in BOTH directions.** The reconcile after legs 4/5/5b
+showed internal $3.8856 against an authoritative OpenRouter delta of $0.7433 —
+apparent 5× overstatement. Cause: `usage.costUsd` / `spendUsd` are
+provider-BLIND scalars, and two of three live class reps were OpenAI models, so
+a multi-provider internal total was being compared against a single-provider
+bill. A provider-blind scalar **cannot be reconciled against per-key billing at
+all** — the operator is forced to do the split by hand and will eventually get
+it wrong (as happened here).
+
+So the per-call spend record must carry `{provider, model, tokens, costUsd}`,
+and the reconciler must compare per key. Note the direction matters
+independently: under-metering (the killed legs) hides spend from budgets;
+OVER-metering would trip a customer's hard stop early and bill them for spend
+that never occurred. A billing path must be correct in both directions, not
+merely conservative in one.
+
+**Residual, honestly open:** even after the provider split, the internal total
+looks high relative to the OpenRouter delta. Unverified candidates: prompt-cache
+discounts (cache reads bill at a fraction of input price and the price table
+models one input rate), and dashboard accounting lag. Resolving this is part of
+the metering item — it needs the per-provider record to be answerable at all.
+
 **Deliberately NOT fixed mid-run** (owner's call): changing the metering path
 during a live capstone would invalidate the capstone's own cost anatomy.
 
@@ -2060,3 +2083,104 @@ rule was adopted.
 Parameter report: `artifacts/g28-parameters.md` (7 sections, each with a
 confidence grade and the copies it applies to). Report artifacts:
 `artifacts/g28-capstone-report.{json,html}`.
+| 2026-08-09 | **LEDGER RECONCILE post-legs-4/5/5b: authoritative OpenRouter $8.9314.** Delta from $8.1881 = **$0.7433**, against internal metering of **$3.8856** — an apparent 5× OVERSTATEMENT. **DIAGNOSED: provider mis-attribution, not a metering bug.** The live sweep's class representatives were `or-gemini-pro` (OpenRouter), **`gpt-frontier-class` (OpenAI, gpt-5)** and **`gpt-nano-class` (OpenAI)** — two of three answer strategies billed to the OPENAI key. `EvalResult.usage.costUsd` and `RunSummary.spendUsd` are provider-BLIND scalars, so the internal total mixes both keys while the authoritative figure is OpenRouter-only. This repo's own convention (two ledger rows per multi-provider run, one per key — see the G1.1/G1.4/G1.7 rows) exists for exactly this; I collapsed it into one row and manufactured the discrepancy. | — | — | $8.9314 / $50.00 (OpenRouter) |
+| 2026-08-09 | same runs, OpenAI side (gpt-5 + gpt-nano answers, usage-priced; no balance endpoint for project keys) | — | ~$3.14 (residual of internal $3.8856 − OpenRouter $0.7433) | ~$3.4 (OpenAI key, usage-priced) |
+
+## STANDING PRODUCT DECISIONS from the G2.8 capstone (owner-filed 2026-08-09)
+
+The capstone's central finding: replaying a whole agentic session as ONE eval
+item asks a single model call to reproduce the final report of a 40-tool-call
+session, with only a truncated tool transcript for context. Measured live on the
+23-item suite: **0.2000 / 0.0491 / 0.0000** across three strategies, and the
+frontier collapsed to **1 non-dominated point of 3 evaluated**. Those are not
+strategy rankings; they are an artifact of an impossible task.
+
+### DECISION 1 — session-level replay is INVALID for agentic workloads
+
+Agentic sessions get **step-level item synthesis**: each model call in the
+session becomes its own eval item, carrying exactly the context that call saw
+(the messages, tool results and system state present at that step) and scored
+against what that call actually produced. A step is a reproducible unit; a
+session is not.
+
+Session-level replay stays valid for single-turn workloads, where the session IS
+one call. For agentic traffic it is **recorded as invalid, with this capstone as
+the evidence** — not deprecated on taste.
+
+Consequences to work through when the item is built: item counts rise by roughly
+the tool-call factor (this corpus: 1,941 spans from 48 sessions, so ~40× more
+items), which incidentally dissolves the 23-pair confidence ceiling; the
+per-step reference is the step's own output rather than the session's final
+answer; and `AGENT_SUITE_ITEM_CAP` becomes a sampling policy over steps rather
+than a cap on sessions.
+
+### DECISION 2 — incumbent self-retention is a SUITE-VALIDITY GATE
+
+A derived suite is **certified for guarantee use** only if the incumbent can
+retain its own baseline above a threshold when re-evaluated against it. If the
+incumbent cannot reproduce its own recorded quality on the suite, the suite is
+not measuring the thing the guarantee promises, and every retention verdict
+computed from it is noise wearing a number.
+
+Certification status and its evidence ride on the **review surface alongside
+rubrics** — same discipline, same owner rule: customer-derived artifacts always
+ship with status + evidence attached. An uncertified suite may still be built
+and inspected; it may not back a contractual verdict.
+
+This is the gate that would have caught G2.8's suite before it produced a
+verdict: an incumbent scoring 0.2000 against references drawn from its own
+sessions is self-evidently failing to retain its baseline.
+
+### Post-capstone queue (owner-ordered, reordered by the blocking finding)
+
+0. **Retention verdict reproducibility** — NEW, ahead of everything. The same
+   evidence produced a contractual-breach and an all-clear (see BLOCKING
+   FINDING). A billing defect costs money; this one invalidates the central
+   claim. Nothing downstream is worth building on an unstable verdict.
+1. **Per-call metering** — blocks design-partner traffic (see POST-CAPSTONE
+   ITEM 1). Must carry provider and reconcile both directions.
+2. **Step-level item synthesis** (Decision 1) — filed BEHIND metering, because
+   it multiplies eval volume ~40× and must not run on a billing path that
+   cannot attribute spend.
+3. **Incumbent self-retention as a suite-validity gate** (Decision 2).
+4. **Swarm adversarial pass** — and the reproducibility finding is a strong
+   argument for running it against the verdict path first.
+
+### G2.8 BLOCKING FINDING — the contractual verdict did not reproduce
+
+Two suite-verify runs over what appears to be the **same pairing** — incumbent
+`1a9bac73` (live mean 0.2000) vs candidate `8fe33bc4` (0.0491), 23 pairs, 0
+excluded, same suite, same provider mode, same rubric — returned:
+
+| run | retention mean | CI95 | outcome |
+|---|---|---|---|
+| leg 5b (policy `pol-g28`) | **0.2707** | [0.1754, 0.3743] | contractual-breach |
+| leg 5c (policy `pol-g28-serve`) | **1.0645** | [0.9848, 1.1420] | all-clear |
+
+The per-strategy means in `eval_results` are byte-identical across both runs
+(re-queried after the second: 0.2000 / 0.0491 / 0.0000), so the inputs did not
+change. **The same evidence produced a breach and an all-clear.**
+
+This is the most serious finding of the capstone, because the entire product
+rests on that number being stable and re-derivable. Candidate explanations, none
+verified:
+
+- `computeRetention` takes the **mean of per-item ratios**, which is not the
+  ratio of means; if the pairing differs in WHICH items pair, the two are
+  legitimately different numbers from the same marginal means. That would mean
+  `pairedQualities` is not pairing deterministically.
+- The verdict may be reading a different candidate than the one passed
+  (`activeIncumbent` is looked up inside the handler; only the candidate is
+  supplied).
+- Some policy-scoped filter in the pairing path differs between the two policy
+  ids.
+
+**Until this is understood, NO retention verdict from this system should be
+treated as contractual.** It is filed ahead of per-call metering in the
+post-capstone queue: a billing defect costs money, this one invalidates the
+product's central claim.
+
+The parameter report's §6 conclusions (floor enforceable at n=23 by 0.5%,
+detectable-drop band) are derived from the CI WIDTH, which is similar in both
+runs (0.0995 vs 0.0786), so they survive — but they are quarantined behind this
+finding until the pairing is proven deterministic.

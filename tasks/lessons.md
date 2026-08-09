@@ -249,3 +249,22 @@ the interval and gate on it — clears only when the whole interval clears, fail
 when the whole interval fails, and report a third INDETERMINATE state when it
 straddles. Be most suspicious when the convenient conclusion is the one the
 point estimate supports.
+
+## Re-run the verdict before you report it
+
+**What happened (2026-08-09, G2.8):** the capstone's contractual verdict was
+recorded from a single suite-verify run — retention 0.2707, contractual-breach.
+Running the same pairing a second time (to attach it to a different policy id)
+returned 1.0645, all-clear, from byte-identical per-strategy evidence. Had the
+second run not been needed for an unrelated reason, a non-reproducible number
+would have shipped as the capstone's headline.
+
+**Why:** a seeded bootstrap makes an interval reproducible GIVEN its inputs.
+That says nothing about whether the input SELECTION is deterministic. "Seeded
+and re-derivable" was proven for the statistic and assumed for everything
+upstream of it.
+
+**How to apply:** for any number that goes into a contract or a customer-facing
+verdict, run it twice and diff before recording it. Where the pipeline selects
+its own inputs (pairing, sampling, ranking), the determinism of that selection
+needs its own test — a seed on the estimator does not cover it.

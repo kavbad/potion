@@ -200,6 +200,15 @@ than it first appears.
 
 ## 6. The retention floor, 0.9 — enforceable here by 0.5%
 
+> **QUARANTINED.** A second suite-verify over what appears to be the same
+> pairing returned retention 1.0645 [0.9848, 1.1420] / all-clear where the run
+> below returned 0.2707 [0.1754, 0.3743] / contractual-breach, with byte-identical
+> per-strategy means in `eval_results`. Until that non-reproducibility is
+> explained (see "BLOCKING FINDING" in tasks/todo.md), treat the VERDICT below as
+> unproven. The conclusions in this section derive from the CI *width* (0.0995 vs
+> 0.0786 across the two runs — similar), so they are less affected, but they are
+> not to be relied on for a contract until the pairing is deterministic.
+
 **The measurement.** Live suite-verify, incumbent `1a9bac73` (mean 0.2000) vs
 serving candidate `8fe33bc4` (mean 0.0491), on the 23-item derived suite:
 
