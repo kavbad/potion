@@ -100,7 +100,7 @@ export async function windowEvidence(
           AND cluster_id = ${scope.clusterId}
           AND strategy_hash = ${scope.strategyHash}
           AND created_at > ${windowCutoff(scope.windowMin, now)}::timestamptz
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, id DESC
         LIMIT ${WINDOW_EVIDENCE_LIMIT}`,
   );
   const qualities = (result.rows as Array<{ quality: number }>).map((r) => r.quality);

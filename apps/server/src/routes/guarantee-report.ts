@@ -35,7 +35,9 @@ import {
   type DerivedServeFloor,
   type IncidentRow,
   listPolicies,
+  latestVerdictForTuple,
   servedSpendByPolicyCluster,
+  type GuaranteeVerdictRow,
 } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { GUARANTEE_VERIFY_SLA_MIN } from '@potion/workers';
@@ -174,6 +176,29 @@ function tupleMatches(row: IncidentRow, policyId: string, clusterId: string): bo
 /** Extract the latest retention verdict for a tuple from its incident rows
  * (newest first): a suite-leg breach incident, or a resolved advisory whose
  * resolution carries retention (all-clear / escalation both qualify). */
+/** Map a durable verdict row (0029) onto the report headline. Only the two
+ * verdict-bearing outcomes render one; recorded refusals (no-suite,
+ * budget-refused, …) surface through the verification state instead. */
+export function headlineFromVerdict(row: GuaranteeVerdictRow | null): RetentionHeadline | null {
+  if (row === null) return null;
+  if (row.outcome !== 'contractual-breach' && row.outcome !== 'all-clear') return null;
+  const r = row.retention as Record<string, unknown> | null;
+  if (r === null || typeof r !== 'object') return null;
+  return {
+    verdict: row.outcome,
+    mean: r.mean as number,
+    ci95: r.ci95 as [number, number],
+    floor: r.floor as number,
+    pairs: r.pairs as number,
+    excludedPairs: r.excludedPairs as number,
+    seed: r.seed as number,
+    confidence: confidenceFor(r.pairs as number),
+    providerMode: row.providerMode,
+    at: row.createdAt.toISOString(),
+    incidentId: row.verdictIncidentId ?? row.id,
+  };
+}
+
 export function latestRetentionHeadline(
   rows: IncidentRow[],
   policyId: string,
@@ -304,7 +329,18 @@ export async function loadGuaranteeReport(
         '(the org is on the labeled legacy absolute-floor path until then)';
     }
     const tupleIncidents = incidents.filter((i) => tupleMatches(i, policyId, clusterId));
-    const retention = latestRetentionHeadline(incidents, policyId, clusterId);
+    // 0029: the durable verdict table is the AUTHORITATIVE headline source —
+    // it records every outcome, all-clears included, where the incident scan
+    // only ever saw breaches and advisory-resolved passes (the gap that left
+    // G2.8's all-clear unrecorded). The incident path stays as the fallback
+    // for pre-0029 history.
+    const verdictRow = await latestVerdictForTuple(ctx.db.db, {
+      orgId,
+      policyId,
+      clusterId,
+    });
+    const retention =
+      headlineFromVerdict(verdictRow) ?? latestRetentionHeadline(incidents, policyId, clusterId);
     // ---- G2.2 verification state ----
     const slaMin = guarantee.verifySlaMin ?? GUARANTEE_VERIFY_SLA_MIN;
     const openAdv = tupleIncidents.filter((i) => i.kind === 'advisory' && i.resolvedAt === null);

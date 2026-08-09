@@ -1020,6 +1020,55 @@ export const clusterIncumbents = pgTable('cluster_incumbents', {
   designatedAt: timestamp('designated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Durable suite-verify verdicts (0029, post-G2.8). One row per verify, ALL
+ * eight outcomes — a verdict is a measurement and measurements are kept
+ * regardless of direction. Pre-0029 an all-clear with no advisory wrote
+ * NOTHING, which is why G2.8's contradictory 1.0645 could never be
+ * root-caused. `retention` carries the full block incl. pairEvidence (the
+ * ordered per-item list) so two verdicts can be diffed. Supersession is
+ * rubric-style: corrections are NEW rows; priors keep superseded_by +
+ * supersede_reason and stay readable.
+ */
+export const guaranteeVerdicts = pgTable(
+  'guarantee_verdicts',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    policyId: text('policy_id').notNull(),
+    clusterId: text('cluster_id').notNull(),
+    suiteId: text('suite_id'),
+    suiteVersion: text('suite_version'),
+    candidateHash: text('candidate_hash').notNull(),
+    incumbentHash: text('incumbent_hash'),
+    incumbentDesignationId: text('incumbent_designation_id'),
+    providerMode: text('provider_mode').notNull().default('unknown'),
+    pricesVersion: text('prices_version'),
+    outcome: text('outcome').notNull(),
+    retention: jsonb('retention').$type<Record<string, unknown>>(),
+    unpairable: jsonb('unpairable')
+      .$type<Array<{ itemId: string; has: 'candidate' | 'incumbent' }>>()
+      .notNull()
+      .default([]),
+    detail: text('detail'),
+    runId: text('run_id'),
+    spendUsd: doublePrecision('spend_usd').notNull().default(0),
+    rubricHash: text('rubric_hash'),
+    calibrationId: text('calibration_id'),
+    advisoryIncidentId: text('advisory_incident_id'),
+    verdictIncidentId: text('verdict_incident_id'),
+    supersededBy: uuid('superseded_by'),
+    supersedeReason: text('supersede_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('guarantee_verdicts_tuple_idx').on(t.orgId, t.policyId, t.clusterId, t.createdAt)],
+);
+
+export type GuaranteeVerdictRow = typeof guaranteeVerdicts.$inferSelect;
+export type NewGuaranteeVerdict = typeof guaranteeVerdicts.$inferInsert;
+
 export type ClusterIncumbentRow = typeof clusterIncumbents.$inferSelect;
 export type NewClusterIncumbent = typeof clusterIncumbents.$inferInsert;
 

@@ -200,14 +200,21 @@ than it first appears.
 
 ## 6. The retention floor, 0.9 — enforceable here by 0.5%
 
-> **QUARANTINED.** A second suite-verify over what appears to be the same
-> pairing returned retention 1.0645 [0.9848, 1.1420] / all-clear where the run
-> below returned 0.2707 [0.1754, 0.3743] / contractual-breach, with byte-identical
-> per-strategy means in `eval_results`. Until that non-reproducibility is
-> explained (see "BLOCKING FINDING" in tasks/todo.md), treat the VERDICT below as
-> unproven. The conclusions in this section derive from the CI *width* (0.0995 vs
-> 0.0786 across the two runs — similar), so they are less affected, but they are
-> not to be relied on for a contract until the pairing is deterministic.
+> **QUARANTINE RESOLVED BY SUPERSESSION (0029).** The contradiction is fully
+> explained, in two parts, both proven:
+> 1. **The interval was order-dependent** — `pairedQualities` had no `ORDER BY`
+>    and the bootstrap seed hashed scan-ordered ratios. Fixed (`0013c28`);
+>    determinism now regression-locked.
+> 2. **The 1.0645 all-clear was a MOCK-MODE verify.** The leg-5c invocation
+>    lacked `POTION_EVAL_PROVIDER=live`, so the handler silently evaluated the
+>    suite under mock providers and paired mock evidence. Proven when the
+>    supersession script itself repeated the identical mistake and the new
+>    durable verdict table caught it: same mean to four decimals, row stamped
+>    `providerMode=mock`. Not unrecorded inputs — a different measurement.
+>
+> The verdict trail in `guarantee_verdicts` (`.pglite/g28-live`) preserves all
+> priors quarantined with reasons; the ACTIVE verdict is the live re-render
+> under deterministic pairing. The numbers below stand.
 
 **The measurement.** Live suite-verify, incumbent `1a9bac73` (mean 0.2000) vs
 serving candidate `8fe33bc4` (mean 0.0491), on the 23-item derived suite:

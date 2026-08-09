@@ -284,3 +284,24 @@ evidence, and the investigation moved from "which order" to "which inputs".
 reported quantities are invariant under the hypothesis you are entertaining. An
 invariant that moved refutes the hypothesis outright and is worth more than any
 amount of further instrumentation.
+
+## A label you never read is not a label
+
+**What happened (2026-08-09, post-G2.8):** the contradictory 1.0645 verdict was
+attributed to "unrecorded inputs" after an investigation that read incidents,
+eval_results and the run log — but never the result's own `providerMode` field
+or the `eval_runs` table, both of which said MOCK the whole time. The verify
+had silently run in mock mode (env unset), and the platform labeled everything
+honestly; the diagnosis just never looked. The supersession script then
+repeated the identical mistake, and only the new durable verdict row — which
+puts the mode on the same row as the number — surfaced it.
+
+**Why:** provenance that lives in a field nobody's eye passes over does not
+function as provenance. The mode was stamped three places, none of them on the
+surface where the number was being argued about.
+
+**How to apply:** when a number is disputed, enumerate and READ every
+provenance field on it before theorizing — mode, seed, run id, prices version.
+And when designing records: put the provenance ON the row that carries the
+contested value, not one join away. The 0029 table caught in minutes what three
+investigation passes missed.

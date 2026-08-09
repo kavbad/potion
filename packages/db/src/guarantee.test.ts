@@ -22,6 +22,8 @@ import {
   resolveIncident,
   rollingQualityForPolicy,
   windowEvidence,
+  assertReproducible,
+  deriveServeFloor,
   type DbHandle,
 } from './index.js';
 import { insertFrontier } from './repos/frontiers.js';
@@ -585,5 +587,65 @@ describe('sweep support', () => {
     expect(all.map((p) => p.id)).toEqual(['pol-g']);
     expect(all[0]!.config.guarantee).toEqual(ROLLBACK_G);
     expect(await listPoliciesWithGuarantee(db(), 'org_nonexistent')).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Post-G2.8 — determinism of the serve-leg evidence readers.
+// ---------------------------------------------------------------------------
+
+describe('windowEvidence determinism (the tie-break, post-G2.8)', () => {
+  const SCOPE_W = { orgId: ORG_A, policyId: PID, clusterId: CID, strategyHash: H_CHEAP, windowMin: 60 };
+  const ID_LO = '00000000-0000-4000-8000-000000000001';
+  const ID_HI = '00000000-0000-4000-8000-000000000002';
+  const tied = async (firstId: string, firstQ: number, secondId: string, secondQ: number) => {
+    // SAME created_at — the tie the pre-fix ORDER BY left unspecified. Three
+    // seed sites (deriveServeFloor, evaluateGuarantee, the advisory leg) hash
+    // this array into their bootstrap seed, so tie order reached a
+    // contractual CI.
+    for (const [id, quality] of [[firstId, firstQ], [secondId, secondQ]] as const) {
+      await insertQualitySample(db(), {
+        id, orgId: ORG_A, strategyHash: H_CHEAP, quality,
+        createdAt: NOW, policyId: PID, clusterId: CID,
+      });
+    }
+  };
+
+  it('created_at ties order by id DESC — a contract, not scan luck', async () => {
+    // Ascending-id insert first: a pre-fix seq scan returns insert order
+    // (id ASC), so this test FAILS without the tie-break.
+    await tied(ID_LO, 0.2, ID_HI, 0.8);
+    const r = await windowEvidence(db(), SCOPE_W, NOW);
+    expect(r.qualities).toEqual([0.8, 0.2]);
+  });
+
+  it('insert order does not move the evidence array when row identity is fixed', async () => {
+    await tied(ID_HI, 0.8, ID_LO, 0.2); // opposite physical order
+    const r = await windowEvidence(db(), SCOPE_W, NOW);
+    expect(r.qualities).toEqual([0.8, 0.2]); // same canonical (created_at, id) order
+  });
+
+  it('re-reads are byte-identical (assertReproducible)', async () => {
+    await tied(ID_LO, 0.31, ID_HI, 0.62);
+    await seedSamples(ORG_A, H_CHEAP, [0.5, 0.7, 0.9]);
+    await assertReproducible(() => windowEvidence(db(), SCOPE_W, NOW), 'windowEvidence');
+  });
+});
+
+describe('deriveServeFloor determinism (run-twice-diff, post-G2.8)', () => {
+  it('identical stored evidence → byte-identical floor, CI and seed', async () => {
+    await seedSamples(ORG_A, H_CHEAP, [0.55, 0.72, 0.63, 0.81, 0.59, 0.7]);
+    const floor = await assertReproducible(
+      () =>
+        deriveServeFloor(
+          db(),
+          { orgId: ORG_A, policyId: PID, clusterId: CID, incumbentHash: H_CHEAP, windowMin: 60, minSamples: 5 },
+          NOW,
+        ),
+      'deriveServeFloor',
+    );
+    // And the result is a real floor with full provenance, not a null path.
+    expect(floor.floor).not.toBeNull();
+    expect(floor.provenance?.seed).toBeGreaterThan(0);
   });
 });

@@ -9,6 +9,7 @@ export * from './repos/request-logs.js';
 export * from './repos/usage.js';
 export * from './repos/shadow.js';
 export * from './repos/guarantee.js';
+export * from './repos/verdicts.js';
 export * from './repos/judge-calibrations.js';
 export * from './repos/derived-suites.js';
 export * from './repos/cluster-rubrics.js';
@@ -32,3 +33,4 @@ export * from './repos/traces.js';
 // cross-tenant tests in both packages/db and apps/server (see the module
 // header for why the demo org must never be an isolation subject).
 export * from './test-fixtures/orgs.js';
+export * from './test-fixtures/reproducible.js';

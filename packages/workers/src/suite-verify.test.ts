@@ -29,6 +29,7 @@ import {
   strategyConfigs,
   upsertBudget,
   upsertStrategyConfig,
+  listGuaranteeVerdicts,
   type DbHandle,
   type NewTraceSpan,
 } from '@potion/db';
@@ -550,5 +551,87 @@ describe('G2.2 incident SLAs', () => {
     const r = (await handler({}, ctx(queue))) as { restoreVerifies: unknown[] };
     expect(r.restoreVerifies).toHaveLength(0);
     expect(enqueued.filter((e) => e.kind === 'guarantee:suite-verify')).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0029 — the verdict is DURABLE, whatever the outcome (post-G2.8 P1 fix).
+// ---------------------------------------------------------------------------
+
+describe('guarantee_verdicts durability (0029)', () => {
+  it('an ALL-CLEAR with NO advisory persists a full verdict row — the P1 fix', async () => {
+    // Pre-0029 this exact case wrote NOTHING: G2.8's contradictory 1.0645
+    // all-clear left no inputs, no seed, no pairing, and could never be
+    // root-caused. The manual verify with no advisory is the hole itself.
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const r = await verify(clusterId);
+    expect(r.outcome).toBe('all-clear');
+    expect(r.verdictId).not.toBeNull();
+
+    const rows = await listGuaranteeVerdicts(db.db, ORG);
+    expect(rows).toHaveLength(1);
+    const v = rows[0]!;
+    expect(v.id).toBe(r.verdictId);
+    expect(v.outcome).toBe('all-clear');
+    expect(v.advisoryIncidentId).toBeNull(); // no advisory — and STILL durable
+    expect(v.incumbentHash).toBe(H_INCUMBENT);
+    expect(v.candidateHash).toBe(H_SERVING);
+    expect(v.providerMode).toBe('mock');
+    expect(v.suiteId).toBe(`${clusterId}-replays-v1`);
+    expect(v.supersededBy).toBeNull();
+    // The diffable per-item record — the thing whose absence made G2.8's
+    // disagreement unexplainable.
+    const ret = v.retention as { pairEvidence?: Array<{ itemId: string; ratio: number }> } | null;
+    expect(ret?.pairEvidence?.length).toBeGreaterThanOrEqual(5);
+    const ids = ret!.pairEvidence!.map((x) => x.itemId);
+    expect(ids).toEqual([...ids].sort());
+  });
+
+  it('a CONTRACTUAL BREACH writes the verdict row AND keeps its incident, linked', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 5 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const r = await verify(clusterId);
+    expect(r.outcome).toBe('contractual-breach');
+    const v = (await listGuaranteeVerdicts(db.db, ORG))[0]!;
+    expect(v.outcome).toBe('contractual-breach');
+    // The alarm (incident) and the lab notebook (verdict) reference each other.
+    expect(v.verdictIncidentId).toBe(r.verdictIncidentId);
+  });
+
+  it('recorded refusals write verdict rows too — no-incumbent and self-incumbent', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    // No designation → no-incumbent.
+    const r1 = await verify(clusterId);
+    expect(r1.outcome).toBe('no-incumbent');
+    expect(r1.verdictId).not.toBeNull();
+    // Designate, then verify the incumbent AGAINST ITSELF → self-incumbent.
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const r2 = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
+    expect(r2.outcome).toBe('self-incumbent');
+    const rows = await listGuaranteeVerdicts(db.db, ORG);
+    expect(rows.map((x) => x.outcome).sort()).toEqual(['no-incumbent', 'self-incumbent']);
+    // A refusal has no retention block — the row records the outcome + detail.
+    expect(rows.find((x) => x.outcome === 'no-incumbent')!.retention).toBeNull();
+    expect(rows.find((x) => x.outcome === 'no-incumbent')!.detail).toMatch(/no active incumbent/);
+  });
+
+  it('RUN-TWICE-DIFF on the full handler path: two verifies over identical evidence render byte-identical retention', async () => {
+    // The whole-path application of the promoted lesson: not just
+    // computeRetention in isolation, but pairing + retention through the
+    // real handler, twice, against the same stored rows.
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const a = await verify(clusterId);
+    const b = await verify(clusterId);
+    expect(JSON.stringify(b.retention)).toBe(JSON.stringify(a.retention));
+    // …and both runs are separately durable: two rows, same evidence.
+    const rows = await listGuaranteeVerdicts(db.db, ORG);
+    expect(rows).toHaveLength(2);
+    expect(JSON.stringify(rows[0]!.retention)).toBe(JSON.stringify(rows[1]!.retention));
   });
 });

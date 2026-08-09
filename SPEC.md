@@ -435,6 +435,14 @@ export interface SavingsReport {
 
 ### 12.5 Quality guarantee + auto-rollback (#22) — apps/server, packages/db
 
+Post-G2.8 (0029): every `guarantee:suite-verify` writes a durable
+`guarantee_verdicts` row for ALL outcomes — all-clears included — carrying the
+full retention block (incl. ordered per-item `pairEvidence`), provider mode,
+coverage gaps (`unpairable`) and provenance; corrections travel by rubric-style
+SUPERSESSION (`superseded_by` + reason), never edits. Breaches additionally
+keep their incident (the alarm); the verdict row is the lab notebook. The
+report's retention headline reads verdicts first.
+
 ```ts
 export interface GuaranteeConfig { minQuality: number; windowMin: number; sampleRate: number; action: 'rollback' | 'alert'; judgeModel?: string; minSamples?: number }
 // Policy gains optional `guarantee`. Migration 0008_guarantee:

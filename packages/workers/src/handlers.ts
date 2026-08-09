@@ -25,7 +25,9 @@ import {
   getPolicyById,
   insertIncident,
   insertIncidentRow,
+  insertGuaranteeVerdict,
   pairedQualities,
+  type UnpairableItem,
   resolveAdvisoryWithEvidence,
   resolveIncidentWithEvidence,
   resolveRollbackTarget,
@@ -3083,6 +3085,10 @@ export function computeRetention(
 }
 
 export interface GuaranteeSuiteVerifyResult {
+  /** The durable guarantee_verdicts row this run wrote (0029). Null never
+   * happens in practice — the write is load-bearing — but the field is
+   * nullable so pre-0029 stored job results still parse. */
+  verdictId: string | null;
   outcome:
     | 'contractual-breach'
     | 'all-clear'
@@ -3110,10 +3116,25 @@ export interface GuaranteeSuiteVerifyResult {
   detail: string | null;
 }
 
-export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'> = async (
+/** Provenance the verdict row needs that the result shape never carried —
+ * accumulated as the run learns it, so the ONE chokepoint write below has it
+ * whatever the outcome. */
+interface VerdictProvenance {
+  incumbentHash: string | null;
+  incumbentDesignationId: string | null;
+  suiteId: string | null;
+  suiteVersion: string | null;
+  pricesVersion: string | null;
+  rubricHash: string | null;
+  calibrationId: string | null;
+  unpairable: UnpairableItem[];
+}
+
+const runSuiteVerify = async (
   payload: GuaranteeSuiteVerifyPayload,
   ctx: JobContext,
-): Promise<GuaranteeSuiteVerifyResult> => {
+  prov: VerdictProvenance,
+): Promise<Omit<GuaranteeSuiteVerifyResult, 'verdictId'>> => {
   const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
   const base = {
     providerMode,
@@ -3174,6 +3195,8 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     await recordAttempt('no-incumbent', detail);
     return { ...base, outcome: 'no-incumbent', detail };
   }
+  prov.incumbentHash = incumbent.strategyHash;
+  prov.incumbentDesignationId = incumbent.id;
   const loadCfg = async (hash: string): Promise<StrategyConfig | null> => {
     const rows = await ctx.db.select().from(strategyConfigs).where(eq(strategyConfigs.hash, hash));
     return rows[0]?.config ?? null;
@@ -3231,12 +3254,14 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   }
 
   const suiteId = `${payload.clusterId}-replays-v1`;
+  prov.suiteId = suiteId;
   const loaded = await loadDerivedSuite(ctx.db, suiteId);
   if (!loaded || loaded.items.length === 0) {
     const detail = `derived suite '${suiteId}' is empty — nothing to verify against`;
     await recordAttempt('no-suite', detail);
     return { ...base, outcome: 'no-suite', detail };
   }
+  prov.suiteVersion = loaded.suite.version;
   const capUsd = payload.capUsd ?? DEFAULT_SUITE_VERIFY_CAP_USD;
 
   // FAIL-CLOSED budget refusal (live spend only) — RECORDED durably on the
@@ -3255,6 +3280,7 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   }
 
   const { table: prices } = loadPrices(ctx.pricesPath);
+  prov.pricesVersion = prices.version;
   let judgeModelOverride: string | undefined;
   if (providerMode === 'live') {
     // Live reachability — explicit refusal, never a silent drop (G1.7
@@ -3325,6 +3351,7 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     providerMode,
     orgId: payload.orgId,
   });
+  prov.unpairable = unpairable;
   const computed = computeRetention(pairs, {
     seedKey:
       `suite-verify|${payload.orgId}|${payload.policyId}|${payload.clusterId}|` +
@@ -3338,6 +3365,8 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   const retention = computed.retention;
   const { mean, ci95 } = retention;
   const approvedRubric = await approvedRubricForCluster(ctx.db, payload.clusterId);
+  prov.rubricHash = approvedRubric?.rubricHash ?? null;
+  prov.calibrationId = approvedRubric?.calibrationId ?? null;
   // The FULL evidence block — a verdict without provenance is a test
   // failure (owner rule: status + evidence, always).
   const evidence = {
@@ -3558,6 +3587,62 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     }
   }
   return { ...spent, outcome: 'all-clear', retention, advisoryResolved, restoredIncidentId, recoveryUnconfirmed };
+};
+
+/**
+ * The exported handler is a CHOKEPOINT around runSuiteVerify (0029): one
+ * durable guarantee_verdicts row per run, for EVERY outcome — all-clears
+ * included. Pre-0029 an all-clear with no advisory attached wrote nothing,
+ * which is why G2.8's contradictory 1.0645 verdict could never be
+ * root-caused: the instrument recorded its failures and not its passes.
+ *
+ * A wrapper, not per-site calls, on purpose: seven return sites is seven
+ * chances for the next edit to add an eighth that forgets to record — the
+ * exact "handled in one route is not handled" class this repo keeps paying
+ * for. Here a new outcome is durable by construction.
+ *
+ * The write is LOAD-BEARING (awaited, throws through): a verdict that cannot
+ * be recorded must not report success. Ownership-misuse throws inside the
+ * runner happen before any verdict exists and stay exceptions, not outcomes.
+ */
+export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'> = async (
+  payload: GuaranteeSuiteVerifyPayload,
+  ctx: JobContext,
+): Promise<GuaranteeSuiteVerifyResult> => {
+  const prov: VerdictProvenance = {
+    incumbentHash: null,
+    incumbentDesignationId: null,
+    suiteId: null,
+    suiteVersion: null,
+    pricesVersion: null,
+    rubricHash: null,
+    calibrationId: null,
+    unpairable: [],
+  };
+  const result = await runSuiteVerify(payload, ctx, prov);
+  const verdictId = await insertGuaranteeVerdict(ctx.db, {
+    orgId: payload.orgId,
+    policyId: payload.policyId,
+    clusterId: payload.clusterId,
+    suiteId: prov.suiteId ?? `${payload.clusterId}-replays-v1`,
+    suiteVersion: prov.suiteVersion,
+    candidateHash: payload.servingStrategyHash,
+    incumbentHash: prov.incumbentHash,
+    incumbentDesignationId: prov.incumbentDesignationId,
+    providerMode: result.providerMode ?? 'unknown',
+    pricesVersion: prov.pricesVersion,
+    outcome: result.outcome,
+    retention: result.retention as unknown as Record<string, unknown> | null,
+    unpairable: prov.unpairable,
+    detail: result.detail,
+    runId: result.runId,
+    spendUsd: result.spendUsd,
+    rubricHash: prov.rubricHash,
+    calibrationId: prov.calibrationId,
+    advisoryIncidentId: payload.advisoryIncidentId ?? null,
+    verdictIncidentId: result.verdictIncidentId,
+  });
+  return { ...result, verdictId };
 };
 
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {

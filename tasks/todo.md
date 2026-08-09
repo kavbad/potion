@@ -2274,3 +2274,76 @@ contractual verdict. Its current value is inherited, never triggered (0 of 23
 exclusions on the capstone), and now needs its own justification. Filed as a
 parameter-report follow-up; NOT re-sited here, since one workload that never
 triggered it is no evidence about where it belongs.
+
+## POST-CAPSTONE (0) COMPLETION — durable verdicts, supersession, and the mystery FULLY resolved (2026-08-09)
+
+### The 1.0645 mystery: RESOLVED, superseding the earlier "unrecorded inputs" conclusion
+
+The earlier root-cause write-up attributed the 1.0645 all-clear to "inputs that
+were never recorded." That was the best available conclusion pre-0029 and it is
+now SUPERSEDED by proof: **leg 5c was a MOCK-MODE verify.** The invocation
+lacked `POTION_EVAL_PROVIDER=live`; `guaranteeSuiteVerifyHandler` silently
+degrades to mock, evaluated the suite under mock providers, and paired MOCK
+evidence — a different measurement, honestly labeled in a field nobody read.
+
+Proof, threefold:
+1. The supersession script's own first run REPEATED the identical mistake, and
+   the new `guarantee_verdicts` table caught it in minutes: same mean to four
+   decimals (1.0645), row stamped `providerMode=mock`, $0.0413 mock-priced
+   eval. First real use of the table; immediate catch.
+2. Forensics in `eval_runs` all along: a `mock / $0.0413` run row written at
+   leg-5c time — the diagnosis had read incidents and never eval_runs.
+3. The mode-purity design worked exactly as built ("modes structurally cannot
+   mix in a pairing") — the failure was operator-side, enabled by an asymmetry:
+   `frontier:live-sweep` THROWS without the env; suite-verify silently stamps
+   mock. FILED: the operator surfaces now guard (g28-supersede requires the
+   env); whether the handler itself should refuse mock pairing when the
+   cluster's evidence is live-only is a design question for the review-surface
+   item (Decision 2's certification gate is the natural home).
+
+### The verdict trail (guarantee_verdicts, .pglite/g28-live)
+
+```
+e8e0bdc5  contractual-breach  live  0.2707  ci95 [0.1736, 0.3804]  seed 2141613106  ACTIVE
+3c4770f0  all-clear           mock  1.0645  SUPERSEDED→e8e0bdc5  (mock-mode operator error, caught by the table)
+3d0a8081  all-clear           live* 1.0645  SUPERSEDED→3c4770f0  (reconstructed prior B; *inserted as live before the mock diagnosis — the terminal reason corrects the record)
+dac842e8  contractual-breach  live  0.2707  SUPERSEDED→3c4770f0  (pre-0029 order-dependent CI, seed 4159430066)
+```
+
+Customer report headline now reads **contractual-breach 0.2707 (low, live)**
+from the verdict table. The audit trail shows the instrument catching and
+correcting itself twice — including catching the correction.
+
+### What landed
+
+- **0029 `guarantee_verdicts`**: one durable row per suite-verify, ALL eight
+  outcomes, written at a CHOKEPOINT wrapper (not per-site calls — a new
+  outcome is durable by construction); write is load-bearing. Carries
+  pairEvidence, unpairable coverage, provider mode, full provenance,
+  supersession links. Report reads verdicts first, incident scan as pre-0029
+  fallback.
+- **windowEvidence tie-break** (`created_at DESC, id DESC`): the sibling
+  reader defect — three seed sites hash `qualities[]`, and created_at ties had
+  unspecified order. Regression-locked; the opposite-insert-order test FAILS
+  against the pre-fix query (verified by revert).
+- **assertReproducible** promoted from lessons.md into the suite
+  (`@potion/db` test fixture): applied to windowEvidence, deriveServeFloor
+  (first byte-identity lock incl. provenance+seed), computeRetention (existing
+  determinism suite), evaluateGuarantee (existing G0.3 test), and the FULL
+  handler path (two verifies over identical evidence → byte-identical
+  retention, both separately durable).
+- **Verdict durability tests**: all-clear-with-no-advisory persists (the P1
+  hole itself), breach links its incident, refusals write rows, run-twice on
+  the whole handler.
+
+### METERING ITEM — over-metering instance recorded
+
+The $0-provider-call live re-render (69 eval rows before AND after — zero
+executed) re-metered **$1.1045** of stored evidence cost into `request_logs`
+as new spend (`eval_live` rollup now $4.9901 vs ~$3.89 actually incurred).
+A cached re-verify — or the G2.2 sweep's RETRIES — bills the org the suite's
+full evidence cost each pass. With the under-metering instances (G1.7, G2.8
+legs 3/4), the per-call metering item now has observed defects in BOTH
+directions; the reconcile-both-ways requirement is not theoretical.
+
+| 2026-08-09 | Post-capstone (0) supersession legs: mock-mode re-render (caught, superseded) + live re-render — **zero provider calls both runs** (eval row count unchanged); $0.0413 mock-priced + $1.1045 stored-cost replay re-metered (see over-metering instance). | $8.00 cap | **$0.0000 real** | no reconcile needed (OpenRouter unchanged) |
