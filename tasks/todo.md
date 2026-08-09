@@ -2184,3 +2184,93 @@ The parameter report's §6 conclusions (floor enforceable at n=23 by 0.5%,
 detectable-drop band) are derived from the CI WIDTH, which is similar in both
 runs (0.0995 vs 0.0786), so they survive — but they are quarantined behind this
 finding until the pairing is proven deterministic.
+
+## POST-CAPSTONE (0) — ROOT CAUSE, WITH PROOF (2026-08-09)
+
+### The decisive experiment
+
+Re-ran every candidate pairing against the designated incumbent on the intact
+capstone db (`.pglite/g28-live`), under the fixed code, **twice each**, $0:
+
+```
+candidate 8fe33bc4: pairs=23 unpairable=0 mean=0.2707 ci=[0.1819, 0.3819] seed=3272373406 | RUN-TWICE IDENTICAL: true
+candidate 2797eeed: pairs=23 unpairable=0 mean=0.0000 ci=[0.0000, 0.0000] seed=1502513808 | RUN-TWICE IDENTICAL: true
+candidate 1a9bac73: pairs=23 unpairable=0 mean=1.0000 ci=[1.0000, 1.0000] seed=2964975663 | RUN-TWICE IDENTICAL: true
+```
+
+### Finding 1 — the CI was order-dependent. PROVEN, and fixed.
+
+Leg 5b recorded `mean 0.2707, ci95 [0.1754, 0.3743], seed 4159430066`.
+The same evidence under the fixed code gives `mean 0.2707, ci95 [0.1819,
+0.3819], seed 3272373406`.
+
+**Same mean, different interval.** That is the signature of the defect and it
+localises it exactly:
+
+- `bootstrapMeanCi` computes the estimate as `values.reduce(sum)/n` over the
+  input array — **order-invariant**. The mean cannot move with ordering.
+- The interval comes from resampling `values[floor(rand()*n)]`, which indexes
+  into the array — **order-sensitive**. Permuting the pairs lands the draws on
+  different items.
+- The seed was `sha256(JSON.stringify(ratios))` over the array in scan order,
+  so ordering perturbed the seed as well.
+
+Both are closed: `pairedQualities` now orders in SQL, `computeRetention` sorts
+by `itemId` before anything order-sensitive, and the seed derives from
+item-keyed pair content (`itemId:cand/inc`) rather than a bare ratio array.
+Three determinism tests fail against the pre-fix code and pass after — verified
+by reverting the fix and re-running.
+
+### Finding 2 — the MEAN difference was NOT ordering. Eliminated by proof.
+
+0.2707 vs 1.0645 is a difference of means, and **ordering cannot change a
+mean** (see above). So the two runs did not see the same pair set.
+
+The experiment shows no candidate paired against the designated incumbent
+`1a9bac73` yields 1.0645 — the three possible pairings give 0.2707, 0.0000 and
+1.0000. Leg 5c therefore ran against **different inputs than the record
+implies**, and those inputs are unrecoverable because the run was an all-clear
+with no advisory attached, which under P1 wrote nothing at all.
+
+**Honest conclusion:** the platform defect (order-dependent CI) is proven and
+fixed; the specific 1.0645 observation is attributable to unrecorded inputs, not
+to the estimator or the pairing arithmetic — both of which now reproduce byte
+for byte. The instrument's real failure was not computing the wrong number, it
+was **being unable to say which number it had computed**.
+
+### Leg 5b's verdict REPRODUCES
+
+`contractual-breach, retention 0.2707, 23 pairs, 0 excluded, 0 unpairable` —
+run twice, byte-identical, under deterministic pairing. That is the verdict that
+survives.
+
+## STANDING DECISION — retention estimator stays MEAN-OF-RATIOS
+
+`computeRetention` averages per-item ratios. On this evidence the alternative,
+ratio-of-means, reads **0.0491 / 0.2000 = 0.2455** versus the 0.2707 recorded —
+stated up front so the choice is visibly not made by which number it produces
+(both breach; neither flatters the run).
+
+| | mean-of-ratios (kept) | ratio-of-means |
+|---|---|---|
+| estimates | mean per-item retention | aggregate retention |
+| weighting | every item equally | items weighted by incumbent score |
+| as `incumbent_i → 0` | **explodes** | stable |
+| the CI is a CI **of** | the mean of a ratio distribution | a ratio of two means |
+| hides | little; noisy under a skewed incumbent | broad regression masked by a few strong items |
+
+**Kept, because the contract is per-item.** The guarantee promises quality on
+the work the customer sent, not on a weighted aggregate of it. A strategy that
+fails 20% of items badly and aces the rest IS a breach; ratio-of-means can
+average that away, and weighting by incumbent score means the items the
+incumbent found easy dominate the verdict — precisely backwards for detecting
+regression on hard work.
+
+**The coupling, recorded explicitly:** mean-of-ratios explodes as
+`incumbent_i → 0`, and `SUITE_VERIFY_EPSILON` (0.05) is the only thing guarding
+that. Keeping this estimator therefore makes epsilon **contractual surface, not
+an implementation detail** — it decides which items are allowed to influence a
+contractual verdict. Its current value is inherited, never triggered (0 of 23
+exclusions on the capstone), and now needs its own justification. Filed as a
+parameter-report follow-up; NOT re-sited here, since one workload that never
+triggered it is no evidence about where it belongs.

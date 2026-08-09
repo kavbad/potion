@@ -1304,7 +1304,10 @@ async function liveHeldoutPairs(
   // G2.1: delegates to the lifted repo pairing (structurally identical
   // rows). The promotion gate stays LIVE-only — mock cycles structurally
   // cannot promote; guarantee:suite-verify passes the env's mode instead.
-  return pairedQualities(ctx.db, {
+  // The promotion gate consumes a plain pair array. Unpairable items are a
+  // coverage gap here too, but the gate's own minimum-n check is what guards
+  // it; the CONTRACTUAL surface that must report them is suite-verify.
+  const { pairs } = await pairedQualities(ctx.db, {
     clusterId,
     candidateHash,
     incumbentHash,
@@ -1312,6 +1315,7 @@ async function liveHeldoutPairs(
     providerMode: 'live',
     ...(orgId !== undefined ? { orgId } : {}),
   });
+  return pairs;
 }
 
 /** Fan a promotion alert out. Platform promotions go to every org with an
@@ -2989,6 +2993,14 @@ export const DEFAULT_RETENTION_FLOOR = 0.9;
 /** Minimum usable pairs for a verdict (mirrors GUARANTEE_MIN_SAMPLES). */
 export const SUITE_VERIFY_MIN_PAIRS = 5;
 
+/** One item's contribution to a retention verdict (G2.8-followup). */
+export interface RetentionPairEvidence {
+  itemId: string;
+  candidateQuality: number;
+  incumbentQuality: number;
+  ratio: number;
+}
+
 export interface SuiteVerifyRetention {
   mean: number;
   ci95: [number, number];
@@ -2998,6 +3010,10 @@ export interface SuiteVerifyRetention {
   excludedPairs: number;
   epsilon: number;
   floor: number;
+  /** The per-item evidence, ordered by itemId. A verdict without this cannot
+   * be diffed against another verdict, which is how G2.8's contradiction
+   * became unexplainable. */
+  pairEvidence: RetentionPairEvidence[];
 }
 
 /**
@@ -3019,8 +3035,28 @@ export function computeRetention(
       insufficient: `${usable.length} usable pairs (${excludedPairs} excluded below epsilon ${epsilon}) — need ${minPairs}+ with a usable majority`,
     };
   }
-  const ratios = usable.map((p) => p.candidateQuality / p.incumbentQuality);
-  const seed = seedFromString(`${opts.seedKey}|${usable.length}|${sha256(JSON.stringify(ratios))}`);
+  // G2.8-followup: SORT BY ITEM ID before doing anything order-sensitive.
+  //
+  // Two order dependencies lived here, and both reached a contractual number:
+  //   1. the seed was `sha256(JSON.stringify(ratios))` over the ratio array in
+  //      whatever order the rows arrived, so a different scan order produced a
+  //      different seed and therefore a different CI95;
+  //   2. `bootstrapMeanCi` draws `values[floor(rand()*n)]`, so even with a
+  //      fixed seed the resamples land on different items when the array is
+  //      permuted — the mean is order-invariant, the INTERVAL is not.
+  // Sorting by itemId makes the pair sequence a function of the pair SET.
+  // (`pairedQualities` now also orders in SQL; this is the belt to that
+  // braces, because computeRetention is exported and unit-tested directly with
+  // caller-supplied arrays.)
+  const ordered = [...usable].sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
+  const ratios = ordered.map((p) => p.candidateQuality / p.incumbentQuality);
+  // Seed from the item-keyed pair CONTENT, not from the bare ratio array: two
+  // different pairings can produce the same multiset of ratios, and they are
+  // not the same evidence.
+  const seedBody = ordered
+    .map((p) => `${p.itemId}:${p.candidateQuality}/${p.incumbentQuality}`)
+    .join('|');
+  const seed = seedFromString(`${opts.seedKey}|${ordered.length}|${sha256(seedBody)}`);
   const { mean, ci95 } = bootstrapMeanCi(ratios, seed, BOOTSTRAP_RESAMPLES);
   return {
     retention: {
@@ -3028,10 +3064,19 @@ export function computeRetention(
       ci95: ci95 as [number, number],
       seed,
       resamples: BOOTSTRAP_RESAMPLES,
-      pairs: usable.length,
+      pairs: ordered.length,
       excludedPairs,
       epsilon,
       floor: opts.floor,
+      // The per-item evidence behind this number, ordered. Without it a later
+      // disagreement between two verdicts is undiagnosable — which is exactly
+      // the position G2.8 ended in.
+      pairEvidence: ordered.map((p) => ({
+        itemId: p.itemId,
+        candidateQuality: p.candidateQuality,
+        incumbentQuality: p.incumbentQuality,
+        ratio: p.candidateQuality / p.incumbentQuality,
+      })),
     },
     insufficient: null,
   };
@@ -3272,7 +3317,7 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   const spent = { ...base, runId: summary.runId, spendUsd: summary.spendUsd };
 
   // Retention over identical items, mode-filtered pairing.
-  const pairs = await pairedQualities(ctx.db, {
+  const { pairs, unpairable } = await pairedQualities(ctx.db, {
     clusterId: payload.clusterId,
     candidateHash: payload.servingStrategyHash,
     incumbentHash: incumbent.strategyHash,
@@ -3301,6 +3346,11 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     clusterId: payload.clusterId,
     fromStrategy: payload.servingStrategyHash,
     retention,
+    // G2.8-followup: COVERAGE, carried with the verdict. Items evaluated for
+    // one strategy but not the other used to vanish inside pairedQualities, so
+    // a verdict over a partial suite read exactly like one over a whole suite.
+    // `retention.pairs` says what was measured; this says what was not.
+    unpairableItems: unpairable,
     suiteId,
     suiteVersion: loaded.suite.version,
     ...(approvedRubric !== null

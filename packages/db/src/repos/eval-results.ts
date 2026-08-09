@@ -112,6 +112,20 @@ export interface QualityPair {
   incumbentQuality: number;
 }
 
+/** An item with evidence for ONE strategy only — a coverage gap the verdict
+ * must report, not swallow (G2.8-followup). */
+export interface UnpairableItem {
+  itemId: string;
+  has: 'candidate' | 'incumbent';
+}
+
+export interface PairedQualities {
+  /** Items scored by BOTH strategies, ordered by itemId. */
+  pairs: QualityPair[];
+  /** Items scored by exactly one — reported, never silently dropped. */
+  unpairable: UnpairableItem[];
+}
+
 /**
  * Per-item quality rows for two hashes on one cluster, paired by itemId
  * (G2.1 lift of the workers-private liveHeldoutPairs). Non-stale rows in
@@ -130,12 +144,13 @@ export async function pairedQualities(
     providerMode: 'mock' | 'live';
     orgId?: string;
   },
-): Promise<QualityPair[]> {
+): Promise<PairedQualities> {
   const rows = await db
     .select({
       itemId: evalResults.itemId,
       strategyHash: evalResults.strategyHash,
       quality: evalResults.quality,
+      cacheKey: evalResults.cacheKey,
     })
     .from(evalResults)
     .where(
@@ -147,20 +162,56 @@ export async function pairedQualities(
         eq(evalResults.providerMode, scope.providerMode),
         scope.orgId !== undefined ? eq(evalResults.orgId, scope.orgId) : isNull(evalResults.orgId),
       ),
-    );
-  const byItem = new Map<string, Map<string, number>>();
+    )
+    // G2.8-followup: TOTAL, EXPLICIT ordering. Without it the scan order is
+    // unspecified by the SQL contract, `byItem` (insertion-ordered) inherits
+    // it, and `computeRetention` seeds from sha256(JSON.stringify(ratios)) —
+    // so the CI95 of a CONTRACTUAL verdict was a function of physical row
+    // order. It happened to be stable on one PGlite file; that is luck, not a
+    // guarantee, and it survives neither a vacuum nor a plan change.
+    .orderBy(evalResults.itemId, evalResults.strategyHash);
+
+  const byItem = new Map<string, Map<string, { quality: number; cacheKey: string }>>();
   for (const r of rows) {
-    const m = byItem.get(r.itemId) ?? new Map<string, number>();
-    m.set(r.strategyHash, r.quality);
+    const m = byItem.get(r.itemId) ?? new Map<string, { quality: number; cacheKey: string }>();
+    const existing = m.get(r.strategyHash);
+    if (existing !== undefined) {
+      // REFUSE rather than guess. The previous code did `m.set(...)`, so a
+      // second row for the same (item, strategy) silently won on scan order —
+      // a value-changing race, not merely an ordering one. Naming both cache
+      // keys makes the collision diagnosable instead of invisible.
+      throw new Error(
+        `pairedQualities: duplicate eval evidence for item '${r.itemId}' strategy ` +
+          `'${r.strategyHash}' (cacheKeys ${existing.cacheKey} and ${r.cacheKey}) — ` +
+          'refusing to pick one; a contractual verdict must not depend on which row was scanned last',
+      );
+    }
+    m.set(r.strategyHash, { quality: r.quality, cacheKey: r.cacheKey });
     byItem.set(r.itemId, m);
   }
+
   const pairs: QualityPair[] = [];
+  const unpairable: UnpairableItem[] = [];
+  // Iterating a Map keyed by itemId in insertion order, over rows already
+  // sorted by itemId, gives a deterministic item sequence.
   for (const [itemId, m] of byItem) {
-    const candidateQuality = m.get(scope.candidateHash);
-    const incumbentQuality = m.get(scope.incumbentHash);
-    if (candidateQuality !== undefined && incumbentQuality !== undefined) {
-      pairs.push({ itemId, candidateQuality, incumbentQuality });
+    const candidate = m.get(scope.candidateHash);
+    const incumbent = m.get(scope.incumbentHash);
+    if (candidate !== undefined && incumbent !== undefined) {
+      pairs.push({
+        itemId,
+        candidateQuality: candidate.quality,
+        incumbentQuality: incumbent.quality,
+      });
+      continue;
     }
+    // Previously dropped silently. An item evaluated for one strategy but not
+    // the other is a COVERAGE GAP, and a verdict that hides it reads as
+    // cleaner than the evidence supports.
+    unpairable.push({
+      itemId,
+      has: candidate !== undefined ? 'candidate' : 'incumbent',
+    });
   }
-  return pairs;
+  return { pairs, unpairable };
 }

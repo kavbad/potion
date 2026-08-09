@@ -268,3 +268,19 @@ upstream of it.
 verdict, run it twice and diff before recording it. Where the pipeline selects
 its own inputs (pairing, sampling, ranking), the determinism of that selection
 needs its own test — a seed on the estimator does not cover it.
+
+## Order-invariance of a mean is a diagnostic, not a detail
+
+**What happened (2026-08-09, post-G2.8):** two verdicts disagreed on both the
+mean (0.2707 vs 1.0645) and the interval. The first hypothesis was
+non-deterministic pairing order. One observation collapsed the search: a
+bootstrap's point estimate is computed from the input array directly
+(`values.reduce(sum)/n`) and is therefore ORDER-INVARIANT, while the interval
+comes from index-based resampling and is not. Ordering can move an interval; it
+cannot move a mean. So the differing mean PROVED the two runs saw different
+evidence, and the investigation moved from "which order" to "which inputs".
+
+**How to apply:** when two runs of a statistic disagree, ask first which of the
+reported quantities are invariant under the hypothesis you are entertaining. An
+invariant that moved refutes the hypothesis outright and is worth more than any
+amount of further instrumentation.

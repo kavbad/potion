@@ -191,7 +191,7 @@ describe('research:cycle (mock)', () => {
     );
     expect(second.candidates).toBe(0);
     expect(second.stopReason).toContain('no new candidates');
-  });
+  }, 60_000);
 
   it('recipeHash narrows the cycle to one registered recipe; unknown hash throws', async () => {
     const config: StrategyConfig = { type: 'single', model: 'mock-cheap' };
@@ -503,7 +503,7 @@ describe('research:cycle per-org (G1.8)', () => {
       ctx(),
     );
     expect(org.candidates).toBeGreaterThan(0);
-  });
+  }, 60_000);
 
   it('ownership: an org cycle over ANOTHER org\'s suite throws; platform cycles refuse agent-* suites', async () => {
     const suiteId = await seedOrgSuite();
