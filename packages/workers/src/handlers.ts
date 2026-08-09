@@ -175,6 +175,13 @@ export interface JobContext {
    * twin of @potion/cluster's Embedder — workers deliberately do not depend
    * on the cluster package). */
   embedder?: { embed(t: string[]): Promise<number[][]> } | undefined;
+  /**
+   * G2.8: which KIND of embedder the above is. The cosine threshold that
+   * works for one is catastrophic for the other (G0.5: 96% @0.2 vs 6% @0.62
+   * on real embeddings), and the handler cannot tell them apart by duck
+   * typing. Absent → the handler warns rather than guesses.
+   */
+  embedderKind?: 'mock' | 'live' | undefined;
   /** M5 #36: dir for synthesized agent replay suites (suite v2 layout).
    * Default: the harness repo suites dir (SUITES_V2_DIR), mirroring the
    * prices.json precedent — tests/walkthrough override to a tmp copy. */
@@ -1774,9 +1781,84 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
 export const TRACES_CLUSTER_DEFAULT_SINCE_DAYS = 7;
 export const TRACES_CLUSTER_DEFAULT_LIMIT = 500;
 /** Same assignment threshold as packages/cluster's assigner (0.62). */
+/**
+ * Default agent-clustering cosine threshold. TUNED FOR THE MOCK EMBEDDER, and
+ * catastrophic on real ones — see resolveAgentClusterThreshold.
+ */
 export const AGENT_CLUSTER_COSINE_THRESHOLD = 0.62;
+
+/**
+ * Above this, a REAL embedder's compressed cosine geometry collapses (G0.5
+ * held-out sweep: 92.50% @0.30, 82.50% @0.40, 45.50% @0.50, **6.00% @0.62** —
+ * the mock-tuned default routes nearly everything to the fallback bucket).
+ */
+export const LIVE_EMBEDDER_THRESHOLD_CEILING = 0.4;
+
+/**
+ * The agent-clustering threshold, honouring `POTION_CLUSTER_THRESHOLD` (G2.8).
+ *
+ * WHY THIS FUNCTION EXISTS. G0.5 measured the real-embedder cliff on a
+ * held-out set, recommended `POTION_CLUSTER_THRESHOLD=0.2` for live
+ * deployments, and wired that override into the SERVING assigner
+ * (apps/server context.ts envAssignThreshold). The agent-clustering path
+ * arrived later (G1.2) and declared its OWN constant at the mock-tuned 0.62,
+ * reading no env at all — so the documented fix silently did not apply here.
+ * Setting the recommended env var and running agent clustering on real
+ * embeddings would have reproduced the 6%-accuracy cliff while appearing
+ * configured correctly.
+ *
+ * The guard is the second half: pairing a live embedder with a mock-tuned
+ * threshold is a known-bad combination with a recorded measurement behind it,
+ * so it refuses rather than producing a fragmented clustering that reads like
+ * a property of the customer's workload.
+ */
+export function resolveAgentClusterThreshold(opts: {
+  embedderKind?: 'mock' | 'live' | undefined;
+  warn?: ((msg: string) => void) | undefined;
+}): number {
+  const raw = process.env.POTION_CLUSTER_THRESHOLD;
+  let threshold = AGENT_CLUSTER_COSINE_THRESHOLD;
+  if (raw !== undefined && raw.trim() !== '') {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0 || value >= 1) {
+      throw new Error(`POTION_CLUSTER_THRESHOLD must be a number in (0,1), got '${raw}'`);
+    }
+    threshold = value;
+  }
+  if (opts.embedderKind === 'live' && threshold > LIVE_EMBEDDER_THRESHOLD_CEILING) {
+    throw new Error(
+      `agent clustering refused: a LIVE embedder with threshold ${threshold} is a known-bad ` +
+        `pairing — the G0.5 held-out sweep measured 6.00% accuracy at 0.62 on real embeddings ` +
+        `(vs 96.00% across 0.05–0.2). Set POTION_CLUSTER_THRESHOLD=0.2 (the recorded ` +
+        `recommendation) or use the mock embedder. No clustering was performed.`,
+    );
+  }
+  if (opts.embedderKind === undefined && raw === undefined) {
+    opts.warn?.(
+      `agent clustering using the MOCK-tuned threshold ${threshold} with an unidentified ` +
+        `embedder — if this is a real embedder, set POTION_CLUSTER_THRESHOLD=0.2 (G0.5)`,
+    );
+  }
+  return threshold;
+}
 /** Replay items kept per synthesized suite (oldest kept, newest appended). */
-export const AGENT_SUITE_ITEM_CAP = 25;
+/**
+ * Replay items kept per synthesized suite.
+ *
+ * G2.8 raised this from 25 to 48. At 25 a derived-suite retention verdict
+ * could never report better than `low` confidence, because `confidenceFor`
+ * draws its low/medium line at 30 — the item cap sat below the confidence
+ * boundary, so the two constants disagreed about what "enough evidence" means
+ * and the cap always won. A verdict that cannot arithmetically exceed `low`
+ * makes the confidence tier decorative.
+ *
+ * NOTE the cap is now an upper bound that a corpus may not reach: a cluster
+ * cannot span tool-signature buckets, so its item count is bounded by its
+ * bucket's session count first and by this cap second. Whether 30 is the right
+ * place for the confidence line is a separate question, deliberately left to
+ * the parameter report rather than tuned to whatever this run produced.
+ */
+export const AGENT_SUITE_ITEM_CAP = 48;
 /** Max exemplar rows written when a cluster is first registered. */
 export const AGENT_EXEMPLAR_CAP = 8;
 
@@ -1799,11 +1881,48 @@ export function orgHashOf(orgId: string): string {
   return sha1Hex(orgId).slice(0, 6);
 }
 
-/** Tool-graph signature slug (SPEC §14.2): hash of the ORDERED tool-name
- * sequence; tool-free sessions share the 'chat' bucket. */
+/**
+ * CANONICAL tool-graph form (G2.8): the DISTINCT tool names in first-use
+ * order. `[Bash, Read, Bash, Bash, Read]` → `[Bash, Read]`.
+ *
+ * WHY THIS EXISTS — the first real workload broke the original rule. SPEC
+ * §14.2 specified the signature as a hash of the *ordered tool-name sequence*,
+ * which is stable and meaningful for a production agent with a fixed pipeline
+ * (search → fetch → summarize). A free-form coding agent has no such pipeline:
+ * measured over 48 real Claude Code sessions, the raw sequence produced 45
+ * DISTINCT signatures — i.e. one cluster per session. That is fatal three
+ * times over: SUITE_VERIFY_MIN_PAIRS (5), RUBRIC_PROBE_MIN_REFERENCED (3), and
+ * the plain fact that a one-item derived suite is not a suite.
+ *
+ * The same corpus under canonical form yields 7 buckets, two of them large
+ * enough to carry a suite (23 and 15 sessions). First-use ORDER is kept rather
+ * than sorting, because a session that reads before it writes is a different
+ * shape from one that writes before it reads, and that distinction survives
+ * repetition where the raw sequence does not.
+ *
+ * Used for the SIGNATURE only. The cluster NAME and rubricTemplateFor keep the
+ * full sequence — they describe the real tool graph to a human and to a judge,
+ * where repetition is information rather than noise.
+ */
+export function canonicalToolSequence(toolSequence: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of toolSequence) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+/** Tool-graph signature slug (SPEC §14.2, revised by G2.8): hash of the
+ * CANONICAL tool-name sequence (distinct tools, first-use order); tool-free
+ * sessions share the 'chat' bucket. See canonicalToolSequence for why the raw
+ * sequence was abandoned. */
 export function toolSignatureSlug(toolSequence: string[]): string {
-  if (toolSequence.length === 0) return 'chat';
-  return sha1Hex(toolSequence.join('>')).slice(0, 6);
+  const canonical = canonicalToolSequence(toolSequence);
+  if (canonical.length === 0) return 'chat';
+  return sha1Hex(canonical.join('>')).slice(0, 6);
 }
 
 /** Mirrors packages/cluster assigner's cosine (workers don't depend on it). */
@@ -1860,6 +1979,11 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
   if (embedder === undefined) {
     throw new Error('traces:cluster requires JobContext.embedder (platform embedder)');
   }
+  // G2.8: resolve (and guard) the cosine threshold BEFORE any embedding spend.
+  const clusterThreshold = resolveAgentClusterThreshold({
+    embedderKind: ctx.embedderKind,
+    warn: (m) => console.warn(`[potion] ${m}`),
+  });
   const sinceDays = payload.sinceDays ?? TRACES_CLUSTER_DEFAULT_SINCE_DAYS;
   const since = new Date(Date.now() - sinceDays * 86_400_000);
   // G1.2: clustering is PER-ORG everywhere. An explicit orgId fetches with
@@ -1930,7 +2054,7 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
           best = gi;
         }
       });
-      if (best >= 0 && bestSim >= AGENT_CLUSTER_COSINE_THRESHOLD) {
+      if (best >= 0 && bestSim >= clusterThreshold) {
         const g = groups[best]!;
         g.members.push(i);
         g.centroid = meanCentroid(g.members.map((m) => vectors[m]!));
@@ -1946,7 +2070,15 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
       const clusterId = gi === 0 ? `agent-${slug}` : `agent-${slug}-${gi + 1}`;
       const members = g.members.map((m) => sources[m]!);
       const orgId = members[0]!.orgId; // one org per bucket by construction
-      const toolSequence = members[0]!.toolSequence; // same slug ⇒ same sequence
+      // G2.8: the bucket shares a CANONICAL sequence, not a raw one — members
+      // differ in how often and in what order they repeat their tools. Take
+      // the canonical form of a representative: it is the property the group
+      // actually holds in common, and it stays short. (Pre-G2.8 this read
+      // `members[0].toolSequence` under "same slug ⇒ same sequence", an
+      // invariant the canonical signature deliberately breaks; a raw
+      // representative here would print one member's 40-call trace as if it
+      // characterised the cluster.)
+      const toolSequence = canonicalToolSequence(members[0]!.toolSequence);
       const suiteId = `${clusterId}-replays-v1`;
       const name = `agent: ${toolSequence.join(' → ') || 'chat'} (${slug})`;
 

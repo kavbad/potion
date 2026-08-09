@@ -321,6 +321,11 @@ export async function main(argv: string[]): Promise<number> {
           spearmanVsTruth: t.spearmanVsTruth,
           judgeAgreement: report.judges.length > 1 ? report.pearson : null,
           meanAbsErr: t.meanAbsErr,
+          // G2.8: the intervals travel with the point estimates, so a later
+          // reader can tell a measured verdict from an underpowered one.
+          pearsonCi95: t.pearsonCi95,
+          spearmanCi95: t.spearmanCi95,
+          correlationSeed: t.correlationSeed,
           flagged: t.flagged,
           spendUsd: report.spendUsd,
           pairs: report.pairs.map((p) => ({ itemId: p.itemId, truth: p.truth, scores: p.scores })),

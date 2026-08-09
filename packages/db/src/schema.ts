@@ -902,6 +902,21 @@ export const judgeCalibrations = pgTable('judge_calibrations', {
   flagged: boolean('flagged').notNull(),
   spendUsd: doublePrecision('spend_usd').notNull().default(0),
   pairs: jsonb('pairs').$type<CalibrationPairEvidence[]>().notNull().default([]),
+  /**
+   * G2.8 (0028) — seeded bootstrap CI95 on each correlation, stored as a
+   * [lo, hi] PAIR (the sampling distribution of a correlation is asymmetric;
+   * a half-width would assert a symmetry that does not hold). Read THESE, not
+   * the point estimate, when deciding whether a judge clears the 0.8 bar: an
+   * interval straddling the bar means the run was not powered to answer the
+   * question. NULL on pre-0028 rows, on corpora below
+   * CORRELATION_CI_MIN_PAIRS, and on indeterminate (constant-truth) rows.
+   */
+  pearsonCi95: jsonb('pearson_ci95').$type<[number, number]>(),
+  spearmanCi95: jsonb('spearman_ci95').$type<[number, number]>(),
+  /** Seed behind both intervals — with the stored `pairs`, the CI is exactly
+   * re-derivable. Double precision, not integer: seeds are uint32 and would
+   * overflow int4. */
+  correlationSeed: doublePrecision('correlation_seed'),
   /** Identity of the rubric the judge was calibrated UNDER (0022) — a rubric
    * edit is a different judge harness and must never inherit old trust
    * evidence. NULL = pre-0022 rows (rubric unrecorded). */

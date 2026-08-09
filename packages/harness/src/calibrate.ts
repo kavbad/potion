@@ -18,7 +18,7 @@
 // pearsonVsTruth is high by construction — which is exactly the assertion.
 import type { Provider } from '@potion/providers';
 import type { EvalItem, PriceEntry, PriceTable, ProviderId, ScoringMethod, Usage } from '@potion/core';
-import { mulberry32 } from '@potion/core';
+import { BOOTSTRAP_RESAMPLES, bootstrapCi, mulberry32, seedFromString, sha256 } from '@potion/core';
 import { createMockProvider, loadPrices } from '@potion/providers';
 import { createResolver, execute } from '@potion/strategies';
 import {
@@ -95,6 +95,51 @@ export function spearman(xs: number[], ys: number[]): number {
   return pearson(ranksOf(xs), ranksOf(ys));
 }
 
+/**
+ * Seeded bootstrap CI95 on a CORRELATION (G2.8) — closing a follow-up this
+ * repo recorded against itself and then had to live with for six items.
+ *
+ * THE PROBLEM, in the project's own numbers: judge-class (sonnet) scored
+ * pearson-vs-truth 0.544 on one live n=50 run and 0.637 on an identical
+ * re-run. The recorded conclusion was "single-run correlations carry
+ * ±0.1-scale error" — and the trust gate is a HARD comparison against 0.8.
+ * A point estimate with ±0.1 error tested against a fixed line produces a
+ * verdict that flips on resampling noise, which is not a verdict.
+ *
+ * Resamples PAIRS (not the two vectors independently — that would destroy the
+ * pairing the correlation is about), reusing the platform's one pinned
+ * bootstrap (G2.6 generalized `bootstrapCi` to an arbitrary statistic for
+ * exactly this kind of use). Seeded from the data so the interval is
+ * re-derivable from the stored `pairs` on the calibration row.
+ *
+ * Returns null below 4 pairs: a bootstrap over 3 points resamples the same
+ * handful of values and reports a confidently wrong interval.
+ */
+export function correlationCi(
+  xs: number[],
+  ys: number[],
+  kind: 'pearson' | 'spearman',
+  seed: number,
+  resamples: number = BOOTSTRAP_RESAMPLES,
+): { estimate: number; ci95: [number, number] } | null {
+  if (xs.length !== ys.length || xs.length < CORRELATION_CI_MIN_PAIRS) return null;
+  const n = xs.length;
+  const stat = kind === 'pearson' ? pearson : spearman;
+  // bootstrapCi resamples a single value array; index-resampling preserves
+  // the (x,y) pairing while reusing the pinned resampling loop verbatim.
+  const indices = Array.from({ length: n }, (_, i) => i);
+  const res = bootstrapCi(
+    indices,
+    (drawn) => stat(drawn.map((i) => xs[i]!), drawn.map((i) => ys[i]!)),
+    seed,
+    resamples,
+  );
+  return { estimate: stat(xs, ys), ci95: res.ci95 };
+}
+
+/** Below this, a bootstrap CI on a correlation is theatre. */
+export const CORRELATION_CI_MIN_PAIRS = 4;
+
 export interface CalibrationPair {
   itemId: string;
   /** Deterministic ground-truth quality of the answer (0..1). */
@@ -120,6 +165,25 @@ export interface JudgeTruthStats {
    * recalibration territory, not untrustworthiness. */
   spearmanVsTruth: number | null;
   meanAbsErr: number;
+  /**
+   * G2.8 — seeded bootstrap CI95 on each correlation. Null when the corpus is
+   * too small (< CORRELATION_CI_MIN_PAIRS) or truth is constant.
+   *
+   * Read these, not the point estimate, when deciding trust: this project
+   * measured the same judge at r=0.544 and r=0.637 on identical live runs, so
+   * a point estimate compared against the hard 0.8 line flips on resampling
+   * noise. `pearsonCi95[0] >= CALIBRATION_FLAG_BELOW` is the defensible
+   * "clears the bar" claim; `pearsonCi95[1] < CALIBRATION_FLAG_BELOW` is the
+   * defensible "fails it". An interval straddling 0.8 means the run did not
+   * answer the question — which is itself the honest finding.
+   */
+  pearsonCi95: [number, number] | null;
+  spearmanCi95: [number, number] | null;
+  /** Seed behind both intervals — re-derivable from the stored pairs. */
+  correlationSeed: number | null;
+  /** True when the Pearson CI STRADDLES the flag line: the run is not
+   * powered to render a verdict either way. */
+  trustIndeterminateAtN: boolean;
   /** No truth variance → the corpus cannot calibrate this judge; pick a
    * harder suite or a weaker answerer. Conservatively still flagged. */
   indeterminate: boolean;
@@ -558,18 +622,36 @@ function assembleReport(
         pearsonVsTruth: null,
         spearmanVsTruth: null,
         meanAbsErr,
+        pearsonCi95: null,
+        spearmanCi95: null,
+        correlationSeed: null,
+        trustIndeterminateAtN: false,
         indeterminate: true,
         flagged: true,
       };
     }
     const r = pearson(judgeScores, truths);
     const rho = spearman(judgeScores, truths);
+    // Seeded from the evidence itself so the interval is reproducible from
+    // the persisted `pairs` — same discipline as every other verdict here.
+    const corrSeed = seedFromString(
+      `corr|${judge}|${pairs.length}|${sha256(JSON.stringify([judgeScores, truths]))}`,
+    );
+    const pCi = correlationCi(judgeScores, truths, 'pearson', corrSeed);
+    const sCi = correlationCi(judgeScores, truths, 'spearman', corrSeed);
     return {
       judgeModel: judge,
       resolvedModel: resolvedModelOf(prices, judge),
       pearsonVsTruth: r,
       spearmanVsTruth: rho,
       meanAbsErr,
+      pearsonCi95: pCi?.ci95 ?? null,
+      spearmanCi95: sCi?.ci95 ?? null,
+      correlationSeed: pCi === null ? null : corrSeed,
+      // The interval spans the bar → this run cannot answer the trust
+      // question at this n. Reported, never silently rounded to a verdict.
+      trustIndeterminateAtN:
+        pCi !== null && pCi.ci95[0] < CALIBRATION_FLAG_BELOW && pCi.ci95[1] >= CALIBRATION_FLAG_BELOW,
       indeterminate: false,
       flagged: r < CALIBRATION_FLAG_BELOW,
     };

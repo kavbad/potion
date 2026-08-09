@@ -1898,3 +1898,94 @@ DONE (2026-08-08, session g26-compound-policy):
   Living gate green WITHOUT touching route-inventory.ts (no route added — the
   premium rides existing routes by design). Lint at its pre-existing baseline.
   $0 spend (mock throughout).
+
+## G2.8 — Capstone spend ledger (cap $25, per-leg rows)
+
+Per the owner's refinement, the standing ledger rule applies PER LEG, not just
+per run: each leg carries its own projected/actual row so this table doubles as
+the cost-anatomy exhibit for what a customer onboarding actually costs.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-09 | LEDGER RECONCILE pre-run: authoritative OpenRouter usage $5.6000 (ledger said $5.5556 after the G1.7 live leg; **drift $0.0444** — delayed accounting, same direction and magnitude as the prior three reconciles) | — | — | $5.6000 / $50.00 (OpenRouter) |
+| 2026-08-09 | G2.8 leg 1 (convert + ingest): 48 sessions → 1941 spans, secrets scrubbed + verified pre-POST | $0.0000 | $0.0000 | $5.6000 / $50.00 (OpenRouter) |
+| 2026-08-09 | G2.8 leg 2 (cluster, REAL embedder @ POTION_CLUSTER_THRESHOLD=0.2 per the required pairing): 48 sessions → **7 clusters** (23/15/5/2/1/1/1), 7 mock first-frontier synthesis runs $0.0800 mock-priced; OpenAI embeddings ~$0.0005 usage-priced | ~$0.0005 | ~$0.0005 | ~$0.19 (OpenAI key, usage-priced) |
+| 2026-08-09 | G2.8 leg 3 (rubric + probe) **KILLED MID-RUN** by the operator harness's 10-minute wall-clock (SIGTERM/143) — not a platform refusal, not a provider error. Authoritative OpenRouter before $5.6000 → after $6.5756. Of the **$0.9756** actually spent, only **$0.008688** reached the metering line (one `rubric_gen` request_log row); the remaining **$0.9669 — 99.1% of the leg — is UNMETERED in-flight probe judging** (3×23=69 sonnet calls). `cluster_rubrics` and `judge_calibrations` are both empty: they write at handler completion, so the artifact the money bought does not exist either. | $2.00 cap | $0.9756 (authoritative delta; $0.008688 metered + $0.9669 unmetered) | $6.5756 / $50.00 (OpenRouter) |
+
+### POST-CAPSTONE ITEM 1 (owner-filed 2026-08-09) — meter per provider call, not per handler
+
+**Promoted from "documented gap" to MUST-FIX.** The note at `handlers.ts:2767-2770`
+described this as a caveat ("a provider error mid-run can spend without reaching
+this line; the operator ledger reconciles"). It now has **two non-hypothetical
+triggers** and a measured magnitude:
+
+1. **G1.7 (2026-08-07)** — `ProviderAuthError` on an unreachable gemini rep after
+   partial nano spend, ~<$0.01 OpenAI-side, unmetered.
+2. **G2.8 leg 3 (2026-08-09)** — operator timeout mid-probe: **$0.9669 of $0.9756
+   unmetered, 99.1% of the leg**. Not a rounding error — the majority of a leg's
+   spend was invisible to `request_logs`, `mtdSpendUsd`, budget hard-stops,
+   forecasts and invoices, all of which inherit that single rollup.
+
+**Why it is a billing defect, not an observability one.** `request_logs` is the
+chokepoint every spend surface reads. Metering at handler completion means any
+non-completion — provider error, timeout, SIGTERM, deploy, OOM — spends a
+customer's budget with no attribution. A hard-stop budget cannot stop what it
+cannot see, so the failure mode is: a job dies repeatedly, each attempt spends,
+and the org's cap never trips.
+
+**The fix:** meter per provider call AS SPEND OCCURS (incrementally into
+`request_logs`, or a spend journal the rollup reads), so the ledger is correct
+at every instant rather than only on the success path. Handler completion then
+reconciles rather than being the sole write.
+
+**Deliberately NOT fixed mid-run** (owner's call): changing the metering path
+during a live capstone would invalidate the capstone's own cost anatomy.
+
+**MEASURED MAGNITUDE, updated after leg 4 (owner-recorded 2026-08-09): $1.5594
+of the capstone's $2.5881 — 60% — never reached the billing path.** Leg 3's
+killed attempt leaked 99.1% of its own spend. **This BLOCKS design-partner
+traffic**: an org's hard-stop budget cannot stop what it cannot see, so a job
+that dies repeatedly spends a customer's money with the cap never tripping.
+Top post-capstone item; nothing external onboards until it lands.
+
+**The correct multi-leg rule (supersedes the leg-granular version below).**
+Leg-granular chunking is INSUFFICIENT — a single leg (23 items × 3 class reps)
+exceeds one foreground invocation, and every interruption leaks. Multi-leg live
+runs must use **detached/background execution, or the harness's ITEM-level
+`--resume`** — not one-leg-per-invocation.
+
+### RECORDED RULE — chunked resume for ALL multi-leg live runs
+
+The M1b ledger established `--resume` + a persistent pglite for chunking, because
+`runEval` has no mid-run spend kill-switch. G2.8 shows the rule is broader than
+cost control: **a multi-leg live run must be driven one leg per invocation**,
+because the legs exceed a single operator-harness wall-clock and an interrupted
+leg spends without attributing (see POST-CAPSTONE ITEM 1). One leg, one
+invocation, one ledger row, against a persistent `DATABASE_URL=pglite://…`.
+| 2026-08-09 | G2.8 leg 3 RESUMED (own invocation, chunked-resume rule; existing `.pglite/g28-live`, legs 1–2 not re-charged): rubric via `judge-class` LIVE + probe calibration n=69 → **pearson 0.605 (FAILS the 0.8 bar) / spearman 0.811 (CLEARS it)**, flagged=true. The monotone-distortion signature: the judge RANKS the perturbed references correctly but its scale is compressed. | $2.00 cap | $1.0200 metered (handler completed, so metering landed this time) | reconcile at run end (OpenRouter) |
+| 2026-08-09 | G2.8 leg 4 (live frontier sweep, 23 items × 3 class reps) **KILLED MID-RUN** — same operator 10-minute wall-clock. THIRD instance of the metering gap. Reconcile: after the killed leg-3 attempt usage was $6.5756; resumed leg 3 metered $1.0200 → $7.5956 expected; authoritative now **$8.1881**, so leg 4 spent **$0.5925, ALL OF IT UNMETERED** (`eval_runs`/`request_logs` write at handler completion, which never came). Confirms leg-granular chunking is INSUFFICIENT: one leg at this suite size exceeds one foreground invocation. | $8.00 cap | $0.5925 (100% unmetered) | $8.1881 / $50.00 (OpenRouter) |
+| 2026-08-09 | **G2.8 capstone subtotal**: $5.6000 → $8.1881 = **$2.5881** across legs 1–4 (leg 3 killed $0.9756 of which $0.9669 unmetered; leg 3 resumed $1.0200 metered; leg 4 killed $0.5925 unmetered). **$1.5594 — 60% of the capstone's spend to date — never reached the billing path.** Legs 4–6 pending in a fresh session against the intact `.pglite/g28-live`. | $25.00 preflight | $2.5881 | $8.1881 / $50.00 (OpenRouter) |
+
+### PARAMETER-REPORT OPEN QUESTION (owner-filed 2026-08-09) — should the trust gate read Spearman?
+
+G2.8's live probe calibration on the real workload: **judge-class pearson 0.605
+(FAILS the 0.8 bar) / spearman 0.811 (CLEARS it), n=69, flagged=true.** The
+classic monotone-distortion signature: the judge orders the perturbed references
+correctly, but on a compressed scale.
+
+`CALIBRATION_FLAG_BELOW` gates on **Pearson only** (`calibrate.ts`); Spearman is
+computed, persisted and displayed but never decides anything. So this run
+FLAGGED a judge whose ranking evidence is sound.
+
+**The question for the parameter report:** breach detection asks "did quality
+DROP relative to the incumbent" — a *ranking* question, scale-free by
+construction (retention is r_i = serving_i / incumbent_i). If the contract only
+needs correct ordering, gating on Pearson rejects usable judges for failing a
+requirement the contract never makes. Candidate positions: (a) gate on Spearman;
+(b) gate on Spearman for the suite/retention leg and Pearson where absolute
+level matters; (c) keep Pearson and accept the false rejections as conservative.
+
+To be argued from evidence in the parameter report — **not tuned to make this
+run's judge pass.** Note that G2.8 also added bootstrap CIs on both correlations
+(migration 0028), so the question can now be posed with intervals rather than
+point estimates.

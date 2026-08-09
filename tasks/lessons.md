@@ -195,3 +195,36 @@ what gets persisted about that variant. If the answer is "its type tag", and
 the new field changes the meaning of the behavior, it needs its own tag. The
 extra union member also buys compiler-enforced exhaustiveness — the TS errors
 at each switch become the worklist of surfaces that must be updated.
+
+## Metering at handler completion is an attribution leak, not a caveat
+
+**What happened (2026-08-09, G2.8):** `request_logs` — the single rollup every
+spend surface reads (budgets, hard stops, forecasts, invoices) — is written when
+a job handler COMPLETES. Across the capstone's live legs, **$1.5594 of $2.5881
+(60%) never reached it**; one killed leg leaked 99.1% of its own spend. Three
+non-hypothetical triggers now exist: a provider error (G1.7), and two operator
+timeouts (G2.8 legs 3 and 4).
+
+**Why:** the success path was treated as the metering path. Any non-completion —
+provider error, timeout, SIGTERM, deploy, OOM — spends real money with no
+attribution. The failure mode compounds: a job that dies repeatedly spends on
+every attempt while the org's hard-stop cap never trips, because the cap is
+computed from the rows the dead job never wrote.
+
+**How to apply:** meter side effects AS THEY OCCUR, not when the work finishes.
+If an operation spends money, writes must be incremental (or journalled) so the
+ledger is correct at every instant; completion then RECONCILES rather than being
+the sole write. And when a long operation is interrupted, do not assume "no
+completion" means "no spend" — reconcile against the provider's own figure.
+
+## A long live leg must be detached, not just chunked
+
+**What happened (2026-08-09, G2.8):** the M1b ledger established chunked
+`--resume` for cost control. G2.8 assumed leg granularity was enough; it was not
+— one leg (23 items × 3 class reps, sonnet judging) exceeds a ten-minute
+foreground invocation, and two legs were killed mid-flight, each leaking
+unmetered spend. Background execution was available and unused.
+
+**How to apply:** before starting a live leg, estimate its wall-clock, not just
+its cost. If it can exceed the invocation limit, run it detached or sub-chunk at
+item level. An interrupted paid operation is worse than a slow one.

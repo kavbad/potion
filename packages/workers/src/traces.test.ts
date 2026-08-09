@@ -4,6 +4,7 @@
 // + exemplars + synthesized replay suite + eval run + first frontier),
 // idempotent re-runs, incremental suite growth with version bump, and
 // traces:purge retention semantics (0 = metadata-only redaction; N = delete).
+import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -39,6 +40,10 @@ import {
   redactTraceText,
   rubricGenerateHandler,
   toolSignatureSlug,
+  canonicalToolSequence,
+  resolveAgentClusterThreshold,
+  AGENT_CLUSTER_COSINE_THRESHOLD,
+  LIVE_EMBEDDER_THRESHOLD_CEILING,
   tracesClusterHandler,
   tracesPurgeHandler,
   tracesRedactHandler,
@@ -174,7 +179,158 @@ describe('M5 #36 helpers', () => {
     expect(toolSignatureSlug(['search', 'write'])).not.toBe(toolSignatureSlug(['write', 'search']));
     expect(toolSignatureSlug(['search'])).toMatch(/^[0-9a-f]{6}$/);
   });
+
+  // -------------------------------------------------------------------------
+  // G2.8 — the signature is CANONICAL (distinct tools, first-use order).
+  // -------------------------------------------------------------------------
+
+  it('canonicalToolSequence collapses repetition but preserves first-use order', () => {
+    expect(canonicalToolSequence(['Bash', 'Read', 'Bash', 'Bash', 'Read'])).toEqual([
+      'Bash',
+      'Read',
+    ]);
+    // Order is FIRST USE, not sorted: reading before writing is a different
+    // shape from writing before reading, and that distinction survives
+    // repetition where the raw sequence does not.
+    expect(canonicalToolSequence(['Read', 'Bash'])).toEqual(['Read', 'Bash']);
+    expect(canonicalToolSequence(['Bash', 'Read'])).not.toEqual(
+      canonicalToolSequence(['Read', 'Bash']),
+    );
+    expect(canonicalToolSequence([])).toEqual([]);
+    expect(canonicalToolSequence(['Bash'])).toEqual(['Bash']);
+  });
+
+  it('repetition no longer fragments the bucket — the G2.8 defect, pinned', () => {
+    // A free-form agent calls the same few tools over and over in whatever
+    // order the work demands. Pre-G2.8 each of these hashed differently, so
+    // every session became its own cluster.
+    const oneSession = ['Bash', 'Bash', 'Read', 'Bash', 'Read', 'Bash', 'Bash'];
+    const anotherSession = ['Bash', 'Read', 'Read', 'Read', 'Bash'];
+    const aThirdSession = ['Bash', 'Read'];
+    expect(toolSignatureSlug(oneSession)).toBe(toolSignatureSlug(anotherSession));
+    expect(toolSignatureSlug(anotherSession)).toBe(toolSignatureSlug(aThirdSession));
+  });
+
+  it('REGRESSION: the measured 48-session corpus collapses 45 buckets → 7', () => {
+    // The real distribution measured over ~/.claude/projects subagent
+    // transcripts during G2.8 planning. Shapes are reproduced here (not the
+    // transcripts themselves); the counts are the observed ones.
+    // Each session repeats its tools a different number of times, which is
+    // precisely what fragmented the raw signature. The CANONICAL distribution
+    // (23 / 15 / 5 / 2 / 1 / 1 / 1) is the observed one.
+    const corpus: string[][] = [
+      ...Array.from({ length: 23 }, (_, i) => [
+        'Bash',
+        ...Array.from({ length: i + 1 }, () => 'Read'),
+        'Bash',
+      ]),
+      ...Array.from({ length: 15 }, (_, i) => Array.from({ length: i + 1 }, () => 'Bash')),
+      ...Array.from({ length: 5 }, (_, i) => [
+        'Bash',
+        ...Array.from({ length: i + 1 }, () => 'Write'),
+      ]),
+      ...Array.from({ length: 2 }, (_, i) => [
+        'Bash',
+        'Read',
+        ...Array.from({ length: i + 1 }, () => 'ToolSearch'),
+      ]),
+      ['Read', 'Bash'],
+      ['Bash', 'mark_chapter'],
+      ['Bash', 'ToolSearch'],
+    ];
+    expect(corpus).toHaveLength(48);
+
+    const rawSignatures = new Set(corpus.map((s) => sha1Of(s.join('>'))));
+    const canonicalSignatures = new Set(corpus.map((s) => toolSignatureSlug(s)));
+
+    // What the pre-G2.8 rule did: ~one bucket per session.
+    expect(rawSignatures.size).toBeGreaterThan(40);
+    // What the canonical rule does: 7 buckets over the same corpus.
+    expect(canonicalSignatures.size).toBe(7);
+
+    // …and the two largest buckets clear the thresholds that make a cluster
+    // usable at all: SUITE_VERIFY_MIN_PAIRS (5) and
+    // RUBRIC_PROBE_MIN_REFERENCED (3).
+    const bySig = new Map<string, number>();
+    for (const s of corpus) {
+      const sig = toolSignatureSlug(s);
+      bySig.set(sig, (bySig.get(sig) ?? 0) + 1);
+    }
+    const sizes = [...bySig.values()].sort((a, b) => b - a);
+    expect(sizes[0]).toBe(23);
+    expect(sizes[1]).toBe(15);
+    expect(sizes.filter((n) => n >= 5)).toHaveLength(3);
+  });
 });
+
+describe('resolveAgentClusterThreshold (G2.8) — the live-embedder pairing guard', () => {
+  const prev = process.env.POTION_CLUSTER_THRESHOLD;
+  afterEach(() => {
+    if (prev === undefined) delete process.env.POTION_CLUSTER_THRESHOLD;
+    else process.env.POTION_CLUSTER_THRESHOLD = prev;
+  });
+
+  it('defaults to the mock-tuned constant when nothing is set', () => {
+    delete process.env.POTION_CLUSTER_THRESHOLD;
+    expect(resolveAgentClusterThreshold({ embedderKind: 'mock' })).toBe(
+      AGENT_CLUSTER_COSINE_THRESHOLD,
+    );
+  });
+
+  it('HONOURS POTION_CLUSTER_THRESHOLD — the G0.5 knob that did not reach this path', () => {
+    // The bug: G0.5 measured the real-embedder cliff, recommended 0.2, and
+    // wired the override into the SERVING assigner only. Agent clustering
+    // declared its own constant and read no env, so the documented fix
+    // silently did not apply here.
+    process.env.POTION_CLUSTER_THRESHOLD = '0.2';
+    expect(resolveAgentClusterThreshold({ embedderKind: 'live' })).toBe(0.2);
+  });
+
+  it('REFUSES a live embedder at the mock-tuned threshold, citing the measurement', () => {
+    delete process.env.POTION_CLUSTER_THRESHOLD;
+    expect(() => resolveAgentClusterThreshold({ embedderKind: 'live' })).toThrow(/6\.00% accuracy/);
+    // …and refuses anything above the ceiling, not just the default.
+    process.env.POTION_CLUSTER_THRESHOLD = '0.5';
+    expect(() => resolveAgentClusterThreshold({ embedderKind: 'live' })).toThrow(
+      /known-bad pairing/,
+    );
+    expect(LIVE_EMBEDDER_THRESHOLD_CEILING).toBeLessThan(AGENT_CLUSTER_COSINE_THRESHOLD);
+  });
+
+  it('allows a live embedder at or below the ceiling', () => {
+    process.env.POTION_CLUSTER_THRESHOLD = String(LIVE_EMBEDDER_THRESHOLD_CEILING);
+    expect(resolveAgentClusterThreshold({ embedderKind: 'live' })).toBe(
+      LIVE_EMBEDDER_THRESHOLD_CEILING,
+    );
+  });
+
+  it('never refuses the MOCK embedder — 0.62 is correct there (89% measured)', () => {
+    delete process.env.POTION_CLUSTER_THRESHOLD;
+    expect(() => resolveAgentClusterThreshold({ embedderKind: 'mock' })).not.toThrow();
+  });
+
+  it('rejects a malformed override rather than silently falling back', () => {
+    for (const bad of ['nope', '0', '1', '-0.3']) {
+      process.env.POTION_CLUSTER_THRESHOLD = bad;
+      expect(() => resolveAgentClusterThreshold({ embedderKind: 'mock' })).toThrow(
+        /must be a number in \(0,1\)/,
+      );
+    }
+  });
+
+  it('warns when the embedder kind is unknown AND no override is set', () => {
+    delete process.env.POTION_CLUSTER_THRESHOLD;
+    const warnings: string[] = [];
+    resolveAgentClusterThreshold({ warn: (m) => warnings.push(m) });
+    expect(warnings.join(' ')).toMatch(/POTION_CLUSTER_THRESHOLD=0\.2/);
+  });
+});
+
+/** Local sha1 mirror so the regression test can compute the PRE-G2.8 raw
+ * signature without re-exporting a function the platform no longer has. */
+function sha1Of(s: string): string {
+  return createHash('sha1').update(s).digest('hex').slice(0, 6);
+}
 
 describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
   it('clusters sessions PER ORG by signature+embedding → cluster row, exemplars, suite, eval, frontier', async () => {

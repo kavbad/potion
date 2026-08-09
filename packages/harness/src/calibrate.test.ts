@@ -6,6 +6,8 @@ import { createMockProvider, loadPrices } from '@potion/providers';
 import { BudgetCapError } from './estimate.js';
 import {
   buildRubricProbes,
+  CALIBRATION_FLAG_BELOW,
+  correlationCi,
   pearson,
   projectCalibrationCostUsd,
   projectProbeCalibrationCostUsd,
@@ -41,6 +43,61 @@ describe('spearman', () => {
     expect(spearman([3, 2, 1], [1, 2, 3])).toBeCloseTo(-1, 10);
     expect(spearman([1, 1, 2], [1, 1, 2])).toBeCloseTo(1, 10);
     expect(spearman([1], [2])).toBe(0);
+  });
+});
+
+describe('correlationCi (G2.8) — a trust bar needs an interval, not a point', () => {
+  // Fixed vectors; no randomness in the test itself.
+  const truth = [0.1, 0.25, 0.3, 0.45, 0.5, 0.62, 0.7, 0.8, 0.9, 1.0];
+  const goodJudge = truth.map((t, i) => Math.min(1, t + (i % 3) * 0.02));
+  const noisyJudge = [0.9, 0.1, 0.5, 0.95, 0.2, 0.7, 0.15, 0.85, 0.3, 0.6];
+
+  it('is reproducible per (data, seed) and brackets the point estimate', () => {
+    const a = correlationCi(goodJudge, truth, 'pearson', 4242);
+    const b = correlationCi(goodJudge, truth, 'pearson', 4242);
+    expect(a).toEqual(b);
+    expect(a!.estimate).toBeCloseTo(pearson(goodJudge, truth), 12);
+    expect(a!.ci95[0]).toBeLessThanOrEqual(a!.estimate);
+    expect(a!.ci95[1]).toBeGreaterThanOrEqual(a!.estimate);
+  });
+
+  it('resamples PAIRS — shuffling one vector alone destroys the correlation', () => {
+    // If the implementation resampled the two vectors independently, the
+    // pairing (which is the entire content of a correlation) would be lost
+    // and a strong relationship would bootstrap to ~0.
+    const strong = correlationCi(goodJudge, truth, 'pearson', 7)!;
+    expect(strong.ci95[0]).toBeGreaterThan(0.5);
+  });
+
+  it('separates a trustworthy judge from a noisy one BY INTERVAL, not by point', () => {
+    const good = correlationCi(goodJudge, truth, 'pearson', 11)!;
+    const noisy = correlationCi(noisyJudge, truth, 'pearson', 11)!;
+    // The good judge's whole interval clears the bar; the noisy judge's
+    // whole interval fails it. Those are the two defensible verdicts.
+    expect(good.ci95[0]).toBeGreaterThanOrEqual(CALIBRATION_FLAG_BELOW);
+    expect(noisy.ci95[1]).toBeLessThan(CALIBRATION_FLAG_BELOW);
+  });
+
+  it('is ASYMMETRIC around the estimate — why a ± half-width would lie', () => {
+    const r = correlationCi(goodJudge, truth, 'pearson', 3)!;
+    const below = r.estimate - r.ci95[0];
+    const above = r.ci95[1] - r.estimate;
+    // A correlation near 1 is bounded above and skews downward.
+    expect(below).toBeGreaterThan(above);
+  });
+
+  it('refuses below CORRELATION_CI_MIN_PAIRS rather than reporting a confident lie', () => {
+    expect(correlationCi([1, 2, 3], [1, 2, 3], 'pearson', 1)).toBeNull();
+    expect(correlationCi([1, 2, 3, 4], [1, 2, 3, 4], 'pearson', 1)).not.toBeNull();
+    expect(correlationCi([1, 2], [1, 2, 3], 'pearson', 1)).toBeNull(); // length mismatch
+  });
+
+  it('spearman variant works on rank-monotone-but-scale-distorted data', () => {
+    const distorted = truth.map((t) => t ** 3); // monotone, badly scaled
+    const p = correlationCi(distorted, truth, 'pearson', 5)!;
+    const s = correlationCi(distorted, truth, 'spearman', 5)!;
+    expect(s.estimate).toBeGreaterThan(p.estimate); // ranks survive the distortion
+    expect(s.ci95[0]).toBeGreaterThan(0.9);
   });
 });
 

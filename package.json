@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && pnpm test:scripts",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test",
@@ -15,7 +17,8 @@
     "demo:customer": "tsx scripts/demo-customer.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
     "m1b:sweep": "tsx scripts/m1b-sweep.ts",
-    "harness": "tsx packages/harness/src/cli.ts"
+    "harness": "tsx packages/harness/src/cli.ts",
+    "test:scripts": "vitest run scripts"
   },
   "devDependencies": {
     "@potion/cluster": "workspace:*",

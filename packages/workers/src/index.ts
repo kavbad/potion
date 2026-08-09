@@ -122,6 +122,7 @@ export {
   tracesRedactHandler,
   redactTraceText,
   toolSignatureSlug,
+  canonicalToolSequence,
   orgHashOf,
   // ---- G1.5 automated scorer construction ----
   rubricGenerateHandler,
