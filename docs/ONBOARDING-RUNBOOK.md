@@ -58,6 +58,60 @@ If the partner brings their own provider key, they POST it to `/api/keys` (custo
 envelope-encrypted at rest, every decrypt audited). Otherwise serving uses platform
 env keys and their usage is invoiced.
 
+## 3b. Ingest the partner's real traffic (G2.8)
+
+The guarantee is built from the partner's OWN workload, so onboarding is not
+finished until their traffic is in. `POST /v1/traces` takes SPEC §14.1 spans;
+the partner needs an adapter from whatever their agent already emits.
+
+`scripts/claude-code-to-traces.ts` is the reference adapter — written against
+Claude Code session transcripts for the G2.8 capstone, and the shape any other
+exporter should copy:
+
+```bash
+# ALWAYS dry-run first: writes the batches to artifacts/, POSTs nothing.
+pnpm tsx scripts/claude-code-to-traces.ts --dir <transcripts> --dry-run
+
+# Then ingest.
+pnpm tsx scripts/claude-code-to-traces.ts --dir <transcripts> \
+  --api-url http://localhost:3000 --api-key pk_<partner-serving-key>
+```
+
+Three properties an adapter MUST keep, each learned the hard way in G2.8:
+
+1. **Faithful.** One tool span per tool call, in order, with real `tool.args` /
+   `tool.result`. Collapsing repeated calls hands clustering a tidy workload
+   that is not the customer's, and hides exactly the defects worth finding.
+2. **Scrub before it leaves, then truncate.** The platform redacts at ingest,
+   but that is the second line. Do credential scrubbing in the adapter, and do
+   it BEFORE any length cap — truncating first can cut a key into a fragment no
+   pattern recognises. `--verify-scrub` re-reads the generated payload and
+   refuses to emit if anything key-shaped survived (it is on by default).
+3. **Real model ids.** Do not map the partner's models onto price-table aliases
+   to make cost attribution look populated. Unknown models price at $0 at
+   ingest, which correctly says "these models are not in the price table yet" —
+   add them to `prices.json` as an onboarding step instead.
+
+After ingest, cluster and check the shape:
+
+```bash
+curl -s -X POST localhost:3000/api/traces/cluster \
+  -H 'content-type: application/json' -b "$COOKIE" -d '{"sinceDays":90}'
+# poll /api/jobs/:id → clusters[], each with sessions + suiteId
+```
+
+**Set `POTION_CLUSTER_THRESHOLD=0.2` whenever the platform embedder is real.**
+The default 0.62 is tuned for the mock embedder and collapses to 6% accuracy on
+OpenAI embeddings (G0.5 held-out sweep). Since G2.8 the agent-clustering path
+honours the override and REFUSES a live embedder above 0.4 rather than silently
+producing one cluster per session.
+
+**Expect the corpus to bound the guarantee.** A cluster cannot span tool
+signatures, so a partner whose traffic splits across many tool graphs gets many
+small clusters, and a cluster below `SUITE_VERIFY_MIN_PAIRS` (5) can never
+render a retention verdict. Report that to the partner as a coverage fact
+before promising a contract on it.
+
 ## 4. Verify serving (1 min)
 
 ```bash

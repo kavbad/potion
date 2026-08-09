@@ -1989,3 +1989,74 @@ To be argued from evidence in the parameter report — **not tuned to make this
 run's judge pass.** Note that G2.8 also added bootstrap CIs on both correlations
 (migration 0028), so the question can now be posed with intervals rather than
 point estimates.
+| 2026-08-09 | G2.8 leg 4 RESUMED **DETACHED** (background execution — the corrected rule): live frontier sweep over the 23-item suite, 3 reachable class reps → **41 executed / 28 cached → org frontier v2, 1 non-dominated point**. Handler completed, so metering landed. Projection DOMINATED actual ($2.3019 → $1.7190), the estimator contract holding on real data. Script then crashed writing its artifact (relative path resolved against the package cwd, not the repo root) — AFTER all spend and all persistence; a cosmetic bug, not a spend event. | $8.00 cap, $2.3019 projected | $1.7190 metered | reconcile at run end (OpenRouter) |
+| 2026-08-09 | G2.8 leg 5 (incumbent + suite-verify, DETACHED): designated `1a9bac73` (live mean 0.2000) incumbent; verified the WORST evaluated strategy `2797eeed` (mean 0.0000) → **contractual-breach, retention 0.0000, ci95 [0,0], 23 pairs, 0 excluded**. Verdict correct but DEGENERATE — a candidate scoring exactly zero yields a zero-variance ratio, which says nothing about the floor's enforceability. Kept as evidence the breach path fires; not used as the parameter measurement. | $8.00 cap | $1.0621 metered | reconcile at run end (OpenRouter) |
+| 2026-08-09 | G2.8 leg 5b (re-verify with a NON-degenerate pairing, `--serving-rank 1`): incumbent `1a9bac73` (0.2000) vs serving `8fe33bc4` (0.0491) → **contractual-breach, retention mean 0.2707, ci95 [0.1754, 0.3743], half-width 0.0995, 23 pairs, 0 excluded, floor 0.9**. THIS is the parameter measurement: half-width 0.0995 against slack 0.1000 — the floor is enforceable at n=23 by **0.5%**. | $8.00 cap | $1.1045 metered | reconcile at run end (OpenRouter) |
+| 2026-08-09 | G2.8 leg 6 (report + calibration intervals): guarantee report JSON+HTML rendered; **0 entries, legacyPath true** — the serve leg was never run, so there are no `quality_samples` and `distinctSampledTargets` returns nothing. The retention verdicts exist as `quality_breach` incidents; the REPORT surface is empty. Recorded as an incomplete part of the capstone, not papered over. Correlation CIs recovered OFFLINE from the stored `pairs` — no re-spend, the re-derivability property working as designed. | $0.0000 | $0.0000 | reconcile at run end (OpenRouter) |
+
+### G2.8 DEFECT 6 — the correlation intervals were written at ONE of two persist sites
+
+`correlationCi` (added earlier in G2.8) was wired into the calibrate **CLI**'s
+`insertJudgeCalibration` call and NOT into `rubricGenerateHandler`'s — so
+`rubric:generate`, the path that actually runs in production and the one the
+capstone used, persisted **NULL intervals**. The capstone's own live probe
+calibration landed without the evidence the same item had just added.
+
+Same "handled in one route is not handled" class as G2.4's uuid-guard finding.
+Fixed at the worker persist site. The intervals for this run were recovered
+offline from the stored `pairs` (the re-derivability contract holding), so no
+money was re-spent to obtain them.
+
+## G2.8 — CAPSTONE DONE (2026-08-09)
+
+One real workload — 48 Claude Code subagent sessions, converted by a
+purpose-written adapter — driven through ingest → cluster → derived suite →
+rubric + probe calibration → per-org live frontier → incumbent → suite-verify
+verdict, live and ledgered per leg.
+
+**THE VERDICT.** `contractual-breach`. Incumbent `1a9bac73` (live mean 0.2000)
+vs serving candidate `8fe33bc4` (0.0491): **retention 0.2707, CI95 [0.1754,
+0.3743], 23 pairs, 0 excluded, floor 0.9.** Confidence grade **low** —
+structurally, not incidentally: `confidenceFor` draws low/medium at 30 pairs and
+a cluster cannot exceed its tool-signature bucket (23 sessions here), so no
+derived-suite verdict on this corpus can grade higher whatever the item cap.
+
+**SIX DEFECTS, all found by contact with real data:**
+1. Tool signature didn't survive a real agent (45 distinct signatures / 48
+   sessions → one cluster each). `canonicalToolSequence`; SPEC §14.2 revised.
+2. `--verify-scrub` flagged its own placeholders, refusing every clean run.
+3. Truncation ran BEFORE scrubbing — a cut key becomes an unrecognisable
+   fragment that the verifier passes. Now scrub-then-truncate.
+4. The scrub verifier scanned serialized JSON, matching quotes across span
+   boundaries. Now walks string leaves.
+5. The G0.5 threshold fix never reached agent clustering (a second constant
+   reading no env). Would have reproduced the measured 6% cliff while looking
+   correctly configured. Now honoured + guarded.
+6. Correlation intervals were persisted at ONE of two sites, so the production
+   path (`rubric:generate`) wrote NULLs — including for this capstone.
+
+**CAPSTONE FINDING — the real pipeline recovers the workload's true structure.**
+Toy embedder @0.62: 30 clusters, 28 unverifiable. Real embedder @0.2: **7,
+exactly the tool-signature buckets.** The fragmentation was the test double.
+
+**COST ANATOMY (the per-leg ledger's purpose).** $5.6000 → reconcile pending.
+Metered legs: rubric+probe $1.0200, frontier sweep $1.7190 (projection $2.3019
+DOMINATED actual — the estimator contract holding on real data), suite-verify
+$1.0621 + $1.1045. Two killed legs leaked $1.5594 unmetered before the detached
+rule was adopted.
+
+**WHAT THIS RUN DID NOT DELIVER (honest):**
+- **The serve leg never ran**, so there are no `quality_samples`: the guarantee
+  REPORT renders with **0 entries / legacyPath true**, and `deriveServeFloor`
+  remains unmeasured against real data. The retention verdicts live on incidents,
+  not on the customer-facing report. This is the capstone's acceptance criterion
+  that is NOT met.
+- **The derived suite may be an unfair eval for single-call strategies.** Live
+  means were 0.2000 / 0.0491 / 0.0000; the frontier collapsed to 1 non-dominated
+  point of 3. Asking one model call to reproduce a 40-tool-call session's report
+  is a very hard task, and whether that is the right denominator for retention is
+  an open product question this run raises but cannot settle.
+
+Parameter report: `artifacts/g28-parameters.md` (7 sections, each with a
+confidence grade and the copies it applies to). Report artifacts:
+`artifacts/g28-capstone-report.{json,html}`.

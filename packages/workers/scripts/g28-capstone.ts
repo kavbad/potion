@@ -38,6 +38,7 @@ import {
   type PotionDb,
 } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
+import { and, eq } from 'drizzle-orm';
 import { resolveEmbedder } from '@potion/cluster';
 import { createMockProvider, createProviders, loadPrices } from '@potion/providers';
 import { strategyHash } from '@potion/core';
@@ -87,6 +88,10 @@ interface Args {
   rubricCap: number;
   sweepCap: number;
   verifyCap: number;
+  /** Which ranked strategy serves as the CANDIDATE (0=best … default worst).
+   * The worst can score exactly 0, giving a degenerate [0,0] retention CI that
+   * says nothing about whether the floor is enforceable. */
+  servingRank: number | null;
   out: string;
 }
 
@@ -107,6 +112,7 @@ function parseArgs(argv: string[]): Args {
     rubricCap: Number(get('--rubric-cap', '2')),
     sweepCap: Number(get('--sweep-cap', '8')),
     verifyCap: Number(get('--verify-cap', '8')),
+    servingRank: get('--serving-rank') !== undefined ? Number(get('--serving-rank')) : null,
     out: get('--out', 'artifacts') ?? 'artifacts',
   };
 }
@@ -322,17 +328,52 @@ async function main(): Promise<void> {
   // ---- LEG 5: incumbent + suite-verify -----------------------------------
   if (args.only.has(5)) {
   console.log(`\n=== LEG 5: incumbent + suite-verify (cap $${args.verifyCap}) ===`);
+  // Pair from EVAL EVIDENCE, not frontier points. The frontier keeps only
+  // non-dominated points, so a workload where one strategy dominates leaves a
+  // single point — but every evaluated strategy still has eval_results on the
+  // same suite items, and pairedQualities reads those. Using the frontier here
+  // would make the verdict unavailable exactly when the quality spread is
+  // widest, which is when it matters most.
   const frontier = await loadCurrentFrontier(db, target.clusterId, ORG);
+  const evalRows = await db
+    .select()
+    .from(evalResults)
+    .where(and(eq(evalResults.clusterId, target.clusterId), eq(evalResults.providerMode, mode)));
+  const byStrategy = new Map<string, { qualities: number[]; config: unknown }>();
+  for (const r of evalRows) {
+    const e = byStrategy.get(r.strategyHash) ?? { qualities: [], config: r.strategyConfig };
+    e.qualities.push(r.quality);
+    byStrategy.set(r.strategyHash, e);
+  }
+  const ranked = [...byStrategy.entries()]
+    .map(([hash, e]) => ({
+      hash,
+      config: e.config,
+      n: e.qualities.length,
+      mean: e.qualities.reduce((a, b) => a + b, 0) / e.qualities.length,
+    }))
+    .sort((a, b) => b.mean - a.mean);
+  console.log('live-evaluated strategies on this cluster:');
+  for (const r of ranked) console.log(`  ${r.hash.slice(0, 8)}  n=${r.n}  mean=${r.mean.toFixed(4)}`);
+  findings.notes.push(
+    `evaluated strategies (${mode}): ` + ranked.map((r) => `${r.hash.slice(0, 8)}=${r.mean.toFixed(4)}`).join(', '),
+  );
   const points = frontier?.points ?? [];
-  if (points.length < 2) {
-    const note = `frontier has ${points.length} point(s) — need 2 to designate an incumbent and verify a DIFFERENT serving strategy`;
+  findings.notes.push(`frontier v${frontier?.version ?? 0} kept ${points.length} non-dominated point(s) of ${ranked.length} evaluated`);
+  if (ranked.length < 2) {
+    const note = `only ${ranked.length} evaluated strategy — need 2 to verify a serving candidate against an incumbent`;
     findings.notes.push(note);
     console.log(`NOTE: ${note}`);
   } else {
-    const sorted = [...points].sort((a, b) => b.quality - a.quality);
-    const incumbent = sorted[0]!;
-    const serving = sorted[sorted.length - 1]!;
-    for (const p of [incumbent, serving]) await upsertStrategyConfig(db, p.strategyHash, p.strategyConfig);
+    const incumbent = { strategyHash: ranked[0]!.hash, strategyConfig: ranked[0]!.config, quality: ranked[0]!.mean };
+    const servingIdx =
+      args.servingRank !== null && args.servingRank > 0 && args.servingRank < ranked.length
+        ? args.servingRank
+        : ranked.length - 1;
+    const serving = { strategyHash: ranked[servingIdx]!.hash, strategyConfig: ranked[servingIdx]!.config, quality: ranked[servingIdx]!.mean };
+    for (const p of [incumbent, serving]) {
+      await upsertStrategyConfig(db, p.strategyHash, p.strategyConfig as Parameters<typeof upsertStrategyConfig>[2]);
+    }
     await designateIncumbent(db, ORG, target.clusterId, incumbent.strategyHash);
     const active = await activeIncumbent(db, ORG, target.clusterId);
     console.log(`incumbent ${active?.strategyHash.slice(0, 8)} (q=${incumbent.quality.toFixed(3)})`);
@@ -340,7 +381,10 @@ async function main(): Promise<void> {
 
     // A guarantee-carrying policy for the tuple the verify is keyed on.
     const policyId = 'pol-g28';
-    await insertPolicy(db, {
+    // Idempotent: a re-run against the same persistent db (the chunked-resume
+    // rule) must not fail on the policy that a previous leg already created.
+    try {
+      await insertPolicy(db, {
       id: policyId,
       orgId: ORG,
       name: 'g28-capstone',
@@ -349,7 +393,10 @@ async function main(): Promise<void> {
         costCeilingPer1K: 100,
         guarantee: { minQuality: 0.5, windowMin: 60, sampleRate: 1, action: 'alert' },
       },
-    });
+      });
+    } catch {
+      /* already present from an earlier leg */
+    }
     const verify = await guaranteeSuiteVerifyHandler(
       {
         orgId: ORG,
@@ -390,7 +437,9 @@ async function main(): Promise<void> {
     .reduce((a, [, v]) => a + v, 0);
   findings.notes.push(`${evalRows.length} eval_results rows written`);
 
-  const target2 = `${args.out}/g28-capstone-${mode}.json`;
+  const target2 = args.out.startsWith('/')
+    ? `${args.out}/g28-capstone-${mode}.json`
+    : fileURLToPath(new URL(`../../../${args.out}/g28-capstone-${mode}.json`, import.meta.url));
   writeFileSync(target2, `${JSON.stringify(findings, null, 2)}\n`);
   console.log(`\n=== SUMMARY (${mode}) ===`);
   console.log(`artifact: ${target2}`);

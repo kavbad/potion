@@ -2698,6 +2698,15 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
       n: report.n,
       pearsonVsTruth: t.pearsonVsTruth,
       spearmanVsTruth: t.spearmanVsTruth,
+      // G2.8 defect 6: the correlation intervals were added to the calibrate
+      // CLI's persist site only, so `rubric:generate` — the path that actually
+      // runs in production — wrote NULL intervals. The capstone's own live
+      // probe calibration landed without them. Same "handled in one route is
+      // not handled" class this repo has a lesson about; the fix belongs at
+      // every write, not the one that was in front of me.
+      pearsonCi95: t.pearsonCi95,
+      spearmanCi95: t.spearmanCi95,
+      correlationSeed: t.correlationSeed,
       judgeAgreement: null,
       meanAbsErr: t.meanAbsErr,
       flagged: t.flagged,

@@ -1,0 +1,92 @@
+{
+  "mode": "live",
+  "sessions": 0,
+  "spans": 0,
+  "withReference": 0,
+  "clusters": [
+    {
+      "clusterId": "agent-2dfbfb-d8898a",
+      "sessions": 23,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-d8898a-replays-v1",
+      "suiteItems": 23
+    },
+    {
+      "clusterId": "agent-2dfbfb-f620ca",
+      "sessions": 15,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-f620ca-replays-v1",
+      "suiteItems": 15
+    },
+    {
+      "clusterId": "agent-2dfbfb-dd184b",
+      "sessions": 5,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-dd184b-replays-v1",
+      "suiteItems": 5
+    },
+    {
+      "clusterId": "agent-2dfbfb-20ff80",
+      "sessions": 2,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-20ff80-replays-v1",
+      "suiteItems": 2
+    },
+    {
+      "clusterId": "agent-2dfbfb-7552a7",
+      "sessions": 1,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-7552a7-replays-v1",
+      "suiteItems": 1
+    },
+    {
+      "clusterId": "agent-2dfbfb-d1c2f7",
+      "sessions": 1,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-d1c2f7-replays-v1",
+      "suiteItems": 1
+    },
+    {
+      "clusterId": "agent-2dfbfb-e98138",
+      "sessions": 1,
+      "toolSequence": [],
+      "suiteId": "agent-2dfbfb-e98138-replays-v1",
+      "suiteItems": 1
+    }
+  ],
+  "spend": {
+    "verify": 1.104509,
+    "total": 1.104509
+  },
+  "notes": [
+    "4 of 7 clusters have <5 suite items — below SUITE_VERIFY_MIN_PAIRS, so they can never render a retention verdict (agent-2dfbfb-20ff80:2, agent-2dfbfb-7552a7:1, agent-2dfbfb-d1c2f7:1, agent-2dfbfb-e98138:1)",
+    "evaluated strategies (live): 1a9bac73=0.2000, 8fe33bc4=0.0491, 2797eeed=0.0000",
+    "frontier v2 kept 1 non-dominated point(s) of 3 evaluated",
+    "retention floor 0.9 IS enforceable at 23 pairs (half-width 0.0995 < slack 0.1000)",
+    "213 eval_results rows written"
+  ],
+  "verify": {
+    "providerMode": "live",
+    "runId": "run-3ff12e98",
+    "spendUsd": 1.104509,
+    "retention": {
+      "mean": 0.2706521739130435,
+      "ci95": [
+        0.1753623188405797,
+        0.3742753623188406
+      ],
+      "seed": 4159430066,
+      "resamples": 1000,
+      "pairs": 23,
+      "excludedPairs": 0,
+      "epsilon": 0.05,
+      "floor": 0.9
+    },
+    "verdictIncidentId": "23923e88-f80e-4cbe-be35-c0bacc9868c4",
+    "advisoryResolved": false,
+    "restoredIncidentId": null,
+    "recoveryUnconfirmed": false,
+    "detail": null,
+    "outcome": "contractual-breach"
+  }
+}

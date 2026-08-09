@@ -228,3 +228,24 @@ unmetered spend. Background execution was available and unused.
 **How to apply:** before starting a live leg, estimate its wall-clock, not just
 its cost. If it can exceed the invocation limit, run it detached or sub-chunk at
 item level. An interrupted paid operation is worse than a slow one.
+
+## A point estimate near a hard threshold is not a verdict
+
+**What happened (2026-08-09, G2.8):** a live judge calibration read pearson
+0.605 / spearman 0.811 against a 0.8 trust bar. The obvious reading — "fails on
+Pearson, clears on Spearman, so gate on Spearman" — was written down as the
+recommendation. The bootstrap intervals said otherwise: Pearson [0.5239,
+0.7964] genuinely fails (the whole interval is below the bar), while Spearman
+[0.6975, 0.8932] **straddles** it. Switching the gate would have converted a
+defensible rejection into an undefensible acceptance, on the run that stood to
+benefit.
+
+**Why:** thresholds are compared against estimates, and estimates have width. A
+point 0.011 above a bar, with a half-width of 0.098, carries no information
+about which side it is on.
+
+**How to apply:** when a decision turns on crossing a fixed threshold, compute
+the interval and gate on it — clears only when the whole interval clears, fails
+when the whole interval fails, and report a third INDETERMINATE state when it
+straddles. Be most suspicious when the convenient conclusion is the one the
+point estimate supports.
