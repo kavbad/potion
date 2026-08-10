@@ -36,6 +36,7 @@ import {
   type IncidentRow,
   listPolicies,
   latestVerdictForTuple,
+  tupleHasAnyVerdict,
   certificationStateForCluster,
   servedSpendByPolicyCluster,
   type GuaranteeVerdictRow,
@@ -357,12 +358,38 @@ export async function loadGuaranteeReport(
     // rendered with only a `low` badge, and that number came from an
     // instrument certification would have refused to vouch for.
     const certState = await certificationStateForCluster(ctx.db.db, clusterId, orgId);
+    // The legacy incident scan is PRE-0029 HISTORY ONLY. It cannot see
+    // supersession, so once any durable verdict exists for the tuple the scan
+    // would republish retracted numbers: every recorded refusal outcome
+    // (mode-mismatch, no-suite, budget-refused, insufficient-pairs) makes
+    // headlineFromVerdict return null, and the fallback then resurrected the
+    // superseded breach's incident as the headline. A retracted verdict is
+    // retracted. Found by the invariant sweep.
+    const hasDurableVerdict = await tupleHasAnyVerdict(ctx.db.db, { orgId, policyId, clusterId });
     let retention =
-      headlineFromVerdict(verdictRow) ?? latestRetentionHeadline(incidents, policyId, clusterId);
+      headlineFromVerdict(verdictRow) ??
+      (hasDurableVerdict ? null : latestRetentionHeadline(incidents, policyId, clusterId));
     let certGated = false;
-    if (!certState.certified && retention !== null) {
+    // A headline may only be published when the certification vouches for the
+    // INSTRUMENT THAT MEASURED IT. certificationStateForCluster answers about
+    // the cluster's CURRENT suite; a verdict measured on an older generation
+    // (or while uncertified, its contractual effects withheld) must not be
+    // published just because a DIFFERENT suite version later certified.
+    const verdictInstrumentCertified =
+      certState.certified &&
+      (verdictRow === null ||
+        verdictRow.suiteId === null ||
+        (certState.certification !== undefined &&
+          certState.certification.suiteId === verdictRow.suiteId &&
+          certState.certification.suiteVersion === verdictRow.suiteVersion));
+    if (!verdictInstrumentCertified && retention !== null) {
       retention = null;
-      retentionUnavailableReason = certState.reason ?? 'suite not certified';
+      retentionUnavailableReason = !certState.certified
+        ? (certState.reason ?? 'suite not certified')
+        : `suite not certified for this verdict's instrument — the number was measured on ` +
+          `${verdictRow?.suiteId ?? 'an earlier suite'}@${verdictRow?.suiteVersion ?? '?'}, ` +
+          `certification vouches for ${certState.certification?.suiteId}@${certState.certification?.suiteVersion} ` +
+          '(re-verify on the certified suite)';
       certGated = true;
     }
     const certEvidence = certState.certification?.evidence as

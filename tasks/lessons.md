@@ -329,3 +329,35 @@ been garbage-collected. Before planning against "the data is already there",
 read one real row end-to-end and prove the needed relationship survives in
 it. Corollary: derived stores are not backups — the capstone's per-call
 detail now exists nowhere on this machine.
+
+## A guard must use the same lookup as the thing it guards (2026-08-10)
+
+False-live instance #6: the live-run guard collected mock ALIASES and tested
+string membership, while the resolver it protects matches `alias === model ||
+entry.model === model`. Every mock entry therefore had a second name that
+reached the mock provider — 'mock-mid' refused, 'mock-mid-v1' executed and got
+stamped `live`. The guard and the resolver had drifted into two different
+definitions of "is this the mock". Rule: a guard should call the SAME
+resolution function as the code path it defends, never a re-derived
+approximation of it.
+
+## The test driver's semantics are part of the contract under test (2026-08-10)
+
+The sweep's best finding was invisible to all ten probes: production retries
+every job three times (BullMQ), no handler is idempotent, and a throw after
+the spend re-runs the whole handler — N× money and duplicate contractual
+effects. No test caught it because MemoryQueue, which every hermetic test
+uses, catches the throw and NEVER retries. The harness could not express the
+failure. When a driver is swapped for tests, diff its semantics against
+production explicitly — the difference is untested surface by construction.
+
+## A hand-maintained list needs a structural check, not a bigger fixture (2026-08-10)
+
+Three migrations added org-FK NOT NULL tables after the G2.7 delete cascade;
+none updated it, so org deletion aborted for every guarantee customer while
+the "nothing derived survives" test kept passing — its fixture stopped short
+of designating an incumbent. Enlarging the fixture would have caught these
+three and not the fourth. The fix that holds derives the obligation from the
+schema (parse org-FK tables, assert each is handled or explicitly exempted
+with a reason), so the NEXT migration fails the build. Same shape as the
+route-inventory meta-test.

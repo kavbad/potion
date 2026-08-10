@@ -3585,6 +3585,11 @@ const runSuiteVerify = async (
     pricesVersion: prices.version,
     providerMode,
     orgId: payload.orgId,
+    // THE VERDICT IS MEASURED ON THE SUITE IT STAMPS. Without this roster the
+    // pairing spans every generation the cluster has ever had (see
+    // pairedQualities' doc): a v2 verdict was being computed over abandoned
+    // v1 evidence, reporting more pairs than the suite has items.
+    itemIds: loaded.items.map((i) => i.id),
   });
   prov.unpairable = unpairable;
   const computed = computeRetention(pairs, {

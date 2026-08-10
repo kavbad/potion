@@ -262,10 +262,28 @@ export function cacheKeyOf(
   );
 }
 
+/**
+ * Does this model string RESOLVE to the mock provider?
+ *
+ * THE RULE IS RESOLUTION, NOT SPELLING (false-live instance #6, found by the
+ * invariant sweep). The guard below used to collect mock ALIASES and test
+ * string membership — but `createResolver` (@potion/strategies) matches
+ * `e.alias === model || e.model === model`, so every mock entry has a SECOND
+ * name that reaches the mock provider: 'mock-mid' was refused while
+ * 'mock-mid-v1' sailed through, executed on the mock, and got stamped
+ * providerMode 'live'. A guard that does not use the same lookup as the
+ * thing it guards is not a guard. This helper IS that lookup.
+ */
+export function resolvesToMockProvider(model: string, prices: PriceTable): boolean {
+  const entry = prices.entries.find((e) => e.alias === model || e.model === model);
+  return entry?.provider === 'mock';
+}
+
 /** G1.7: a run declared 'live' must never execute against mock-provider
- * aliases — the provider set still contains a real mock behind 'mock:', so
- * a mock alias would silently mock while the rows get stamped 'live' (the
- * false-live pattern; fourth instance made it a guard). */
+ * models — the provider set still contains a real mock behind 'mock:', so
+ * a model that RESOLVES to mock would silently mock while the rows get
+ * stamped 'live' (the false-live pattern; instance #4 made it a guard,
+ * instance #6 made it resolution-based). */
 export class MockAliasInLiveRunError extends Error {
   constructor(readonly aliases: string[]) {
     super(
@@ -354,17 +372,17 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
 
   // ---- G1.7: false-live guard ----
   if ((opts.provider ?? 'mock') === 'live') {
-    const mockAliases = new Set(
-      prices.entries.filter((e) => e.provider === 'mock').map((e) => e.alias),
-    );
+    // Resolution-based (see resolvesToMockProvider): alias-membership let
+    // every mock model's NATIVE id through. strategyModels covers nested
+    // models for every strategy type, and the judge clause covers scoring.
     const offending = new Set<string>();
     for (const strategy of opts.strategies) {
       for (const alias of strategyModels(strategy)) {
-        if (mockAliases.has(alias)) offending.add(alias);
+        if (resolvesToMockProvider(alias, prices)) offending.add(alias);
       }
     }
     for (const item of runItems) {
-      if (item.scoring.kind === 'llm-judge' && mockAliases.has(item.scoring.judgeModel)) {
+      if (item.scoring.kind === 'llm-judge' && resolvesToMockProvider(item.scoring.judgeModel, prices)) {
         offending.add(item.scoring.judgeModel);
       }
     }

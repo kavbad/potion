@@ -133,6 +133,18 @@ export interface PairedQualities {
  * research promotion gate passes 'live'; guarantee:suite-verify passes the
  * env's mode and stamps it on the verdict). orgId scoping matches the
  * eval rows' attribution: an org's pairing never mixes platform evidence.
+ *
+ * `itemIds` SCOPES THE PAIRING TO ONE SUITE and callers rendering a verdict
+ * MUST pass it. eval_results has no suite column, so a cluster-only scope
+ * silently spans every suite GENERATION the cluster has ever had: after the
+ * step-level flip (post-capstone item 2) a `-replays-v2` verdict was computed
+ * over the abandoned `-replays-v1` evidence too — 18 pairs reported for a
+ * 12-item suite, and a mean that was neither suite's. The verdict row stamps
+ * suiteId/suiteVersion as the provenance of its number, so the number has to
+ * be measured over exactly that roster. Found by the invariant sweep; the
+ * omission became reachable the moment a cluster could own two generations.
+ * Coverage (`unpairable`) is reported against the SAME roster — a retired
+ * generation's items are not gaps in the current suite.
  */
 export async function pairedQualities(
   db: PotionDb,
@@ -143,6 +155,9 @@ export async function pairedQualities(
     pricesVersion: string;
     providerMode: 'mock' | 'live';
     orgId?: string;
+    /** The suite's item roster. Omit ONLY for cluster-wide analytics that
+     * are not rendering a contractual verdict. */
+    itemIds?: string[];
   },
 ): Promise<PairedQualities> {
   const rows = await db
@@ -161,6 +176,9 @@ export async function pairedQualities(
         eq(evalResults.stale, false),
         eq(evalResults.providerMode, scope.providerMode),
         scope.orgId !== undefined ? eq(evalResults.orgId, scope.orgId) : isNull(evalResults.orgId),
+        // Suite scoping: an empty roster can pair nothing (inArray with an
+        // empty list is a contradiction, which is the correct answer).
+        scope.itemIds !== undefined ? inArray(evalResults.itemId, scope.itemIds) : undefined,
       ),
     )
     // G2.8-followup: TOTAL, EXPLICIT ordering. Without it the scan order is

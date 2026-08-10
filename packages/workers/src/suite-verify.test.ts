@@ -31,6 +31,7 @@ import {
   upsertBudget,
   upsertStrategyConfig,
   listGuaranteeVerdicts,
+  loadDerivedSuite,
   listSuiteCertifications,
   type DbHandle,
   type NewTraceSpan,
@@ -793,6 +794,59 @@ describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lo
     const rows = await listGuaranteeVerdicts(db.db, ORG);
     expect(rows[0]!.suiteId).toBe(`${clusterId}-replays-v2`);
   });
+
+  it('SUITE SCOPING: after the v1→v2 flip the verdict is measured on the suite it STAMPS, not the whole cluster', async () => {
+    // Found by the invariant sweep. pairedQualities is cluster-scoped and
+    // eval_results has no suite column, so a cluster that owns two suite
+    // GENERATIONS was pairing both into one contractual number: more pairs
+    // than the stamped suite has items, and a mean belonging to neither
+    // suite. Reachable only since the step-level flip made two generations
+    // possible — the defect arrived with that feature, not before it.
+    const clusterId = await seedCluster(); // 6 sessions → v1 session suite
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+
+    // Verdict #1 lays down v1 evidence on the cluster.
+    const first = await verify(clusterId);
+    expect(first.outcome).toBe('all-clear');
+    const v1Items = (await loadDerivedSuite(db.db, `${clusterId}-replays-v1`))!.items.length;
+    expect(first.retention!.pairs).toBe(v1Items);
+
+    // The cluster flips to step-level synthesis: same tool signature, so the
+    // SAME cluster id, now resolving to a v2 suite with its own roster.
+    const t0 = new Date('2026-08-10T09:00:00Z').getTime();
+    await insertTraceSpans(db.db, [
+      span({ traceId: 'tr_flip', spanId: 'tr_flip_root', attrs: { 'gen_ai.prompt': 'Audit the payment retries for account <num>' }, ts: new Date(t0) }),
+      ...Array.from({ length: 6 }, (_, i) =>
+        span({
+          traceId: 'tr_flip',
+          spanId: `tr_flip_s${i + 1}`,
+          name: 'llm.call',
+          attrs: { 'gen_ai.operation.name': 'llm_call', 'gen_ai.completion': `step ${i + 1}: checked batch ${i + 1}`, 'potion.step_index': i + 1 },
+          ts: new Date(t0 + (i + 1) * 60_000),
+        }),
+      ),
+      span({ traceId: 'tr_flip', spanId: 'tr_flip_tool', name: 'tool.billing', attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(t0 + 60_000) }),
+      span({ traceId: 'tr_flip', spanId: 'tr_flip_chat', name: 'chat', attrs: { 'gen_ai.completion': 'step 6: checked batch 6' }, ts: new Date(t0 + 360_000) }),
+    ]);
+    await tracesClusterHandler({ orgId: ORG }, ctx());
+    const v2 = (await loadDerivedSuite(db.db, `${clusterId}-replays-v2`))!;
+    expect(v2.items.length).toBeGreaterThanOrEqual(5);
+
+    const second = await verify(clusterId);
+    const row = (await listGuaranteeVerdicts(db.db, ORG)).find((r) => r.id === second.verdictId)!;
+    expect(row.suiteId).toBe(`${clusterId}-replays-v2`);
+
+    // Every item behind the number belongs to the stamped suite, and the
+    // count cannot exceed that suite's roster.
+    const v2Ids = new Set(v2.items.map((i) => i.id));
+    const evidenceIds = second.retention!.pairEvidence.map((p) => p.itemId);
+    expect(evidenceIds.filter((id) => !v2Ids.has(id))).toEqual([]);
+    expect(second.retention!.pairs).toBeLessThanOrEqual(v2Ids.size);
+    // …and coverage is reported against THAT roster: a retired generation's
+    // items are not gaps in the current suite.
+    expect((row.unpairable as Array<{ itemId: string }>).filter((u) => !v2Ids.has(u.itemId))).toEqual([]);
+  }, 60_000);
 
   it('mock-on-MOCK is untouched: the same cluster without live evidence verifies normally', async () => {
     const clusterId = await seedCluster();

@@ -2637,3 +2637,79 @@ Run when the converter-v2 corpus has accumulated and an incumbent is
 designated.
 
 | 2026-08-10 | Post-capstone (3) certification gate: keyless item, $0. Comparability leg scripted + projected, not run (fresh-corpus decision). | n/a | **$0.0000 real** | no reconcile needed |
+
+## POST-CAPSTONE ITEM 4 — INVARIANT SWARM, ROUND 1 (2026-08-10)
+
+Independent invariant-test sweep: 57 agents across 10 probe lenses, each
+candidate audited by two skeptical verifiers (premise-validity + fails-for-the-
+right-reason), plus a completeness critic. Agents proposed FAILING TESTS ONLY —
+no fixes, no writes to trunk (verified: zero tracked-file modifications; the
+10 `swarm-*.test.ts` proposals were preserved outside the tree). Mock
+providers throughout, **$0.0000** against the $10 cap. `.env` and the curated
+`.pglite/` verdict trail untouched.
+
+**23 candidates → 11 unanimous-accept, 3 contested, 9 rejected.** After my own
+source-level audit: **12 real defects, 5 critical — three of them introduced
+by items 2 and 3 in this same session.**
+
+### Fixed with pinned regressions (this commit)
+
+- **F1 CRITICAL — the verdict was measured over the CLUSTER, not the suite it
+  stamps.** `pairedQualities` is cluster-scoped and `eval_results` has no
+  suite column, so a cluster owning two suite GENERATIONS paired both into one
+  contractual number: 18 pairs reported for a 12-item suite, and a mean
+  belonging to neither suite. Reachable only since item 2's v1→v2 flip — the
+  defect arrived with that feature. Fixed by scoping the pairing (and its
+  coverage report) to the suite roster; callers rendering a verdict MUST pass
+  `itemIds`.
+- **F2 CRITICAL — the headline gate asked the wrong question.**
+  `certificationStateForCluster` is keyed to the CURRENT (suite, version);
+  `latestVerdictForTuple` is keyed to (org, policy, cluster). A number
+  measured while uncertified — contractual effects withheld — was published
+  the moment a DIFFERENT suite version certified. Now the certification must
+  vouch for the verdict's OWN instrument. (Introduced by item 3.)
+- **F3 CRITICAL — a retracted verdict resurrected.** The pre-0029 incident
+  fallback cannot see supersession, so whenever the active verdict was a
+  recorded refusal (mode-mismatch, no-suite, budget-refused,
+  insufficient-pairs) the superseded breach's number republished as the
+  headline. The fallback is now pre-0029 history only (`tupleHasAnyVerdict`).
+- **F4 CRITICAL — false-live #6.** The live guard collected mock ALIASES;
+  `createResolver` matches alias OR native id, so `mock-mid-v1` executed on
+  the mock and was stamped `live`. Identical copy in `calibrate.ts` (answerer
+  + judges). Both now RESOLUTION-based. Pinned for strategy models, nested
+  compound models, and the llm-judge clause.
+- **F5 HIGH — org deletion aborted for every guarantee customer.**
+  `cluster_incumbents` (0025), `guarantee_verdicts` (0029),
+  `suite_certifications` (0031) are all `org_id NOT NULL REFERENCES orgs(id)`
+  and none were in the cascade; the "nothing derived survives" test passed
+  because its fixture never designates an incumbent. Fixed + a STRUCTURAL
+  completeness meta-test that parses the schema and fails the build when a
+  future migration adds an org-FK table without handling it.
+
+### Filed as their own items (F6–F12)
+
+F6 HIGH `/v1/completions` bypasses the budget hard-stop AND the rate limiter
+(the chat route's protections were never ported). F7 CRITICAL certification
+survives changes to what the suite MEANS — lost-update version bump under
+concurrent re-derivation, retention purge, rubric restamp; fix is a content
+fingerprint, not a patch counter. F8 MEDIUM calendar-invalid `?period`/`?from`
+→ 500 on two report routes. F9 MEDIUM `supersedeVerdict` accepts a self or
+already-retracted successor (cycles). **F10 CRITICAL job retries re-execute
+spend and contractual effects — no handler is idempotent, and MemoryQueue
+(every hermetic test) never retries, so the harness cannot express the
+failure.** **F11 CRITICAL `GET /api/certifications` renders CERTIFIED for a
+certification the gate refuses** (row-status boolean vs key-based predicate).
+F12 HIGH migration DATA statements re-run every boot, re-attributing platform
+evidence to an org.
+
+### Audit notes (the swarm proposes, the owner disposes)
+
+One critic-proposed critical was REJECTED on audit: it claimed suite-verify
+lacks an ownership check, but the cluster is checked at handlers.ts:3360 and
+the suite id derives from the cluster. Of the 9 auditor-rejected candidates,
+four were rejected for asserting contracts the codebase deliberately does not
+make (documented trade-offs), and four more said "the defect is real, the
+framing is wrong" — those became F7 and F9 rather than being discarded.
+Zero findings would have been a signal to re-aim; this was not that.
+
+| 2026-08-10 | Post-capstone (4) invariant swarm round 1: 57 agents, mock-only, no live legs. 12 defects (5 critical); 5 fixed + pinned this commit, 7 filed. | $10.00 cap | **$0.0000** | no reconcile needed |

@@ -201,6 +201,59 @@ describe('runEval', () => {
     expect(again.cacheHits).toBe(2);
   });
 
+  it('FALSE-LIVE #6: the guard is RESOLUTION-based — a mock model named by its NATIVE id is refused too', async () => {
+    // The guard used to collect mock ALIASES and test string membership, but
+    // createResolver matches `alias === model || e.model === model`. Every
+    // mock entry therefore had a second name that reached the mock provider:
+    // 'mock-mid' was refused while 'mock-mid-v1' executed on the mock and was
+    // stamped providerMode 'live'. Found by the invariant sweep; the sixth
+    // recorded false-live instance.
+    const nativeMockId = prices.entries.find((e) => e.provider === 'mock' && e.alias === 'mock-mid')!.model;
+    expect(nativeMockId).toBe('mock-mid-v1'); // alias !== native id, the whole hole
+    await expect(
+      runEval(
+        {
+          suiteIds: ['extraction'],
+          strategies: [{ type: 'single', model: nativeMockId } as const],
+          budgetCapUsd: 25,
+          provider: 'live',
+        },
+        deps(),
+      ),
+    ).rejects.toThrow(MockAliasInLiveRunError);
+    // Nested models in compound strategies resolve through the same rule.
+    await expect(
+      runEval(
+        {
+          suiteIds: ['extraction'],
+          strategies: [
+            {
+              type: 'cascade',
+              stages: [{ model: nativeMockId, escalateIf: { confidenceBelow: 0.7 } }, { model: 'frontier-class' }],
+              confidenceMethod: 'self-report-calibrated',
+            } as const,
+          ],
+          budgetCapUsd: 25,
+          provider: 'live',
+        },
+        deps(),
+      ),
+    ).rejects.toThrow(MockAliasInLiveRunError);
+    // …and the llm-judge clause: a live run judged by a native mock id.
+    await expect(
+      runEval(
+        {
+          suiteIds: ['creative'],
+          strategies: [{ type: 'single', model: 'frontier-class' } as const],
+          budgetCapUsd: 25,
+          provider: 'live',
+          judgeModelOverride: prices.entries.find((e) => e.provider === 'mock' && e.alias === 'mock-judge')!.model,
+        },
+        deps(),
+      ),
+    ).rejects.toThrow(MockAliasInLiveRunError);
+  });
+
   it('G1.7: MockAliasInLiveRunError refuses live runs over mock aliases before any call', async () => {
     await expect(
       runEval(

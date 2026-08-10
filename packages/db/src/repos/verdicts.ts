@@ -107,3 +107,31 @@ export async function supersedeVerdict(
     return updated.length;
   });
 }
+
+/**
+ * Does ANY durable verdict row exist for this tuple (superseded included)?
+ *
+ * The guarantee report's pre-0029 incident fallback must not run once the
+ * verdict table has spoken for a tuple: the incident scan cannot see
+ * supersession, so it republished the numbers of RETRACTED verdicts whenever
+ * the active verdict was a recorded refusal (mode-mismatch, no-suite,
+ * budget-refused, insufficient-pairs — all of which carry no headline).
+ * A retracted verdict is retracted. Found by the invariant sweep.
+ */
+export async function tupleHasAnyVerdict(
+  db: PotionDb,
+  scope: { orgId: string; policyId: string; clusterId: string },
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: guaranteeVerdicts.id })
+    .from(guaranteeVerdicts)
+    .where(
+      and(
+        eq(guaranteeVerdicts.orgId, scope.orgId),
+        eq(guaranteeVerdicts.policyId, scope.policyId),
+        eq(guaranteeVerdicts.clusterId, scope.clusterId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}

@@ -29,7 +29,7 @@ import {
 } from './estimate.js';
 import { scoreAnswer, scoreLlmJudge, type ScorerDeps } from './scorers.js';
 import {
-  MockAliasInLiveRunError, unrunnableReason } from './runner.js';
+  MockAliasInLiveRunError, resolvesToMockProvider, unrunnableReason } from './runner.js';
 
 export const CALIBRATION_JUDGES = ['mock-judge-a', 'mock-judge-b'] as const;
 export const CALIBRATION_ANSWERER = 'mock-cheap';
@@ -326,10 +326,10 @@ export async function runJudgeCalibration(
   // mock alias — not the judges, and not the answerer whose default is
   // mock-cheap. Refuse before any provider call, the runner's convention.
   if (deps.providerMode === 'live') {
-    const mockAliases = new Set(
-      prices.entries.filter((e) => e.provider === 'mock').map((e) => e.alias),
-    );
-    const offending = [...judges, answerer].filter((a) => mockAliases.has(a));
+    // Resolution-based, not alias-membership (false-live instance #6): the
+    // resolver matches native ids too, so 'mock-judge-a-v1' evaded the old
+    // string check and produced a live-RECORDED calibration from mock output.
+    const offending = [...judges, answerer].filter((a) => resolvesToMockProvider(a, prices));
     if (offending.length > 0) throw new MockAliasInLiveRunError([...new Set(offending)]);
   }
 

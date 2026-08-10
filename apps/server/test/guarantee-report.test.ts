@@ -14,6 +14,8 @@ import {
   designateIncumbent,
   insertApiKey,
   insertIncident,
+  insertGuaranteeVerdict,
+  supersedeVerdict,
   insertPolicy,
   insertQualitySample,
   listQualitySamples,
@@ -273,6 +275,33 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     return clusterId;
   }
 
+  async function seedCertifiedCluster2(): Promise<string> {
+    for (let i = 1; i <= 6; i++) {
+      const task = evalTaskById(`ex-0${i}`)!;
+      await insertTraceSpans(db(), [
+        { orgId: ORG, traceId: `tr_gr2_${i}`, spanId: `tr_gr2_${i}_r`, name: 'agent.root', model: 'mock-cheap', usage: { input_tokens: 10, output_tokens: 5 }, costUsd: 0,
+          attrs: { 'gen_ai.prompt': `Reconcile the audit batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(`2026-08-06T11:0${i}:00Z`) },
+        { orgId: ORG, traceId: `tr_gr2_${i}`, spanId: `tr_gr2_${i}_t`, name: 'tool.graudit', model: 'mock-cheap', usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0,
+          attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(`2026-08-06T11:0${i}:30Z`) },
+      ] as NewTraceSpan[]);
+    }
+    const fakeEmbedder2 = { async embed(texts: string[]): Promise<number[][]> { return texts.map(() => new Array<number>(384).fill(0.05)); } };
+    const jobCtx2: JobContext = {
+      db: db(),
+      dbHandle: app.potion.db,
+      pricesPath: fileURLToPath(new URL('../../../prices.json', import.meta.url)),
+      embedder: fakeEmbedder2,
+    };
+    await tracesClusterHandler({ orgId: ORG }, jobCtx2);
+    const clusterId = `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['graudit'])}`;
+    const CFG_F = { type: 'single', model: 'mock-frontier' } as const;
+    await upsertStrategyConfig(db(), strategyHash(CFG_F), CFG_F);
+    await designateIncumbent(db(), ORG, clusterId, strategyHash(CFG_F));
+    const cert = await suiteCertifyHandler({ orgId: ORG, clusterId }, jobCtx2);
+    expect(cert.status).toBe('certified');
+    return clusterId;
+  }
+
   it('renders entries with retention headline for a CERTIFIED cluster; uncertified clusters are gated; html variant', async () => {
     const certCluster = await seedCertifiedCluster();
     // Evidence: samples today for BOTH clusters + suite verdicts.
@@ -379,6 +408,64 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     expect(entry).toBeTruthy();
     expect(entry.retention).toBeNull();
     expect(entry.retentionUnavailableReason).toContain('no suite-verify verdict');
+  });
+
+  it('INSTRUMENT IDENTITY (swarm): a certified cluster does NOT publish a verdict measured on a DIFFERENT suite version', async () => {
+    // The gate composed two differently-keyed facts: certification is keyed to
+    // (suiteId, suiteVersion); latestVerdictForTuple is keyed to
+    // (org, policy, cluster) with no suite constraint. So a number measured
+    // while the cluster was uncertified — its contractual effects WITHHELD —
+    // was published as the headline the moment any later suite version
+    // certified. A certification vouches for an instrument, not a cluster.
+    const clusterId = await seedCertifiedCluster2();
+    // A verdict stamped with a DIFFERENT (earlier) suite generation.
+    await insertGuaranteeVerdict(db(), {
+      orgId: ORG, policyId: PID, clusterId, candidateHash: H_MID,
+      suiteId: `${clusterId}-replays-v0-legacy`, suiteVersion: '0.9.0',
+      providerMode: 'mock', outcome: 'contractual-breach',
+      retention: retentionBlock({ mean: 0.27 }) as unknown as Record<string, unknown>,
+    });
+    await insertQualitySample(db(), { orgId: ORG, strategyHash: H_MID, quality: 0.9, createdAt: new Date(), policyId: PID, clusterId });
+
+    const res = await app.inject({ method: 'GET', url: `/api/reports/guarantee?from=${today}&to=${today}`, headers: { authorization: `Bearer ${KEY}` } });
+    const entry = res.json().entries.find((e: { clusterId: string }) => e.clusterId === clusterId);
+    expect(entry).toBeTruthy();
+    expect(entry.certification.certified).toBe(true); // the CLUSTER is certified…
+    expect(entry.retention).toBeNull(); // …but this number's instrument is not
+    expect(entry.retentionUnavailableReason).toContain("verdict's instrument");
+  });
+
+  it('RETRACTED VERDICT (swarm): a superseded breach must not resurface through the pre-0029 incident fallback', async () => {
+    // The incident scan cannot see supersession. Whenever the ACTIVE verdict
+    // carries no headline — every recorded refusal outcome — the fallback
+    // republished the retracted number as the customer-facing headline.
+    const cl = 'agent-grtest-retracted';
+    await db().insert(clusters).values({ id: cl, name: 'retracted', description: 'x', orgId: ORG });
+    await designateIncumbent(db(), ORG, cl, H_CHEAP);
+    await insertQualitySample(db(), { orgId: ORG, strategyHash: H_MID, quality: 0.9, createdAt: new Date(), policyId: PID, clusterId: cl });
+    // A breach verdict + its incident (the shape the fallback scans for)…
+    const inc = await insertIncident(db(), {
+      orgId: ORG, kind: 'quality_breach',
+      detail: { leg: 'suite', policyId: PID, clusterId: cl, fromStrategy: H_MID, retention: retentionBlock({ mean: 0.31 }), providerMode: 'mock' },
+    });
+    const breachId = await insertGuaranteeVerdict(db(), {
+      orgId: ORG, policyId: PID, clusterId: cl, candidateHash: H_MID,
+      providerMode: 'mock', outcome: 'contractual-breach',
+      retention: retentionBlock({ mean: 0.31 }) as unknown as Record<string, unknown>,
+      verdictIncidentId: inc,
+    });
+    // …then it is RETRACTED, and the newest active verdict is a refusal.
+    const refusalId = await insertGuaranteeVerdict(db(), {
+      orgId: ORG, policyId: PID, clusterId: cl, candidateHash: H_MID,
+      providerMode: 'mock', outcome: 'mode-mismatch', detail: 'mock verify on a live-evidence cluster',
+    });
+    await supersedeVerdict(db(), { orgId: ORG, priorIds: [breachId], newId: refusalId, reason: 'measurement retracted' });
+
+    const res = await app.inject({ method: 'GET', url: `/api/reports/guarantee?from=${today}&to=${today}`, headers: { authorization: `Bearer ${KEY}` } });
+    const entry = res.json().entries.find((e: { clusterId: string }) => e.clusterId === cl);
+    expect(entry).toBeTruthy();
+    expect(entry.retention).toBeNull(); // NOT 0.31
+    expect(entry.retentionUnavailableReason).toBeTruthy();
   });
 
   it('401 without credentials; 400 on malformed window', async () => {

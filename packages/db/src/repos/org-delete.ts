@@ -26,7 +26,10 @@ import {
   budgetEvents,
   budgets,
   clusterExemplars,
+  clusterIncumbents,
   clusterRubrics,
+  guaranteeVerdicts,
+  suiteCertifications,
   clusters,
   custodyAudit,
   derivedSuites,
@@ -179,6 +182,28 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count(
     'cluster_rubrics',
     db.delete(clusterRubrics).where(eq(clusterRubrics.orgId, orgId)).returning({ id: clusterRubrics.id }),
+  );
+  // The guarantee trio (0025 incumbents, 0029 verdicts, 0031 certifications).
+  // All three landed AFTER the G2.7 cascade and none of their items touched
+  // this file, so every org that ever designated an incumbent — i.e. every
+  // guarantee customer — failed deletion with an FK violation while the
+  // "nothing derived survives" test passed, because its fixture stops short
+  // of designation. Found by the invariant sweep; the completeness meta-test
+  // in org-delete.test.ts now makes the next such omission a build failure.
+  await count(
+    'cluster_incumbents',
+    db.delete(clusterIncumbents).where(eq(clusterIncumbents.orgId, orgId)).returning({ id: clusterIncumbents.id }),
+  );
+  await count(
+    'guarantee_verdicts',
+    db.delete(guaranteeVerdicts).where(eq(guaranteeVerdicts.orgId, orgId)).returning({ id: guaranteeVerdicts.id }),
+  );
+  await count(
+    'suite_certifications',
+    db
+      .delete(suiteCertifications)
+      .where(eq(suiteCertifications.orgId, orgId))
+      .returning({ id: suiteCertifications.id }),
   );
   // derived_suite_items ride the schema's ONE real cascade.
   await count(
