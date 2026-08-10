@@ -1011,7 +1011,31 @@ async function main(): Promise<void> {
       if (verdict.outcome !== 'self-incumbent') {
         assert((verdict.retention?.pairs ?? 0) >= 5, `retention pairs < 5: ${JSON.stringify(verdict.retention)}`);
       }
-      // REPORT: retention headline surface + designation + gap-filled series.
+      // CERTIFICATION GATE (post-capstone item 3, Decision 2): run the REAL
+      // certification job and let it land WHEREVER the measurement honestly
+      // falls — the mock judge is not discriminative on this fixture's
+      // content, so the incumbent's self-retention will genuinely miss the
+      // 0.9 floor and the suite stays UNCERTIFIED. The gate working is the
+      // assertion: the report must OBEY the certification state, never
+      // render a number from an unvouched instrument.
+      const certRun = await fetch(`${API}/api/certifications/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ clusterId }),
+      });
+      const certRunBody = await certRun.json();
+      assert(certRun.status === 202, `certify → HTTP ${certRun.status}: ${JSON.stringify(certRunBody)}`);
+      let cert: { status?: string; selfRetentionMean?: number | null } = {};
+      for (let i = 0; i < 120; i++) {
+        const job = await (await fetch(`${API}/api/jobs/${certRunBody.jobId}`, { headers: { cookie } })).json();
+        if (job.state === 'completed') { cert = job.result ?? {}; break; }
+        assert(job.state !== 'failed', `certify job failed: ${job.error}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      assert(cert.status === 'certified' || cert.status === 'failed', `certification did not measure: ${JSON.stringify(cert)}`);
+      const certList = await (await fetch(`${API}/api/certifications`, { headers: { cookie } })).json();
+      assert((certList.certifications ?? []).length >= 1, 'certification row missing from the review surface');
+      // REPORT: retention surface OBEYS the certification state.
       const today = new Date().toISOString().slice(0, 10);
       const rep = await (await fetch(`${API}/api/reports/guarantee?from=${today}&to=${today}`, { headers: { cookie } })).json();
       const entry = (rep.entries ?? []).find(
@@ -1021,11 +1045,19 @@ async function main(): Promise<void> {
       assert(entry.incumbent?.strategyHash === incumbentHash, 'report incumbent mismatch');
       assert(rep.legacyPath === false, 'org with a designation must not read legacyPath');
       assert(entry.qualitySeries.some((d: { samples: number }) => d.samples >= 3), 'series missing samples');
+      if (cert.status === 'certified') {
+        assert(entry.certification?.certified === true, 'certified cluster must report certification');
+        assert(verdict.outcome === 'self-incumbent' || entry.retention !== null, 'certified cluster with a verdict must render the headline');
+      } else {
+        assert(entry.certification?.certified === false, 'uncertified cluster must report the gate state');
+        assert(entry.retention === null, 'UNCERTIFIED cluster rendered a retention number — the gate leaked');
+        assert(String(entry.retentionUnavailableReason ?? '').includes('not certified'), `gate reason missing: ${entry.retentionUnavailableReason}`);
+      }
       const html = await fetch(`${API}/api/reports/guarantee?from=${today}&to=${today}&format=html`, { headers: { cookie } });
       assert(html.ok && (html.headers.get('content-type') ?? '').includes('text/html'), 'html report failed');
       const htmlText = await html.text();
-      assert(htmlText.includes('Baseline retention'), 'html report missing retention headline');
-      return `designated ${incumbentHash.slice(0, 8)} → 3 sampled requests → suite-verify ${verdict.outcome} (mock-labeled, ${verdict.retention?.pairs ?? 0} pairs) → retention report rendered`;
+      assert(htmlText.includes('Baseline retention'), 'html report missing retention section');
+      return `designated ${incumbentHash.slice(0, 8)} → 3 sampled requests → suite-verify ${verdict.outcome} (mock-labeled, ${verdict.retention?.pairs ?? 0} pairs) → certification ${cert.status} (self-retention ${typeof cert.selfRetentionMean === 'number' ? cert.selfRetentionMean.toFixed(3) : '—'}) → report obeys the gate`;
     } finally {
       sessionCookie = savedCookie;
     }

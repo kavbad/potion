@@ -101,7 +101,33 @@ describe('buildSavingsReport (hand-computed to the cent)', () => {
       [],
       new Map(),
     );
-    expect(report).toEqual({ orgId: 'org_x', from: '2026-08-02', to: '2026-08-03', actualSpendUsd: 0, alternatives: [] });
+    expect(report).toEqual({ orgId: 'org_x', from: '2026-08-02', to: '2026-08-03', actualSpendUsd: 0, alternatives: [], withheld: [] });
+  });
+
+  it('WITHHELD SEAM (post-capstone item 3): uncertified-cluster samples are excluded AND reported — never silently blended', () => {
+    const agentRow = { ...unitRow('h1', 0.05, 0.8), clusterId: 'agent-abc-uncert' };
+    const report = buildSavingsReport(
+      SCOPE,
+      { actualSpendUsd: 100.0, requestCount: 1000 },
+      [agentRow, { ...agentRow, id: randomUUID() }, unitRow('h1', 0.07, 0.9)],
+      new Map(),
+      new Map([['agent-abc-uncert', 'suite not certified — incumbent self-retention gate not passed']]),
+    );
+    // Only the non-withheld sample contributes: mean cost 0.07, not 0.0633.
+    expect(report.alternatives).toHaveLength(1);
+    expect(report.alternatives[0]!.projectedSpendUsd).toBeCloseTo(70.0, 10);
+    expect(report.alternatives[0]!.sampleSize).toBe(1);
+    // The withholding is REPORTED, with counts and the reason.
+    expect(report.withheld).toEqual([
+      {
+        clusterId: 'agent-abc-uncert',
+        samples: 2,
+        reason: 'suite not certified — incumbent self-retention gate not passed',
+      },
+    ]);
+    // The CSV names the withheld contribution too.
+    const csv = savingsCsv(report);
+    expect(csv).toContain('# withheld,agent-abc-uncert,2');
   });
 });
 
@@ -240,6 +266,7 @@ describe('GET /api/reports/savings', () => {
       to: '2020-01-02',
       actualSpendUsd: 0,
       alternatives: [],
+      withheld: [],
     });
   });
 
@@ -287,6 +314,7 @@ describe('GET /api/reports/savings.csv', () => {
           confidence: 'low',
         },
       ],
+      withheld: [],
     });
     expect(csv.split('\n')[1]).toBe('h,"ensemble · a,b",1,low,0.5,0.5,0.5,1');
   });

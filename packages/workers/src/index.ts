@@ -147,6 +147,10 @@ export {
   type AgentClusterOutcome,
   ALERT_DISPATCH_ATTEMPTS,
   ALERT_DISPATCH_TIMEOUT_MS,
+  // ---- Post-capstone item 3: suite certification (Decision 2) ----
+  suiteCertifyHandler,
+  CERTIFICATION_SELF_RETENTION_FLOOR,
+  type SuiteCertifyResult,
   // ---- G2.2 incident SLAs ----
   GUARANTEE_VERIFY_SLA_MIN,
   VERIFY_RETRY_MIN,

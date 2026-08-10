@@ -31,6 +31,7 @@ import {
   insertAlertRule,
   insertApiKey,
   insertClusterRubric,
+  insertSuiteCertificationTx,
   insertIncidentRow,
   insertPolicy,
   insertProviderKey,
@@ -208,6 +209,19 @@ beforeAll(async () => {
     generatorModel: 'mock-cheap',
     providerMode: 'mock',
     exemplarCount: 3,
+  });
+
+  // A certification ROW for the list-leak arm only (a refused 'failed' row —
+  // tenancy fixture, not a certification claim; nothing consumes it as one).
+  seeded.certification = await insertSuiteCertificationTx(db(), {
+    orgId: ORG_A,
+    clusterId: seeded.cluster,
+    suiteId: `${seeded.cluster}-replays-v1`,
+    suiteVersion: '1.0.0',
+    providerMode: 'mock',
+    status: 'failed',
+    statusReason: 'refused-no-incumbent: sweep fixture',
+    evidence: { refused: true, kind: 'no-incumbent' },
   });
 
   const share = await insertShareToken(db(), {

@@ -36,6 +36,7 @@ import {
   type IncidentRow,
   listPolicies,
   latestVerdictForTuple,
+  certificationStateForCluster,
   servedSpendByPolicyCluster,
   type GuaranteeVerdictRow,
 } from '@potion/db';
@@ -87,10 +88,20 @@ export interface VerificationState {
 export interface GuaranteeReportEntry {
   policyId: string;
   clusterId: string;
-  /** HEADLINE (standing decision): baseline retention, never raw scores. */
+  /** HEADLINE (standing decision): baseline retention, never raw scores.
+   * Post-capstone item 3: certification-GATED — an uncertified cluster
+   * renders null + reason, never a number, even with a low badge. */
   retention: RetentionHeadline | null;
   /** Why retention is unavailable when null (visible rigor). */
   retentionUnavailableReason: string | null;
+  /** Suite-certification state (Decision 2): the review-surface summary of
+   * whether this cluster's suite is certified for guarantee use. Null for
+   * non-agent clusters (certification governs derived agentic suites). */
+  certification: {
+    certified: boolean;
+    selfRetentionMean: number | null;
+    reason: string | null;
+  } | null;
   /** G2.2 verification state (SLA clock runs from advisory creation). */
   verification: VerificationState;
   incumbent: IncumbentDto | null;
@@ -339,8 +350,33 @@ export async function loadGuaranteeReport(
       policyId,
       clusterId,
     });
-    const retention =
+    // Post-capstone item 3 (Decision 2, owner requirement): the retention
+    // HEADLINE is certification-gated at THIS single seam — it covers both
+    // the verdict path and the legacy incident scan. An uncertified agentic
+    // cluster renders null + reason, never a number: the capstone's 0.2707
+    // rendered with only a `low` badge, and that number came from an
+    // instrument certification would have refused to vouch for.
+    const certState = await certificationStateForCluster(ctx.db.db, clusterId, orgId);
+    let retention =
       headlineFromVerdict(verdictRow) ?? latestRetentionHeadline(incidents, policyId, clusterId);
+    let certGated = false;
+    if (!certState.certified && retention !== null) {
+      retention = null;
+      retentionUnavailableReason = certState.reason ?? 'suite not certified';
+      certGated = true;
+    }
+    const certEvidence = certState.certification?.evidence as
+      | { selfRetentionMean?: number }
+      | null
+      | undefined;
+    const certification = clusterId.startsWith('agent-')
+      ? {
+          certified: certState.certified,
+          selfRetentionMean:
+            typeof certEvidence?.selfRetentionMean === 'number' ? certEvidence.selfRetentionMean : null,
+          reason: certState.reason ?? null,
+        }
+      : null;
     // ---- G2.2 verification state ----
     const slaMin = guarantee.verifySlaMin ?? GUARANTEE_VERIFY_SLA_MIN;
     const openAdv = tupleIncidents.filter((i) => i.kind === 'advisory' && i.resolvedAt === null);
@@ -372,12 +408,15 @@ export async function loadGuaranteeReport(
       escalatedAt: escalation?.at ?? null,
       verifySlaMin: slaMin,
     };
-    if (unverifiable && retention === null) {
+    // The certification gate's reason is the most specific and is never
+    // overwritten; the pre-existing precedence (unverifiable overwrites the
+    // designate-an-incumbent reason) is otherwise unchanged.
+    if (!certGated && unverifiable && retention === null) {
       retentionUnavailableReason =
         'guarantee currently unverifiable — suite verification has not produced a verdict ' +
         `within the SLA bound (${slaMin}min)` +
         (lastAttempt ? ` (last attempt: ${lastAttempt.outcome}${lastAttempt.detail ? ` — ${lastAttempt.detail}` : ''})` : ' (no verify attempt recorded yet)');
-    } else if (incumbent && retention === null) {
+    } else if (!certGated && retentionUnavailableReason === null && incumbent && retention === null) {
       retentionUnavailableReason = 'no suite-verify verdict yet — retention pending the first verify run';
     }
     entries.push({
@@ -385,6 +424,7 @@ export async function loadGuaranteeReport(
       clusterId,
       retention,
       retentionUnavailableReason,
+      certification,
       verification,
       incumbent: incumbent ? incumbentDtoOf(incumbent) : null,
       derivedFloor,

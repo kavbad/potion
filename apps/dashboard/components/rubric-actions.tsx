@@ -104,3 +104,28 @@ export function RubricGenerateButton({ clusterId }: { clusterId: string }) {
     </span>
   );
 }
+
+export function CertifyButton({ clusterId }: { clusterId: string }) {
+  const { busy, error, run } = useAction();
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() =>
+          void run(() =>
+            fetch('/api/certifications/run', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ clusterId }),
+            }),
+          )
+        }
+        className={btn}
+      >
+        {busy ? 'Certifying…' : 'Certify suite'}
+      </button>
+      {error ? <span className="text-xs text-warn">{error}</span> : null}
+    </span>
+  );
+}

@@ -1003,6 +1003,42 @@ export const clusterRubrics = pgTable('cluster_rubrics', {
 export type ClusterRubricRow = typeof clusterRubrics.$inferSelect;
 export type NewClusterRubric = typeof clusterRubrics.$inferInsert;
 
+// ---- suite certifications (post-capstone item 3, migration 0031) ----
+// Decision 2: a derived suite is certified for guarantee use only if the
+// incumbent retains its own baseline when FRESH-re-evaluated against it —
+// the capstone's 0.2000 incumbent self-retention is the failure this gates.
+// Subject is (org, suite, suite VERSION): re-derivation invalidates by key.
+// Lifecycle mirrors cluster_rubrics; 'pending' is reserved vocabulary (the
+// job measures and writes certified/failed directly; refusals are 'failed'
+// rows with evidence.refused = true — REFUSED, NOT MEASURED).
+export type SuiteCertificationStatus = 'pending' | 'certified' | 'failed' | 'superseded';
+
+export const suiteCertifications = pgTable('suite_certifications', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  clusterId: text('cluster_id').notNull(),
+  suiteId: text('suite_id').notNull(),
+  suiteVersion: text('suite_version').notNull(),
+  /** NULL on refused-before-designation rows (no incumbent to measure). */
+  incumbentHash: text('incumbent_hash'),
+  incumbentDesignationId: uuid('incumbent_designation_id'),
+  providerMode: text('provider_mode').notNull().default('mock'),
+  status: text('status').$type<SuiteCertificationStatus>().notNull(),
+  statusReason: text('status_reason'),
+  /** The measurement: {selfRetentionMean, floor, items, executed, perItem,
+   * providerMode, runId, suiteVersion, judgeModel, executedSpendUsd,
+   * metering} — or {refused: true, kind} for recorded refusals. */
+  evidence: jsonb('evidence').$type<Record<string, unknown>>(),
+  spendUsd: doublePrecision('spend_usd').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+});
+
+export type SuiteCertificationRow = typeof suiteCertifications.$inferSelect;
+export type NewSuiteCertification = typeof suiteCertifications.$inferInsert;
+
 // ---- cluster incumbents (G2.1, migration 0025) ----
 // The org's DESIGNATED INCUMBENT strategy per cluster — the baseline every
 // retention verdict and derived floor rests on. At most one ACTIVE per

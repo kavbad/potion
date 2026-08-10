@@ -7,7 +7,7 @@
 // verdict (or the uncalibrated reason), and — for rejections — the failure
 // reason. Nothing is ever hidden: "this rubric failed calibration at r=0.6
 // and was not deployed" is the visible rigor the guarantee sells.
-import { RubricGenerateButton, RubricReviewButtons } from '@/components/rubric-actions';
+import { CertifyButton, RubricGenerateButton, RubricReviewButtons } from '@/components/rubric-actions';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
 import type { FrontierListResponse } from '@/lib/types';
 import Link from 'next/link';
@@ -48,6 +48,32 @@ interface RubricsResponse {
   rubrics: RubricRow[];
 }
 
+interface CertificationRow {
+  id: string;
+  clusterId: string;
+  suiteId: string;
+  suiteVersion: string;
+  status: 'pending' | 'certified' | 'failed' | 'superseded';
+  active: boolean;
+  refused: boolean;
+  statusReason: string | null;
+  selfRetentionMean: number | null;
+  floor: number | null;
+  items: number | null;
+  providerMode: string;
+  spendUsd: number;
+  createdAt: string;
+}
+
+/** Badge vocabulary mirrors the rubric lifecycle; refusals are unmistakably
+ * NOT MEASURED (a budget refusal is not evidence against the suite). */
+function certBadge(c: CertificationRow): { label: string; cls: string } {
+  if (c.status === 'certified') return { label: 'CERTIFIED', cls: 'bg-accent/15 text-accent' };
+  if (c.status === 'superseded') return { label: 'SUPERSEDED', cls: 'bg-line text-faint' };
+  if (c.refused) return { label: 'REFUSED — NOT MEASURED', cls: 'bg-line text-faint' };
+  return { label: 'FAILED — NOT CERTIFIED', cls: 'bg-warn/15 text-warn' };
+}
+
 const STATUS_BADGE: Record<RubricRow['status'], { label: string; cls: string }> = {
   approved: { label: 'IN FORCE', cls: 'bg-accent/15 text-accent' },
   pending: { label: 'DRAFT — NOT IN FORCE', cls: 'bg-warn/15 text-warn' },
@@ -81,6 +107,9 @@ export default async function RubricsPage() {
   const frontiers = await apiFetch<FrontierListResponse>('/api/frontiers').catch(() => null);
   const agentClusters = (frontiers?.clusters ?? []).filter((c) => c.clusterId.startsWith('agent-'));
   const withRubric = new Set(data.rubrics.map((r) => r.clusterId));
+  const certs = await apiFetch<{ certifications: CertificationRow[] }>('/api/certifications').catch(
+    () => null,
+  );
 
   return (
     <PageShell>
@@ -107,6 +136,58 @@ export default async function RubricsPage() {
           </ul>
         </div>
       ) : null}
+
+      {/* Suite certifications (Decision 2) — same review surface as rubrics:
+          every attempt visible with status + evidence. An uncertified suite
+          may be inspected but backs NO contractual claim. */}
+      <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm font-medium text-ink">Suite certifications</div>
+        </div>
+        <p className="mt-1 text-xs text-soft">
+          A suite is certified when your designated incumbent retains its own baseline
+          (self-retention ≥ floor) on a fresh re-evaluation. Uncertified suites render no
+          retention numbers and open no incidents — verdicts are still measured and kept.
+        </p>
+        {isAdmin && agentClusters.length > 0 ? (
+          <ul className="mt-2 space-y-1">
+            {agentClusters.map((c) => (
+              <li key={c.clusterId} className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-mono text-soft">{c.clusterId}</span>
+                <CertifyButton clusterId={c.clusterId} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {(certs?.certifications ?? []).length > 0 ? (
+          <ul className="mt-3 space-y-2 border-t border-line pt-3">
+            {certs!.certifications.map((c) => {
+              const badge = certBadge(c);
+              return (
+                <li key={c.id} className="text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-soft">
+                      {c.suiteId} <span className="text-faint">v{c.suiteVersion}</span>
+                    </span>
+                    <span className={`rounded px-2 py-0.5 text-[11px] font-semibold tracking-wide ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-faint">
+                    {c.selfRetentionMean !== null
+                      ? `self-retention ${c.selfRetentionMean.toFixed(4)} vs floor ${c.floor ?? '—'} over ${c.items ?? '—'} items · `
+                      : ''}
+                    {c.providerMode} · ${c.spendUsd.toFixed(4)}
+                    {c.statusReason ? ` · ${c.statusReason}` : ''}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-faint">No certification attempts yet.</p>
+        )}
+      </div>
 
       {data.rubrics.length === 0 ? (
         <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">

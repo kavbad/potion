@@ -31,15 +31,18 @@ import {
   upsertBudget,
   upsertStrategyConfig,
   listGuaranteeVerdicts,
+  listSuiteCertifications,
   type DbHandle,
   type NewTraceSpan,
 } from '@potion/db';
 import { eq } from 'drizzle-orm';
+import { evalTaskById } from '@potion/providers';
 import {
   computeRetention,
   createGuaranteeEvaluateHandler,
   guaranteeSuiteVerifyHandler,
   orgHashOf,
+  suiteCertifyHandler,
   toolSignatureSlug,
   tracesClusterHandler,
   SUITE_VERIFY_EPSILON,
@@ -127,6 +130,52 @@ async function seedCluster(): Promise<string> {
   }
   await tracesClusterHandler({ orgId: ORG }, ctx());
   return `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['billing'])}`;
+}
+
+/**
+ * An HONESTLY certifiable cluster (post-capstone item 3 — the owner rule:
+ * fixtures reconstruct REAL certifications, never stub the gate). The mock
+ * judge is only discriminative on CORPUS content (base 0.5 otherwise), so a
+ * cluster whose sessions are corpus tasks — recorded completion = the corpus
+ * reference — is the one construction where a frontier-class incumbent can
+ * genuinely score ≥ the certification floor through the real path.
+ * Six identical-prompt traces → one cluster (tool 'ledger'), 6-item v1 suite.
+ */
+async function seedCertifiableCluster(): Promise<string> {
+  // Six DISTINCT corpus tasks (ratio spread for CI-sensitive tests) whose
+  // prompts differ only in the EVAL id — the mock answers and judges by TASK
+  // ID, not prompt text, so the near-identical prompts guarantee one cluster
+  // while the qualities stay per-task.
+  for (let i = 1; i <= 6; i++) {
+    const task = evalTaskById(`ex-0${i}`)!;
+    const prompt = `Reconcile the ledger batch and answer the embedded record task. EVAL: ${task.id}`;
+    const t = `tr_cert${i}`;
+    await insertTraceSpans(db.db, [
+      span({
+        traceId: t,
+        spanId: `${t}_root`,
+        attrs: { 'gen_ai.prompt': prompt, 'gen_ai.completion': task.reference },
+        ts: new Date(`2026-08-06T10:0${i}:00Z`),
+      }),
+      span({
+        traceId: t,
+        spanId: `${t}_tool`,
+        name: 'tool.ledger',
+        attrs: { 'gen_ai.operation.name': 'execute_tool' },
+        ts: new Date(`2026-08-06T10:0${i}:30Z`),
+      }),
+    ]);
+  }
+  await tracesClusterHandler({ orgId: ORG }, ctx());
+  return `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['ledger'])}`;
+}
+
+/** Run the REAL certification job and require it to pass — a measurement,
+ * never a seeded row. The incumbent must be designated first. */
+async function certifyForReal(clusterId: string): Promise<void> {
+  const r = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+  expect(r.status).toBe('certified');
+  expect(r.certificationId).not.toBeNull();
 }
 
 function guaranteeWith(over: Partial<NonNullable<Policy['guarantee']>> = {}): Policy {
@@ -252,12 +301,14 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
   });
 
   it('unreachable floor → CONTRACTUAL breach: quality_breach with the full evidence block', async () => {
-    const clusterId = await seedCluster();
+    const clusterId = await seedCertifiableCluster();
     // retentionFloor far above any possible CI upper — forces the breach
-    // branch deterministically (mock scores are seeded).
+    // branch deterministically (mock scores are seeded). Incumbent is the
+    // FRONTIER class (the certifiable one); the cheap strategy is on trial.
     await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 5 }));
-    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
-    const r = await verify(clusterId);
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING);
+    await certifyForReal(clusterId);
+    const r = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
     expect(r.outcome).toBe('contractual-breach');
     expect(r.verdictIncidentId).not.toBeNull();
     const incidents = await listIncidents(db.db, ORG);
@@ -269,7 +320,7 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
     expect(detail.retention).toBeTruthy();
     expect(detail.suiteId).toBe(`${clusterId}-replays-v1`);
     expect(detail.suiteVersion).toBeTruthy(); // '1.0.0' — semver string
-    expect((detail.incumbent as Record<string, unknown>).hash).toBe(H_INCUMBENT);
+    expect((detail.incumbent as Record<string, unknown>).hash).toBe(H_SERVING);
     expect(detail.runId).toBe(r.runId);
     expect(detail.providerMode).toBe('mock');
   });
@@ -287,14 +338,15 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
   });
 
   it('e2e chain: advisory crossing → suite-verify enqueue → verify resolves the advisory', async () => {
-    const clusterId = await seedCluster();
+    const clusterId = await seedCertifiableCluster();
     const policy = guaranteeWith({ retentionFloor: 0 });
     await seedPolicyAndStrategies(policy);
-    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING); // frontier — certifiable
+    await certifyForReal(clusterId);
     // Incumbent serve-path baseline high, serving window confidently low.
     for (const [hash, qs] of [
-      [H_INCUMBENT, [0.8, 0.82, 0.78, 0.81, 0.79, 0.8, 0.8, 0.81]],
-      [H_SERVING, [0.3, 0.32, 0.28, 0.31, 0.29, 0.3]],
+      [H_SERVING, [0.8, 0.82, 0.78, 0.81, 0.79, 0.8, 0.8, 0.81]],
+      [H_INCUMBENT, [0.3, 0.32, 0.28, 0.31, 0.29, 0.3]],
     ] as const) {
       for (const q of qs) {
         await insertQualitySample(db.db, {
@@ -310,7 +362,7 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
     const enqueued: Array<{ kind: string; payload: Record<string, unknown> }> = [];
     const evalHandler = createGuaranteeEvaluateHandler({});
     const result = (await evalHandler(
-      { orgId: ORG, policyId: PID, clusterId, strategyHash: H_SERVING, policy },
+      { orgId: ORG, policyId: PID, clusterId, strategyHash: H_INCUMBENT, policy },
       ctx({ enqueue: async (kind, payload) => void enqueued.push({ kind, payload: payload as Record<string, unknown> }) }),
     )) as { advisories: Array<{ incidentId: string; suiteVerifyEnqueued: boolean }> };
     expect(result.advisories).toHaveLength(1);
@@ -433,13 +485,14 @@ describe('G2.2 incident SLAs', () => {
   });
 
   it('contractual dedupe: a second breach verify resolves to the EXISTING incident, no duplicate', async () => {
-    const clusterId = await seedCluster();
+    const clusterId = await seedCertifiableCluster();
     await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 5 })); // unreachable → breach
-    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
-    const first = await verify(clusterId);
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING); // frontier — certifiable
+    await certifyForReal(clusterId);
+    const first = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
     expect(first.outcome).toBe('contractual-breach');
     const advisoryId = await backdatedAdvisory(clusterId, 1);
-    const second = await verify(clusterId, { advisoryIncidentId: advisoryId });
+    const second = await verify(clusterId, { servingStrategyHash: H_INCUMBENT, advisoryIncidentId: advisoryId });
     expect(second.outcome).toBe('contractual-breach');
     expect(second.verdictIncidentId).toBe(first.verdictIncidentId); // deduped
     expect(second.detail).toContain('deduped');
@@ -454,18 +507,19 @@ describe('G2.2 incident SLAs', () => {
   });
 
   it('auto-restore: CONFIDENT recovery (floor 0) resolves the rollback and emits guarantee_restored', async () => {
-    const clusterId = await seedCluster();
+    const clusterId = await seedCertifiableCluster();
     await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0, autoRestore: true }));
-    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING); // frontier — certifiable
+    await certifyForReal(clusterId);
     const rollbackId = await insertIncident(db.db, {
       orgId: ORG,
       kind: 'rollback',
       createdAt: new Date(Date.now() - 1 * HOURS),
-      detail: { policyId: PID, clusterId, fromStrategy: H_SERVING, toStrategy: H_INCUMBENT },
+      detail: { policyId: PID, clusterId, fromStrategy: H_INCUMBENT, toStrategy: H_SERVING },
     });
     const { enqueued, queue } = captureQueue();
     const r = (await guaranteeSuiteVerifyHandler(
-      { orgId: ORG, policyId: PID, clusterId, servingStrategyHash: H_SERVING, restoreForIncidentId: rollbackId },
+      { orgId: ORG, policyId: PID, clusterId, servingStrategyHash: H_INCUMBENT, restoreForIncidentId: rollbackId },
       ctx(queue),
     )) as GuaranteeSuiteVerifyResult;
     expect(r.outcome).toBe('all-clear');
@@ -484,13 +538,14 @@ describe('G2.2 incident SLAs', () => {
   });
 
   it('non-confident all-clears never restore; the Nth consecutive escalates recovery-unconfirmed ONCE', async () => {
-    const clusterId = await seedCluster();
+    const clusterId = await seedCertifiableCluster();
     await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0, autoRestore: true }));
-    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING); // frontier — certifiable
+    await certifyForReal(clusterId);
     // Probe verify (floor 0) to learn the deterministic retention CI, then
     // pin the floor INSIDE it: all-clear (upper ≥ floor) but NOT confident
     // (lower < floor).
-    const probe = await verify(clusterId);
+    const probe = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
     expect(probe.outcome).toBe('all-clear');
     const [lo, hi] = probe.retention!.ci95;
     expect(lo).toBeLessThan(hi); // mock ratios have spread — floor fits between
@@ -503,13 +558,13 @@ describe('G2.2 incident SLAs', () => {
       orgId: ORG,
       kind: 'rollback',
       createdAt: new Date(Date.now() - 1 * HOURS),
-      detail: { policyId: PID, clusterId, fromStrategy: H_SERVING, toStrategy: H_INCUMBENT },
+      detail: { policyId: PID, clusterId, fromStrategy: H_INCUMBENT, toStrategy: H_SERVING },
     });
     let unconfirmedAlerts = 0;
     for (let i = 1; i <= RECOVERY_UNCONFIRMED_AFTER + 1; i++) {
       const { enqueued, queue } = captureQueue();
       const r = (await guaranteeSuiteVerifyHandler(
-        { orgId: ORG, policyId: PID, clusterId, servingStrategyHash: H_SERVING, restoreForIncidentId: rollbackId },
+        { orgId: ORG, policyId: PID, clusterId, servingStrategyHash: H_INCUMBENT, restoreForIncidentId: rollbackId },
         ctx(queue),
       )) as GuaranteeSuiteVerifyResult;
       expect(r.outcome).toBe('all-clear');
@@ -746,5 +801,142 @@ describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lo
     const r = await verify(clusterId);
     expect(r.outcome).toBe('all-clear'); // the walkthrough world keeps working
     expect(r.providerMode).toBe('mock');
+  });
+});
+
+describe('suite:certify + contractual gating (post-capstone item 3, Decision 2)', () => {
+  it('the certifiable cluster CERTIFIES through the real path — measurement, evidence, durable row', async () => {
+    const clusterId = await seedCertifiableCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING); // frontier
+    const r = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    expect(r.status).toBe('certified');
+    expect(r.outcome).toBe('certified');
+    expect(r.selfRetentionMean).toBeGreaterThanOrEqual(0.9);
+    expect(r.suiteVersion).toBe('1.0.0');
+    const rows = await listSuiteCertifications(db.db, ORG);
+    expect(rows[0]!.status).toBe('certified');
+    const evidence = rows[0]!.evidence as Record<string, unknown>;
+    expect(evidence.selfRetentionMean).toBe(r.selfRetentionMean);
+    expect(evidence.floor).toBe(0.9);
+    expect(evidence.executed).toBe(6);
+    expect((evidence.perItem as unknown[]).length).toBe(6);
+    expect(evidence.providerMode).toBe('mock');
+  });
+
+  it('a cheap-class incumbent honestly FAILS certification — the number is in the reason', async () => {
+    const clusterId = await seedCertifiableCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT); // mock-cheap, 45% corruption
+    const r = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    expect(r.status).toBe('failed');
+    expect(r.outcome).toBe('not-certified');
+    expect(r.selfRetentionMean).not.toBeNull();
+    expect(r.selfRetentionMean!).toBeLessThan(0.9);
+    const rows = await listSuiteCertifications(db.db, ORG);
+    expect(rows[0]!.status).toBe('failed');
+    expect(rows[0]!.statusReason).toContain('below floor');
+  });
+
+  it('refusals are durable rows: no-incumbent, budget-refused (live), mode-mismatch', async () => {
+    const clusterId = await seedCertifiableCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    // no incumbent yet
+    const r1 = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    expect(r1.status).toBe('failed');
+    expect(r1.outcome).toBe('no-incumbent');
+    // budget refusal (live, fail-closed, recorded)
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING);
+    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true });
+    process.env.POTION_EVAL_PROVIDER = 'live';
+    const r2 = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    expect(r2.outcome).toBe('budget-refused');
+    expect(r2.detail).toContain('no spend occurred');
+    delete process.env.POTION_EVAL_PROVIDER;
+    // mode-mismatch: live evidence + mock certification run
+    await insertEvalResult(db.db, {
+      runId: 'run-live-cert', itemId: 'it-live', clusterId, strategyHash: H_SERVING,
+      strategyConfig: CFG_SERVING, quality: 0.8, scorer: 'llm-judge',
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.01, latencyMs: 1 },
+      latencyMs: { p50: 1, p95: 1, mean: 1 }, modelVersions: {}, pricesVersion: 'pv',
+      providerMode: 'live', orgId: ORG, cacheKey: `ck-live-cert-${clusterId}`,
+      createdAt: '2026-08-10T00:00:00.000Z',
+    });
+    const r3 = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    expect(r3.outcome).toBe('mode-mismatch');
+    const rows = await listSuiteCertifications(db.db, ORG);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.status).toBe('failed');
+      expect(row.statusReason).toMatch(/^refused-/);
+      expect((row.evidence as Record<string, unknown>).refused).toBe(true);
+    }
+  });
+
+  it('UNCERTIFIED breach: verdict measured + durable, but NO incident, NO advisory resolution — the withholding is recorded', async () => {
+    const clusterId = await seedCluster(); // the payment-retries cluster: honestly uncertifiable in mock
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 5 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const advisoryId = await insertIncident(db.db, {
+      orgId: ORG,
+      kind: 'advisory',
+      detail: { leg: 'serve', policyId: PID, clusterId, fromStrategy: H_SERVING, ci95: [0.28, 0.32] },
+    });
+    const r = await verify(clusterId, { advisoryIncidentId: advisoryId });
+    expect(r.outcome).toBe('contractual-breach'); // measured honestly
+    expect(r.contractualEffects).toBe('withheld-uncertified');
+    expect(r.detail).toContain('contractual effects withheld');
+    expect(r.verdictIncidentId).toBeNull(); // no incident opened
+    // The verdict row is durable (0029 chokepoint) with the withholding named.
+    const verdicts = await listGuaranteeVerdicts(db.db, ORG);
+    expect(verdicts[0]!.outcome).toBe('contractual-breach');
+    expect(verdicts[0]!.detail).toContain('uncertified-suite');
+    // No quality_breach incident; the advisory stays OPEN with the attempt on its ledger.
+    const incidents = await listIncidents(db.db, ORG);
+    expect(incidents.filter((i) => i.kind === 'quality_breach')).toHaveLength(0);
+    const advisory = incidents.find((i) => i.id === advisoryId)!;
+    expect(advisory.resolvedAt).toBeNull();
+    const attempts = (advisory.detail as Record<string, unknown>).verifyAttempts as Array<{ outcome: string; detail: string }>;
+    expect(attempts[0]!.outcome).toBe('contractual-breach');
+    expect(attempts[0]!.detail).toContain('withheld');
+  });
+
+  it('re-derivation invalidates certification: the next verify WITHHOLDS until re-certified', async () => {
+    const clusterId = await seedCertifiableCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING);
+    await certifyForReal(clusterId);
+    const before = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
+    expect(before.contractualEffects).toBe('applied');
+    // A new session re-derives the suite → version bump → certification stale.
+    const task = evalTaskById('ex-07')!;
+    await insertTraceSpans(db.db, [
+      span({ traceId: 'tr_cert7', spanId: 'tr_cert7_root', attrs: { 'gen_ai.prompt': `Reconcile the ledger batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date('2026-08-06T10:07:00Z') }),
+      span({ traceId: 'tr_cert7', spanId: 'tr_cert7_tool', name: 'tool.ledger', attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date('2026-08-06T10:07:30Z') }),
+    ]);
+    await tracesClusterHandler({ orgId: ORG }, ctx());
+    const after = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
+    expect(after.contractualEffects).toBe('withheld-uncertified');
+    expect(after.detail).toContain('re-derivation invalidates certification');
+    // Re-certify against the new version → effects restored.
+    await certifyForReal(clusterId);
+    const again = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });
+    expect(again.contractualEffects).toBe('applied');
+  });
+
+  it('certification is byte-identical run-to-run (evidence determinism, the item-(0) discipline)', async () => {
+    const clusterId = await seedCertifiableCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    await designateIncumbent(db.db, ORG, clusterId, H_SERVING);
+    const a = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    const b = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
+    expect(a.selfRetentionMean).toBe(b.selfRetentionMean);
+    const rows = await listSuiteCertifications(db.db, ORG);
+    const stripVolatile = (r: (typeof rows)[number]) => {
+      const e = { ...(r.evidence as Record<string, unknown>) };
+      delete e.runId; // fresh uuid per run — everything else must match
+      return JSON.stringify({ status: r.status === 'superseded' ? 'certified' : r.status, e });
+    };
+    expect(stripVolatile(rows[0]!)).toBe(stripVolatile(rows[1]!));
   });
 });

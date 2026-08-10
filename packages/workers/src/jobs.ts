@@ -26,7 +26,9 @@ export type JobKind =
   // ---- G2.7 operator org deletion ----
   | 'org:delete'
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
-  | 'guarantee:suite-verify';
+  | 'guarantee:suite-verify'
+  // ---- Post-capstone item 3: suite-validity certification (Decision 2) ----
+  | 'suite:certify';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -45,6 +47,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'frontier:live-sweep',
   'org:delete',
   'guarantee:suite-verify',
+  'suite:certify',
 ] as const;
 
 export interface EvalRunPayload {
@@ -113,6 +116,7 @@ export interface JobPayloads {
   'frontier:live-sweep': FrontierLiveSweepPayload;
   'org:delete': OrgDeletePayload;
   'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
+  'suite:certify': SuiteCertifyPayload;
 }
 
 /**
@@ -287,6 +291,26 @@ export interface GuaranteeSuiteVerifyPayload {
    * on CONFIDENT recovery (retention CI95 lower ≥ floor). Set only by the
    * sweep's auto-restore pass. */
   restoreForIncidentId?: string;
+}
+
+/**
+ * Post-capstone item 3 (Decision 2): certify a derived suite for guarantee
+ * use by FRESH-re-evaluating the org's designated incumbent against it and
+ * comparing self-retention to the certification floor. Every outcome —
+ * certified, failed, or a recorded refusal — writes a durable
+ * suite_certifications row at the handler's chokepoint. Admin-triggered.
+ */
+export interface SuiteCertifyPayload {
+  /** Required: /api/jobs/:id reads are org-gated on payload.orgId. */
+  orgId: string;
+  clusterId: string;
+  /** Address a SPECIFIC suite generation (e.g. `-replays-v1` for the
+   * session-vs-step comparability leg). Default: the cluster's current
+   * suite via derivedSuiteIdFor. Must belong to the cluster. */
+  suiteId?: string;
+  /** Live spend cap; default derives from item count (suite-verify rule,
+   * 1 strategy). */
+  capUsd?: number;
 }
 
 export interface FrontierLiveSweepPayload {

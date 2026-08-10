@@ -21,6 +21,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { StrategyConfig } from '@potion/core';
 import {
+  certificationStateForCluster,
   getStrategyConfigs,
   isDayString,
   listShadowResults,
@@ -51,6 +52,16 @@ export interface SavingsReport {
   to: string;
   actualSpendUsd: number;
   alternatives: SavingsAlternative[];
+  /**
+   * Post-capstone item 3 (Decision 2, owner requirement): shadow samples
+   * from UNCERTIFIED agentic clusters are WITHHELD from the projection —
+   * without this seam the org-total headline silently launders uncertified
+   * claims into a dollar figure. Withheld contributions are reported, never
+   * hidden. NOTE (recorded scope): the denominator (actualSpendUsd /
+   * requestCount) stays org-total per the SPEC §12.4 documented choice;
+   * cluster-scoping it is the named follow-up.
+   */
+  withheld: Array<{ clusterId: string; samples: number; reason: string }>;
 }
 
 /** Confidence tier by sample size (SPEC §12.4): low <30, medium <200, high ≥200. */
@@ -100,9 +111,18 @@ export function buildSavingsReport(
   totals: { actualSpendUsd: number; requestCount: number },
   rows: ShadowResultRow[],
   configs: Map<string, StrategyConfig>,
+  /** clusterId → reason for clusters whose samples must be withheld
+   * (uncertified agentic suites). Empty map = nothing withheld. */
+  withheldClusters: Map<string, string> = new Map(),
 ): SavingsReport {
+  const withheldCount = new Map<string, number>();
+  const usable = rows.filter((r) => {
+    if (!withheldClusters.has(r.clusterId)) return true;
+    withheldCount.set(r.clusterId, (withheldCount.get(r.clusterId) ?? 0) + 1);
+    return false;
+  });
   const byCandidate = new Map<string, ShadowResultRow[]>();
-  for (const r of rows) {
+  for (const r of usable) {
     const group = byCandidate.get(r.candidateHash);
     if (group) group.push(r);
     else byCandidate.set(r.candidateHash, [r]);
@@ -136,6 +156,13 @@ export function buildSavingsReport(
     to: scope.toDay,
     actualSpendUsd: totals.actualSpendUsd,
     alternatives,
+    withheld: [...withheldCount.entries()]
+      .map(([clusterId, samples]) => ({
+        clusterId,
+        samples,
+        reason: withheldClusters.get(clusterId) ?? 'suite not certified',
+      }))
+      .sort((a, b) => a.clusterId.localeCompare(b.clusterId)),
   };
 }
 
@@ -168,7 +195,12 @@ export function savingsCsv(report: SavingsReport): string {
       .map(csvCell)
       .join(','),
   );
-  return [header, ...lines].join('\n') + '\n';
+  // Withheld contributions are part of the export — an analyst diffing the
+  // CSV against raw shadow rows must see WHY samples are missing.
+  const withheldLines = report.withheld.map((w) =>
+    ['# withheld', w.clusterId, w.samples, '', '', '', '', csvCell(w.reason)].join(','),
+  );
+  return [header, ...lines, ...withheldLines].join('\n') + '\n';
 }
 
 // ---- routes ----
@@ -188,11 +220,23 @@ export async function loadReport(
       (r) => [r.hash, r.config] as const,
     ),
   );
+  // Post-capstone item 3: samples from uncertified agentic clusters are
+  // withheld (certification governs derived agentic suites; non-agent
+  // clusters pass through). One predicate call per distinct agent cluster.
+  const withheldClusters = new Map<string, string>();
+  for (const clusterId of new Set(rows.map((r) => r.clusterId))) {
+    if (!clusterId.startsWith('agent-')) continue;
+    const state = await certificationStateForCluster(ctx.db.db, clusterId, orgId);
+    if (!state.certified) {
+      withheldClusters.set(clusterId, state.reason ?? 'suite not certified');
+    }
+  }
   return buildSavingsReport(
     { orgId, fromDay: range.fromDay, toDay: range.toDay },
     { actualSpendUsd: rollup.costUsd, requestCount: rollup.requests },
     rows,
     configs,
+    withheldClusters,
   );
 }
 

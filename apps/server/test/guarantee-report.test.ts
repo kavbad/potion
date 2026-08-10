@@ -22,6 +22,10 @@ import {
   type IncidentRow,
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
+import { fileURLToPath } from 'node:url';
+import { insertTraceSpans, type NewTraceSpan } from '@potion/db';
+import { evalTaskById } from '@potion/providers';
+import { suiteCertifyHandler, tracesClusterHandler, orgHashOf, toolSignatureSlug, type JobContext } from '@potion/workers';
 import { buildServer } from '../src/server.js';
 import { latestRetentionHeadline } from '../src/routes/guarantee-report.js';
 
@@ -225,30 +229,77 @@ describe('latestRetentionHeadline (pure)', () => {
 });
 
 describe('GET /api/reports/guarantee (G2.1)', () => {
-  it('renders entries with retention headline, labeled legs, gap-filled series; html variant', async () => {
-    // Evidence: samples today for (policy, agent cluster) + a suite verdict.
-    for (const q of [0.8, 0.85, 0.9]) {
-      await insertQualitySample(db(), {
+  /** A REAL certification through the real path (post-capstone item 3 —
+   * never a seeded row): corpus-task sessions (the one content the mock
+   * judge is discriminative on), frontier incumbent, real certify job. */
+  async function seedCertifiedCluster(): Promise<string> {
+    const fakeEmbedder = {
+      async embed(texts: string[]): Promise<number[][]> {
+        return texts.map(() => new Array<number>(384).fill(0.05));
+      },
+    };
+    const jobCtx: JobContext = {
+      db: db(),
+      dbHandle: app.potion.db,
+      pricesPath: fileURLToPath(new URL('../../../prices.json', import.meta.url)),
+      embedder: fakeEmbedder,
+    };
+    for (let i = 1; i <= 6; i++) {
+      const task = evalTaskById(`ex-0${i}`)!;
+      const t = `tr_gr_cert${i}`;
+      const spans: NewTraceSpan[] = [
+        {
+          orgId: ORG, traceId: t, spanId: `${t}_root`, name: 'agent.root', model: 'mock-cheap',
+          usage: { input_tokens: 10, output_tokens: 5 }, costUsd: 0,
+          attrs: { 'gen_ai.prompt': `Reconcile the ledger batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference },
+          ts: new Date(`2026-08-06T10:0${i}:00Z`),
+        },
+        {
+          orgId: ORG, traceId: t, spanId: `${t}_tool`, name: 'tool.grledger', model: 'mock-cheap',
+          usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0,
+          attrs: { 'gen_ai.operation.name': 'execute_tool' },
+          ts: new Date(`2026-08-06T10:0${i}:30Z`),
+        },
+      ];
+      await insertTraceSpans(db(), spans);
+    }
+    await tracesClusterHandler({ orgId: ORG }, jobCtx);
+    const clusterId = `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['grledger'])}`;
+    const CFG_FRONTIER = { type: 'single', model: 'mock-frontier' } as const;
+    await upsertStrategyConfig(db(), strategyHash(CFG_FRONTIER), CFG_FRONTIER);
+    await designateIncumbent(db(), ORG, clusterId, strategyHash(CFG_FRONTIER));
+    const cert = await suiteCertifyHandler({ orgId: ORG, clusterId }, jobCtx);
+    expect(cert.status).toBe('certified'); // real measurement
+    return clusterId;
+  }
+
+  it('renders entries with retention headline for a CERTIFIED cluster; uncertified clusters are gated; html variant', async () => {
+    const certCluster = await seedCertifiedCluster();
+    // Evidence: samples today for BOTH clusters + suite verdicts.
+    for (const clusterId of [certCluster, AGENT_CLUSTER]) {
+      for (const q of [0.8, 0.85, 0.9]) {
+        await insertQualitySample(db(), {
+          orgId: ORG,
+          strategyHash: H_MID,
+          quality: q,
+          createdAt: new Date(),
+          policyId: PID,
+          clusterId,
+        });
+      }
+      await insertIncident(db(), {
         orgId: ORG,
-        strategyHash: H_MID,
-        quality: q,
-        createdAt: new Date(),
-        policyId: PID,
-        clusterId: AGENT_CLUSTER,
+        kind: 'quality_breach',
+        detail: {
+          leg: 'suite',
+          policyId: PID,
+          clusterId,
+          fromStrategy: H_MID,
+          retention: retentionBlock({ mean: 0.82, ci95: [0.75, 0.88] }),
+          providerMode: 'mock',
+        },
       });
     }
-    await insertIncident(db(), {
-      orgId: ORG,
-      kind: 'quality_breach',
-      detail: {
-        leg: 'suite',
-        policyId: PID,
-        clusterId: AGENT_CLUSTER,
-        fromStrategy: H_MID,
-        retention: retentionBlock({ mean: 0.82, ci95: [0.75, 0.88] }),
-        providerMode: 'mock',
-      },
-    });
     const res = await app.inject({
       method: 'GET',
       url: `/api/reports/guarantee?from=${today}&to=${today}`,
@@ -257,15 +308,17 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     expect(res.statusCode).toBe(200);
     const report = res.json();
     expect(report.orgId).toBe(ORG);
+    type Entry = { policyId: string; clusterId: string } & Record<string, unknown>;
     const entry = report.entries.find(
-      (e: { policyId: string; clusterId: string }) => e.policyId === PID && e.clusterId === AGENT_CLUSTER,
+      (e: Entry) => e.policyId === PID && e.clusterId === certCluster,
     );
     expect(entry).toBeTruthy();
-    // HEADLINE: retention, never raw scores.
+    // HEADLINE renders for the CERTIFIED cluster: retention, never raw scores.
     expect(entry.retention.verdict).toBe('contractual-breach');
     expect(entry.retention.mean).toBe(0.82);
     expect(entry.retention.confidence).toBe('low'); // 8 pairs
-    // Incumbent designated in the earlier test → hierarchy, not legacy.
+    expect(entry.certification.certified).toBe(true);
+    expect(entry.certification.selfRetentionMean).toBeGreaterThanOrEqual(0.9);
     expect(entry.incumbent).not.toBeNull();
     expect(report.legacyPath).toBe(false);
     // Gap-filled single-day series with the seeded samples.
@@ -276,6 +329,15 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     for (const i of entry.incidents) {
       expect(['serve', 'suite', 'legacy']).toContain(i.leg);
     }
+    // THE GATE (owner requirement): the UNCERTIFIED agent cluster has the
+    // same-shaped verdict evidence but renders NO number — reason instead.
+    const gated = report.entries.find(
+      (e: Entry) => e.policyId === PID && e.clusterId === AGENT_CLUSTER,
+    );
+    expect(gated).toBeTruthy();
+    expect(gated.retention).toBeNull();
+    expect(gated.retentionUnavailableReason).toContain('suite not certified');
+    expect(gated.certification.certified).toBe(false);
     // HTML artifact variant.
     const html = await app.inject({
       method: 'GET',
@@ -285,7 +347,8 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     expect(html.statusCode).toBe(200);
     expect(html.headers['content-type']).toContain('text/html');
     expect(html.body).toContain('Baseline retention');
-    expect(html.body).toContain(AGENT_CLUSTER);
+    expect(html.body).toContain(certCluster); // certified headline in the artifact
+    expect(html.body).toContain('suite not certified'); // gated reason visible too
   });
 
   it('NO-CLAIM PIN (post-capstone item 2): an agentic cluster with an incumbent but NO verdict renders null retention + a reason — never a number', async () => {

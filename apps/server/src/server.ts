@@ -58,6 +58,7 @@ import { registerResearchRoutes } from './routes/research.js';
 // ---- M5 #36 agent workloads ----
 import { registerTraceRoutes } from './routes/traces.js';
 import { registerRubricRoutes } from './routes/rubrics.js';
+import { registerCertificationRoutes } from './routes/certifications.js';
 import { registerOperatorRoutes } from './routes/operator.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
 import { createBudgetEvaluateHandler } from '@potion/workers';
@@ -330,6 +331,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   registerTraceRoutes(app, ctx, { queue });
   // G1.5: per-cluster rubric review surface (generate/list/approve/reject).
   registerRubricRoutes(app, ctx, { queue });
+  registerCertificationRoutes(app, ctx, { queue });
   // G2.7: operator surface (create/list/delete orgs + jobs mirror) —
   // fail-closed POTION_OPERATOR_TOKEN bearer, outside the /api auth hook.
   registerOperatorRoutes(app, ctx, { queue });

@@ -74,6 +74,7 @@ export interface RouteInventoryRow {
     | 'trace'
     | 'incident'
     | 'rubric'
+    | 'certification'
     | 'shareToken'
     | 'alertRule'
     | 'none';
@@ -119,6 +120,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/research/cycles', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/recipes', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'shared-global', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/rubrics', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'rubric', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'GET', path: '/api/certifications', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'certification', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/share', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'shareToken', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/budgets', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/traces', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'trace', crossOrgProbe: { expect: 'org-list-absent' } },
@@ -160,6 +162,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/api/research/cycle', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/research/cycle', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/recipes/:hash/evaluate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/recipes/sha-x/evaluate', probeBody: {}, tenancyClass: 'shared-global', resourceParam: ':hash', crossOrgProbe: { expect: 'skip', skipReason: "recipes are content-addressed PLATFORM configs; unknown hashes 404 for everyone" } },
   { method: 'POST', path: '/api/rubrics/generate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/generate', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/certifications/run', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/certifications/run', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/rubrics/:id/approve', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/00000000-0000-4000-8000-000000000000/approve', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'rubric', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/rubrics/:id/reject', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/00000000-0000-4000-8000-000000000000/reject', probeBody: { reason: 'probe' }, tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'rubric', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/share/:id/revoke', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/share/st_x/revoke', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'shareToken', crossOrgProbe: { expect: 'uniform-404' } },

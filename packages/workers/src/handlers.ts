@@ -10,9 +10,11 @@ import {
 import {
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
+  certificationStateForCluster,
   derivedSuiteIdFor,
   insertClusterRubric,
   insertJudgeCalibration,
+  insertSuiteCertificationTx,
   loadDerivedSuite,
   purgeDerivedSuiteItems,
   upsertDerivedSuite,
@@ -120,7 +122,7 @@ import {
   type TraceClusterSource,
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
-import type { FrontierLiveSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type { FrontierLiveSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
 import { orgDeleteHandler } from './org-delete.js';
 // ---- end M5 #36 imports ----
 import {
@@ -3308,6 +3310,14 @@ export interface GuaranteeSuiteVerifyResult {
    * consecutive non-confident all-clear on a restore verify). */
   recoveryUnconfirmed: boolean;
   detail: string | null;
+  /** Post-capstone item 3 (Decision 2, owner-selected full gating): when the
+   * suite is UNCERTIFIED the verdict is still measured and durably recorded,
+   * but contractual effects — incident open/dedupe, advisory resolution,
+   * auto-restore, alert emission — are WITHHELD: an uncertified suite is one
+   * the instrument declined to vouch for; letting it page a customer or roll
+   * back traffic would act on evidence we won't publish. Absent on outcomes
+   * with no contractual reach (refusals, self-incumbent identity). */
+  contractualEffects?: 'applied' | 'withheld-uncertified';
 }
 
 /** Provenance the verdict row needs that the result shape never carried —
@@ -3620,6 +3630,29 @@ const runSuiteVerify = async (
     ...(payload.advisoryIncidentId !== undefined ? { advisoryIncidentId: payload.advisoryIncidentId } : {}),
   };
 
+  // Certification gate (post-capstone item 3, Decision 2 — owner-selected
+  // FULL scope): the verdict above is measured and will be durably recorded
+  // by the chokepoint whatever happens next, but an UNCERTIFIED suite backs
+  // no contractual claim — no incident, no advisory resolution, no
+  // auto-restore, no alert. The withholding is itself a recorded outcome:
+  // the attempt lands on any attached incident ledger and the verdict row's
+  // detail names the reason, so a certified retry can pick the work up.
+  // (The self-incumbent identity path above is deliberately ungated —
+  // retention 1.0 by identity involves no suite instrument at all.)
+  const certState = await certificationStateForCluster(ctx.db, payload.clusterId, payload.orgId);
+  if (!certState.certified) {
+    const measuredOutcome = ci95[1] < floor ? ('contractual-breach' as const) : ('all-clear' as const);
+    const withheldDetail = `uncertified-suite: contractual effects withheld — ${certState.reason ?? 'suite not certified'}`;
+    await recordAttempt(measuredOutcome, withheldDetail);
+    return {
+      ...spent,
+      outcome: measuredOutcome,
+      retention,
+      detail: withheldDetail,
+      contractualEffects: 'withheld-uncertified',
+    };
+  }
+
   // CONTRACTUAL verdict: breach iff the retention CI95 UPPER bound is
   // below the floor (confidently under, the G0.3 rigor).
   if (ci95[1] < floor) {
@@ -3653,6 +3686,7 @@ const runSuiteVerify = async (
         verdictIncidentId: existing.id,
         advisoryResolved,
         detail: 'deduped: an unresolved contractual incident already covers this tuple',
+        contractualEffects: 'applied',
       };
     }
     let verdictIncident: { id: string; createdAt: Date };
@@ -3711,7 +3745,7 @@ const runSuiteVerify = async (
     } catch {
       // alert faults never fail the verdict — the incident is durable
     }
-    return { ...spent, outcome: 'contractual-breach', retention, verdictIncidentId, advisoryResolved };
+    return { ...spent, outcome: 'contractual-breach', retention, verdictIncidentId, advisoryResolved, contractualEffects: 'applied' };
   }
 
   // All-clear — durable record on the advisory (when one is attached).
@@ -3811,7 +3845,7 @@ const runSuiteVerify = async (
       }
     }
   }
-  return { ...spent, outcome: 'all-clear', retention, advisoryResolved, restoredIncidentId, recoveryUnconfirmed };
+  return { ...spent, outcome: 'all-clear', retention, advisoryResolved, restoredIncidentId, recoveryUnconfirmed, contractualEffects: 'applied' };
 };
 
 /**
@@ -3870,6 +3904,285 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
   return { ...result, verdictId };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// suite:certify (post-capstone item 3, Decision 2) — the suite-validity gate.
+// A derived suite is certified for guarantee use only if the org's designated
+// incumbent RETAINS ITS OWN BASELINE when fresh-re-evaluated against it: the
+// items' references are recorded outputs of the incumbent's own sessions, so
+// self-retention below the floor means the suite measures the instrument,
+// not the strategy (the capstone's 0.2000). The re-eval is FRESH by
+// construction — runEval without resume never reuses cached rows and never
+// overwrites them; the metric is computed from summary.results IN MEMORY
+// (reading back through the db would return stale cached qualities).
+// Every outcome writes a durable suite_certifications row at the chokepoint
+// wrapper; refusals are recorded rows (evidence.refused), never throws.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** = DEFAULT_RETENTION_FLOOR: if the incumbent cannot hit the contractual
+ * floor against its OWN recorded outputs, a floor verdict rendered from that
+ * suite is unfalsifiable — certification and the guarantee share the bar. */
+export const CERTIFICATION_SELF_RETENTION_FLOOR = 0.9;
+
+export interface SuiteCertifyResult {
+  /** The durable suite_certifications row (write is load-bearing). */
+  certificationId: string | null;
+  status: 'certified' | 'failed';
+  outcome:
+    | 'certified'
+    | 'not-certified'
+    | 'no-suite'
+    | 'no-incumbent'
+    | 'budget-refused'
+    | 'mode-mismatch';
+  suiteId: string;
+  suiteVersion: string | null;
+  selfRetentionMean: number | null;
+  providerMode: ProviderMode;
+  runId: string | null;
+  spendUsd: number;
+  detail: string | null;
+}
+
+interface CertifyProvenance {
+  suiteVersion: string | null;
+  incumbentHash: string | null;
+  incumbentDesignationId: string | null;
+  evidence: Record<string, unknown>;
+}
+
+const runSuiteCertify = async (
+  payload: SuiteCertifyPayload,
+  ctx: JobContext,
+  prov: CertifyProvenance,
+): Promise<Omit<SuiteCertifyResult, 'certificationId' | 'status' | 'suiteVersion'>> => {
+  const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
+  const base = { providerMode, runId: null, spendUsd: 0, selfRetentionMean: null, detail: null };
+
+  // Ownership — misuse, not an outcome: throw (forged payloads die here).
+  const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
+  const cluster = clusterRows[0];
+  if (!cluster) throw new Error(`unknown cluster '${payload.clusterId}'`);
+  if (cluster.orgId !== payload.orgId) {
+    throw new Error(`cluster '${payload.clusterId}' does not belong to org '${payload.orgId}'`);
+  }
+  const suiteId = payload.suiteId ?? (await derivedSuiteIdFor(ctx.db, payload.clusterId));
+  const loaded = await loadDerivedSuite(ctx.db, suiteId);
+  if (payload.suiteId !== undefined && loaded !== null) {
+    // An explicit suiteId (the comparability leg) must be the CLUSTER'S suite.
+    if (loaded.suite.clusterId !== payload.clusterId || loaded.suite.orgId !== payload.orgId) {
+      throw new Error(`suite '${suiteId}' does not belong to cluster '${payload.clusterId}'`);
+    }
+  }
+  if (!loaded || loaded.items.length === 0) {
+    return {
+      ...base,
+      suiteId,
+      outcome: 'no-suite',
+      detail: `derived suite '${suiteId}' is empty — nothing to certify against. No spend occurred.`,
+    };
+  }
+  prov.suiteVersion = loaded.suite.version;
+
+  // The item-1 guard, positive half: certifying a live-evidence cluster with
+  // a mock instrument would stamp a false-live validity claim.
+  if (providerMode === 'mock' && (await hasLiveEvidence(ctx.db, payload.clusterId, payload.orgId))) {
+    return {
+      ...base,
+      suiteId,
+      outcome: 'mode-mismatch',
+      detail:
+        `mode mismatch: cluster '${payload.clusterId}' holds LIVE evidence but this certification ` +
+        'would run MOCK (POTION_EVAL_PROVIDER is not "live") — re-run with POTION_EVAL_PROVIDER=live. ' +
+        'No spend occurred.',
+    };
+  }
+
+  const incumbent = await activeIncumbent(ctx.db, payload.orgId, payload.clusterId);
+  if (!incumbent) {
+    return {
+      ...base,
+      suiteId,
+      outcome: 'no-incumbent',
+      detail: 'no active incumbent designation — certification measures the incumbent against its own outputs. No spend occurred.',
+    };
+  }
+  prov.incumbentHash = incumbent.strategyHash;
+  prov.incumbentDesignationId = incumbent.id;
+  const cfgRows = await ctx.db
+    .select()
+    .from(strategyConfigs)
+    .where(eq(strategyConfigs.hash, incumbent.strategyHash));
+  const incumbentCfg = cfgRows[0]?.config;
+  if (!incumbentCfg) {
+    return {
+      ...base,
+      suiteId,
+      outcome: 'no-incumbent',
+      detail: `incumbent strategy '${incumbent.strategyHash}' not in strategy_configs — re-designate. No spend occurred.`,
+    };
+  }
+
+  const capUsd = payload.capUsd ?? deriveSuiteVerifyCapUsd(loaded.items.length, 1);
+  // FAIL-CLOSED budget refusal (live spend only) — recorded, never thrown.
+  if (providerMode === 'live') {
+    const budget = await getBudget(ctx.db, payload.orgId);
+    if (budget !== null && budget.hardStop) {
+      const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
+      if (mtd + capUsd > budget.monthlyCapUsd) {
+        return {
+          ...base,
+          suiteId,
+          outcome: 'budget-refused',
+          detail: `hard-stop budget would be exceeded (MTD $${mtd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly $${budget.monthlyCapUsd.toFixed(2)}) — no spend occurred`,
+        };
+      }
+    }
+  }
+
+  const { table: prices } = loadPrices(ctx.pricesPath);
+  let judgeModelOverride: string | undefined;
+  if (providerMode === 'live') {
+    const reachable = (p: string): boolean =>
+      p !== 'mock' &&
+      process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
+    const registry = buildRegistry(prices).filter((e) => reachable(e.provider));
+    const judgeEntry = classRepresentative(registry, 'judge');
+    if (!judgeEntry) {
+      throw new Error('suite:certify refused: no reachable live judge-class model — no spend occurred');
+    }
+    judgeModelOverride = judgeEntry.alias;
+  }
+
+  // FRESH re-eval of the incumbent only: no resume — cached rows are neither
+  // reused nor overwritten; summary.results carries only fresh qualities.
+  const meter =
+    providerMode === 'live'
+      ? perCallRequestLogSink(ctx.db, {
+          orgId: payload.orgId,
+          clusterId: payload.clusterId,
+          status: 'eval_live',
+        })
+      : null;
+  let summary: RunSummary;
+  try {
+    summary = await runEval(
+      {
+        suiteIds: [],
+        suiteV2Ids: [suiteId],
+        strategies: [incumbentCfg],
+        budgetCapUsd: capUsd,
+        provider: providerMode,
+        orgId: payload.orgId,
+        ...(judgeModelOverride !== undefined ? { judgeModelOverride } : {}),
+        ...(providerMode === 'live'
+          ? { judgeMaxTokens: LIVE_SWEEP_JUDGE_MAX_TOKENS, maxOutputTokens: LIVE_SWEEP_ANSWER_MAX_TOKENS }
+          : {}),
+      },
+      {
+        db: ctx.dbHandle,
+        pricesPath: ctx.pricesPath,
+        ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
+        ...(meter !== null ? { spendSink: meter.sink } : {}),
+      },
+    );
+  } catch (e) {
+    if (e instanceof BudgetCapError) {
+      return {
+        ...base,
+        suiteId,
+        outcome: 'budget-refused',
+        detail: `${e.message} (projection preflight) — no spend occurred`,
+      };
+    }
+    throw e;
+  }
+
+  const metering = meter !== null ? reconcileMetering(meter, summary, `suite:certify ${suiteId}`) : null;
+  await ctx.db.insert(evalRuns).values({
+    id: summary.runId,
+    options: {
+      suiteIds: [],
+      suiteV2Ids: [suiteId],
+      strategyHashes: [incumbent.strategyHash],
+      agentCluster: payload.clusterId,
+      purpose: 'suite:certify',
+      ...(metering !== null ? { metering } : {}),
+    },
+    budgetCapUsd: capUsd,
+    provider: providerMode,
+    status: 'completed',
+    spendUsd: summary.spendUsd,
+    orgId: payload.orgId,
+  });
+
+  // The metric, IN MEMORY from the fresh results.
+  const qualities = summary.results.map((r) => ({ itemId: r.itemId, quality: r.quality }));
+  const selfRetentionMean =
+    qualities.length === 0
+      ? 0
+      : qualities.reduce((a, q) => a + q.quality, 0) / qualities.length;
+  prov.evidence = {
+    selfRetentionMean,
+    floor: CERTIFICATION_SELF_RETENTION_FLOOR,
+    items: loaded.items.length,
+    executed: summary.executed,
+    perItem: qualities.slice(0, AGENT_SUITE_ITEM_CAP_V2),
+    providerMode: summary.providerMode,
+    runId: summary.runId,
+    suiteVersion: loaded.suite.version,
+    ...(judgeModelOverride !== undefined ? { judgeModel: judgeModelOverride } : {}),
+    executedSpendUsd: summary.executedSpendUsd,
+    ...(metering !== null ? { metering } : {}),
+  };
+  const certified = selfRetentionMean >= CERTIFICATION_SELF_RETENTION_FLOOR;
+  return {
+    ...base,
+    suiteId,
+    outcome: certified ? 'certified' : 'not-certified',
+    selfRetentionMean,
+    runId: summary.runId,
+    spendUsd: summary.executedSpendUsd,
+    detail: certified
+      ? `incumbent self-retention ${selfRetentionMean.toFixed(4)} ≥ floor ${CERTIFICATION_SELF_RETENTION_FLOOR} over ${summary.executed} items`
+      : `incumbent self-retention ${selfRetentionMean.toFixed(4)} below floor ${CERTIFICATION_SELF_RETENTION_FLOOR} over ${summary.executed} items — the suite does not reproduce the incumbent's own baseline`,
+  };
+};
+
+/** Chokepoint wrapper (the 0029 shape): EVERY outcome — certified, failed,
+ * or refused — writes exactly one durable suite_certifications row. */
+export const suiteCertifyHandler: WorkerHandler<'suite:certify'> = async (
+  payload: SuiteCertifyPayload,
+  ctx: JobContext,
+): Promise<SuiteCertifyResult> => {
+  const prov: CertifyProvenance = {
+    suiteVersion: null,
+    incumbentHash: null,
+    incumbentDesignationId: null,
+    evidence: {},
+  };
+  const r = await runSuiteCertify(payload, ctx, prov);
+  const measured = r.outcome === 'certified' || r.outcome === 'not-certified';
+  const status: SuiteCertifyResult['status'] = r.outcome === 'certified' ? 'certified' : 'failed';
+  const certificationId = await insertSuiteCertificationTx(ctx.db, {
+    orgId: payload.orgId,
+    clusterId: payload.clusterId,
+    suiteId: r.suiteId,
+    suiteVersion: prov.suiteVersion ?? 'unknown',
+    incumbentHash: prov.incumbentHash,
+    incumbentDesignationId: prov.incumbentDesignationId,
+    providerMode: r.providerMode,
+    status,
+    statusReason: measured
+      ? r.outcome === 'certified'
+        ? null
+        : r.detail
+      : `refused-${r.outcome}: ${r.detail ?? ''}`,
+    evidence: measured ? prov.evidence : { refused: true, kind: r.outcome },
+    spendUsd: r.spendUsd,
+  });
+  return { ...r, status, certificationId, suiteVersion: prov.suiteVersion };
+};
+
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'eval:run': evalRunHandler,
   'sweep:run': sweepRunHandler,
@@ -3893,6 +4206,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'org:delete': orgDeleteHandler,
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
   'guarantee:suite-verify': guaranteeSuiteVerifyHandler,
+  'suite:certify': suiteCertifyHandler,
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,

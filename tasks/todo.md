@@ -2537,3 +2537,103 @@ ignore llm.call spans), or (b) a fresh corpus ingested going forward.
 OWNER INPUT REQUIRED before the gate item's live leg.
 
 | 2026-08-10 | Post-capstone (2) step-level synthesis: keyless item, $0. Projection for the gate's live leg computed above (184 items ≈ $8.8 worst-case), not run. | n/a | **$0.0000 real** | no reconcile needed |
+
+## POST-CAPSTONE ITEM 3 — DONE (2026-08-10, session certification-gate)
+
+**Incumbent self-retention certification gate (Decision 2).** A derived suite
+is certified for guarantee use only if the incumbent retains its own baseline
+when FRESH-re-evaluated against it. This is item 2's acceptance instrument:
+the capstone measured 0.2000 incumbent self-retention on a session-level
+suite — every retention verdict from such an instrument is noise wearing a
+number, and from this item on, nothing built on one reaches a customer.
+
+**Owner decisions recorded verbatim-intent:**
+- FRESH CORPUS for the live leg — no hunting the deleted transcripts.
+  "Re-deriving the capstone number would produce a retrospective figure on a
+  corpus that no longer matters, while new agentic transcripts accumulate
+  daily and converter v2 already ingests them. The G2.8 verdict stays as a
+  superseded durable record — evidence for the step-level fix, not something
+  to redo."
+- FULL CONTRACTUAL GATING: "an uncertified suite is one the instrument
+  declined to vouch for; letting it page a customer or roll back traffic
+  acts on evidence we won't publish. Verdicts stay durable, contractual
+  effects withhold, and the withholding is itself a recorded outcome.
+  Fixtures must reconstruct real mock-reproducible certifications — never
+  override the gate or stub a certification."
+
+### What landed
+
+- **0031 `suite_certifications`** (cluster_rubrics shape): partial unique on
+  (suite_id) WHERE certified; supersede-don't-mutate (demote-FIRST-then-
+  insert — the partial unique would reject insert-first); a fresh FAILED
+  measurement REVOKES a stale pass (a certified badge surviving failed
+  re-measurement would be the dishonesty the table prevents); REFUSALS
+  (evidence.refused: budget / mode-mismatch / no-incumbent / no-suite)
+  demote nothing — a refusal is the absence of a measurement.
+- **`suite:certify`** job at a 0029-style chokepoint: fresh `runEval`
+  (resume omitted — cached rows neither reused nor overwritten; the metric
+  computed IN MEMORY from summary.results, never read back through
+  pairedQualities), incumbent-only, `CERTIFICATION_SELF_RETENTION_FLOOR =
+  0.9` (= the retention floor: an incumbent that can't hit the floor against
+  its own outputs makes floor verdicts unfalsifiable). Payload `suiteId?`
+  addresses a specific generation — the comparability lever. Per-call
+  metered + reconciled (item 1), cap derived from item count, recorded
+  refusals throughout.
+- **`certificationStateForCluster`** — THE predicate all three surfaces
+  call: current suite (v2-preferred) + version match + active certified row;
+  non-agent clusters exempt (certification governs derived agentic suites).
+- **Contractual gating in suite-verify**: uncertified → verdict measured and
+  durably recorded, detail prefixed `uncertified-suite: contractual effects
+  withheld`, `contractualEffects: 'withheld-uncertified'`, and NO incident
+  open/dedupe, NO advisory resolution, NO auto-restore, NO alert; the
+  attempt lands on the advisory ledger so a certified retry resolves it.
+- **Retention headline gate** at the single report seam covering the verdict
+  path AND the legacy incident scan: uncertified → `retention: null` + the
+  certification reason (never overwritten by generic fallbacks); entry DTO
+  gains `certification {certified, selfRetentionMean, reason}`.
+- **Savings withheld seam**: shadow samples from uncertified agent clusters
+  are excluded from the projection and REPORTED (`withheld[]` in the DTO,
+  `# withheld` rows in the CSV) — the org total no longer launders
+  uncertified claims. Recorded scope: the denominator stays org-total (SPEC
+  §12.4 documented choice); cluster-scoping it is the named follow-up
+  (`servedSpendByPolicyCluster` is the existing per-(policy,cluster)
+  precedent when that lands).
+- **Review surface**: /rubrics gains the certifications section (CERTIFIED /
+  FAILED — NOT CERTIFIED / REFUSED — NOT MEASURED / SUPERSEDED, evidence
+  line, admin certify button); `POST /api/certifications/run` +
+  `GET /api/certifications` with ROUTE_INVENTORY rows (two-way live-diff +
+  tenancy sweep enforced, 103 security tests green).
+
+### The fixture discipline (owner rule, applied)
+
+The mock judge is only discriminative on CORPUS content (base 0.5
+otherwise) — so honestly-certifiable fixtures are clusters whose sessions
+ARE corpus tasks (recorded completion = the corpus reference, prompts
+differing only in the EVAL id so clustering can't split them) with a
+frontier-class incumbent (5% corruption): certification genuinely measures
+≥ 0.9 through the real path. Cheap-class incumbents honestly FAIL (45%
+corruption, ~0.5). No stubbed rows anywhere a gate consumes them; the five
+G2.2 chain tests now run through REAL certifications, and the walkthrough's
+legacy fixture honestly fails certification (self-retention 0.483) with the
+report OBEYING the gate — both directions demonstrated live in step 15.
+
+### Tests (36 suite-verify/certify + 26 report/savings/SLA + 103 security +
+6 repo, all keyless)
+
+Lifecycle (revoke-on-failed-measurement, refusals demote nothing, version
+invalidation, cross-org); certify handler (certified / failed / refused ×3 /
+byte-identity); withheld breach (verdict row durable, no incident, advisory
+open with attempt); re-derivation invalidates → re-certify restores effects;
+headline gate incl. certified-headline + gated-sibling in one report; savings
+withheld seam hand-computed; walkthrough 18/18.
+
+### Live comparability leg (scripted, owner-gated on the fresh corpus)
+
+`packages/workers/scripts/certify-compare.ts <orgId> <clusterId>` — certifies
+`-replays-v1` AND `-replays-v2` on the SAME cluster, live, env-gated,
+per-call metered. Expected: v1 fails (0.2-class), v2 certifies — the
+step-synthesis improvement demonstrated on shared data. Projected ≈ $5–10.
+Run when the converter-v2 corpus has accumulated and an incumbent is
+designated.
+
+| 2026-08-10 | Post-capstone (3) certification gate: keyless item, $0. Comparability leg scripted + projected, not run (fresh-corpus decision). | n/a | **$0.0000 real** | no reconcile needed |
