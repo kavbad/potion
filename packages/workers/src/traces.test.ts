@@ -14,6 +14,7 @@ import {
   approveClusterRubric,
   getClusterRubric,
   judgeCalibrations,
+  derivedSuiteIdFor,
   listDerivedSuites,
   loadDerivedSuite,
   requestLogs,
@@ -43,7 +44,11 @@ import {
   canonicalToolSequence,
   resolveAgentClusterThreshold,
   AGENT_CLUSTER_COSINE_THRESHOLD,
+  AGENT_STEPS_PER_SESSION_CAP,
+  AGENT_SUITE_ITEM_CAP_V2,
   LIVE_EMBEDDER_THRESHOLD_CEILING,
+  deriveSuiteVerifyCapUsd,
+  sampleStepIndices,
   tracesClusterHandler,
   tracesPurgeHandler,
   tracesRedactHandler,
@@ -691,5 +696,207 @@ describe('rubric:generate (G1.5)', () => {
     const msgs = buildRubricGenerationMessages(['search'], ['Refactor the billing retry loop']);
     expect(msgs[0]!.content).toContain('<<<UNTRUSTED_DATA_BEGIN>>>');
     expect(msgs[0]!.content).toContain('Session tools used: search');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step-level item synthesis (post-capstone item 2, Decision 1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A converter-v2 session: root prompt, `stepCount` llm.call spans (per-call
+ * usage + potion.step_index), a tool span after step 1, terminal chat span. */
+async function seedStepSession(
+  orgId: string,
+  traceId: string,
+  prompt: string,
+  stepCount: number,
+  ts = '2026-08-06T10:00:00Z',
+): Promise<void> {
+  const t0 = new Date(ts).getTime();
+  const spans: NewTraceSpan[] = [
+    span({ orgId, traceId, spanId: `${traceId}_root`, attrs: { 'gen_ai.prompt': prompt }, ts: new Date(t0) }),
+  ];
+  for (let k = 1; k <= stepCount; k++) {
+    spans.push(
+      span({
+        orgId,
+        traceId,
+        spanId: `${traceId}_s${k}`,
+        name: 'llm.call',
+        model: 'claude-opus-5',
+        usage: { input_tokens: 1000 + k, output_tokens: 50 + k },
+        attrs: {
+          'gen_ai.operation.name': 'llm_call',
+          'gen_ai.completion': `step ${k} output of ${traceId}`,
+          'potion.step_index': k,
+        },
+        ts: new Date(t0 + k * 60_000),
+      }),
+    );
+    if (k === 1) {
+      spans.push(
+        span({
+          orgId,
+          traceId,
+          spanId: `${traceId}_t1`,
+          name: 'tool.search',
+          attrs: { 'gen_ai.operation.name': 'execute_tool', 'tool.args': 'lookup latest', 'tool.result': 'found 3 records' },
+          ts: new Date(t0 + k * 60_000),
+        }),
+      );
+    }
+  }
+  spans.push(
+    span({
+      orgId,
+      traceId,
+      spanId: `${traceId}_chat`,
+      name: 'chat',
+      attrs: { 'gen_ai.completion': `step ${stepCount} output of ${traceId}` },
+      ts: new Date(t0 + stepCount * 60_000),
+    }),
+  );
+  await insertTraceSpans(db.db, spans);
+}
+
+describe('sampling policy (pure)', () => {
+  it('sampleStepIndices: all steps when under the cap; first+last always; evenly spaced; deterministic', () => {
+    expect(sampleStepIndices(5, 8)).toEqual([0, 1, 2, 3, 4]);
+    const s12 = sampleStepIndices(12, 8);
+    expect(s12).toHaveLength(8);
+    expect(s12[0]).toBe(0);
+    expect(s12[s12.length - 1]).toBe(11);
+    expect(s12).toEqual(sampleStepIndices(12, 8)); // no RNG anywhere
+    const s40 = sampleStepIndices(40, AGENT_STEPS_PER_SESSION_CAP);
+    expect(s40).toHaveLength(8);
+    expect(s40[0]).toBe(0);
+    expect(s40[7]).toBe(39);
+  });
+
+  it('deriveSuiteVerifyCapUsd scales with the suite; the flat default floors it', () => {
+    expect(deriveSuiteVerifyCapUsd(23)).toBe(5); // capstone v1 size: flat default
+    expect(deriveSuiteVerifyCapUsd(184)).toBeCloseTo(11.04, 9); // the projected step suite
+  });
+});
+
+describe('step-level synthesis (traces:cluster over converter-v2 spans)', () => {
+  it('emits one item per SAMPLED model call into -replays-v2, referenced to the step\'s OWN output', async () => {
+    await seedStepSession('org_a', 'tr_sl1', 'Refactor the billing retry loop for invoices', 3);
+    const res = await tracesClusterHandler({ orgId: 'org_a' }, ctx());
+    expect(res.clustersCreated).toBe(1);
+    const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
+    const suiteId = await derivedSuiteIdFor(db.db, clusterId);
+    expect(suiteId).toBe(`${clusterId}-replays-v2`);
+    const loaded = (await loadDerivedSuite(db.db, suiteId))!;
+    expect(loaded.items).toHaveLength(3); // 3 steps ≤ per-session cap
+    // Item ids carry the step index; references are the step's own output.
+    for (const [i, item] of loaded.items.entries()) {
+      expect(item.id).toMatch(new RegExp(`-s00${i + 1}$`));
+      expect(item.reference).toBe(`step ${i + 1} output of tr_sl1`);
+    }
+    // Step 2's prompt carries the context step 2 saw: the user turn, step 1's
+    // completion (assistant role), and the tool call step 1 dispatched.
+    const step2 = loaded.items[1]!;
+    const roles = step2.prompt.map((m) => m.role);
+    expect(roles[0]).toBe('system');
+    expect(step2.prompt.some((m) => m.role === 'assistant' && m.content.includes('step 1 output'))).toBe(true);
+    expect(step2.prompt.some((m) => m.role === 'user' && m.content.includes('[tool] search('))).toBe(true);
+    // Step rubric template (no approved rubric in force).
+    const scoring = step2.scoring as { kind: string; rubric: string };
+    expect(scoring.rubric).toContain('ONE step of a recorded agent session');
+    // Manifest: stepLevel marker, per-item provenance, honest caveat.
+    const manifest = loaded.suite.manifest as Record<string, unknown>;
+    expect(manifest.stepLevel).toBe(true);
+    expect(String(manifest.contextCaveat)).toContain('system prompts');
+    const provRows = manifest.stepItems as Array<{ itemId: string; sourceSpanId: string; stepIndex: number }>;
+    expect(provRows).toHaveLength(3);
+    expect(provRows[0]!.sourceSpanId).toBe('tr_sl1_s1');
+    // The mock sweep ran over the v2 suite.
+    const runs = await db.db.select().from(evalRuns);
+    expect(runs.some((r) => JSON.stringify(r.options).includes(suiteId))).toBe(true);
+  });
+
+  it('caps steps per session and fills the cluster round-robin — no session monopolizes', async () => {
+    // 3 sessions × 12 steps = 36 raw; per-session cap 8 → 24 items.
+    await seedStepSession('org_a', 'tr_v1', 'Refactor the billing retry loop for invoices', 12, '2026-08-06T10:00:00Z');
+    await seedStepSession('org_a', 'tr_v2', 'Refactor the billing retry loop for receipts', 12, '2026-08-06T11:00:00Z');
+    await seedStepSession('org_a', 'tr_v3', 'Refactor the billing retry loop for refunds', 12, '2026-08-06T12:00:00Z');
+    await tracesClusterHandler({ orgId: 'org_a' }, ctx());
+    const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
+    const loaded = (await loadDerivedSuite(db.db, `${clusterId}-replays-v2`))!;
+    expect(loaded.items).toHaveLength(3 * AGENT_STEPS_PER_SESSION_CAP);
+    expect(loaded.items.length).toBeLessThanOrEqual(AGENT_SUITE_ITEM_CAP_V2);
+    // Every session contributes exactly the cap; first + last steps present.
+    for (const tr of ['tr_v1', 'tr_v2', 'tr_v3']) {
+      const hash = createHash('sha1').update(tr).digest('hex').slice(0, 8);
+      const mine = loaded.items.filter((i) => i.id.includes(hash));
+      expect(mine).toHaveLength(AGENT_STEPS_PER_SESSION_CAP);
+      expect(mine.some((i) => i.id.endsWith('-s001'))).toBe(true);
+      expect(mine.some((i) => i.id.endsWith('-s012'))).toBe(true);
+    }
+  });
+
+  it('is byte-identical run-to-run and insensitive to span insert order (the item-(0) discipline)', async () => {
+    const synthesize = async (permute: boolean): Promise<string> => {
+      const h = await createDb();
+      await migrate(h.db);
+      await h.db.insert(orgs).values({ id: 'org_det2', name: 'Det' });
+      const saved = db;
+      db = h; // seedStepSession writes through the module-scoped handle
+      try {
+        await seedStepSession('org_det2', 'tr_d1', 'Refactor the billing retry loop for invoices', 12);
+        if (permute) {
+          // Insert a second session's spans in REVERSE batch order — the read
+          // model orders by (ts, spanId), so synthesis must not care.
+          const spans: NewTraceSpan[] = [];
+          const t0 = new Date('2026-08-06T13:00:00Z').getTime();
+          spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: 'tr_d2_root', attrs: { 'gen_ai.prompt': 'Refactor the billing retry loop for receipts' }, ts: new Date(t0) }));
+          for (let k = 1; k <= 3; k++) {
+            spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: `tr_d2_s${k}`, name: 'llm.call', attrs: { 'gen_ai.operation.name': 'llm_call', 'gen_ai.completion': `step ${k} output of tr_d2`, 'potion.step_index': k }, ts: new Date(t0 + k * 60_000) }));
+          }
+          spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: 'tr_d2_t1', name: 'tool.search', attrs: { 'gen_ai.operation.name': 'execute_tool', 'tool.args': 'lookup latest', 'tool.result': 'found 3 records' }, ts: new Date(t0 + 60_000) }));
+          spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: 'tr_d2_chat', name: 'chat', attrs: { 'gen_ai.completion': 'step 3 output of tr_d2' }, ts: new Date(t0 + 180_000) }));
+          await insertTraceSpans(h.db, spans.reverse());
+        } else {
+          await seedStepSession('org_det2', 'tr_d2', 'Refactor the billing retry loop for receipts', 3, '2026-08-06T13:00:00Z');
+        }
+        await tracesClusterHandler({ orgId: 'org_det2' }, ctx());
+        const clusterId = `agent-${orgHashOf('org_det2')}-${toolSignatureSlug(['search'])}`;
+        const loaded = (await loadDerivedSuite(h.db, `${clusterId}-replays-v2`))!;
+        // Compare id/prompt/reference — createdAt timestamps legitimately differ.
+        return JSON.stringify(loaded.items.map((i) => ({ id: i.id, prompt: i.prompt, reference: i.reference })));
+      } finally {
+        db = saved;
+        await h.close();
+      }
+    };
+    const a = await synthesize(false);
+    const b = await synthesize(false);
+    const c = await synthesize(true);
+    expect(a).toBe(b); // run-twice byte-identity
+    // tr_d2's tool span rides at step-1 ts in both variants; insert order is
+    // irrelevant to the read model's (ts, spanId) scan.
+    expect(a).toBe(c);
+  });
+
+  it('mixed corpus: legacy sessions (no llm.call spans) contribute their session item into the v2 suite', async () => {
+    await seedStepSession('org_a', 'tr_mx1', 'Refactor the billing retry loop for invoices', 3);
+    await seedSession('org_a', 'tr_mx2', 'Refactor the billing retry loop for receipts', 'search', '2026-08-06T11:00:00Z', 'legacy final answer');
+    await tracesClusterHandler({ orgId: 'org_a' }, ctx());
+    const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
+    const loaded = (await loadDerivedSuite(db.db, `${clusterId}-replays-v2`))!;
+    const legacyHash = createHash('sha1').update('tr_mx2').digest('hex').slice(0, 8);
+    const legacyItem = loaded.items.find((i) => i.id.endsWith(legacyHash));
+    expect(legacyItem).toBeDefined(); // session item, no -sNNN suffix
+    expect(legacyItem!.reference).toBe('legacy final answer');
+    expect(loaded.items.filter((i) => /-s\d{3}$/.test(i.id))).toHaveLength(3);
+  });
+
+  it('legacy-only corpora stay on -replays-v1 — no flag day', async () => {
+    await seedSession('org_a', 'tr_lg1', 'Refactor the billing retry loop for invoices', 'search');
+    await tracesClusterHandler({ orgId: 'org_a' }, ctx());
+    const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
+    expect(await derivedSuiteIdFor(db.db, clusterId)).toBe(`${clusterId}-replays-v1`);
+    expect(await loadDerivedSuite(db.db, `${clusterId}-replays-v2`)).toBeNull();
   });
 });

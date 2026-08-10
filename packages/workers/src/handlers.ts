@@ -10,6 +10,7 @@ import {
 import {
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
+  derivedSuiteIdFor,
   insertClusterRubric,
   insertJudgeCalibration,
   loadDerivedSuite,
@@ -1680,7 +1681,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
         // cluster.
         let provenanceCtx: { suiteId?: string; suiteVersion?: string; rubricHash?: string; calibrationId?: string } = {};
         if (payload.orgId !== undefined && clusterId.startsWith('agent-')) {
-          const derivedSuiteId = `${clusterId}-replays-v1`;
+          const derivedSuiteId = await derivedSuiteIdFor(ctx.db, clusterId);
           const derivedRow = await loadDerivedSuite(ctx.db, derivedSuiteId);
           const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
           provenanceCtx = {
@@ -1880,6 +1881,37 @@ export function resolveAgentClusterThreshold(opts: {
 export const AGENT_SUITE_ITEM_CAP = 48;
 /** Max exemplar rows written when a cluster is first registered. */
 export const AGENT_EXEMPLAR_CAP = 8;
+
+// ---- Step-level item synthesis (post-capstone item 2, Decision 1) ----
+// A session's ~40 model calls become items, so the cap becomes a SAMPLING
+// POLICY over steps rather than a ceiling on sessions — bounded volume is an
+// owner requirement filed BEFORE any live leg, not an emergent property.
+/**
+ * Steps kept per session: the FIRST and LAST steps always (trajectory
+ * endpoints — task framing and final answer), interior steps evenly spaced.
+ * Deterministic by construction (index arithmetic, no RNG): the same session
+ * always contributes the same steps, so suite synthesis stays byte-identical
+ * run-to-run (the item-(0) discipline).
+ */
+export const AGENT_STEPS_PER_SESSION_CAP = 8;
+/**
+ * Step items per cluster suite, filled session-ROUND-ROBIN in deterministic
+ * session order so no long session monopolizes the suite. At the capstone
+ * corpus (23 sessions × ~40 steps ≈ 920 raw) this yields 23×8 = 184 items —
+ * the volume the cost projection in the item plan is computed against.
+ * Selection happens HERE, in synthesis: the db-side roster cap is a sorted-id
+ * prefix and would otherwise select steps by hash order.
+ */
+export const AGENT_SUITE_ITEM_CAP_V2 = 200;
+
+/** Evenly-spaced deterministic sample of step indices: first + last always,
+ * interior at round(k·(n−1)/(cap−1)). Exported for the volume tests. */
+export function sampleStepIndices(n: number, cap: number): number[] {
+  if (n <= cap) return Array.from({ length: n }, (_, i) => i);
+  const picked = new Set<number>();
+  for (let k = 0; k < cap; k++) picked.add(Math.round((k * (n - 1)) / (cap - 1)));
+  return [...picked].sort((a, b) => a - b);
+}
 
 /** Redact payload text before it pools across orgs or lands in suites
  * (SPEC §14.2 "redact payloads, keep structure"). G1.1: delegates to the
@@ -2098,7 +2130,14 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
       // representative here would print one member's 40-call trace as if it
       // characterised the cluster.)
       const toolSequence = canonicalToolSequence(members[0]!.toolSequence);
-      const suiteId = `${clusterId}-replays-v1`;
+      // Post-capstone item 2: members whose traces carry llm.call spans get
+      // STEP-LEVEL items in a new suite generation (-v2, clean break — the
+      // v1 suite's merge-only/never-evict semantics make in-place mutation
+      // hazardous: a changed prompt on a reused id would silently reuse
+      // cached evidence). Any step-capable member flips the cluster to v2;
+      // legacy corpora with no llm.call spans anywhere stay on v1 untouched.
+      const stepCapable = members.some((m) => m.steps.length > 0);
+      const suiteId = stepCapable ? `${clusterId}-replays-v2` : `${clusterId}-replays-v1`;
       const name = `agent: ${toolSequence.join(' → ') || 'chat'} (${slug})`;
 
       const existingCluster = await ctx.db
@@ -2151,13 +2190,22 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
       // clusters with nothing in force. Generation itself never runs here —
       // it is admin-triggered, capped, and metered (rubric:generate).
       const approvedRubric = await approvedRubricForCluster(ctx.db, clusterId);
-      const rubric = approvedRubric?.rubricText ?? rubricTemplateFor(toolSequence);
+      const rubric =
+        approvedRubric?.rubricText ??
+        (stepCapable ? stepRubricTemplateFor(toolSequence) : rubricTemplateFor(toolSequence));
+      const scoring = {
+        kind: 'llm-judge' as const,
+        rubric,
+        judgeModel: judgeAlias,
+        scale: [0, 1] as [number, number],
+      };
       // G1.4 replay fidelity: multi-turn user context, a tool-transcript
       // system message when the session used tools, and the ORIGINAL
       // (redacted) final answer as the judge's reference — items degrade
       // gracefully to the single-turn reference-free shape when the trace
-      // carried neither.
-      const candidates = members.map((m) => {
+      // carried neither. Used for legacy members (no llm.call spans) and for
+      // whole v1 clusters.
+      const sessionItem = (m: (typeof members)[number]) => {
         const srcIdx = sources.indexOf(m);
         const turnTexts =
           m.turns.length > 0
@@ -2188,22 +2236,98 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
           clusterId,
           prompt,
           ...(reference !== undefined ? { reference } : {}),
-          scoring: {
-            kind: 'llm-judge' as const,
-            rubric,
-            judgeModel: judgeAlias,
-            scale: [0, 1] as [number, number],
-          },
+          scoring,
           sourceTraceId: m.traceId,
         };
-      });
+      };
+      // Post-capstone item 2 (Decision 1): one item PER SAMPLED MODEL CALL,
+      // carrying the context that call saw (reconstructable context: user
+      // turns, prior step outputs, tool calls with payloads — the corpus has
+      // no system prompts; recorded as a manifest caveat) and judged against
+      // the step's OWN recorded output, never the session's final answer.
+      const stepItems = (m: (typeof members)[number]) => {
+        const keep = new Set(sampleStepIndices(m.steps.length, AGENT_STEPS_PER_SESSION_CAP));
+        return m.steps
+          .filter((_, i) => keep.has(i))
+          .map((step) => {
+            const prompt = [
+              {
+                role: 'system' as const,
+                content:
+                  'You are replaying ONE step of a recorded agent session. The conversation so ' +
+                  'far (including tool activity as [tool] lines) precedes this call. Produce this ' +
+                  "step's contribution only — not the session's final answer.",
+              },
+              ...step.contextBefore.map((c) =>
+                c.kind === 'tool'
+                  ? {
+                      role: 'user' as const,
+                      content:
+                        `[tool] ${c.name}(${redactTraceText(c.args ?? '', 300)})` +
+                        (c.result !== undefined ? ` → ${redactTraceText(c.result, 300)}` : ''),
+                    }
+                  : c.kind === 'assistant'
+                    ? { role: 'assistant' as const, content: redactTraceText(c.text) }
+                    : { role: 'user' as const, content: redactTraceText(c.text) },
+              ),
+            ];
+            return {
+              id: `${suiteId}-${sha1Hex(m.traceId).slice(0, 8)}-s${String(step.stepIndex).padStart(3, '0')}`,
+              clusterId,
+              prompt,
+              reference: redactTraceText(step.completion),
+              scoring,
+              sourceTraceId: m.traceId,
+            };
+          });
+      };
+      let candidates: Array<EvalItem & { sourceTraceId: string }>;
+      let stepProvenance: Array<{ itemId: string; sourceTraceId: string; sourceSpanId: string; stepIndex: number }> = [];
+      if (stepCapable) {
+        // Deterministic session order (traceId asc), then ROUND-ROBIN fill to
+        // the cluster cap so no session monopolizes the suite. Legacy members
+        // (steps: []) contribute their session item, counted in the same cap.
+        const ordered = [...members].sort((a, b) => a.traceId.localeCompare(b.traceId));
+        const perMember = ordered.map((m) =>
+          m.steps.length > 0 ? stepItems(m) : [sessionItem(m)],
+        );
+        candidates = [];
+        for (let round = 0; candidates.length < AGENT_SUITE_ITEM_CAP_V2; round++) {
+          let took = false;
+          for (const list of perMember) {
+            if (round >= list.length || candidates.length >= AGENT_SUITE_ITEM_CAP_V2) continue;
+            candidates.push(list[round]!);
+            took = true;
+          }
+          if (!took) break;
+        }
+        const spanIdByItem = new Map<string, { spanId: string; stepIndex: number }>();
+        for (const m of ordered) {
+          for (const step of m.steps) {
+            spanIdByItem.set(
+              `${suiteId}-${sha1Hex(m.traceId).slice(0, 8)}-s${String(step.stepIndex).padStart(3, '0')}`,
+              { spanId: step.spanId, stepIndex: step.stepIndex },
+            );
+          }
+        }
+        stepProvenance = candidates.flatMap((c) => {
+          const hit = spanIdByItem.get(c.id);
+          return hit
+            ? [{ itemId: c.id, sourceTraceId: c.sourceTraceId, sourceSpanId: hit.spanId, stepIndex: hit.stepIndex }]
+            : [];
+        });
+      } else {
+        candidates = members.map(sessionItem);
+      }
       const manifest: SuiteManifest = {
         suiteId,
         clusterId,
-        version: '1.0.0',
+        version: stepCapable ? '2.0.0' : '1.0.0',
         source: {
           kind: 'authored',
-          name: 'Potion trace-synthesized session replays (payloads redacted)',
+          name: stepCapable
+            ? 'Potion trace-synthesized STEP replays (one item per sampled model call, payloads redacted)'
+            : 'Potion trace-synthesized session replays (payloads redacted)',
           license: 'Proprietary (customer-derived, redacted) — M5 #36',
         },
         // 'items.jsonl' is the schema's file-pointer literal; in db storage
@@ -2213,13 +2337,30 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
         scoring: { allowed: ['llm-judge'] },
         createdAt: new Date().toISOString(),
       };
+      const manifestExtras = stepCapable
+        ? {
+            stepLevel: true,
+            // Honest caveat (Decision 1): "the context that call saw" is the
+            // RECONSTRUCTABLE context — the corpus carries no system prompts
+            // and drops thinking blocks; judging is reference-anchored, which
+            // is what makes this tolerable (G1.4).
+            contextCaveat:
+              'step context excludes system prompts and thinking blocks (not present in the source corpus)',
+            samplingPolicy: {
+              stepsPerSessionCap: AGENT_STEPS_PER_SESSION_CAP,
+              clusterItemCap: AGENT_SUITE_ITEM_CAP_V2,
+              rule: 'first+last always, interior evenly spaced; sessions fill round-robin in traceId order',
+            },
+            stepItems: stepProvenance,
+          }
+        : {};
       const upsert = await upsertDerivedSuite(ctx.db, {
         suiteId,
         clusterId,
         orgId,
-        manifest: manifest as unknown as Record<string, unknown>, // jsonb provenance record
+        manifest: { ...manifest, ...manifestExtras } as unknown as Record<string, unknown>, // jsonb provenance record
         items: candidates,
-        itemCap: AGENT_SUITE_ITEM_CAP,
+        itemCap: stepCapable ? AGENT_SUITE_ITEM_CAP_V2 : AGENT_SUITE_ITEM_CAP,
       });
       const newItems = { length: upsert.itemsAdded };
 
@@ -2428,7 +2569,7 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
           await saveFrontier(ctx.db, clusterId, points, 'recompute', prices.version, {
             orgId,
             provenance: {
-              suiteId: `${clusterId}-replays-v1`,
+              suiteId: await derivedSuiteIdFor(ctx.db, clusterId),
               ...(approvedRubric !== null
                 ? {
                     rubricHash: approvedRubric.rubricHash,
@@ -2498,6 +2639,26 @@ export function rubricTemplateFor(toolSequence: string[]): string {
     `answer is provided, judge primarily by comparison against it. Redaction ` +
     `placeholders like <email>, <num>, <phone> stand for removed values and match ` +
     `any equivalent value.`
+  );
+}
+
+/**
+ * Step-item rubric template (post-capstone item 2): the unit under judgment
+ * is ONE model call inside an agent session, scored against that call's own
+ * recorded output — never the session's final answer. Same fallback role as
+ * rubricTemplateFor: an APPROVED cluster rubric wins via the restamp path.
+ */
+export function stepRubricTemplateFor(toolSequence: string[]): string {
+  return (
+    `Score how well the assistant's response reproduces ONE step of a recorded ` +
+    `agent session` +
+    `${toolSequence.length > 0 ? ` (session tools: ${toolSequence.join(' → ')})` : ''}. ` +
+    `The prompt carries the session context up to this step; the REFERENCE is what ` +
+    `this step actually produced. Judge whether the response makes the same step ` +
+    `contribution — same findings, same decisions, same content — by comparison ` +
+    `against the REFERENCE. An intermediate step is judged as a step, not as a ` +
+    `final answer; ignore style. Redaction placeholders like <email>, <num>, ` +
+    `<phone> stand for removed values and match any equivalent value.`
   );
 }
 
@@ -2603,7 +2764,7 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
   if (exemplarRows.length === 0) {
     throw new Error(`cluster '${payload.clusterId}' has no exemplars — nothing to generate from`);
   }
-  const suiteId = `${payload.clusterId}-replays-v1`;
+  const suiteId = await derivedSuiteIdFor(ctx.db, payload.clusterId);
   const loaded = await loadDerivedSuite(ctx.db, suiteId);
   const items = loaded?.items ?? [];
   const toolSequence =
@@ -2849,7 +3010,7 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
   if (cluster.orgId !== payload.orgId) {
     throw new Error(`cluster '${payload.clusterId}' does not belong to org '${payload.orgId}'`);
   }
-  const suiteId = `${payload.clusterId}-replays-v1`;
+  const suiteId = await derivedSuiteIdFor(ctx.db, payload.clusterId);
   const loaded = await loadDerivedSuite(ctx.db, suiteId);
   if (!loaded || loaded.items.length === 0) {
     throw new Error(`derived suite '${suiteId}' is empty — nothing to evaluate live`);
@@ -3001,6 +3162,20 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_SUITE_VERIFY_CAP_USD = 5;
+/**
+ * Per-(item × strategy) budget slice for the DERIVED default cap
+ * (post-capstone item 2). Empirical: capstone leg 5b metered $1.1045 over
+ * 23 items × 2 strategies ≈ $0.024/cell at the live ceilings; $0.03 gives
+ * ~25% headroom. A step-level suite (184 items × 2 strategies → ~$11) blows
+ * the flat $5 default by design — the default must scale with the suite or
+ * every step-suite verify would be refused by its own preflight. An explicit
+ * payload capUsd always wins; the fail-closed budget pre-check and the
+ * projection preflight are unchanged and still bind.
+ */
+export const SUITE_VERIFY_CAP_PER_CELL_USD = 0.03;
+export function deriveSuiteVerifyCapUsd(itemCount: number, strategies = 2): number {
+  return Math.max(DEFAULT_SUITE_VERIFY_CAP_USD, itemCount * strategies * SUITE_VERIFY_CAP_PER_CELL_USD);
+}
 /** Items where the incumbent itself scores below this are EXCLUDED from
  * retention (smoothing would fabricate retention on items the baseline
  * fails); the exclusion count is always reported. */
@@ -3292,7 +3467,7 @@ const runSuiteVerify = async (
     return { ...base, outcome: 'self-incumbent', advisoryResolved, restoredIncidentId, detail: 'serving strategy IS the incumbent — retention 1.0 by identity' };
   }
 
-  const suiteId = `${payload.clusterId}-replays-v1`;
+  const suiteId = await derivedSuiteIdFor(ctx.db, payload.clusterId);
   prov.suiteId = suiteId;
   const loaded = await loadDerivedSuite(ctx.db, suiteId);
   if (!loaded || loaded.items.length === 0) {
@@ -3301,7 +3476,9 @@ const runSuiteVerify = async (
     return { ...base, outcome: 'no-suite', detail };
   }
   prov.suiteVersion = loaded.suite.version;
-  const capUsd = payload.capUsd ?? DEFAULT_SUITE_VERIFY_CAP_USD;
+  // Default cap scales with the suite (step-level suites are ~8× larger);
+  // explicit payload capUsd always wins.
+  const capUsd = payload.capUsd ?? deriveSuiteVerifyCapUsd(loaded.items.length);
 
   // FAIL-CLOSED budget refusal (live spend only) — RECORDED durably on the
   // incident's ledger (G2.2 starved verification), no throw: the advisory
@@ -3672,7 +3849,7 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     orgId: payload.orgId,
     policyId: payload.policyId,
     clusterId: payload.clusterId,
-    suiteId: prov.suiteId ?? `${payload.clusterId}-replays-v1`,
+    suiteId: prov.suiteId ?? (await derivedSuiteIdFor(ctx.db, payload.clusterId)),
     suiteVersion: prov.suiteVersion,
     candidateHash: payload.servingStrategyHash,
     incumbentHash: prov.incumbentHash,

@@ -288,6 +288,36 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     expect(html.body).toContain(AGENT_CLUSTER);
   });
 
+  it('NO-CLAIM PIN (post-capstone item 2): an agentic cluster with an incumbent but NO verdict renders null retention + a reason — never a number', async () => {
+    // The cluster class step-level synthesis creates volume for: designated,
+    // sampled, but no suite-verify verdict has ever rendered. The contract
+    // (owner requirement 4): the report says "no claim yet", it does not
+    // fabricate or approximate a retention figure.
+    const cluster2 = 'agent-grtest-noverdict';
+    await db()
+      .insert(clusters)
+      .values({ id: cluster2, name: 'noverdict', description: 'agentic, unverified', orgId: ORG });
+    await designateIncumbent(db(), ORG, cluster2, H_CHEAP);
+    await insertQualitySample(db(), {
+      orgId: ORG,
+      strategyHash: H_MID,
+      quality: 0.9,
+      createdAt: new Date(),
+      policyId: PID,
+      clusterId: cluster2,
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/reports/guarantee?from=${today}&to=${today}`,
+      headers: { authorization: `Bearer ${KEY}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const entry = res.json().entries.find((e: { clusterId: string }) => e.clusterId === cluster2);
+    expect(entry).toBeTruthy();
+    expect(entry.retention).toBeNull();
+    expect(entry.retentionUnavailableReason).toContain('no suite-verify verdict');
+  });
+
   it('401 without credentials; 400 on malformed window', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/reports/guarantee', headers: { authorization: 'Bearer pk_nope' } })).statusCode).toBe(401);
     const bad = await app.inject({
@@ -314,7 +344,11 @@ describe('GET /api/guarantee/status (G2.1 fields)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.incumbents.length).toBeGreaterThanOrEqual(1);
-    expect(body.incumbents[0].clusterId).toBe(AGENT_CLUSTER);
+    // Find by cluster, not index — the no-claim-pin test designates a second
+    // incumbent and designation order is not part of this contract.
+    expect(
+      body.incumbents.some((i: { clusterId: string }) => i.clusterId === AGENT_CLUSTER),
+    ).toBe(true);
     expect(body.openAdvisories).toBeGreaterThanOrEqual(1);
     const pol = body.policies.find((p: { policyId: string }) => p.policyId === PID);
     expect(pol.retentionFloor).toBe(0.9);

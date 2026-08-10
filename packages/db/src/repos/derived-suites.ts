@@ -102,6 +102,24 @@ export interface LoadedDerivedSuite {
   items: EvalItem[];
 }
 
+/**
+ * Resolve a cluster's CURRENT derived suite id (post-capstone item 2): the
+ * step-level generation (`-replays-v2`) when it exists with items, else the
+ * session-level `-replays-v1`. One resolver instead of three hardcoded
+ * `${clusterId}-replays-v1` call sites — when a cluster flips to step-level
+ * synthesis, every consumer (suite-verify, live-sweep, rubric generation)
+ * follows in the same commit, and legacy clusters keep resolving to v1.
+ */
+export async function derivedSuiteIdFor(db: PotionDb, clusterId: string): Promise<string> {
+  const v2 = `${clusterId}-replays-v2`;
+  const rows = await db
+    .select({ itemId: derivedSuiteItems.itemId })
+    .from(derivedSuiteItems)
+    .where(eq(derivedSuiteItems.suiteId, v2))
+    .limit(1);
+  return rows.length > 0 ? v2 : `${clusterId}-replays-v1`;
+}
+
 /** Load a derived suite + items (id-ordered). null when unknown. */
 export async function loadDerivedSuite(
   db: PotionDb,

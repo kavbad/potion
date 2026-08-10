@@ -221,4 +221,68 @@ describe('trace_spans repo (M5 #36)', () => {
     await expect(migrate(h.db)).resolves.toContain('0015_traces.sql');
     await expect(migrate(h.db)).resolves.toContain('0015_traces.sql');
   });
+
+  it('step view (post-capstone item 2): llm.call spans pair completion with the context that call saw', async () => {
+    const h = await migratedDb('org_steps');
+    // Converter-v2 layout: root prompt → llm.call s1 (+its tool call) →
+    // llm.call s2 (final) → terminal chat span.
+    await insertTraceSpans(h.db, [
+      span({ orgId: 'org_steps', traceId: 'tr_s', spanId: 'tr_s_root', attrs: { 'gen_ai.prompt': 'Fix the flaky test' }, ts: new Date('2026-08-10T10:00:00Z') }),
+      span({
+        orgId: 'org_steps', traceId: 'tr_s', spanId: 'tr_s_s1', name: 'llm.call', model: 'claude-opus-5',
+        usage: { input_tokens: 1200, output_tokens: 80 },
+        attrs: { 'gen_ai.operation.name': 'llm_call', 'gen_ai.completion': 'Looking at the test file.', 'potion.step_index': 1 },
+        ts: new Date('2026-08-10T10:00:05Z'),
+      }),
+      span({
+        orgId: 'org_steps', traceId: 'tr_s', spanId: 'tr_s_t1', name: 'tool.Read',
+        attrs: { 'gen_ai.operation.name': 'execute_tool', 'tool.args': 'flaky.test.ts', 'tool.result': 'race in beforeEach' },
+        ts: new Date('2026-08-10T10:00:05Z'),
+      }),
+      span({
+        orgId: 'org_steps', traceId: 'tr_s', spanId: 'tr_s_s2', name: 'llm.call', model: 'claude-opus-5',
+        usage: { input_tokens: 2000, output_tokens: 200 },
+        attrs: { 'gen_ai.operation.name': 'llm_call', 'gen_ai.completion': 'The race is in beforeEach; awaiting the handle fixes it.', 'potion.step_index': 2 },
+        ts: new Date('2026-08-10T10:00:20Z'),
+      }),
+      span({
+        orgId: 'org_steps', traceId: 'tr_s', spanId: 'tr_s_chat', name: 'chat',
+        attrs: { 'gen_ai.completion': 'The race is in beforeEach; awaiting the handle fixes it.' },
+        ts: new Date('2026-08-10T10:00:20Z'),
+      }),
+    ]);
+    const src = (await listTracesForClustering(h.db, { orgId: 'org_steps' }))[0]!;
+    // Pre-v2 semantics untouched: turns, session reference, tool transcript.
+    expect(src.turns).toEqual(['Fix the flaky test']);
+    expect(src.referenceAnswer).toContain('awaiting the handle');
+    expect(src.toolSequence).toEqual(['Read']);
+    // The step view: pairing preserved, per-call usage, context folds forward.
+    expect(src.steps).toHaveLength(2);
+    const [s1, s2] = src.steps;
+    expect(s1!.stepIndex).toBe(1);
+    expect(s1!.completion).toBe('Looking at the test file.');
+    expect(s1!.usage).toEqual({ inputTokens: 1200, outputTokens: 80 });
+    expect(s1!.contextBefore).toEqual([{ kind: 'user', text: 'Fix the flaky test' }]);
+    expect(s2!.stepIndex).toBe(2);
+    // Step 2 saw: the user turn, step 1's own completion, and the tool call
+    // step 1 dispatched — exactly the context that call saw.
+    expect(s2!.contextBefore).toEqual([
+      { kind: 'user', text: 'Fix the flaky test' },
+      { kind: 'assistant', text: 'Looking at the test file.' },
+      { kind: 'tool', name: 'Read', args: 'flaky.test.ts', result: 'race in beforeEach' },
+    ]);
+    await h.close();
+  });
+
+  it('step view: pre-v2 traces (no llm.call spans) yield steps: [] — session-item fallback, no flag day', async () => {
+    const h = await migratedDb('org_nosteps');
+    await insertTraceSpans(h.db, [
+      span({ orgId: 'org_nosteps', traceId: 'tr_old', spanId: 'o_root', attrs: { 'gen_ai.prompt': 'legacy session' } }),
+      span({ orgId: 'org_nosteps', traceId: 'tr_old', spanId: 'o_chat', name: 'chat', attrs: { 'gen_ai.completion': 'legacy answer' }, ts: new Date('2026-08-06T10:01:00Z') }),
+    ]);
+    const src = (await listTracesForClustering(h.db, { orgId: 'org_nosteps' }))[0]!;
+    expect(src.steps).toEqual([]);
+    expect(src.referenceAnswer).toBe('legacy answer');
+    await h.close();
+  });
 });

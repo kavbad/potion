@@ -316,3 +316,16 @@ A billing record must be written at the seam where money leaves (the provider
 call), awaited before the response is used, and merely RECONCILED at
 completion. Corollary: correctness is a both-directions property — a path
 that is only conservative in one direction is still wrong, just politely.
+
+## A schema that COULD hold the data is not data (2026-08-10)
+
+The step-synthesis item was filed as "the spans already hold what's needed."
+The schema did (free-form jsonb attrs); the data did not — the converter had
+collapsed every assistant turn into one terminal span, and the read model
+destroyed prompt↔completion pairing on top. Exploration against the ACTUAL
+rows, not the column types, turned a "wire up a read model" item into a
+converter-rewrite item and surfaced that the source transcripts had since
+been garbage-collected. Before planning against "the data is already there",
+read one real row end-to-end and prove the needed relationship survives in
+it. Corollary: derived stores are not backups — the capstone's per-call
+detail now exists nowhere on this machine.

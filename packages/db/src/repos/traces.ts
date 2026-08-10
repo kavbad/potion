@@ -154,6 +154,32 @@ export async function redactSpanAttrs(db: PotionDb, orgId: string): Promise<numb
 // 'execute_tool', or whose name is prefixed 'tool.'). Payload text leaves the
 // org only AFTER the caller redacts it.
 // ---------------------------------------------------------------------------
+/** One entry of the context a model call saw, in session order (post-capstone
+ * item 2). All text was redacted at ingest. */
+export type TraceStepContext =
+  | { kind: 'user'; text: string }
+  | { kind: 'assistant'; text: string }
+  | { kind: 'tool'; name: string; args?: string; result?: string };
+
+/**
+ * One text-producing model call inside an agentic session (an `llm.call`
+ * span, converter v2). THE PAIRING IS THE POINT: pre-v2 the read model
+ * flattened prompts into `turns` and let the last completion win, which is
+ * what forced whole-session replay — the measurement Decision 1 recorded as
+ * invalid (incumbent 0.2000 on its own traffic). `contextBefore` is folded
+ * from the ordered prior siblings (user turns, earlier step completions,
+ * tool calls with payloads); `completion` is what THIS call produced.
+ */
+export interface TraceStep {
+  spanId: string;
+  /** Converter-stamped potion.step_index when present, else fold order. */
+  stepIndex: number;
+  completion: string;
+  model: string | null;
+  usage: { inputTokens: number; outputTokens: number } | null;
+  contextBefore: TraceStepContext[];
+}
+
 export interface TraceClusterSource {
   orgId: string;
   traceId: string;
@@ -168,6 +194,10 @@ export interface TraceClusterSource {
    * names-only toolSequence stays for signature slugging. */
   toolTranscript: Array<{ name: string; args?: string; result?: string }>;
   toolSequence: string[];
+  /** Post-capstone item 2: per-model-call steps with preserved
+   * prompt↔completion pairing. Empty for pre-v2 traces (no llm.call spans)
+   * — synthesis falls back to the session item; no flag day. */
+  steps: TraceStep[];
   spanCount: number;
   totalCostUsd: number;
   startedAt: Date;
@@ -215,24 +245,57 @@ export async function listTracesForClustering(
       const attrs = s.attrs as Record<string, unknown>;
       return attrs['gen_ai.operation.name'] === 'execute_tool' || s.name.startsWith('tool.');
     });
+    // Post-capstone item 2: fold the step view in the SAME ordered scan.
+    // Running context accumulates what the session has produced so far; each
+    // llm.call span snapshots it as contextBefore, then contributes its own
+    // completion. The terminal chat span (no llm_call marker) is NOT a step
+    // — it keeps its pre-v2 role as the session reference.
+    const steps: TraceStep[] = [];
+    const runningContext: TraceStepContext[] = [];
+    const isToolSpan = (s: TraceSpanRow): boolean => {
+      const attrs = s.attrs as Record<string, unknown>;
+      return attrs['gen_ai.operation.name'] === 'execute_tool' || s.name.startsWith('tool.');
+    };
     for (const s of spans) {
       const attrs = s.attrs as Record<string, unknown>;
       const prompt = attrs['gen_ai.prompt'];
-      if (typeof prompt === 'string' && prompt.length > 0) turns.push(prompt);
+      if (typeof prompt === 'string' && prompt.length > 0) {
+        turns.push(prompt);
+        runningContext.push({ kind: 'user', text: prompt });
+      }
       const completion = attrs['gen_ai.completion'];
       if (typeof completion === 'string' && completion.length > 0) referenceAnswer = completion;
-    }
-    for (const s of toolSpans) {
-      const attrs = s.attrs as Record<string, unknown>;
-      const args = attrs['tool.args'];
-      const result = attrs['tool.result'];
-      toolTranscript.push({
-        name: s.name.replace(/^tool\./, ''),
-        ...(args !== undefined ? { args: typeof args === 'string' ? args : JSON.stringify(args) } : {}),
-        ...(result !== undefined
-          ? { result: typeof result === 'string' ? result : JSON.stringify(result) }
-          : {}),
-      });
+      if (isToolSpan(s)) {
+        const args = attrs['tool.args'];
+        const result = attrs['tool.result'];
+        const entry = {
+          name: s.name.replace(/^tool\./, ''),
+          ...(args !== undefined ? { args: typeof args === 'string' ? args : JSON.stringify(args) } : {}),
+          ...(result !== undefined
+            ? { result: typeof result === 'string' ? result : JSON.stringify(result) }
+            : {}),
+        };
+        toolTranscript.push(entry);
+        runningContext.push({ kind: 'tool', ...entry });
+        continue;
+      }
+      const isLlmCall = attrs['gen_ai.operation.name'] === 'llm_call' || s.name === 'llm.call';
+      if (isLlmCall && typeof completion === 'string' && completion.length > 0) {
+        const stamped = attrs['potion.step_index'];
+        const usage = s.usage as { input_tokens?: number; output_tokens?: number } | null;
+        steps.push({
+          spanId: s.spanId,
+          stepIndex: typeof stamped === 'number' ? stamped : steps.length + 1,
+          completion,
+          model: s.model ?? null,
+          usage:
+            usage && (usage.input_tokens !== undefined || usage.output_tokens !== undefined)
+              ? { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0 }
+              : null,
+          contextBefore: [...runningContext],
+        });
+        runningContext.push({ kind: 'assistant', text: completion });
+      }
     }
     const toolSequence = toolSpans.map((s) => s.name.replace(/^tool\./, ''));
     out.push({
@@ -243,6 +306,7 @@ export async function listTracesForClustering(
       referenceAnswer,
       toolTranscript,
       toolSequence,
+      steps,
       spanCount: spans.length,
       totalCostUsd: spans.reduce((sum, s) => sum + s.costUsd, 0),
       startedAt: spans[0]!.ts,

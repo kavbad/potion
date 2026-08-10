@@ -489,6 +489,24 @@ async function main(): Promise<void> {
           attributes: { 'gen_ai.prompt': 'Check invoice 4421 status and email the customer' },
           ts: at(0),
         },
+        // Converter-v2 layout (post-capstone item 2): one llm.call span per
+        // text-producing model call, per-call usage + step index. Step-level
+        // synthesis pairs each completion with the context that call saw.
+        {
+          trace_id: 'wt-trace-normal',
+          span_id: 'n_s1',
+          parent_id: 'n_root',
+          name: 'llm.call',
+          model: 'haiku-class',
+          input_tokens: 400,
+          output_tokens: 300,
+          attributes: {
+            'gen_ai.operation.name': 'llm_call',
+            'gen_ai.completion': 'Looking up invoice 4421 before emailing.',
+            'potion.step_index': 1,
+          },
+          ts: at(1),
+        },
         {
           trace_id: 'wt-trace-normal',
           span_id: 'n_tool',
@@ -496,6 +514,21 @@ async function main(): Promise<void> {
           name: 'tool.search',
           attributes: toolAttrs,
           ts: at(1),
+        },
+        {
+          trace_id: 'wt-trace-normal',
+          span_id: 'n_s2',
+          parent_id: 'n_root',
+          name: 'llm.call',
+          model: 'haiku-class',
+          input_tokens: 600,
+          output_tokens: 700,
+          attributes: {
+            'gen_ai.operation.name': 'llm_call',
+            'gen_ai.completion': 'Invoice 4421 is pending; emailed the customer.',
+            'potion.step_index': 2,
+          },
+          ts: at(2),
         },
         {
           trace_id: 'wt-trace-normal',
@@ -535,13 +568,13 @@ async function main(): Promise<void> {
     const ing = await postBatch();
     const ingBody = await ing.json();
     assert(ing.status === 202, `ingest → HTTP ${ing.status}: ${JSON.stringify(ingBody)}`);
-    assert(ingBody.accepted === 7, `expected 7 accepted, got ${ingBody.accepted}`);
+    assert(ingBody.accepted === 9, `expected 9 accepted, got ${ingBody.accepted}`);
     assert(ingBody.costUsd > 0, 'ingest-time pricing missing');
     // Idempotent retry: the same batch is duplicates, never double-counted.
     const retry = await postBatch();
     const retryBody = await retry.json();
     assert(
-      retry.status === 202 && retryBody.accepted === 0 && retryBody.duplicates === 7,
+      retry.status === 202 && retryBody.accepted === 0 && retryBody.duplicates === 9,
       `idempotent retry failed: ${JSON.stringify(retryBody)}`,
     );
     // Rollup: the loop trace is flagged; the normal one is priced.
@@ -556,10 +589,11 @@ async function main(): Promise<void> {
     const normalS = sessions.find((s) => s.traceId === 'wt-trace-normal');
     assert(loopS?.looping === true && loopS.loops.length >= 1, 'loop signal missing from rollup');
     assert(normalS && !normalS.looping && normalS.totalCostUsd > 0, 'normal session rollup wrong');
-    // Waterfall for the normal trace: 3 spans, parent linkage, per-span cost.
+    // Waterfall for the normal trace: 5 spans (root + 2 llm.call + tool +
+    // chat, converter-v2 layout), parent linkage, per-span cost.
     const wfRes = await dashFetch('/api/traces/wt-trace-normal');
     const wf = await wfRes.json();
-    assert(wfRes.ok && wf.spans.length === 3, `waterfall wrong: ${JSON.stringify(wf)}`);
+    assert(wfRes.ok && wf.spans.length === 5, `waterfall wrong: ${JSON.stringify(wf)}`);
     const chatSpan = (wf.spans as Array<{ name: string; costUsd: number }>).find(
       (s) => s.name === 'chat',
     );
@@ -578,7 +612,11 @@ async function main(): Promise<void> {
     const clBody = await cl.json();
     assert(cl.status === 202, `cluster → HTTP ${cl.status}: ${JSON.stringify(clBody)}`);
     const clDeadline = Date.now() + 240_000;
-    let clResult: { sessionsSeen?: number; clustersCreated?: number } = {};
+    let clResult: {
+      sessionsSeen?: number;
+      clustersCreated?: number;
+      clusters?: Array<{ clusterId: string; suiteId: string; itemsAdded: number }>;
+    } = {};
     for (;;) {
       const job = await (
         await fetch(`${API}/api/jobs/${clBody.jobId}`, {
@@ -596,6 +634,14 @@ async function main(): Promise<void> {
     assert(
       (clResult.sessionsSeen ?? 0) >= 2 && (clResult.clustersCreated ?? 0) >= 1,
       `cluster result wrong: ${JSON.stringify(clResult)}`,
+    );
+    // Post-capstone item 2: the converter-v2 session (llm.call spans) must
+    // synthesize a STEP-LEVEL suite (-replays-v2, one item per model call),
+    // while the loop trace (no llm.call spans) stays session-level.
+    const stepSuite = (clResult.clusters ?? []).find((c) => c.suiteId.endsWith('-replays-v2'));
+    assert(
+      stepSuite !== undefined && stepSuite.itemsAdded >= 2,
+      `step-level suite missing from cluster outcomes: ${JSON.stringify(clResult.clusters)}`,
     );
     // The agent cluster has a frontier and serves explicit traffic via the hint.
     const fl = await (await dashFetch('/api/frontiers')).json();
@@ -697,7 +743,7 @@ async function main(): Promise<void> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ days: 30 }),
     });
-    return `7 spans ingested idempotently, loop flagged, ${clResult.clustersCreated} agent cluster(s) → frontier ${agentCluster.clusterId}, hint honored, purge redacted attrs`;
+    return `9 spans ingested idempotently, loop flagged, ${clResult.clustersCreated} agent cluster(s) incl. step-level suite ${stepSuite.suiteId} → frontier ${agentCluster.clusterId}, hint honored, purge redacted attrs`;
   });
 
   // ---- 14. G2.7: operator create → full pipeline → TRUE-CASCADE delete →

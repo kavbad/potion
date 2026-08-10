@@ -233,17 +233,80 @@ describe('sessionToSpans — SPEC §14.1 shape', () => {
       return convertFile(f);
     });
 
-  it('emits root + one span PER TOOL CALL + chat', () => {
+  it('emits root + one span PER TOOL CALL + one llm.call PER TEXT-PRODUCING MODEL CALL + chat', () => {
     const c = conv();
     expect(c.spans.map((s) => s.name)).toEqual([
       'agent.root',
+      'llm.call', // turn 1: 'Searching.' + Bash dispatch
       'tool.Bash',
-      'tool.Read',
+      'tool.Read', // turns 2-3 are pure tool dispatch — no judgeable text, no llm.call
       'tool.Bash',
+      'llm.call', // turn 4: the final answer
       'chat',
     ]);
     // FAITHFUL: three calls → three spans, even though two share a name.
     expect(c.toolCalls).toBe(3);
+    expect(c.llmCalls).toBe(2);
+  });
+
+  it('llm.call spans carry PER-CALL usage/model/completion — not the summed-away totals (Decision 1)', () => {
+    const calls = conv().spans.filter((s) => s.name === 'llm.call');
+    // Turn 1's own tokens, not the session total.
+    expect(calls[0]!.input_tokens).toBe(1200);
+    expect(calls[0]!.output_tokens).toBe(80);
+    expect(calls[0]!.model).toBe('claude-opus-5');
+    expect(calls[0]!.attributes!['gen_ai.completion']).toBe('Searching.');
+    expect(calls[0]!.attributes!['gen_ai.operation.name']).toBe('llm_call');
+    expect(calls[0]!.attributes!['potion.step_index']).toBe(1);
+    expect(calls[1]!.input_tokens).toBe(2000);
+    expect(calls[1]!.attributes!['gen_ai.completion']).toContain('PLATFORM_RETENTION_FLOOR is 0.9');
+    expect(calls[1]!.attributes!['potion.step_index']).toBe(2);
+  });
+
+  it('llm.call step indices are monotone and span ids sort before same-ts tool spans', () => {
+    const c = conv();
+    const idx = c.spans
+      .filter((s) => s.name === 'llm.call')
+      .map((s) => s.attributes!['potion.step_index'] as number);
+    expect(idx).toEqual([...idx].sort((a, b) => a - b));
+    // The platform orders by (ts, spanId); at equal ts the llm.call ('_s')
+    // sorts before its own tool spans ('_t') — text precedes its tool calls.
+    const s1 = c.spans.find((s) => s.name === 'llm.call')!;
+    const t1 = c.spans.find((s) => s.name === 'tool.Bash')!;
+    expect(s1.ts).toBe(t1.ts);
+    expect(s1.span_id < t1.span_id).toBe(true);
+  });
+
+  it('llm.call payloads are scrubbed BEFORE truncation (the security invariant)', () => {
+    withTmpDir((dir) => {
+      const f = path.join(dir, 'agent-secret.jsonl');
+      const key = `sk-or-v1-${'a'.repeat(60)}`;
+      writeFileSync(
+        f,
+        [
+          record({
+            type: 'user',
+            timestamp: '2026-08-08T10:00:00.000Z',
+            message: { role: 'user', content: 'Check the key.' },
+          }),
+          record({
+            type: 'assistant',
+            timestamp: '2026-08-08T10:00:05.000Z',
+            message: {
+              role: 'assistant',
+              model: 'claude-opus-5',
+              usage: { input_tokens: 10, output_tokens: 10 },
+              content: [{ type: 'text', text: `The key is ${key} and it works.` }],
+            },
+          }),
+        ].join('\n'),
+      );
+      const c = convertFile(f);
+      const call = c.spans.find((s) => s.name === 'llm.call')!;
+      const completion = String(call.attributes!['gen_ai.completion']);
+      expect(completion).not.toContain(key);
+      expect(completion).toContain('<secret:openrouter>');
+    });
   });
 
   it('reports the CANONICAL signature (what clustering buckets on)', () => {
@@ -473,7 +536,8 @@ describe('runConvert', () => {
       const out = path.join(dir, 'out');
       const r = await runConvert({ dir, outDir: out, dryRun: true, verifyScrub: true });
       expect(r.sessions).toBe(2);
-      expect(r.spans).toBe(10);
+      // 5 pre-v2 spans + 2 llm.call spans per session (Decision 1).
+      expect(r.spans).toBe(14);
       expect(r.posted).toBe(0);
       expect(r.withReference).toBe(2);
       expect(r.toolSignatures).toEqual({ 'Bash>Read': 2 });

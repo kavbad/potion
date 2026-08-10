@@ -2434,3 +2434,106 @@ directions are closed and regression-locked against their instances.
   the next live ledger reconcile.
 
 | 2026-08-10 | Post-capstone (1) per-call metering: keyless item, no live legs. All spend-path changes verified against the capstone db read-only (fully-cached replay meters zero). | n/a | **$0.0000 real** | no reconcile needed (OpenRouter unchanged) |
+
+## POST-CAPSTONE ITEM 2 — DONE (2026-08-10, session step-level-synthesis)
+
+**Step-level item synthesis (Decision 1).** Each text-producing model call in
+an agentic session becomes an eval item carrying the context that call saw,
+judged against the call's OWN recorded output. Session-level replay — the
+instrument that scored the incumbent 0.2000 on its own traffic — stays only
+for sessions without per-call spans (no flag day) and for single-turn
+workloads, where it remains valid.
+
+### Premise correction (recorded honestly)
+
+"The spans already hold what's needed" was true of the schema, FALSE of the
+data: the G2.8 converter collapsed every assistant turn into ONE terminal
+chat span (tokens summed, last text kept), and the read model destroyed
+prompt↔completion pairing regardless (last completion won). Per-call detail
+survives only in SOURCE transcripts. This item therefore spans converter →
+read model → synthesis. Known limitation, stamped on every step-suite
+manifest: the corpus carries no system prompts and drops thinking blocks, so
+step context is the RECONSTRUCTABLE context — tolerable because judging is
+reference-anchored (G1.4: pearson 0.948 anchored vs 0.544 free).
+
+### What landed
+
+- **Converter v2** (claude-code-to-traces): one `llm.call` span per
+  text-producing assistant record — per-call model + usage +
+  `potion.step_index`, completion scrub-then-truncated; root/tool/terminal
+  chat spans byte-compatible with v1 consumers. Span id `_sN` sorts before
+  same-ts `_tN` (text precedes its tool calls).
+- **Step read model** (db repos/traces): `TraceClusterSource.steps` —
+  `{spanId, stepIndex, completion, model, usage, contextBefore}` folded in
+  the same ordered scan; `turns`/`referenceAnswer`/`toolSequence` semantics
+  untouched; pre-v2 traces yield `steps: []`.
+- **Synthesis** (tracesClusterHandler): step-capable clusters emit step items
+  into a NEW suite generation `-replays-v2` (clean break — v1's
+  merge-only/never-evict semantics make in-place mutation hazardous); legacy
+  members contribute their session item into the same v2 suite; legacy-only
+  clusters stay on v1. Step rubric template (approved rubrics still win via
+  restamp). Manifest carries stepLevel, per-item
+  {sourceTraceId, sourceSpanId, stepIndex}, sampling policy, context caveat.
+- **Sampling policy (volume bounded BEFORE any live leg)**:
+  `AGENT_STEPS_PER_SESSION_CAP = 8` (first + last always, interior evenly
+  spaced — pure index arithmetic, no RNG) and `AGENT_SUITE_ITEM_CAP_V2 = 200`
+  filled session-round-robin in traceId order. Selection lives in synthesis —
+  the db-side sorted-id-prefix cap would have selected steps by hash order.
+- **`derivedSuiteIdFor` resolver** replaces six hardcoded `-replays-v1`
+  sites (suite-verify, live-sweep, rubric-gen, research provenance, frontier
+  provenance, verdict-row fallback): v2-with-items wins, else v1.
+- **Cost consequences built in**: `deriveSuiteVerifyCapUsd(items)` =
+  max($5, items × strategies × $0.03/cell — leg-5b empirical $0.024 + 25%
+  headroom); explicit payload capUsd always wins; projection preflight and
+  the fail-closed budget pre-check (reading the per-call metered record,
+  item 1) unchanged. **Projection at realistic counts: largest capstone
+  cluster 23 sessions × ~40 steps → 184 items; 2-strategy suite-verify
+  ≈ $8.8 worst-case / ~$4–6 expected; 3-strategy sweep ≈ $13 worst-case.**
+- **Honest surface (requirement 4)**: NO-CLAIM PIN added — an agentic cluster
+  with an incumbent but no verdict renders `retention: null` +
+  `retentionUnavailableReason`, never a number (server test). Leaderboard
+  stays structurally closed to agentic clusters (platformOnly).
+
+### Tests (all keyless; 39 converter + 11 db-traces + 32 workers-traces +
+25 suite-verify + 7 report)
+
+Step e2e (llm.call spans → v2 step suite → mock sweep → suite-verify renders
+a 6-pair verdict over the STEP suite from ONE session — vs 1 pair pre-item);
+run-twice byte-identity AND span-insert-order permutation (item-(0)
+discipline); volume (3×12 steps → 8/session, first+last always, cluster cap);
+cap derivation; mixed corpus; legacy fallback; walkthrough step 13 asserts
+the step suite end-to-end (9 spans, `-replays-v2` in cluster outcomes) while
+step 15's legacy cluster keeps its v1 session suite — the no-flag-day proof.
+
+### Gate-item spec (Decision 2 — designed together, ships next)
+
+- Certification subject: (orgId, suiteId, suiteVersion) — the v2 suite id +
+  version column. Re-derivation bumps version → invalidates certification.
+- Metric: FRESH re-eval of the incumbent against the step suite (cache-
+  bypassed or fresh-keyed) judged against recorded references, compared to
+  its recorded baseline. NOT computeRetention over cached rows (tautological
+  1.0) and NOT guarantee:suite-verify as-is (self-incumbent short-circuits).
+- Storage: `suite_certifications` shaped like cluster_rubrics
+  (status pending|certified|failed|superseded, statusReason, evidence jsonb,
+  supersede-don't-mutate), on the rubrics review surface. `mode-mismatch`
+  (item 1) is the negative half.
+- Budget: the suite-verify RECORDED-refusal discipline (never a throw).
+- **The gate is item 2's acceptance test**: the capstone incumbent moving
+  from 0.2000 toward ~1.0 on its own step suite.
+- Also recorded for the gate: gating the retention HEADLINE on certification
+  (0.2707 renders today with only a `low` badge), and the savings report's
+  cluster-blindness (org-total scope — no seam to withhold an uncertified
+  cluster's contribution; cluster scoping is a prerequisite).
+
+### BLOCKED: capstone re-derivation needs the source transcripts
+
+The 48 G2.8 source sessions are NOT on this machine anymore —
+`~/.claude/projects/-Users-kavonbadie-gentaOS/` holds only an empty index
+(transcript retention cleaned it). The capstone db's 1,941 spans are pre-v2
+(no per-call data) and cannot be upgraded in place. The gate item's live
+acceptance leg needs either (a) the owner locating the original transcripts
+(re-convert with converter v2, re-ingest, same cluster ids — tool signatures
+ignore llm.call spans), or (b) a fresh corpus ingested going forward.
+OWNER INPUT REQUIRED before the gate item's live leg.
+
+| 2026-08-10 | Post-capstone (2) step-level synthesis: keyless item, $0. Projection for the gate's live leg computed above (184 items ≈ $8.8 worst-case), not run. | n/a | **$0.0000 real** | no reconcile needed |

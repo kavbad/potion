@@ -699,6 +699,46 @@ describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lo
     expect(attempts.map((a) => a.outcome)).toEqual(['mode-mismatch']);
   });
 
+  it('resolves the STEP-LEVEL suite when one exists: the verdict is rendered over -replays-v2 (post-capstone item 2)', async () => {
+    // A converter-v2 session: 6 llm.call steps → 6 step items (≥ the 5-pair
+    // floor), so the whole retention pipeline runs over the step suite.
+    const t0 = new Date('2026-08-10T09:00:00Z').getTime();
+    const spans = [
+      span({ traceId: 'tr_step', spanId: 'tr_step_root', attrs: { 'gen_ai.prompt': 'Audit the payment retries for account <num>' }, ts: new Date(t0) }),
+      ...Array.from({ length: 6 }, (_, i) =>
+        span({
+          traceId: 'tr_step',
+          spanId: `tr_step_s${i + 1}`,
+          name: 'llm.call',
+          attrs: {
+            'gen_ai.operation.name': 'llm_call',
+            'gen_ai.completion': `step ${i + 1}: checked retry batch ${i + 1}`,
+            'potion.step_index': i + 1,
+          },
+          ts: new Date(t0 + (i + 1) * 60_000),
+        }),
+      ),
+      span({
+        traceId: 'tr_step',
+        spanId: 'tr_step_tool',
+        name: 'tool.billing',
+        attrs: { 'gen_ai.operation.name': 'execute_tool' },
+        ts: new Date(t0 + 60_000),
+      }),
+      span({ traceId: 'tr_step', spanId: 'tr_step_chat', name: 'chat', attrs: { 'gen_ai.completion': 'step 6: checked retry batch 6' }, ts: new Date(t0 + 360_000) }),
+    ];
+    await insertTraceSpans(db.db, spans);
+    await tracesClusterHandler({ orgId: ORG }, ctx());
+    const clusterId = `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['billing'])}`;
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const r = await verify(clusterId);
+    expect(r.outcome).toBe('all-clear');
+    expect(r.retention!.pairs).toBe(6); // 6 step items paired, not 1 session
+    const rows = await listGuaranteeVerdicts(db.db, ORG);
+    expect(rows[0]!.suiteId).toBe(`${clusterId}-replays-v2`);
+  });
+
   it('mock-on-MOCK is untouched: the same cluster without live evidence verifies normally', async () => {
     const clusterId = await seedCluster();
     await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));

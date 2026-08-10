@@ -253,6 +253,9 @@ export interface SessionConversion {
    * on after G2.8. Reported so the operator can predict clustering. */
   toolSignature: string[];
   toolCalls: number;
+  /** Text-producing model calls (llm.call spans emitted) — the step-item
+   * budget this session contributes before sampling. */
+  llmCalls: number;
   hasReference: boolean;
   models: string[];
 }
@@ -263,7 +266,17 @@ export interface SessionConversion {
  * Span layout follows SPEC §14.1's payload conventions exactly:
  *   agent.root   `gen_ai.prompt`     — the task prompt (embedding text, turn 1)
  *   tool.<Name>  `tool.args`/`tool.result` + `gen_ai.operation.name`
- *   chat         `gen_ai.completion` — the FINAL assistant text
+ *   llm.call     `gen_ai.completion` — ONE span per text-producing model call
+ *                (post-capstone item 2 / Decision 1): per-call model, per-call
+ *                usage, `potion.step_index`. These are what step-level item
+ *                synthesis consumes — the pre-v2 layout summed usage across
+ *                all assistant turns and kept only the last text, which is
+ *                why whole-session replay was the only measurement possible.
+ *                Text-producing calls only: a pure tool-dispatch turn has no
+ *                judgeable completion; its activity is in the tool spans.
+ *   chat         `gen_ai.completion` — the FINAL assistant text (unchanged;
+ *                every pre-v2 consumer — clustering turns, session reference,
+ *                tool signatures — reads exactly what it read before)
  *
  * The completion matters more than it looks: it becomes the derived replay
  * item's `reference`, which is what makes the suite REFERENCE-ANCHORED — the
@@ -324,6 +337,7 @@ export function sessionToSpans(
   let finalText = '';
   let lastTs = rootTs;
 
+  let stepIdx = 0;
   for (const r of records) {
     if (r.type !== 'assistant') continue;
     const msg = r.message;
@@ -335,7 +349,28 @@ export function sessionToSpans(
     const content = msg?.content;
     if (!Array.isArray(content)) continue;
     const text = asText(content);
-    if (text.trim() !== '') finalText = text; // last non-empty wins
+    if (text.trim() !== '') {
+      finalText = text; // last non-empty wins (session reference, unchanged)
+      // llm.call: the per-call record step-level synthesis consumes. Same ts
+      // as this record's tool spans; span_id 's' sorts before 't' at equal
+      // ts, matching reality (the assistant text precedes its tool calls).
+      stepIdx += 1;
+      spans.push({
+        trace_id: traceId,
+        span_id: `${traceId}_s${stepIdx}`,
+        parent_id: `${traceId}_root`,
+        name: 'llm.call',
+        ...(msg?.model !== undefined && msg.model !== '<synthetic>' ? { model: msg.model } : {}),
+        input_tokens: msg?.usage?.input_tokens ?? 0,
+        output_tokens: msg?.usage?.output_tokens ?? 0,
+        attributes: {
+          'gen_ai.operation.name': 'llm_call',
+          'gen_ai.completion': safe(text, 8000),
+          'potion.step_index': stepIdx,
+        },
+        ts: typeof r.timestamp === 'string' ? r.timestamp : rootTs,
+      });
+    }
 
     for (const b of content) {
       if (b.type !== 'tool_use' || typeof b.name !== 'string') continue;
@@ -389,6 +424,7 @@ export function sessionToSpans(
     spans: scrubDeep(spans),
     toolSignature,
     toolCalls: toolIdx,
+    llmCalls: stepIdx,
     hasReference: finalText.trim() !== '',
     models: [...models],
   };
