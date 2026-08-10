@@ -37,6 +37,7 @@ import {
   type JobContext,
 } from './handlers.js';
 import { insertTraceSpans, type NewTraceSpan } from '@potion/db';
+import { perCallRequestLogSink } from './spend-sink.js';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
 
@@ -144,6 +145,37 @@ describe('frontier:live-sweep (G1.7)', () => {
     expect(logs).toHaveLength(0);
     const evals = await db.db.select().from(evalResults).where(eq(evalResults.orgId, 'org_ls'));
     expect(evals.filter((r) => r.providerMode === 'live')).toHaveLength(0);
+  });
+
+  it('RATCHET (post-capstone item 1): a run KILLED mid-flight already metered its spend, so the retry is refused at the cap', async () => {
+    const clusterId = await seedCluster();
+    process.env.POTION_EVAL_PROVIDER = 'live';
+    await upsertBudget(db.db, { orgId: 'org_ls', monthlyCapUsd: 1, hardStop: true });
+    // A prior attempt died mid-run AFTER two provider calls. Per-call
+    // metering made both durable as they occurred — no completion, no
+    // aggregate row, no run row. Pre-fix this spend was INVISIBLE to the
+    // pre-check (G2.8 legs 3/4 leaked 60%), so a dying-and-retrying job
+    // could spend past a hard-stop cap forever — the design-partner blocker.
+    const meter = perCallRequestLogSink(db.db, { orgId: 'org_ls', clusterId, status: 'eval_live' });
+    const call = (costUsd: number) => ({
+      provider: 'openrouter' as never,
+      model: 'judge-class',
+      resolvedModel: 'judge-class-v1',
+      inputTokens: 1000,
+      outputTokens: 100,
+      costUsd,
+      latencyMs: 800,
+    });
+    await meter.sink(call(0.5));
+    await meter.sink(call(0.4));
+    // …the process died here. The retry's fail-closed pre-check reads
+    // mtdSpendUsd — which now includes the dead attempt's $0.90.
+    await expect(
+      frontierLiveSweepHandler({ orgId: 'org_ls', clusterId, capUsd: 0.5 }, ctx()),
+    ).rejects.toThrow(OrgBudgetRefusalError);
+    // Refused BEFORE any new spend: still exactly the two dead-run rows.
+    const logs = await db.db.select().from(requestLogs).where(eq(requestLogs.status, 'eval_live'));
+    expect(logs).toHaveLength(2);
   });
 
   it('ownership: another org cannot sweep the cluster', async () => {

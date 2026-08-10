@@ -10,6 +10,7 @@ export * from './aggregate.js';
 export * from './estimate.js';
 export * from './suites.js';
 export * from './runner.js';
+export * from './metered-providers.js';
 export * from './calibrate.js';
 export * from './ingest/index.js';
 export * from './staleness.js';

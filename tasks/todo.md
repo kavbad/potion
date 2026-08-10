@@ -2347,3 +2347,90 @@ legs 3/4), the per-call metering item now has observed defects in BOTH
 directions; the reconcile-both-ways requirement is not theoretical.
 
 | 2026-08-09 | Post-capstone (0) supersession legs: mock-mode re-render (caught, superseded) + live re-render — **zero provider calls both runs** (eval row count unchanged); $0.0413 mock-priced + $1.1045 stored-cost replay re-metered (see over-metering instance). | $8.00 cap | **$0.0000 real** | no reconcile needed (OpenRouter unchanged) |
+
+## POST-CAPSTONE ITEM 1 — DONE (2026-08-10, session metering-per-call)
+
+**Per-call spend metering + the mock-on-live-evidence guard.** Every provider
+call now meters AS SPEND OCCURS, carrying the provider id; completion
+reconciles the record and never writes spend anew. Both filed defect
+directions are closed and regression-locked against their instances.
+
+### What landed
+
+- **`meteredProviders` (harness)** — the ONE seam: wraps the run's provider
+  record (strategy + judge calls share it), computes core-rounded cost per
+  successful call, and AWAITS the sink before returning the response — an
+  unawaited write dies with the process, which was the under-metering bug in
+  miniature. Identity-memoized so `detectProviderMode`'s reference-identity
+  contract survives (a mock set stays mock). Sits outside `resilient()`: one
+  metered spend per successful attempt. Failed calls return no usage — nothing
+  billed. Sink failure fails the call: spend must not proceed invisibly.
+- **`RunDeps.spendSink` + `RunSummary.executedSpendUsd`** — cache hits
+  short-circuit before any provider call, so they meter ZERO **by
+  construction**. `spendUsd` keeps its pinned cache-inclusive meaning
+  (runner.test.ts:383 untouched) but is now documented as EVIDENCE cost;
+  `executedSpendUsd` is what the run actually spent. Billing from the former
+  was the $1.1045 over-metering.
+- **Migration 0030** — nullable `provider` column on `request_logs`. No new
+  table, no new status: per-call rows use `eval_live`/`rubric_gen`, already in
+  the rollup's billing list — budgets/hard-stops/forecasts/invoices see
+  mid-run spend with zero rollup changes. Rows carry REAL token counts (the
+  aggregate rows zeroed them).
+- **Handler sinks + reconcile** (`spend-sink.ts`): live-sweep, suite-verify,
+  and org-live research cycles meter per call; the three aggregate
+  completion-time `insertRequestLog` writes are REMOVED. Completion records
+  `eval_runs.options.metering` = {calls, meteredUsd, perProvider,
+  executedSpendUsd, evidenceCostUsd, deltaUsd} — the per-provider record the
+  operator ledger reconciles against per-key provider bills (the legs-4/5
+  "5× overstatement" was a provider-blind scalar against a single key's
+  bill). Tolerance 1e-5 (rounding accumulation order); past it, a loud warn
+  naming which direction is broken.
+- **Rubric generation + probe calibration** — both direct-call paths now flow
+  through the same metered set; the hand-rolled UNROUNDED cost copy (the
+  fourth in the codebase) is replaced by core `roundCost(costUsd(...))`; the
+  aggregate `calSpendUsd` row is replaced by per-call rows.
+- **`mode-mismatch` guard (suite-verify)** — providerMode mock +
+  `hasLiveEvidence(cluster, org)` → RECORDED refusal (durable 0029 verdict
+  row, advisory attempt appended, advisory stays open), never
+  stamp-and-proceed. This is the leg-5c false-live event as a structural
+  refusal. Mock-on-mock untouched (walkthrough world has no live evidence).
+  **COUPLING (Decision 2):** this refusal is the negative half of the
+  suite-certification gate — certification asserts the suite measures what
+  the guarantee promises; this guard refuses to measure a live contract with
+  a mock instrument. Same review surface when that item lands.
+  `frontier:live-sweep`'s env-gate throw was already pinned
+  (live-sweep.test.ts).
+
+### Tests keyed to the filed instances (all keyless)
+
+- **Kill-mid-run** (runner): two calls journal, run dies on the third — both
+  survive with spend > 0. Pre-fix this spend was invisible (legs 3/4: 60%).
+- **Cache-replay zero** (runner): fully cached resume → 0 sink calls,
+  executedSpendUsd 0, spendUsd unchanged — the $1.1045 instance at the seam.
+- **Ratchet** (live-sweep): a killed attempt's per-call rows + hard-stop cap →
+  the RETRY is refused by the fail-closed pre-check before any new spend —
+  the design-partner blocker closed end-to-end (sink rows → `mtdSpendUsd` →
+  refusal).
+- **Reconcile both directions** (spend-sink): under-metering (legs-3/4
+  magnitudes) and over-metering ($1.1045) both flagged past tolerance;
+  per-provider sums; rubric_gen rows roll up.
+- **Guards** (suite-verify): mock-on-live refuses with durable verdict row +
+  advisory ledger entry; mock-on-mock verifies normally.
+- **Seam units**: identity preservation (mock stays mock, live stays live),
+  provider-scoped price lookup, awaited-before-return ordering, unknown-alias
+  costUsd-0, failed-call no-meter, sink-failure propagation, embed pass-through.
+
+### Recorded residuals (not this item)
+
+- Serving error-path usage: a multi-stage strategy that spent then failed
+  logs $0 usage on its request row — same gap class, serving hot path, own
+  item.
+- Hedge losers' provider-side tokens are unmeterable (winner's usage only).
+- CLI calibrate stays operator-ledgered (no org attribution).
+- Platform (NULL-org) research cycles and mock-only handlers stay unmetered
+  by convention ($0 real spend).
+- The legs-4/5 residual ("internal total still looks high vs the OpenRouter
+  delta") is now ANSWERABLE — the per-provider record exists; resolve it at
+  the next live ledger reconcile.
+
+| 2026-08-10 | Post-capstone (1) per-call metering: keyless item, no live legs. All spend-path changes verified against the capstone db read-only (fully-cached replay meters zero). | n/a | **$0.0000 real** | no reconcile needed (OpenRouter unchanged) |

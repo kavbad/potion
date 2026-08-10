@@ -306,6 +306,10 @@ export const requestLogs = pgTable('request_logs', {
    * log rows outlive policy rows. */
   policyId: text('policy_id'),
   model: text('model'),
+  /** Provider id on per-call job spend rows (0030, post-capstone metering) —
+   * the reconcile against provider-billed reality is per provider. NULL on
+   * serving rows (model implies it) and pre-0030 rows. */
+  provider: text('provider'),
   usage: jsonb('usage').$type<Usage>(),
   latencyMs: doublePrecision('latency_ms'),
   status: text('status'),
@@ -1021,8 +1025,9 @@ export const clusterIncumbents = pgTable('cluster_incumbents', {
 });
 
 /**
- * Durable suite-verify verdicts (0029, post-G2.8). One row per verify, ALL
- * eight outcomes — a verdict is a measurement and measurements are kept
+ * Durable suite-verify verdicts (0029, post-G2.8). One row per verify, EVERY
+ * outcome (the eight 0029 outcomes plus 'mode-mismatch' from the post-capstone
+ * metering item) — a verdict is a measurement and measurements are kept
  * regardless of direction. Pre-0029 an all-clear with no advisory wrote
  * NOTHING, which is why G2.8's contradictory 1.0645 could never be
  * root-caused. `retention` carries the full block incl. pairEvidence (the

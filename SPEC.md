@@ -412,6 +412,7 @@ export interface Metrics {
 - Fastify plugin `observabilityPlugin` wires request counters + GET /metrics (Prometheus text) when `metrics:true`.
 - pino structured logging with `x-request-id` correlation (honors inbound header, else uuid); provider calls log model+duration+cost, never payloads/keys.
 - OTel: `@opentelemetry/sdk-node` lazy-imported only when `otlpEndpoint` set — dependency is optional.
+- **Per-call spend metering (post-G2.8, migration 0030)**: job-side provider calls meter AS SPEND OCCURS — `meteredProviders` (harness) wraps the run's provider record and awaits a `SpendSink` per successful call before returning; handler sinks write one `request_logs` row per call (provider id, real tokens, core-rounded cost, existing `eval_live`/`rubric_gen` statuses). Handler completion RECONCILES (`eval_runs.options.metering`: per-provider sums, `executedSpendUsd` vs metered, delta) and never writes spend anew. `RunSummary.spendUsd` is evidence cost (cache-inclusive); `executedSpendUsd` is what the run spent — billing reads the metered record, so killed runs still count against hard-stops and cache replays bill zero. suite-verify additionally refuses a mock verify on a live-evidence cluster (`mode-mismatch`, durable verdict row).
 
 ### 12.4 Shadow mode + savings report (#21) — apps/server, packages/db, apps/dashboard
 

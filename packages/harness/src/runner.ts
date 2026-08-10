@@ -29,6 +29,7 @@ import { aggregateResults } from './aggregate.js';
 import { BudgetCapError, projectRunCostUsd } from './estimate.js';
 import { loadSuitesV2 } from './ingest/suite-v2.js';
 import { crossCheckItem, type SuiteManifest } from './ingest/manifest.js';
+import { meteredProviders, type SpendSink } from './metered-providers.js';
 import { scoreAnswer } from './scorers.js';
 import { loadSuiteFile, resolveSuite } from './suites.js';
 
@@ -97,6 +98,12 @@ export interface RunDeps {
   suitesDir?: string;
   suitesV2Dir?: string;
   pricesPath?: string;
+  /** Per-call spend metering (post-capstone item 1): when present, the run's
+   * provider set is wrapped with meteredProviders so EVERY successful
+   * complete() — strategy and judge alike — reports its spend before the
+   * response returns. Cache hits short-circuit before any provider call, so
+   * they meter zero by construction. */
+  spendSink?: SpendSink;
 }
 
 /** An item the runner deliberately did not execute (with the reason). */
@@ -118,7 +125,23 @@ export function unrunnableReason(item: EvalItem): string | null {
 export interface RunSummary {
   runId: string;
   aggregates: StrategyAggregate[];
+  /**
+   * EVIDENCE cost: Σ usage.costUsd over every result row in this summary,
+   * INCLUDING resume cache hits (their stored historical cost). This is what
+   * the evidence would have cost to produce — it is NOT what this run spent.
+   * Billing from this number is the filed over-metering instance (a fully
+   * cached re-verify "spent" $1.1045 with zero provider calls); bill from
+   * executedSpendUsd / the per-call metered record instead.
+   */
   spendUsd: number;
+  /**
+   * What THIS run actually spent: Σ (strategy + judge) cost over EXECUTED
+   * items only — cache hits contribute nothing. Completion reconciles this
+   * against the per-call metered record (Σ SpendSink rows); the two differ
+   * only by rounding accumulation order (per-call rounding vs helpers'
+   * round-per-accumulation), bounded well under 1e-5 per run.
+   */
+  executedSpendUsd: number;
   /**
    * Judge-scoring spend included in spendUsd: Σ over this run's EXECUTED
    * llm-judge scorer calls (scorerUsage.costUsd). 0 for runs with no
@@ -362,7 +385,14 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
     throw new BudgetCapError(projectedSpendUsd, opts.budgetCapUsd);
   }
 
-  const providers = createRunProviders(opts.provider ?? 'mock', prices);
+  // Metering wraps the WHOLE record (strategy + judge calls share it) and is
+  // identity-preserving, so detectProviderMode reads the same on either set.
+  // The resolver is rebuilt over the wrapped set — a resolver built over the
+  // originals would route calls around the meter (the context.ts lesson).
+  const rawProviders = createRunProviders(opts.provider ?? 'mock', prices);
+  const providers = deps.spendSink
+    ? meteredProviders(rawProviders, prices, deps.spendSink)
+    : rawProviders;
   const providerMode = opts.providerModeOverride ?? detectProviderMode(providers);
   const ctx = {
     providers,
@@ -381,6 +411,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
     let executed = 0;
     let cacheHits = 0;
     let judgeSpendUsd = 0;
+    let executedSpendUsd = 0;
 
     for (const strategy of opts.strategies) {
       const sh = strategyHash(strategy);
@@ -442,6 +473,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         if (!cached) await insertEvalResult(handle.db, result);
         executed++;
         judgeSpendUsd += scorerUsage?.costUsd ?? 0;
+        executedSpendUsd += usage.costUsd;
         results.push(result);
       }
     }
@@ -477,6 +509,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
       runId,
       aggregates,
       spendUsd,
+      executedSpendUsd,
       judgeSpendUsd,
       projectedSpendUsd,
       executed,

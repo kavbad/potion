@@ -1,0 +1,23 @@
+Post-capstone item 1 verification replay (2026-08-10, against a scratchpad
+COPY of .pglite/g28-live — the curated original untouched):
+
+CHECK 1 — the leg-5c operator error, replayed WITHOUT POTION_EVAL_PROVIDER:
+MODE=(unset) outcome=mode-mismatch providerMode=mock verdictId=53c4719a
+eval_live request_log rows: 4 before → 4 after (delta 0)
+detail: mode mismatch: cluster 'agent-2dfbfb-d8898a' holds LIVE evidence but
+this verify would run MOCK (POTION_EVAL_PROVIDER is not "live") — a mock
+verdict on a live-evidence cluster is a false-live event; re-run with
+POTION_EVAL_PROVIDER=live. No spend occurred.
+  → the mistake that produced the mock 1.0645 "all-clear" now REFUSES with a
+    durable verdict row instead of stamping-and-proceeding.
+
+CHECK 2 — the $1.1045 over-metering instance, WITH POTION_EVAL_PROVIDER=live:
+MODE=live outcome=contractual-breach providerMode=live verdictId=799b0e43
+eval_live request_log rows: 4 before → 4 after (delta 0)
+retention mean=0.2707 ci=[0.1736, 0.3804] pairs=23
+detail: deduped: an unresolved contractual incident already covers this tuple
+  → fully-cached live verify: zero provider calls → ZERO new spend rows.
+    The identical operation pre-fix re-billed $1.1045 of stored evidence
+    cost. Verdict unchanged from the active capstone row (e8e0bdc5).
+
+$0.0000 real spend both checks (all cache hits; OpenRouter unchanged).

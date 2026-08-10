@@ -3,16 +3,15 @@
 // live-provider sweeps stay an operator-run script affair (scripts/m1b-sweep).
 import { fileURLToPath } from 'node:url';
 import {
-  redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi,
+  redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi, costUsd, roundCost,
   type ProviderId, seedFromString, sha256, strategyHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
-  type ChatMessage, type EvalItem, type Policy, type StrategyConfig, type Usage } from '@potion/core';
+  type ChatMessage, type EvalItem, type Policy, type StrategyConfig } from '@potion/core';
 import {
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
   insertClusterRubric,
   insertJudgeCalibration,
-  insertRequestLog,
   loadDerivedSuite,
   purgeDerivedSuiteItems,
   upsertDerivedSuite,
@@ -73,6 +72,7 @@ import {
   loadSuite,
   loadSuiteV2,
   markStale,
+  meteredProviders,
   projectRunCostUsd,
   runEval,
   runRubricProbeCalibration,
@@ -80,6 +80,7 @@ import {
   type RunSummary,
   type StaleCounts,
 } from '@potion/harness';
+import { perCallRequestLogSink, reconcileMetering } from './spend-sink.js';
 import { createProviders, ENV_VAR_BY_PROVIDER, loadPrices } from '@potion/providers';
 // ---- M4b #37 autoresearcher (SPEC §15) ----
 import { writeFileSync } from 'node:fs';
@@ -1535,6 +1536,16 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     let stoppedEarly = false;
     let stopReason: string | null = null;
 
+    // Post-capstone item 1: live ORG cycle spend meters PER CALL as it
+    // occurs (one meter across all suite runs); platform and mock cycles
+    // stay unmetered by convention. No clusterId — the cycle spans suites;
+    // rows roll up under the org like the pre-0030 aggregate row did.
+    const meter =
+      payload.orgId !== undefined && provider === 'live'
+        ? perCallRequestLogSink(ctx.db, { orgId: payload.orgId, status: 'eval_live' })
+        : null;
+    let executedSpendUsd = 0;
+
     for (const suiteId of suiteV2Ids) {
       const suiteItems = suiteItemsById.get(suiteId)!;
       for (const item of suiteItems) clusterIds.add(item.clusterId);
@@ -1563,23 +1574,25 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
           db: ctx.dbHandle,
           pricesPath: ctx.pricesPath,
           ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
+          ...(meter !== null ? { spendSink: meter.sink } : {}),
         },
       );
       spendUsd += summary.spendUsd;
+      executedSpendUsd += summary.executedSpendUsd;
       provenance = summary.providerMode;
       suitesRun.push(suiteId);
     }
 
-    // G1.8: live ORG cycle spend is customer-attributable (G1.7 convention) —
-    // one aggregate eval_live row through the rollup chokepoint.
-    if (payload.orgId !== undefined && provider === 'live' && spendUsd > 0) {
-      await insertRequestLog(ctx.db, {
-        orgId: payload.orgId,
-        model: 'research-cycle',
-        usage: { inputTokens: 0, outputTokens: 0, costUsd: spendUsd, latencyMs: 0 } as Usage,
-        latencyMs: 0,
-        status: 'eval_live',
-      });
+    // G1.8 → post-capstone item 1: live ORG cycle spend is customer-
+    // attributable and now metered PER CALL above; completion RECONCILES the
+    // record instead of writing the pre-0030 aggregate row (which leaked
+    // killed-cycle spend and re-billed cached evidence).
+    if (meter !== null) {
+      reconcileMetering(
+        meter,
+        { executedSpendUsd, spendUsd },
+        `research:cycle ${cycle.id} (${suitesRun.length} suites)`,
+      );
     }
 
     await updateResearchCycle(ctx.db, cycle.id, {
@@ -2612,6 +2625,23 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
   const judgeEntry = classRepresentative(registry, 'judge', providerMode === 'live' ? 'mock' : undefined);
   const judgeAlias = judgeEntry?.alias ?? 'mock-judge';
 
+  // Post-capstone item 1: EVERY live provider call in this handler — the one
+  // generation call AND every probe-calibration judge call — flows through
+  // ONE metered provider set, so each call writes its own rubric_gen row
+  // (real tokens, provider id, core-rounded cost) as spend occurs. This
+  // replaces the hand-rolled unrounded cost math that lived here (the fourth
+  // copy) and the aggregate calibration row that only landed at completion.
+  const meter =
+    providerMode === 'live'
+      ? perCallRequestLogSink(ctx.db, {
+          orgId: payload.orgId,
+          clusterId: payload.clusterId,
+          status: 'rubric_gen',
+        })
+      : null;
+  const liveProviders =
+    meter !== null ? meteredProviders(createProviders({ prices }), prices, meter.sink) : null;
+
   let rubricText: string;
   let generatorModel: string;
   let genSpendUsd = 0;
@@ -2626,35 +2656,20 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
       prices,
     );
     if (projected > capUsd) throw new BudgetCapError(projected, capUsd);
-    const providers = createProviders({ prices });
     const priceRow = prices.entries.find((e) => e.alias === genEntry.alias);
     if (!priceRow) throw new Error(`no price entry for generator '${genEntry.alias}'`);
-    const res = await providers[priceRow.provider].complete({
+    const res = await liveProviders![priceRow.provider].complete({
       model: priceRow.model,
       messages,
       params: { maxTokens: RUBRIC_MAX_OUTPUT_TOKENS, seed: payload.seed ?? 7 },
     });
-    genSpendUsd =
-      (res.usage.inputTokens * priceRow.inputPer1M + res.usage.outputTokens * priceRow.outputPer1M) / 1e6;
+    genSpendUsd = roundCost(costUsd(res.usage, priceRow));
     const validated = validateGeneratedRubric(res.text);
     if (!validated.ok) {
       throw new Error(`generated rubric rejected: ${validated.reason}`);
     }
     rubricText = validated.text;
     generatorModel = genEntry.alias;
-    await insertRequestLog(ctx.db, {
-      orgId: payload.orgId,
-      clusterId: payload.clusterId,
-      model: generatorModel,
-      usage: {
-        inputTokens: res.usage.inputTokens,
-        outputTokens: res.usage.outputTokens,
-        costUsd: genSpendUsd,
-        latencyMs: res.latencyMs,
-      } as Usage,
-      latencyMs: res.latencyMs,
-      status: 'rubric_gen',
-    });
   } else {
     // Deterministic template-DERIVED text (numbered-criteria form, distinct
     // from the synthesis fallback template so approval/restamp is
@@ -2685,7 +2700,9 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
   try {
     const report = await runRubricProbeCalibration(items, rubricText, {
       prices,
-      ...(providerMode === 'live' ? { providers: createProviders({ prices }) } : {}),
+      // Probe-judge calls run through the SAME metered set as generation —
+      // each live call writes its own rubric_gen row as spend occurs.
+      ...(liveProviders !== null ? { providers: liveProviders } : {}),
       judgeModels: [judgeAlias],
       budgetCapUsd: Math.max(0, capUsd - genSpendUsd),
       judgeMaxTokens: RUBRIC_PROBE_JUDGE_MAX_TOKENS,
@@ -2727,22 +2744,25 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
       flagged: t.flagged,
       n: report.n,
     };
-    // Meter probe-judging spend (aggregate row; token counts live on the
-    // provider side — the rollup only bills costUsd for non-'ok' rows).
-    await insertRequestLog(ctx.db, {
-      orgId: payload.orgId,
-      clusterId: payload.clusterId,
-      model: judgeAlias,
-      usage: { inputTokens: 0, outputTokens: 0, costUsd: calSpendUsd, latencyMs: 0 } as Usage,
-      latencyMs: 0,
-      status: 'rubric_gen',
-    });
+    // Probe-judging spend already metered per call above (post-capstone
+    // item 1) — the pre-0030 aggregate row here double-billed nothing only
+    // because it was the sole write; now it would.
   } catch (e) {
     if (e instanceof RubricProbeInsufficientError) {
       uncalibratedReason = `insufficient referenced items (${e.referencedCount} < 3) — uncalibrated`;
     } else {
       throw e;
     }
+  }
+
+  // Completion RECONCILES the per-call record (generation + probe calls),
+  // never writes spend anew.
+  if (meter !== null) {
+    reconcileMetering(
+      meter,
+      { executedSpendUsd: genSpendUsd + calSpendUsd, spendUsd: genSpendUsd + calSpendUsd },
+      `rubric:generate ${payload.clusterId}`,
+    );
   }
 
   const rubricId = await insertClusterRubric(ctx.db, {
@@ -2878,7 +2898,16 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
   }
 
   // 5. The live run — org-attributed, |org/|live cache keys, judge budget +
-  // answer ceiling projection-bound.
+  // answer ceiling projection-bound. Spend meters PER CALL as it occurs
+  // (post-capstone item 1): each successful provider call writes its own
+  // eval_live row before the response returns, so a killed run has already
+  // billed every completed call — the G2.8 legs-3/4 gap ($1.5594 of $2.5881
+  // unmetered) cannot recur, and a fully-cached resume meters zero.
+  const meter = perCallRequestLogSink(ctx.db, {
+    orgId: payload.orgId,
+    clusterId: payload.clusterId,
+    status: 'eval_live',
+  });
   const summary: RunSummary = await runEval(
     {
       suiteIds: [],
@@ -2892,10 +2921,12 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
       judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
       maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
     },
-    { db: ctx.dbHandle, pricesPath: ctx.pricesPath },
+    { db: ctx.dbHandle, pricesPath: ctx.pricesPath, spendSink: meter.sink },
   );
 
-  // 6. Run row (provider 'live', org-attributed).
+  // 6. Run row (provider 'live', org-attributed). Completion RECONCILES the
+  // per-call record — it never writes spend anew (the pre-0030 aggregate row
+  // both leaked killed-run spend and re-billed cached evidence).
   await ctx.db.insert(evalRuns).values({
     id: summary.runId,
     options: {
@@ -2903,30 +2934,13 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
       suiteV2Ids: [suiteId],
       strategyHashes: [...byHash.keys()],
       agentCluster: payload.clusterId,
+      metering: reconcileMetering(meter, summary, `frontier:live-sweep ${payload.clusterId}`),
     },
     budgetCapUsd: capUsd,
     provider: 'live',
     status: 'completed',
     spendUsd: summary.spendUsd,
     orgId: payload.orgId,
-  });
-
-  // 7. Customer-attributable metering: ONE aggregate eval_live row (model
-  // label neutral — three models spent). KNOWN GAP (documented): a provider
-  // error mid-run can spend without reaching this line; the operator ledger
-  // reconciles.
-  await insertRequestLog(ctx.db, {
-    orgId: payload.orgId,
-    clusterId: payload.clusterId,
-    model: 'eval-sweep',
-    usage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      costUsd: summary.spendUsd,
-      latencyMs: 0,
-    } as Usage,
-    latencyMs: 0,
-    status: 'eval_live',
   });
 
   // 8. Provenance-pure LIVE aggregation → the servable org frontier.
@@ -3097,7 +3111,12 @@ export interface GuaranteeSuiteVerifyResult {
     | 'incumbent-unresolvable'
     | 'no-suite'
     | 'insufficient-pairs'
-    | 'budget-refused';
+    | 'budget-refused'
+    /** Post-capstone item 1 guard: a MOCK verify against a cluster that holds
+     * LIVE evidence is a false-live event — the leg-5c defect (env unset →
+     * silent mock degrade → 1.0645 "all-clear" on a live contract). Refused
+     * and recorded, never stamped-and-proceeded. */
+    | 'mode-mismatch';
   providerMode: ProviderMode;
   runId: string | null;
   spendUsd: number;
@@ -3187,6 +3206,26 @@ const runSuiteVerify = async (
       await appendIncidentVerifyAttempt(ctx.db, payload.orgId, payload.restoreForIncidentId, { at, outcome, detail });
     }
   };
+
+  // Mode guard (post-capstone item 1, the companion to Decision 2's
+  // suite-certification gate): a mock verify on a cluster with LIVE evidence
+  // would render a mock verdict against a live contract — exactly the leg-5c
+  // false-live event (POTION_EVAL_PROVIDER unset → silent degrade → mock
+  // 1.0645 "all-clear" superseding a live 0.2707 breach). Certification
+  // asserts the suite measures what the guarantee promises; this refusal is
+  // its negative half — the instrument declines to measure a live contract in
+  // mock mode. A RECORDED outcome, not a throw: the 0029 chokepoint makes the
+  // refusal durable, recordAttempt keeps the advisory ledger honest, and the
+  // advisory stays open for a correctly-configured retry. Mock-on-mock stays
+  // fully allowed (the walkthrough world has no live evidence).
+  if (providerMode === 'mock' && (await hasLiveEvidence(ctx.db, payload.clusterId, payload.orgId))) {
+    const detail =
+      `mode mismatch: cluster '${payload.clusterId}' holds LIVE evidence but this verify would run ` +
+      'MOCK (POTION_EVAL_PROVIDER is not "live") — a mock verdict on a live-evidence cluster is a ' +
+      'false-live event; re-run with POTION_EVAL_PROVIDER=live. No spend occurred.';
+    await recordAttempt('mode-mismatch', detail);
+    return { ...base, outcome: 'mode-mismatch', detail };
+  }
 
   // Designation — recorded outcomes (the advisory stays open).
   const incumbent = await activeIncumbent(ctx.db, payload.orgId, payload.clusterId);
@@ -3297,7 +3336,19 @@ const runSuiteVerify = async (
   }
 
   // The paired re-eval: |org / mode-suffixed cache keys make the incumbent
-  // leg cheap on repeat verifies (resume:true).
+  // leg cheap on repeat verifies (resume:true). Live spend meters PER CALL
+  // as it occurs (post-capstone item 1) — the pre-0030 aggregate row billed
+  // summary.spendUsd at completion, which is cache-INCLUSIVE: the filed
+  // $1.1045 over-metering was THIS site re-billing a fully-cached re-verify.
+  // Cache hits never reach a provider, so they meter zero by construction.
+  const meter =
+    providerMode === 'live'
+      ? perCallRequestLogSink(ctx.db, {
+          orgId: payload.orgId,
+          clusterId: payload.clusterId,
+          status: 'eval_live',
+        })
+      : null;
   const summary: RunSummary = await runEval(
     {
       suiteIds: [],
@@ -3312,8 +3363,13 @@ const runSuiteVerify = async (
         ? { judgeMaxTokens: LIVE_SWEEP_JUDGE_MAX_TOKENS, maxOutputTokens: LIVE_SWEEP_ANSWER_MAX_TOKENS }
         : {}),
     },
-    { db: ctx.dbHandle, pricesPath: ctx.pricesPath },
+    {
+      db: ctx.dbHandle,
+      pricesPath: ctx.pricesPath,
+      ...(meter !== null ? { spendSink: meter.sink } : {}),
+    },
   );
+  // Completion RECONCILES the per-call record — it never writes spend anew.
   await ctx.db.insert(evalRuns).values({
     id: summary.runId,
     options: {
@@ -3322,6 +3378,9 @@ const runSuiteVerify = async (
       strategyHashes: [payload.servingStrategyHash, incumbent.strategyHash],
       agentCluster: payload.clusterId,
       purpose: 'guarantee:suite-verify',
+      ...(meter !== null
+        ? { metering: reconcileMetering(meter, summary, `suite-verify ${payload.clusterId}`) }
+        : {}),
     },
     budgetCapUsd: capUsd,
     provider: providerMode,
@@ -3329,17 +3388,6 @@ const runSuiteVerify = async (
     spendUsd: summary.spendUsd,
     orgId: payload.orgId,
   });
-  if (providerMode === 'live' && summary.spendUsd > 0) {
-    // Customer-attributable metering through the rollup chokepoint.
-    await insertRequestLog(ctx.db, {
-      orgId: payload.orgId,
-      clusterId: payload.clusterId,
-      model: 'suite-verify',
-      usage: { inputTokens: 0, outputTokens: 0, costUsd: summary.spendUsd, latencyMs: 0 } as Usage,
-      latencyMs: 0,
-      status: 'eval_live',
-    });
-  }
   const spent = { ...base, runId: summary.runId, spendUsd: summary.spendUsd };
 
   // Retention over identical items, mode-filtered pairing.

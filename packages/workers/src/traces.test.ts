@@ -614,10 +614,12 @@ describe('rubric:generate (G1.5)', () => {
     // mock judge can't discriminate an unknown corpus → honestly flagged
     expect(cal.flagged).toBe(true);
 
-    // Metered: a rubric_gen request_logs row exists for the org.
+    // Post-capstone item 1: metering is PER CALL and live-only. A mock run
+    // makes zero live provider calls, so it writes ZERO rubric_gen rows —
+    // the pre-0030 $0 aggregate row here was a phantom (billing noise, not
+    // spend). Live per-call rows are locked in spend-sink.test.ts.
     const logs = await db.db.select().from(requestLogs).where(eq(requestLogs.status, 'rubric_gen'));
-    expect(logs.length).toBeGreaterThanOrEqual(1);
-    expect(logs[0]!.orgId).toBe('org_a');
+    expect(logs).toHaveLength(0);
 
     // The suite currently carries the TEMPLATE rubric.
     const suiteId = `${clusterId}-replays-v1`;

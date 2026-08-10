@@ -305,3 +305,14 @@ provenance field on it before theorizing — mode, seed, run id, prices version.
 And when designing records: put the provenance ON the row that carries the
 contested value, not one join away. The 0029 table caught in minutes what three
 investigation passes missed.
+
+## Meter where spend occurs, not where success is reported (2026-08-10)
+
+Both filed metering defects — 60% of the capstone's spend invisible to
+hard-stops, and $1.1045 billed for a run with zero provider calls — were ONE
+defect: the spend write lived at handler completion, so it fired exactly when
+it shouldn't (cached success) and not at all when it should (mid-run death).
+A billing record must be written at the seam where money leaves (the provider
+call), awaited before the response is used, and merely RECONCILED at
+completion. Corollary: correctness is a both-directions property — a path
+that is only conservative in one direction is still wrong, just politely.

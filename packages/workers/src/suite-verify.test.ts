@@ -10,13 +10,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { strategyHash, type Policy, type StrategyConfig } from '@potion/core';
+import { strategyHash, type EvalResult, type Policy, type StrategyConfig } from '@potion/core';
 import {
   createDb,
   createOrg,
   designateIncumbent,
   evalRuns,
   getIncidentByIdForOrg,
+  insertEvalResult,
   insertIncident,
   insertPolicy,
   insertQualitySample,
@@ -633,5 +634,77 @@ describe('guarantee_verdicts durability (0029)', () => {
     const rows = await listGuaranteeVerdicts(db.db, ORG);
     expect(rows).toHaveLength(2);
     expect(JSON.stringify(rows[0]!.retention)).toBe(JSON.stringify(rows[1]!.retention));
+  });
+});
+
+describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lock)', () => {
+  /** One live-provenance eval row is all hasLiveEvidence needs. */
+  function liveEvalRow(clusterId: string): EvalResult {
+    return {
+      runId: 'run-live-ev',
+      itemId: 'item-live-1',
+      clusterId,
+      strategyHash: H_SERVING,
+      strategyConfig: CFG_SERVING,
+      quality: 0.8,
+      scorer: 'llm-judge',
+      usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.01, latencyMs: 1 },
+      latencyMs: { p50: 1, p95: 1, mean: 1 },
+      modelVersions: {},
+      pricesVersion: 'pv-live',
+      providerMode: 'live',
+      orgId: ORG,
+      cacheKey: `ck-live-${clusterId}`,
+      createdAt: '2026-08-09T00:00:00.000Z',
+    };
+  }
+
+  it('a MOCK verify on a LIVE-evidence cluster refuses with a DURABLE verdict row — never stamps-and-proceeds', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    await insertEvalResult(db.db, liveEvalRow(clusterId));
+    // POTION_EVAL_PROVIDER deliberately unset (beforeEach) — the exact leg-5c
+    // operator error: the handler would silently degrade to mock and render
+    // a mock 1.0645 "all-clear" against a live contract.
+    const r = await verify(clusterId);
+    expect(r.outcome).toBe('mode-mismatch');
+    expect(r.detail).toContain('POTION_EVAL_PROVIDER=live');
+    expect(r.detail).toContain('false-live event');
+    expect(r.spendUsd).toBe(0);
+    expect(r.runId).toBeNull(); // refused BEFORE any eval run
+    // The refusal is a measurement: durable 0029 row, honest mock stamp.
+    expect(r.verdictId).not.toBeNull();
+    const rows = await listGuaranteeVerdicts(db.db, ORG);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.outcome).toBe('mode-mismatch');
+    expect(rows[0]!.providerMode).toBe('mock');
+  });
+
+  it('appends the refusal to an attached advisory ledger — the advisory stays open for a live retry', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith());
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    await insertEvalResult(db.db, liveEvalRow(clusterId));
+    const advisoryId = await insertIncident(db.db, {
+      orgId: ORG,
+      kind: 'advisory',
+      detail: { leg: 'serve', policyId: PID, clusterId, fromStrategy: H_SERVING, ci95: [0.28, 0.32] },
+    });
+    const r = await verify(clusterId, { advisoryIncidentId: advisoryId });
+    expect(r.outcome).toBe('mode-mismatch');
+    const advisory = await getIncidentByIdForOrg(db.db, ORG, advisoryId);
+    expect(advisory!.resolvedAt).toBeNull();
+    const attempts = (advisory!.detail as Record<string, unknown>).verifyAttempts as Array<{ outcome: string }>;
+    expect(attempts.map((a) => a.outcome)).toEqual(['mode-mismatch']);
+  });
+
+  it('mock-on-MOCK is untouched: the same cluster without live evidence verifies normally', async () => {
+    const clusterId = await seedCluster();
+    await seedPolicyAndStrategies(guaranteeWith({ retentionFloor: 0 }));
+    await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
+    const r = await verify(clusterId);
+    expect(r.outcome).toBe('all-clear'); // the walkthrough world keeps working
+    expect(r.providerMode).toBe('mock');
   });
 });

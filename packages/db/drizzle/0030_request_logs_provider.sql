@@ -1,0 +1,16 @@
+-- 0030 — per-call spend metering (post-capstone item 1).
+--
+-- Job-side spend previously reached request_logs as ONE aggregate row at
+-- handler completion. Both filed failure directions follow from that shape:
+-- a killed leg leaked its spend (G2.8 legs 3/4: $1.5594 of $2.5881 never
+-- metered — a dying-and-retrying job can spend past a hard-stop cap), and a
+-- fully-cached re-run re-billed evidence cost as new spend ($1.1045, zero
+-- provider calls). Per-call rows written AS SPEND OCCURS close both; the
+-- owner requirement is that each row carries the provider id so the record
+-- reconciles against provider-billed reality per provider.
+--
+-- Nullable: serving rows (model implies the provider; per-request metering
+-- already exists there) and all pre-0030 rows have no value. Job per-call
+-- rows set it. No new status — per-call rows use the existing spend statuses
+-- ('eval_live', 'rubric_gen'), already in the usage rollup's billing list.
+ALTER TABLE request_logs ADD COLUMN IF NOT EXISTS provider text;

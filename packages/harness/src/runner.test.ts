@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { roundCost, type EvalItem, type ScoringMethod, sha256 } from '@potion/core';
-import { createDb, getEvalResultByCacheKey, type DbHandle } from '@potion/db';
+import { createDb, createOrg, getEvalResultByCacheKey, type DbHandle } from '@potion/db';
 import { createMockProvider, evalTaskById, hashString } from '@potion/providers';
 import { BudgetCapError, estimateItemCostUsd } from './estimate.js';
 import { MockAliasInLiveRunError, SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
+import type { SpendCall } from './metered-providers.js';
 import { buildJudgeScoreMessages } from './scorers.js';
 import { loadPrices } from '@potion/providers';
 import { strategyHash } from '@potion/core';
@@ -381,6 +382,97 @@ describe('runEval', () => {
     expect(second.cacheHits).toBe(2);
     expect(second.executed).toBe(0);
     expect(second.spendUsd).toBeCloseTo(expectedSpend, 12);
+  });
+
+  it('meters every provider call through deps.spendSink; cache hits meter ZERO', async () => {
+    // Distinct org → distinct cache keys → fresh executions on this handle.
+    await createOrg(handle.db, { id: 'org-metering', name: 'Metering Test Org' });
+    const calls: SpendCall[] = [];
+    const opts = {
+      suiteIds: ['creative'],
+      strategies: [{ type: 'single', model: 'm-cheap-answer' } as const],
+      budgetCapUsd: 25,
+      resume: true,
+      orgId: 'org-metering',
+    };
+    const first = await runEval(opts, {
+      db: handle,
+      suitesDir: suiteDir,
+      pricesPath: PRICED_PRICES_PATH,
+      spendSink: (c) => {
+        calls.push(c);
+      },
+    });
+    // 2 items × (1 strategy call + 1 judge call) — the judge flows through the
+    // SAME wrapped record, no separate seam.
+    expect(first.executed).toBe(2);
+    expect(calls).toHaveLength(4);
+    expect(calls.map((c) => c.model).sort()).toEqual([
+      'm-cheap-answer',
+      'm-cheap-answer',
+      'm-judge',
+      'm-judge',
+    ]);
+    for (const c of calls) {
+      expect(c.provider).toBe('mock');
+      expect(c.inputTokens).toBeGreaterThan(0);
+      expect(c.costUsd).toBeGreaterThan(0);
+    }
+    // Per-call metered total == the run's executed spend (both sides round
+    // per call here; multi-call strategies may differ by accumulation-order
+    // rounding, bounded ≪ 1e-5).
+    const metered = calls.reduce((a, c) => a + c.costUsd, 0);
+    expect(metered).toBeCloseTo(first.executedSpendUsd, 12);
+    expect(first.executedSpendUsd).toBeCloseTo(first.spendUsd, 12); // fresh run: identical
+
+    // THE filed over-metering instance, at the runner level: a fully cached
+    // resume makes ZERO provider calls → meters zero → executedSpendUsd 0,
+    // while spendUsd keeps its pinned evidence-cost meaning.
+    const replayCalls: SpendCall[] = [];
+    const second = await runEval(opts, {
+      db: handle,
+      suitesDir: suiteDir,
+      pricesPath: PRICED_PRICES_PATH,
+      spendSink: (c) => {
+        replayCalls.push(c);
+      },
+    });
+    expect(second.cacheHits).toBe(2);
+    expect(replayCalls).toHaveLength(0);
+    expect(second.executedSpendUsd).toBe(0);
+    expect(second.spendUsd).toBeCloseTo(first.spendUsd, 12);
+  });
+
+  it('spend metered before a mid-run death survives (the under-metering instance)', async () => {
+    // Simulate a killed handler: the sink journals two calls, then the run
+    // dies mid-item. Everything delivered to the sink BEFORE the death is
+    // durable — because meteredProviders awaits the sink pre-return, nothing
+    // depends on reaching completion.
+    await createOrg(handle.db, { id: 'org-metering-kill', name: 'Metering Kill Org' });
+    const journal: SpendCall[] = [];
+    let n = 0;
+    await expect(
+      runEval(
+        {
+          suiteIds: ['creative'],
+          strategies: [{ type: 'single', model: 'm-cheap-answer' }],
+          budgetCapUsd: 25,
+          orgId: 'org-metering-kill',
+        },
+        {
+          db: handle,
+          suitesDir: suiteDir,
+          pricesPath: PRICED_PRICES_PATH,
+          spendSink: (c) => {
+            if (++n > 2) throw new Error('SIGKILL (simulated mid-run death)');
+            journal.push(c);
+          },
+        },
+      ),
+    ).rejects.toThrow('SIGKILL');
+    expect(journal).toHaveLength(2);
+    const leaked = journal.reduce((a, c) => a + c.costUsd, 0);
+    expect(leaked).toBeGreaterThan(0); // pre-fix this spend was invisible to caps
   });
 
   it('composite strategies produce intermediate latency profiles', async () => {
