@@ -568,6 +568,12 @@ export type AlertEvent =
   // frontier version. Pure TS addition — alert_rules.events is text[] with
   // no DB-level CHECK, so no migration is needed for the wider vocabulary.
   | 'recipe_promoted'
+  // F7: the certified INSTRUMENT changed underneath a live certification —
+  // a retention purge or a rubric restamp. Emitted with the certified and
+  // live content hashes so the customer can see exactly what moved, and
+  // paired with an automatic suite:certify enqueue: a scheduled purge must
+  // never silently lapse a guarantee.
+  | 'certification_invalidated'
   // G2.2 trust-hierarchy SLA conditions (TS-only widening, same contract):
   // guarantee_unverifiable — an OPEN advisory aged past its verifySlaMin
   //   without a contractual verdict (starved verification; distinct from
@@ -1011,7 +1017,15 @@ export type NewClusterRubric = typeof clusterRubrics.$inferInsert;
 // Lifecycle mirrors cluster_rubrics; 'pending' is reserved vocabulary (the
 // job measures and writes certified/failed directly; refusals are 'failed'
 // rows with evidence.refused = true — REFUSED, NOT MEASURED).
-export type SuiteCertificationStatus = 'pending' | 'certified' | 'failed' | 'superseded';
+/** F7 adds 'invalidated': the instrument moved underneath a measurement
+ * nobody repeated. Distinct from 'superseded', which means a newer
+ * MEASUREMENT replaced this one — different fact, different remedy. */
+export type SuiteCertificationStatus =
+  | 'pending'
+  | 'certified'
+  | 'failed'
+  | 'superseded'
+  | 'invalidated';
 
 export const suiteCertifications = pgTable('suite_certifications', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -1021,6 +1035,10 @@ export const suiteCertifications = pgTable('suite_certifications', {
   clusterId: text('cluster_id').notNull(),
   suiteId: text('suite_id').notNull(),
   suiteVersion: text('suite_version').notNull(),
+  /** F7: sha256 over the id-sorted item roster (prompt, reference, scoring) at
+   * certification time — the identity of what was actually vouched for. NULL =
+   * certified before F7; the gate treats that as NOT certified, fail-closed. */
+  suiteContentHash: text('suite_content_hash'),
   /** NULL on refused-before-designation rows (no incumbent to measure). */
   incumbentHash: text('incumbent_hash'),
   incumbentDesignationId: uuid('incumbent_designation_id'),

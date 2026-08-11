@@ -12,6 +12,7 @@ import {
   listSuiteCertifications,
   migrate,
   upsertDerivedSuite,
+  computeSuiteContentHash,
   type DbHandle,
   type NewSuiteCertification,
 } from './index.js';
@@ -26,6 +27,14 @@ async function migratedDb(): Promise<DbHandle> {
   await migrate(h.db);
   await seedIsolationOrgs(h.db);
   return h;
+}
+
+/** F7: a certification must record the hash of the instrument it vouched for.
+ * The fixture computes the REAL hash from the seeded suite rather than stubbing
+ * one — a fixture that fakes certification identity is the tests-encoding-
+ * defects pattern this codebase has been bitten by repeatedly. */
+async function certRowFor(h: DbHandle, over: Partial<NewSuiteCertification> = {}): Promise<NewSuiteCertification> {
+  return certRow({ suiteContentHash: await computeSuiteContentHash(h.db, SUITE), ...over });
 }
 
 function certRow(over: Partial<NewSuiteCertification> = {}): NewSuiteCertification {
@@ -161,7 +170,7 @@ describe('certificationStateForCluster (the gating predicate)', () => {
   it('certification for the CURRENT suite version certifies; a re-derivation bump INVALIDATES it', async () => {
     const h = await migratedDb();
     await seedSuite(h); // version 1.0.0 (created)
-    await insertSuiteCertificationTx(h.db, certRow({ suiteVersion: '1.0.0' }));
+    await insertSuiteCertificationTx(h.db, await certRowFor(h, { suiteVersion: '1.0.0' }));
     const ok = await certificationStateForCluster(h.db, CLUSTER, ORG);
     expect(ok.certified).toBe(true);
     expect(ok.certification!.suiteVersion).toBe('1.0.0');
@@ -176,7 +185,7 @@ describe('certificationStateForCluster (the gating predicate)', () => {
   it('another org cannot borrow a certification (org checked on suite AND row)', async () => {
     const h = await migratedDb();
     await seedSuite(h);
-    await insertSuiteCertificationTx(h.db, certRow({ suiteVersion: '1.0.0' }));
+    await insertSuiteCertificationTx(h.db, await certRowFor(h, { suiteVersion: '1.0.0' }));
     const state = await certificationStateForCluster(h.db, CLUSTER, ORG_B);
     expect(state.certified).toBe(false);
     await h.close();
@@ -215,7 +224,7 @@ describe('certificationStateForCluster (the gating predicate)', () => {
     expect(none.currentSuiteId).toBe(`${CLUSTER}-replays-v1`); // no v2 items yet
     // Certified and current.
     await seedSuite(h);
-    await insertSuiteCertificationTx(h.db, certRow({ suiteVersion: '1.0.0' }));
+    await insertSuiteCertificationTx(h.db, await certRowFor(h, { suiteVersion: '1.0.0' }));
     const ok = await certificationStateForCluster(h.db, CLUSTER, ORG);
     expect(ok).toMatchObject({ certified: true, currentSuiteId: SUITE, currentSuiteVersion: '1.0.0' });
     await h.close();

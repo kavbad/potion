@@ -3288,3 +3288,82 @@ property working exactly as designed. Its subject needed correcting too:
 the test now asserts what production actually constructs.
 
 | 2026-08-10 | F19 breaker + signal forwarding: keyless, stubbed fetch, no live legs. | n/a | **$0.0000** | no reconcile needed |
+
+## F7 — DONE (2026-08-11): certification bound to what the suite MEANS
+
+The last open CRITICAL. It does not gate a partner's first request; it gates
+the honesty of the first certified retention figure, and that figure is the
+product.
+
+### Measured first, three cases on a certified 6-item suite
+
+| | Change | Before |
+|---|---|---|
+| **A** | every item's judge rubric rewritten (`restampDerivedSuiteRubric`) | **`certified = true`**, silently |
+| **C** | half the items purged — an ordinary retention cutoff | **`certified = true`**, 3 of 6 left |
+| B | all items purged | `certified = false`, but **by accident**: `derivedSuiteIdFor` falls back to `-replays-v1` on an empty suite, so the reason blamed a missing suite instead of naming what happened |
+
+**Root cause**: identity was `(suiteId, suiteVersion)`, and `suiteVersion`
+moved in exactly one place — `upsertDerivedSuite`, `if (!created &&
+itemsAdded > 0)`. It tracked ADDITIONS only. Not a weak key; a key to the
+wrong thing.
+
+### The fix
+
+- **`suiteContentHash`** (core): sha256 over the **id-sorted** item roster —
+  per item the prompt, reference, and scoring (which carries the rubric, judge
+  model, and scale). Order-independent by construction, because insertion
+  order is not part of what a suite means and a gate that flipped on scan
+  order would be a random refusal generator.
+- **Migration 0034**: `suite_content_hash` on `suite_certifications`, plus a
+  new terminal status `invalidated`.
+- The gate **recomputes the hash live** and refuses on drift, naming what
+  changed instead of quoting a version number.
+- **NULL hash ⇒ fail closed.** A row predating the binding cannot demonstrate
+  what it vouched for, and an instrument that cannot prove its identity has
+  not been vouched for.
+- **Version now moves on removal and restamp too.** The hash enforces; the
+  version is what a person reads, and it used to actively mislead.
+
+### Owner additions
+
+**Case B names the actual state**: *"every item of '<suite>' has been purged
+(retention), so there is no instrument left to measure on — the prior
+certification is void; re-derive and re-certify"*, carrying the prior
+certification. The test asserts the old misleading text is GONE, not merely
+that the new text is present.
+
+**Invalidation is visible and notifiable.** `invalidated` is deliberately
+distinct from `superseded`: superseded means a newer MEASUREMENT replaced this
+one; invalidated means the instrument moved underneath a measurement nobody
+repeated — different fact, different remedy. `tracesPurgeHandler` demotes
+drifted rows, emits the new **`certification_invalidated`** alert carrying
+both hashes and the trigger, and **enqueues `suite:certify`** so the remedy is
+in flight before the customer reads the alert. Idempotent: a second purge does
+not re-alert.
+
+**The certified hash is on the customer surface** (`/api/certifications`), so
+"certified" names something inspectable rather than a version label.
+
+### Flag answered: nothing encoded version-stability-on-removal
+
+The only two version assertions (`derived-suites.test.ts:52,63`) are about
+ADDITION — creation at 1.0.0, and a no-op re-upsert staying at 1.0.0. Both
+still hold. Nothing to reconcile.
+
+### Two existing certification tests failed, correctly
+
+Their fixtures certified with a version but no content hash, so the
+fail-closed branch refused them — the branch working. Per the standing rule
+that fixtures must reconstruct REAL certifications rather than stub them, the
+fixture now computes the actual hash from the seeded suite instead of the gate
+being relaxed to accommodate it.
+
+### The guard that matters as much as the fix
+
+**A no-op re-derivation must NOT invalidate.** Without it the fix would trade
+a silent false-certify for a noisy false-refuse, which is its own dishonesty.
+Tested, along with hash order-independence, byte-stability across re-reads,
+fail-closed on NULL, and idempotent invalidation.
+
+| 2026-08-11 | F7 certification content binding: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |

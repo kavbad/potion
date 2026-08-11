@@ -25,3 +25,39 @@ export function sha256(input: string): string {
 export function strategyHash(cfg: unknown): string {
   return sha256(canonicalJson(cfg));
 }
+
+/**
+ * The identity of what a suite MEASURES (F7).
+ *
+ * Certification used to be keyed on `(suiteId, suiteVersion)`, and the version
+ * moves in exactly one place — when items are ADDED. So removal never moved
+ * it, and rewriting every item's judge rubric never moved it: a suite could be
+ * halved by a retention purge, or re-scored against a completely different
+ * rubric, and its certification stood. Measured, all three cases.
+ *
+ * This hashes the set that actually determines the measurement: the item
+ * roster plus, per item, the prompt, the reference answer, and the scoring
+ * config (which carries the rubric, the judge model, and the scale).
+ *
+ * Order-independent by construction — items are sorted by id before hashing —
+ * because insertion order is not part of what a suite means, and a gate that
+ * flipped on row order would be a random refusal generator.
+ */
+export function suiteContentHash(
+  items: ReadonlyArray<{
+    itemId: string;
+    prompt: unknown;
+    reference?: unknown;
+    scoring: unknown;
+  }>,
+): string {
+  const canonical = [...items]
+    .sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0))
+    .map((i) => ({
+      itemId: i.itemId,
+      prompt: i.prompt,
+      reference: i.reference ?? null,
+      scoring: i.scoring,
+    }));
+  return sha256(canonicalJson(canonical));
+}

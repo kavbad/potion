@@ -4,7 +4,7 @@
 // the roster is the deterministic id-ordered head up to the cap, and the
 // suite's patch version bumps only when the item roster changed.
 import { and, asc, eq, lt, sql } from 'drizzle-orm';
-import type { EvalItem } from '@potion/core';
+import { suiteContentHash, type EvalItem } from '@potion/core';
 import type { PotionDb } from '../db.js';
 import {
   derivedSuiteItems,
@@ -182,6 +182,9 @@ export async function restampDerivedSuiteRubric(
       ),
     )
     .returning({ itemId: derivedSuiteItems.itemId });
+  // F7: re-scoring every item against a different rubric is the single
+  // largest change to what a suite means. Same prompts, different question.
+  if (updated.length > 0) await bumpSuiteVersion(db, suiteId);
   return updated.length;
 }
 
@@ -217,6 +220,10 @@ export async function purgeDerivedSuiteItems(
     itemsDeleted += deleted.length;
     purgedItemIds.push(...deleted.map((d) => d.itemId));
     if (deleted.length > 0) {
+      // F7: removal changes what the suite measures, so the version moves.
+      // It used to move only on ADDITION, which let a retention cutoff halve
+      // an instrument while its label — and its certification — stood still.
+      await bumpSuiteVersion(db, suiteId);
       const remaining = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(derivedSuiteItems)
@@ -225,4 +232,46 @@ export async function purgeDerivedSuiteItems(
     }
   }
   return { itemsDeleted, suitesEmptied, purgedItemIds };
+}
+
+/**
+ * The CURRENT content hash of a suite (F7) — recomputed from the live rows,
+ * never cached, because the whole point is to notice when it has drifted from
+ * what a certification vouched for.
+ */
+export async function computeSuiteContentHash(db: PotionDb, suiteId: string): Promise<string> {
+  const rows = await db
+    .select({
+      itemId: derivedSuiteItems.itemId,
+      prompt: derivedSuiteItems.prompt,
+      reference: derivedSuiteItems.reference,
+      scoring: derivedSuiteItems.scoring,
+    })
+    .from(derivedSuiteItems)
+    .where(eq(derivedSuiteItems.suiteId, suiteId));
+  return suiteContentHash(
+    rows.map((r) => ({
+      itemId: r.itemId,
+      prompt: r.prompt,
+      reference: r.reference,
+      scoring: r.scoring,
+    })),
+  );
+}
+
+/** Bump a suite's patch version (F7: removal and restamp change what the
+ * suite means, so the human-readable label must move too — it used to move
+ * only on ADDITION, which made it quietly misleading). */
+export async function bumpSuiteVersion(db: PotionDb, suiteId: string): Promise<string | null> {
+  const rows = await db
+    .select({ version: derivedSuites.version })
+    .from(derivedSuites)
+    .where(eq(derivedSuites.suiteId, suiteId));
+  if (rows.length === 0) return null;
+  const next = bumpPatch(rows[0]!.version ?? '1.0.0');
+  await db
+    .update(derivedSuites)
+    .set({ version: next, updatedAt: new Date() })
+    .where(eq(derivedSuites.suiteId, suiteId));
+  return next;
 }

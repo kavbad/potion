@@ -104,6 +104,13 @@ export function registerCertificationRoutes(
           clusterId: r.clusterId,
           suiteId: r.suiteId,
           suiteVersion: r.suiteVersion,
+          /** F7: the identity of the instrument this row vouched for — the
+           * id-sorted item roster with each item's prompt, reference and
+           * scoring (rubric, judge model, scale). "Certified" now names
+           * something inspectable rather than a version label that only moved
+           * when items were added. NULL on rows predating the binding, which
+           * the gate refuses. */
+          suiteContentHash: r.suiteContentHash,
           incumbentHash: r.incumbentHash,
           status: r.status,
           // Only an ACTIVE row vouches for the suite — clients must render

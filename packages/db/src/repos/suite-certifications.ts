@@ -15,7 +15,7 @@ import {
   type NewSuiteCertification,
   type SuiteCertificationRow,
 } from '../schema.js';
-import { derivedSuiteIdFor } from './derived-suites.js';
+import { computeSuiteContentHash, derivedSuiteIdFor } from './derived-suites.js';
 
 /**
  * Insert a certification outcome, superseding any prior ACTIVE ('certified')
@@ -157,6 +157,28 @@ export async function certificationStateForCluster(
     .where(eq(derivedSuites.suiteId, suiteId));
   const suite = suiteRows[0];
   if (!suite || suite.orgId !== orgId) {
+    // F7 (owner-requested): this branch used to be reached ACCIDENTALLY when a
+    // purge emptied the v2 suite — derivedSuiteIdFor falls back to v1, which
+    // does not exist, so the answer was right for the wrong reason and the
+    // message blamed a missing suite rather than naming what happened. Look
+    // for the emptied suite and say so.
+    const emptied = await db
+      .select({ suiteId: derivedSuites.suiteId, version: derivedSuites.version })
+      .from(derivedSuites)
+      .where(and(eq(derivedSuites.clusterId, clusterId), eq(derivedSuites.orgId, orgId)));
+    const priorCertified = (await certifiedRowsForCluster(db, clusterId, orgId))[0];
+    if (emptied.length > 0) {
+      return {
+        certified: false,
+        reason:
+          `suite not certified — every item of '${emptied[0]!.suiteId}' has been purged ` +
+          `(retention), so there is no instrument left to measure on` +
+          (priorCertified ? ` — the prior certification is void; re-derive and re-certify` : ''),
+        ...(priorCertified !== undefined ? { certification: priorCertified } : {}),
+        currentSuiteId: suiteId,
+        currentSuiteVersion: null,
+      };
+    }
     return {
       certified: false,
       reason: `suite not certified — no derived suite '${suiteId}' for this org`,
@@ -197,5 +219,95 @@ export async function certificationStateForCluster(
       ...current,
     };
   }
+  // F7 — THE IDENTITY CHECK. The version above only ever moved when items were
+  // ADDED, so it could not see a retention purge or a rubric restamp. This
+  // compares what the certification vouched for against what the suite now IS.
+  const liveHash = await computeSuiteContentHash(db, suiteId);
+  if (active.suiteContentHash === null || active.suiteContentHash === undefined) {
+    // FAIL-CLOSED. A row certified before F7 cannot demonstrate what it
+    // vouched for, and an instrument that cannot prove its identity has not
+    // been vouched for.
+    return {
+      certified: false,
+      reason:
+        'suite not certified — this certification predates content-hash binding and cannot ' +
+        'demonstrate which instrument it vouched for (re-certify)',
+      certification: active,
+      ...current,
+    };
+  }
+  if (active.suiteContentHash !== liveHash) {
+    return {
+      certified: false,
+      reason:
+        `suite not certified — the suite's CONTENT changed since certification ` +
+        `(certified ${active.suiteContentHash.slice(0, 12)}…, now ${liveHash.slice(0, 12)}…): ` +
+        'items were added, purged, or re-scored against a different rubric. The certification ' +
+        'vouched for a different instrument — re-certify',
+      certification: active,
+      ...current,
+    };
+  }
   return { certified: true, certification: active, ...current };
+}
+
+export interface CertificationInvalidation {
+  certificationId: string;
+  orgId: string;
+  clusterId: string;
+  suiteId: string;
+  certifiedHash: string | null;
+  liveHash: string;
+  reason: string;
+}
+
+/**
+ * F7 (owner-requested): make invalidation VISIBLE rather than merely true.
+ *
+ * A scheduled retention purge must not silently lapse a customer's guarantee.
+ * The gate already refuses a drifted certification at read time, but a refusal
+ * nobody is told about is indistinguishable from an outage the customer
+ * discovers themselves. This demotes drifted rows to the terminal
+ * `invalidated` status and RETURNS them, so the caller can alert the org and
+ * enqueue re-certification.
+ *
+ * `invalidated` is deliberately distinct from `superseded`: superseded means a
+ * newer MEASUREMENT replaced this one; invalidated means the instrument moved
+ * underneath a measurement nobody repeated. Different fact, different remedy.
+ *
+ * Idempotent — a row already demoted is not returned again, so repeated purges
+ * do not re-alert.
+ */
+export async function invalidateDriftedCertifications(
+  db: PotionDb,
+  orgId: string,
+): Promise<CertificationInvalidation[]> {
+  const rows = await db
+    .select()
+    .from(suiteCertifications)
+    .where(and(eq(suiteCertifications.orgId, orgId), eq(suiteCertifications.status, 'certified')));
+
+  const out: CertificationInvalidation[] = [];
+  for (const row of rows) {
+    const liveHash = await computeSuiteContentHash(db, row.suiteId);
+    if (row.suiteContentHash !== null && row.suiteContentHash === liveHash) continue;
+    const reason =
+      row.suiteContentHash === null
+        ? 'certification predates content-hash binding; cannot demonstrate its instrument'
+        : `suite content changed (certified ${row.suiteContentHash.slice(0, 12)}…, now ${liveHash.slice(0, 12)}…)`;
+    await db
+      .update(suiteCertifications)
+      .set({ status: 'invalidated', statusReason: reason, reviewedAt: new Date() })
+      .where(eq(suiteCertifications.id, row.id));
+    out.push({
+      certificationId: row.id,
+      orgId: row.orgId,
+      clusterId: row.clusterId,
+      suiteId: row.suiteId,
+      certifiedHash: row.suiteContentHash,
+      liveHash,
+      reason,
+    });
+  }
+  return out;
 }

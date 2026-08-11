@@ -19,6 +19,8 @@ import {
   insertSuiteCertificationTx,
   loadDerivedSuite,
   purgeDerivedSuiteItems,
+  invalidateDriftedCertifications,
+  computeSuiteContentHash,
   upsertDerivedSuite,
   backfillRedactSpans,
   distinctSampledTargets,
@@ -2552,6 +2554,29 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
       deleted = await deleteSpansOlderThan(ctx.db, orgId, cutoff);
       derived = await purgeDerivedSuiteItems(ctx.db, orgId, cutoff);
     }
+    // F7 (owner requirement): a scheduled purge must not SILENTLY lapse a
+    // customer's guarantee. The read-time gate already refuses a drifted
+    // certification, but a refusal nobody is told about is indistinguishable
+    // from an outage the customer finds themselves. Demote the drifted rows
+    // to `invalidated`, tell the org, and enqueue re-certification so the
+    // remedy is already in flight when they read the alert.
+    const invalidated = await invalidateDriftedCertifications(ctx.db, orgId);
+    for (const inv of invalidated) {
+      await emitAlertEvent(ctx, {
+        orgId,
+        event: 'certification_invalidated',
+        detail: {
+          clusterId: inv.clusterId,
+          suiteId: inv.suiteId,
+          certifiedHash: inv.certifiedHash,
+          liveHash: inv.liveHash,
+          reason: inv.reason,
+          trigger: 'traces:purge',
+        },
+      });
+      await ctx.queue?.enqueue('suite:certify', { orgId, clusterId: inv.clusterId });
+    }
+
     // G1.6 evidence retirement (RESOLVES the G1.3 standing decision):
     // eval_results built from purged items are marked STALE — never deleted,
     // the guarantee's promise is "why we believed each point" and old
@@ -4203,6 +4228,10 @@ export const suiteCertifyHandler: WorkerHandler<'suite:certify'> = async (
     clusterId: payload.clusterId,
     suiteId: r.suiteId,
     suiteVersion: prov.suiteVersion ?? 'unknown',
+    // F7: record WHAT was certified, not just which version label it carried.
+    // The gate recomputes this and refuses if the instrument has drifted; the
+    // customer surface shows it so "certified" names something inspectable.
+    suiteContentHash: await computeSuiteContentHash(ctx.db, r.suiteId),
     incumbentHash: prov.incumbentHash,
     incumbentDesignationId: prov.incumbentDesignationId,
     providerMode: r.providerMode,
