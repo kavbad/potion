@@ -37,17 +37,62 @@ document while doing it.
 
 ---
 
-## §1 Provision the database
+## §1 Provision the database — Neon
 
-Any managed PostgreSQL that satisfies **both**:
+**Shape (decided 2026-08-10): PostgreSQL is Neon; Redis is co-located on the
+host.** One managed service instead of two at this scale, and Neon's
+branch/PITR restore is the fastest path through §3 of the rollback runbook —
+the step most likely to matter and least likely to be practised.
 
-- **version ≥ 15** — migration 0023 uses `CREATE UNIQUE INDEX … NULLS NOT
-  DISTINCT`, which is PG15+ only. On 13/14 the first boot fails.
-- **pgvector available, and the app user may `CREATE EXTENSION`** —
-  `0000_init.sql` runs `CREATE EXTENSION IF NOT EXISTS vector`. On managed
-  providers this often needs the extension allow-listed first.
+1. Create a Neon project on **PostgreSQL 17** (17.10 + pgvector 0.8.6 is what
+   the rehearsal verified). Anything ≥15 satisfies 0023's `NULLS NOT
+   DISTINCT`; do not go below.
+2. Create the `potion` database and a role for the app.
+3. Enable pgvector — `0000_init.sql` runs `CREATE EXTENSION IF NOT EXISTS
+   vector`, and the app role must be allowed to create it:
 
-Preflight, before anything else:
+   ```bash
+   psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector"
+   ```
+
+4. Take the **DIRECT endpoint**, not the `-pooler` one, and keep
+   `sslmode=require`:
+
+   ```
+   DATABASE_URL=postgres://USER:PASS@ep-xxxx.REGION.aws.neon.tech/potion?sslmode=require
+   ```
+
+   This is a single instance with `PG_POOL_MAX=10`. Neon's PgBouncer pooler
+   buys nothing at that size, and its transaction-mode semantics are a
+   divergence nothing here has tested — the rehearsal ran against a direct
+   connection.
+
+### ⚠️ Neon autosuspend vs `/readyz` — decide this before going live
+
+Neon suspends an idle compute and cold-starts it on the next connection. Two
+timeouts in this codebase sit right on top of that:
+
+| Knob | Default | Interaction |
+|---|---|---|
+| `READYZ_DB_TIMEOUT_MS` | **2 000 ms** (`apps/server/src/readiness.ts`) | a cold start slower than 2s makes `/readyz` report the db unhealthy |
+| compose `healthcheck` | `/readyz`, 10s interval, 6 retries | sustained `/readyz` failures mark the container unhealthy |
+| `PG_CONN_TIMEOUT_MS` | 5 000 ms (raised to **15 000** in compose) | pool connect can otherwise fail during a cold start |
+
+So an idle deployment can wake to a failed readiness probe rather than a slow
+first request. **Pick one:**
+
+- **Recommended: disable scale-to-zero** on the Neon compute for this
+  deployment. A partner-facing instance that sleeps is trading a real failure
+  mode for a small bill.
+- Or keep autosuspend and raise `READYZ_DB_TIMEOUT_MS` above the observed cold
+  start — but note the healthcheck then hides a genuinely slow database, which
+  is exactly the signal `/readyz` exists to give.
+
+This is written from reading the code, **not** from watching it happen: it is
+an UNEXECUTED interaction, and the first idle-then-wake cycle on the real host
+is where it gets confirmed or corrected.
+
+### Preflight
 
 ```bash
 psql "$DATABASE_URL" -tAc "SELECT current_setting('server_version_num')::int >= 150000"
@@ -55,7 +100,7 @@ psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector"
 ```
 
 Both must succeed. If the second fails, stop — no amount of retrying the
-deploy will fix a database that cannot host the extension.
+deploy fixes a database that cannot host the extension.
 
 ## §2 Secrets
 
@@ -63,10 +108,11 @@ deploy will fix a database that cannot host the extension.
 cp .env.example .env.prod
 openssl rand -hex 32   # POTION_MASTER_KEY
 openssl rand -hex 32   # POTION_OPERATOR_TOKEN
-openssl rand -base64 32 # POSTGRES_PASSWORD
 sudo chown root .env.prod && sudo chmod 600 .env.prod
 ```
 
+- `DATABASE_URL` is the Neon direct endpoint from §1 (it carries the
+  password; there is no separate `POSTGRES_PASSWORD` in this shape).
 - **`POTION_MASTER_KEY` encrypts every stored BYOK provider key. If it is
   lost, they are unrecoverable.** Back it up **separately from database
   dumps** — a dump plus this key in one place is full custody compromise.
@@ -162,18 +208,24 @@ exercise the deployed path.
 
 ## §8 Backups
 
+Neon gives you PITR and branching. **Use them, and do not rely on them alone**
+— a provider-side snapshot is still one vendor away from being unavailable.
+
 ```bash
+# Off-platform dump, nightly, retained off-host.
 pg_dump "$DATABASE_URL" | gzip > potion-$(date -u +%Y%m%dT%H%M%SZ).sql.gz
 ```
 
-Nightly, retained off-host, **plus** the managed provider's own automated
-backups. Back up the artifacts volume too.
+Redis is **not** in the backup set: it holds queue state only — every piece of
+customer evidence lives in Neon — so losing it costs in-flight jobs, which are
+re-enqueued, not restored.
 
-**A backup you have not restored is a hypothesis.** Do the restore drill in
-§4 of [ROLLBACK-RUNBOOK.md](ROLLBACK-RUNBOOK.md) once, now, and record the
-date here when you do.
+**A backup you have not restored is a hypothesis.** Neon makes the drill cheap:
+branch the project at a timestamp and point a scratch server at the branch.
+Do it once, now, and record the date in the rollback runbook.
 
-`POTION_MASTER_KEY` is backed up **separately** — see §2.
+`POTION_MASTER_KEY` is backed up **separately** — see §2. It is not in the
+dump, and a restore without it leaves every stored BYOK key undecryptable.
 
 ## §9 Upgrades
 

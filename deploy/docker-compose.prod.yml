@@ -14,41 +14,26 @@
 #  docs/DEPLOY-RUNBOOK.md.
 # ─────────────────────────────────────────────────────────────────────────────
 #
+# SHAPE (owner decision, 2026-08-10): PostgreSQL is **Neon** (managed,
+# off-host); Redis is **co-located** here. That keeps one managed service
+# instead of two at this scale, and Neon's branch/PITR restore is the fastest
+# path through §3 of the rollback runbook — the step most likely to matter and
+# least likely to be practised.
+#
 # Usage:  docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod up -d --build
 # Secrets come from --env-file (root-owned, chmod 600) and are NEVER baked into
 # the image. See .env.example for the variable names.
 
 services:
-  postgres:
-    # REQUIREMENT: PostgreSQL >= 15 WITH pgvector. Not incidental — migration
-    # 0023 uses `NULLS NOT DISTINCT` (PG15+ only) and 0000_init does
-    # `CREATE EXTENSION vector`. A managed instance must satisfy both or the
-    # very first boot fails. The runbook preflights both.
-    #
-    # Pinned to pg17 because 17.10 + pgvector 0.8.6 is what the rehearsal
-    # actually verified (packages/db/src/rehearse-postgres.ts, 9/9), and this
-    # file should name the version that was measured, not one that was
-    # assumed.
-    image: pgvector/pgvector:pg17
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-potion}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    # Deliberately NOT published to the host: the database is reachable only
-    # on the compose network.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
   redis:
     # Present for job DURABILITY, not scale: with the memory queue a restart
     # silently drops queued guarantee:suite-verify work, and the guarantee is
     # the product. F10's idempotency ledger makes a redelivery safe.
+    #
+    # CO-LOCATED (not managed): its AOF lives in the `redisdata` volume on this
+    # host. It holds QUEUE STATE ONLY — no customer evidence, which all lives
+    # in Neon — so losing it costs in-flight jobs, not data. Re-enqueue rather
+    # than restore.
     image: redis:7
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -70,7 +55,14 @@ services:
       # api keys are required. The Dockerfile runtime stage sets it; repeated
       # here so it is visible at the deployment boundary.
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-potion}
+      # Neon, from .env.prod. Use the DIRECT (non-pooler) endpoint: this is a
+      # single instance with a pool of 10, so Neon's PgBouncer pooler buys
+      # nothing and its transaction-mode semantics are a divergence we have
+      # not tested. sslmode=require is mandatory.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (Neon direct endpoint, sslmode=require)}
+      # Neon autosuspend interacts with two timeouts — see DEPLOY-RUNBOOK §1.
+      PG_CONN_TIMEOUT_MS: ${PG_CONN_TIMEOUT_MS:-15000}
+      PG_POOL_MAX: ${PG_POOL_MAX:-10}
       REDIS_URL: redis://redis:6379
       QUEUE_DRIVER: bullmq
       POTION_MASTER_KEY: ${POTION_MASTER_KEY:?set POTION_MASTER_KEY (64 hex, `openssl rand -hex 32`)}
@@ -93,8 +85,6 @@ services:
     # what makes /metrics network-restricted in fact rather than by assertion
     # (route-inventory.ts classifies it public with exactly that justification).
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -124,7 +114,6 @@ services:
         condition: service_started
 
 volumes:
-  pgdata:
   redisdata:
   caddydata:
   caddyconfig:
