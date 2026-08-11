@@ -520,7 +520,7 @@ export interface GuaranteeConfig { minQuality: number; windowMin: number; sample
 
 ### 13.7 Budget autopilot (#35) — apps/server, packages/db
 - budgets(org_id pk, monthly_cap_usd, hard_stop boolean default false, warn_pct int default 80, updated_at) — migration 0011_budgets.
-- Serving-path check: before execution, if hard_stop and MTD spend ≥ cap → 429 OpenAI-shaped `{error:{type:'budget_exceeded',...}}` (fail-closed; cached 60s per org).
+- Serving-path check: before execution, if hard_stop and MTD spend ≥ cap → 429 OpenAI-shaped `{error:{type:'budget_exceeded',...}}` (fail-closed; cached 60s per org). **EVERY serving route, not just chat** — the routes that can spend are enumerated in `apps/server/src/security/serving-routes.ts` (`SERVING_ROUTES`), which is also what the rate limiter matches on and what the parity tests loop over; adding a spend route without registering it there fails the completeness meta-test. Pre-F6 the gate and the limiter were wired to `/v1/chat/completions` alone, so a key served past its cap by switching to `/v1/completions` or `/v1/embeddings`.
 - Anomaly detection: nightly worker job `budget:evaluate` — z-score of last-7-day daily spend vs trailing 30-day; |z|>2.5 → alert event budget_warning; MTD forecast (linear extrapolation) > cap → budget_warning at warn_pct crossing → budget_exceeded at cap.
 - GET/PUT /api/budgets (admin); dashboard /reports shows cap line + forecast.
 

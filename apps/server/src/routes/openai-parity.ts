@@ -9,7 +9,10 @@
 //   401 invalid_api_key (type invalid_request_error) · 400 invalid_request_error
 //   503 service_unavailable (provider down mid-execution).
 // Chat-completions parity (tools/tool_choice passthrough, streaming usage)
-// lives in ./chat.ts; 429 rate_limit_exceeded in middleware/ratelimit.ts.
+// lives in ./chat.ts. Rate limiting + the budget hard stop apply to THESE
+// routes too (F6): scope comes from security/serving-routes.ts, and the
+// budget guard is routes/budgets.ts enforceBudgetHardStop. Before F6 this
+// comment claimed a 429 the route did not have.
 import { performance } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -20,6 +23,7 @@ import { loadCurrentFrontier } from '@potion/pareto';
 import { execute, type ExecContext } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError, type AuthResult } from '../auth.js';
 import { assignmentCacheKey, fallbackStrategyFor, type PotionContext } from '../context.js';
+import { enforceBudgetHardStop } from './budgets.js';
 import { guardFrontierProvenance, resolveOperatingPoint, traceHeaderValue } from './chat.js';
 import {
   bindServingLatency,
@@ -100,11 +104,36 @@ const EmbeddingsRequestSchema = z.object({
 
 function registerEmbeddingsRoute(app: FastifyInstance, ctx: PotionContext): void {
   app.post('/v1/embeddings', async (req, reply) => {
+    const startedAt = Date.now();
     const auth = await requireApiKey(ctx, req, reply);
     if (!auth) return reply;
+    // F6: embeddings SPEND under live providers (resolveEmbedder selects a
+    // real OpenAI model) and previously wrote no request_logs row at all —
+    // invisible to this gate, to the rate limiter, and to the invoice
+    // rollup. Gate first, then meter every exit.
+    const logBase: NewRequestLog = { orgId: auth.org.orgId, model: ctx.embedderInfo.model };
+    const meter = async (status: string, usage?: Usage): Promise<void> => {
+      try {
+        await insertRequestLog(ctx.db.db, {
+          ...logBase,
+          status,
+          ...(usage !== undefined ? { usage } : {}),
+          latencyMs: Date.now() - startedAt,
+        });
+      } catch (err) {
+        app.log.warn(err, 'request_logs insert failed');
+      }
+    };
+    if (await enforceBudgetHardStop(ctx, auth.org.orgId, reply, logBase, {
+      latencyMs: Date.now() - startedAt,
+      onError: (err, msg) => app.log.warn(err, msg),
+    })) {
+      return reply;
+    }
 
     const parsed = EmbeddingsRequestSchema.safeParse(req.body);
     if (!parsed.success) {
+      await meter('invalid_request');
       return reply
         .code(400)
         .send(
@@ -113,6 +142,7 @@ function registerEmbeddingsRoute(app: FastifyInstance, ctx: PotionContext): void
     }
     const { model, input } = parsed.data;
     if (model !== ctx.embedderInfo.model) {
+      await meter('model_not_found');
       return reply
         .code(400)
         .send(
@@ -130,6 +160,7 @@ function registerEmbeddingsRoute(app: FastifyInstance, ctx: PotionContext): void
     try {
       vectors = await ctx.embedder.embed(texts);
     } catch (err) {
+      await meter('provider_error');
       return reply
         .code(503)
         .send(
@@ -141,6 +172,20 @@ function registerEmbeddingsRoute(app: FastifyInstance, ctx: PotionContext): void
         );
     }
     const promptTokens = texts.reduce((sum, t) => sum + estTokens(t.length), 0);
+    await meter('ok', {
+      inputTokens: promptTokens,
+      outputTokens: 0,
+      // costUsd 0: embeddings are not in the price table, so there is no
+      // honest per-token price to apply here. The row still MATTERS — it
+      // makes the call visible to the usage rollup and to anyone auditing
+      // what this key did. Recording $0 is a true statement about what the
+      // platform knows (the converter's unknown-model convention); a
+      // fabricated cost would not be. Pricing embeddings is a filed
+      // follow-up, and until it lands this route's spend is real but
+      // unpriced — stated, not hidden.
+      costUsd: 0,
+      latencyMs: Date.now() - startedAt,
+    });
     return {
       object: 'list',
       data: vectors.map((embedding, index) => ({ object: 'embedding', index, embedding })),
@@ -233,6 +278,19 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
     }
     logBase.apiKeyId = auth.key.id;
     logBase.orgId = auth.org.orgId;
+    // F6: the budget hard stop, on the SAME seam chat uses and in the same
+    // position (before the no_policy check, so the two routes refuse
+    // identically). This route previously had none: a key past its hard cap
+    // simply switched endpoints — and `prompt` accepts an array, so one
+    // unbudgeted request fans out to N provider calls.
+    if (
+      await enforceBudgetHardStop(ctx, auth.org.orgId, reply, logBase, {
+        latencyMs: elapsed(),
+        onError: (err: unknown, msg: string) => app.log.warn(err, msg),
+      })
+    ) {
+      return reply;
+    }
     if (!auth.policy) {
       await logRequest({ ...logBase, status: 'no_policy', latencyMs: elapsed() });
       return reply

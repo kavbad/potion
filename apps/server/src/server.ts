@@ -185,6 +185,9 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // ---- M3 #25 OpenAI parity (m3-openai-parity) ----
   // GET /v1/models, POST /v1/embeddings, POST /v1/completions (legacy) — all
   // in src/routes/openai-parity.ts, reusing the §8 chat serving-path helpers.
+  // The two SPEND routes here carry the serving protections through the
+  // shared seams (security/serving-routes.ts drives rate limiting;
+  // routes/budgets.ts enforceBudgetHardStop is the budget gate) — F6.
   // (Chat-completions parity — tools/tool_choice passthrough, streaming
   // usage, error-shape parity — lives in routes/chat.ts + auth.ts +
   // middleware/ratelimit.ts.)

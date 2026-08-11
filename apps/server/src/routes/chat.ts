@@ -65,7 +65,7 @@ import {
   latencyTraceFields,
   maintainPolicyCondition,
 } from '../latency-policy.js';
-import { checkBudgetHardStop } from './budgets.js';
+import { enforceBudgetHardStop } from './budgets.js';
 import { recordBudgetEvent } from '@potion/db';
 import { ProviderError, breakerStates } from '@potion/providers';
 // ---- end M4 #33/#35 imports ----
@@ -395,38 +395,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // and fails OPEN on db errors (availability; see routes/budgets.ts).
     // The refusal is also an ALERT event — deduped per (org, kind, UTC day)
     // through the budget_events ledger, then alerts:dispatch.
-    {
-      const gate = await checkBudgetHardStop(ctx, auth.org.orgId);
-      if (gate.stopped && gate.budget) {
-        await logRequest({ ...logBase, status: 'budget_exceeded', latencyMs: elapsed() });
-        recordBudgetEvent(ctx.db.db, { orgId: auth.org.orgId, kind: 'budget_exceeded' })
-          .then(async (fresh) => {
-            if (fresh) {
-              await emitAlert(ctx, {
-                orgId: auth.org.orgId,
-                event: 'budget_exceeded',
-                detail: {
-                  monthlyCapUsd: gate.budget!.monthlyCapUsd,
-                  mtdUsd: gate.mtdUsd,
-                  source: 'serving_path_hard_stop',
-                },
-              });
-            }
-          })
-          .catch((err: unknown) => app.log.warn(err, 'budget alert emit failed — swallowed'));
-        return reply
-          .code(429)
-          .send(
-            openAiError(
-              `monthly budget cap reached (hard stop): MTD $${gate.mtdUsd.toFixed(2)} ≥ cap ` +
-                `$${gate.budget.monthlyCapUsd.toFixed(2)} — raise it via PUT /api/budgets`,
-              'budget_exceeded',
-              'budget_exceeded',
-            ),
-          );
-      }
+    // F6: the block now lives in routes/budgets.ts so EVERY spend-bearing
+    // route runs the same guard — it was inline here, and only here, which
+    // is why /v1/completions and /v1/embeddings served past an exceeded cap.
+    if (
+      await enforceBudgetHardStop(ctx, auth.org.orgId, reply, logBase, {
+        latencyMs: elapsed(),
+        onError: (err, msg) => app.log.warn(err, msg),
+      })
+    ) {
+      return reply;
     }
-    // ---- end M4 #35 budget autopilot ----
     if (!auth.policy) {
       await logRequest({ ...logBase, status: 'no_policy', latencyMs: elapsed() });
       return reply

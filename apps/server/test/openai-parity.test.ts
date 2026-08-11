@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
-import { DEFAULT_ORG_ID, insertApiKey, insertPolicy } from '@potion/db';
+import { DEFAULT_ORG_ID, insertApiKey, insertPolicy, listRequestLogs } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { createMockProvider, type Provider } from '@potion/providers';
 import { buildServer } from '../src/server.js';
@@ -101,8 +101,13 @@ beforeAll(async () => {
   app = await buildServer({ seed: false });
   const db = app.potion.db.db;
   const keys: Array<{ id: string; raw: string; config: Policy; rateRps?: number }> = [
-    { id: 'pol-single', raw: KEY_SINGLE, config: { type: 'latency_bound', p95Ms: 500 } },
-    { id: 'pol-composite', raw: KEY_COMPOSITE, config: { type: 'max_quality', costCeilingPer1K: 100 } },
+    // F6: these keys now share ONE bucket across all three serving routes
+    // (chat + legacy completions + embeddings), which is the point — a key's
+    // cap is a key's cap. This file is about SHAPE parity and makes many
+    // calls per key, so it opts out of throttling with a generous rps; the
+    // one test that IS about rate limiting uses KEY_LIMITED below.
+    { id: 'pol-single', raw: KEY_SINGLE, config: { type: 'latency_bound', p95Ms: 500 }, rateRps: 1000 },
+    { id: 'pol-composite', raw: KEY_COMPOSITE, config: { type: 'max_quality', costCeilingPer1K: 100 }, rateRps: 1000 },
     { id: 'pol-limited', raw: KEY_LIMITED, config: { type: 'latency_bound', p95Ms: 500 }, rateRps: 1 },
   ];
   for (const k of keys) {
@@ -488,4 +493,45 @@ describe('error parity table (exact OpenAI shape)', () => {
       await down.close();
     }
   }, 90_000);
+});
+
+// F6: embeddings SPEND under live providers but wrote no request_logs row at
+// all — invisible to the budget gate, the rate limiter, and the invoice
+// rollup. A cap cannot stop what it cannot see (the per-call metering
+// lesson), so the route is now metered on every exit.
+describe('/v1/embeddings is metered (F6)', () => {
+  it('writes a request_logs row with real token counts on success', async () => {
+    const before = (await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID)).length;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/embeddings',
+      headers: { authorization: `Bearer ${KEY_SINGLE}`, 'content-type': 'application/json' },
+      payload: { model: app.potion.embedderInfo.model, input: ['alpha beta', 'gamma'] },
+    });
+    expect(res.statusCode).toBe(200);
+    const rows = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID);
+    expect(rows.length).toBe(before + 1);
+    const row = rows[0]!;
+    expect(row.status).toBe('ok');
+    expect(row.model).toBe(app.potion.embedderInfo.model);
+    expect(row.usage?.inputTokens).toBeGreaterThan(0);
+    // costUsd is 0 BY DESIGN: embeddings are not in the price table, so
+    // there is no honest per-token price. The row exists so the call is
+    // VISIBLE to the rollup and to an auditor; pricing is a filed follow-up.
+    expect(row.usage?.costUsd).toBe(0);
+  });
+
+  it('meters refusals too — an unmetered error path is an unmetered call', async () => {
+    const before = (await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID)).length;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/embeddings',
+      headers: { authorization: `Bearer ${KEY_SINGLE}`, 'content-type': 'application/json' },
+      payload: { model: 'not-this-deployments-embedder', input: 'x' },
+    });
+    expect(res.statusCode).toBe(400);
+    const rows = await listRequestLogs(app.potion.db.db, DEFAULT_ORG_ID);
+    expect(rows.length).toBe(before + 1);
+    expect(rows[0]!.status).toBe('model_not_found');
+  });
 });

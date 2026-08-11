@@ -20,12 +20,16 @@ import { z } from 'zod';
 import {
   forecastMtdUsd,
   getBudget,
+  insertRequestLog,
   mtdSpendUsd,
+  recordBudgetEvent,
   upsertBudget,
   warnAtUsd,
   type BudgetRow,
+  type NewRequestLog,
 } from '@potion/db';
 import { openAiError, roleAtLeast } from '../auth.js';
+import { emitAlert } from '../alerts.js';
 import type { PotionContext } from '../context.js';
 
 export interface BudgetHardStopResult {
@@ -164,4 +168,67 @@ export function registerBudgetRoutes(app: FastifyInstance, ctx: PotionContext): 
       },
     });
   });
+}
+
+/**
+ * THE serving-path hard-stop guard — the ONE seam every spend-bearing route
+ * goes through (F6).
+ *
+ * This block used to live inline in /v1/chat/completions only, so
+ * /v1/completions and /v1/embeddings served past an exceeded hard cap: the
+ * same credential simply switched endpoints. That is the "handled in one
+ * route is not handled" class G2.4 closed for tenancy and G2.6 closed for
+ * latency bounds (see latency-policy.ts) — here it had a customer's money
+ * behind it.
+ *
+ * Performs the whole refusal when it refuses: the budget_exceeded
+ * request_logs row, the per-(org, kind, UTC day) deduped alert through the
+ * budget_events ledger, and the 429. Returns true iff it replied, so callers
+ * `if (await enforceBudgetHardStop(...)) return;`.
+ *
+ * Soft caps NEVER block, and the underlying check is cached 60s/org and
+ * fails OPEN on db errors — both deliberate (see this file's header). This
+ * guard widens WHO asks the gate; it does not change what the gate decides.
+ */
+export async function enforceBudgetHardStop(
+  ctx: PotionContext,
+  orgId: string,
+  reply: { code(n: number): { send(body: unknown): unknown } },
+  logBase: NewRequestLog,
+  opts: { latencyMs?: number; onError?: (err: unknown, msg: string) => void } = {},
+): Promise<boolean> {
+  const gate = await checkBudgetHardStop(ctx, orgId);
+  if (!gate.stopped || !gate.budget) return false;
+  try {
+    await insertRequestLog(ctx.db.db, {
+      ...logBase,
+      status: 'budget_exceeded',
+      ...(opts.latencyMs !== undefined ? { latencyMs: opts.latencyMs } : {}),
+    });
+  } catch (err) {
+    opts.onError?.(err, 'request_logs insert failed');
+  }
+  const cap = gate.budget.monthlyCapUsd;
+  recordBudgetEvent(ctx.db.db, { orgId, kind: 'budget_exceeded' })
+    .then(async (fresh) => {
+      if (fresh) {
+        await emitAlert(ctx, {
+          orgId,
+          event: 'budget_exceeded',
+          detail: { monthlyCapUsd: cap, mtdUsd: gate.mtdUsd, source: 'serving_path_hard_stop' },
+        });
+      }
+    })
+    .catch((err: unknown) => opts.onError?.(err, 'budget alert emit failed — swallowed'));
+  reply
+    .code(429)
+    .send(
+      openAiError(
+        `monthly budget cap reached (hard stop): MTD $${gate.mtdUsd.toFixed(2)} ≥ cap ` +
+          `$${cap.toFixed(2)} — raise it via PUT /api/budgets`,
+        'budget_exceeded',
+        'budget_exceeded',
+      ),
+    );
+  return true;
 }

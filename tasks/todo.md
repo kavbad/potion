@@ -2776,3 +2776,80 @@ what a suite MEANS without bumping `version`. F11 makes the surfaces agree
 with the gate; F7 makes the gate itself sound.
 
 | 2026-08-10 | F11 certification-surface agreement: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |
+
+## F6 — DONE (2026-08-10): every serving path carries every serving protection
+
+Owner promoted this above F10: *"a route bypassing both the budget hard-stop
+and the rate limiter is the same class as the metering blocker just closed:
+an unmetered spend path with a customer's money behind it. It cannot be open
+when a partner arrives."*
+
+### The inventory found two things worse than the filed defect
+
+1. **`/v1/embeddings` was the stronger instance.** It spends under live
+   providers (`resolveEmbedder` selects a real OpenAI model) and wrote **no
+   `request_logs` row at all** — invisible to the budget gate, the rate
+   limiter, AND the usage rollup that feeds invoices. `/v1/completions` at
+   least metered.
+2. **`/v1/completions` loops `execute()` per prompt element**, so one
+   unbudgeted, unthrottled request fanned out to N provider calls.
+
+### The rate limiter's chat-only scope was an OMISSION, not a decision
+
+Its comment scoped the exclusion to *read* surfaces; the parity routes did
+not exist when it was written (rate limiting is M2 Wave 2, the routes are
+M3 #25). Worse, `openai-parity.ts` and `server.ts` both **asserted** the
+protection the route lacked ("429 rate_limit_exceeded in
+middleware/ratelimit.ts"). Two stale comments had become a phantom decision.
+Both corrected.
+
+### What landed — one seam per protection, plus a fixture
+
+- **`security/serving-routes.ts`** — `SERVING_ROUTES` names every route that
+  can spend; `NON_SERVING_V1_ROUTES` and `EXEMPT_SPEND_SURFACES` carry a
+  REASON for everything else (the playground's documented unmetered
+  exemption included). The rate limiter matches on it, the tests loop over
+  it, and a completeness meta-test requires every mutating `/v1` route to be
+  classified — silence is not an option.
+- **`enforceBudgetHardStop`** extracted to `routes/budgets.ts`: the whole
+  refusal (request_logs row, per-(org,kind,day) deduped alert, 429) behind
+  one call, used by chat (behavior unchanged — its existing test passes
+  untouched), `/v1/completions`, and `/v1/embeddings`, in the same position
+  relative to the `no_policy` check so the routes refuse identically.
+  `checkBudgetHardStop`'s 60s cache and fail-OPEN catch are DELIBERATE and
+  were preserved verbatim — this widened who asks the gate, not what it
+  decides.
+- **`/v1/embeddings` is now metered** on every exit. `costUsd` is 0 by
+  design: embeddings are not in the price table, so there is no honest
+  per-token price; the row exists so the call is VISIBLE to the rollup and
+  to an auditor (the converter's unknown-model convention — a fabricated
+  cost would be worse). **Pricing embeddings is a filed follow-up**, and
+  until it lands this route's spend is real but unpriced — stated, not
+  hidden.
+
+### Regressions
+
+Fixture-driven, so the next spend route cannot quietly opt out: for EVERY
+route in `SERVING_ROUTES`, an exceeded hard cap 429s `budget_exceeded` (and
+all serve again after disarm — proving the 429 was the cap, not a broken
+route); every serving route passes through the limiter; the daily cap is
+shared ACROSS routes on one key — the exact bypass this closes. Plus
+embeddings metering on success AND refusal, and the walkthrough's budget leg
+now asserts all three routes (it would have passed with two wide open).
+
+One self-inflicted catch worth recording: the first version of the budget
+loop depended on a sibling test's seeded spend and passed only in-suite. A
+test coupled to another test's state passes for the wrong reason the moment
+either is reordered — made self-contained.
+
+### Scope line
+
+IN: the SPEND/SAFETY class. OUT (filed, matrix committed): the EVIDENCE
+class on `/v1/completions` — guarantee sampling, shadow sampling, guarantee
+error samples, completion-id correlation, `X-Potion-Cluster`,
+`observeFrontierDecision`, `notifyBreakerOpen`. Those change what evidence
+exists, not whose money is spent (`CLAUDE.md:70` already records the
+guarantee gap). Also filed: a per-request call ceiling for the legacy
+route's prompt-array fan-out, and embeddings pricing.
+
+| 2026-08-10 | F6 serving-path protection parity: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |

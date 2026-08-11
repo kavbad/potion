@@ -9,6 +9,7 @@ import type { FastifyInstance } from 'fastify';
 import { sha256, type Policy } from '@potion/core';
 import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { buildServer } from '../src/server.js';
+import { SERVING_ROUTES } from '../src/security/serving-routes.js';
 import {
   DEFAULT_RATE_LIMIT,
   InMemoryRateLimiterStore,
@@ -86,6 +87,8 @@ const RAW_A = 'pk_rl_org_a';
 const RAW_LIMITED = 'pk_rl_limited';
 const RAW_CAPPED = 'pk_rl_capped';
 const RAW_SMALLBODY = 'pk_rl_smallbody';
+const RAW_DAILY = 'pk_rl_f6_daily';
+const RAW_SHARED = 'pk_rl_f6_shared';
 const RAW_BURST = 'pk_rl_burst';
 
 const POLICY: Policy = { type: 'max_quality', costCeilingPer1K: 100 };
@@ -133,6 +136,26 @@ beforeAll(async () => {
     policyId: 'pol-rl',
     rateRps: 1000,
     dailyCap: 2,
+  });
+  // F6: a generous key for the header/pass-through loop, and a tiny-cap key
+  // for the shared-across-routes exhaustion proof.
+  await insertApiKey(db(), {
+    id: 'key-rl-f6-daily',
+    keyHash: sha256(RAW_DAILY),
+    name: 'f6-daily',
+    orgId: 'org_rl',
+    policyId: 'pol-rl',
+    rateRps: 1000,
+    dailyCap: 1000,
+  });
+  await insertApiKey(db(), {
+    id: 'key-rl-f6-shared',
+    keyHash: sha256(RAW_SHARED),
+    name: 'f6-shared',
+    orgId: 'org_rl',
+    policyId: 'pol-rl',
+    rateRps: 1000,
+    dailyCap: 3,
   });
   // body limit override: 1 KiB
   await insertApiKey(db(), {
@@ -220,7 +243,7 @@ describe('rate limiting via inject', () => {
     expect((await chat(RAW_SMALLBODY)).statusCode).toBe(200);
   });
 
-  it('non-chat routes are not throttled and carry no rate headers', async () => {
+  it('READ surfaces are not throttled and carry no rate headers (the deliberate exemption)', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/usage',
@@ -237,5 +260,56 @@ describe('rate limiting via inject', () => {
       maxBodyKb: null,
     } as Parameters<typeof rateLimitConfigForKey>[0]);
     expect(dflt).toEqual(DEFAULT_RATE_LIMIT);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F6 — the limiter binds on EVERY serving route, not just chat. Its scope was
+// a single literal path written when /v1/chat/completions was the only spend
+// route; /v1/completions and /v1/embeddings arrived later (M3 #25) and were
+// never added, so one key served past its daily cap by switching endpoints —
+// while two comments elsewhere asserted the protection it lacked. Scope now
+// comes from SERVING_ROUTES, and this loop is what makes the next route fail
+// loudly instead of silently.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('the rate limiter binds on EVERY serving route (F6)', () => {
+  function serve(route: string, rawKey: string) {
+    const payload =
+      route === '/v1/chat/completions'
+        ? PROMPT
+        : route === '/v1/completions'
+          ? { model: 'potion-auto', prompt: 'hi' }
+          : { model: app.potion.embedderInfo.model, input: 'hi' };
+    return app.inject({
+      method: 'POST',
+      url: route,
+      headers: { authorization: `Bearer ${rawKey}`, 'content-type': 'application/json' },
+      payload: payload as Record<string, unknown>,
+    });
+  }
+
+  it('every serving route carries rate headers and 429s when the key is exhausted', async () => {
+    expect(SERVING_ROUTES.length).toBeGreaterThanOrEqual(3); // fixture populated
+    for (const route of SERVING_ROUTES) {
+      const res = await serve(route, RAW_DAILY);
+      // Headers prove the limiter SAW the request (it early-returns on
+      // routes outside its scope, leaving no headers at all).
+      expect(
+        { route, seen: res.headers['x-ratelimit-remaining-requests'] !== undefined },
+        `${route} is a spend route and must pass through the limiter`,
+      ).toEqual({ route, seen: true });
+    }
+  });
+
+  it('the daily cap is shared ACROSS serving routes — one key, one budget', async () => {
+    // The bucket is per api key, so spending the cap on one endpoint must
+    // exhaust it on the others: that is the bypass this closes.
+    let refusedOn: string | null = null;
+    for (let i = 0; i < 40 && refusedOn === null; i++) {
+      const route = SERVING_ROUTES[i % SERVING_ROUTES.length]!;
+      const res = await serve(route, RAW_SHARED);
+      if (res.statusCode === 429) refusedOn = route;
+    }
+    expect(refusedOn, 'the shared-cap key should exhaust across routes').not.toBeNull();
   });
 });

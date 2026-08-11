@@ -357,7 +357,7 @@ async function main(): Promise<void> {
   });
 
   // ---- 10. M4 #35: budget hard stop 429s serving, then disarms ----
-  await step('10. budget autopilot (PUT hard stop → chat 429 → disarm)', async () => {
+  await step('10. budget autopilot (PUT hard stop → EVERY serving route 429s → disarm)', async () => {
     const put = await dashFetch('/api/budgets', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -372,6 +372,28 @@ async function main(): Promise<void> {
     const blockedBody = await blocked.json();
     assert(blocked.status === 429, `expected 429, got ${blocked.status}: ${JSON.stringify(blockedBody)}`);
     assert(blockedBody.error?.type === 'budget_exceeded', 'budget_exceeded type missing');
+    // F6: the hard stop must bind on EVERY serving route. This leg used to
+    // assert chat only — and would have passed with /v1/completions and
+    // /v1/embeddings wide open, which is exactly how they shipped unguarded.
+    const legacyBlocked = await fetch(`${API}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'potion-auto', prompt: 'hi' }),
+    });
+    const legacyBody = await legacyBlocked.json();
+    assert(
+      legacyBlocked.status === 429 && legacyBody.error?.type === 'budget_exceeded',
+      `/v1/completions must refuse under a hard cap, got ${legacyBlocked.status}: ${JSON.stringify(legacyBody)}`,
+    );
+    const embedBlocked = await fetch(`${API}/v1/embeddings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'text-embedding-3-small', input: 'hi' }),
+    });
+    assert(
+      embedBlocked.status === 429,
+      `/v1/embeddings must refuse under a hard cap, got ${embedBlocked.status}`,
+    );
     const state = await (await dashFetch('/api/budgets')).json();
     assert(state.state === 'exceeded', `expected state=exceeded, got ${state.state}`);
     // Disarm → serving resumes immediately (cache busted on write).
@@ -387,7 +409,7 @@ async function main(): Promise<void> {
       body: JSON.stringify({ model: 'potion-auto', messages: [{ role: 'user', content: 'hi' }] }),
     });
     assert(open.status === 200, `expected 200 after disarm, got ${open.status}`);
-    return 'hard stop 429 budget_exceeded → state=exceeded → disarm serves 200 immediately';
+    return 'hard stop 429 budget_exceeded on chat + /v1/completions + /v1/embeddings → state=exceeded → disarm serves 200 immediately';
   });
 
   // ---- 11. M4 #34: /settings/audit renders the unified trail (admin) ----

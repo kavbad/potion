@@ -23,6 +23,7 @@ import {
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { clearBudgetHardStopCache } from '../src/routes/budgets.js';
+import { SERVING_ROUTES } from '../src/security/serving-routes.js';
 
 const ORG_A = DEFAULT_ORG_ID;
 const KEY_A = 'pk_budgets_a';
@@ -41,11 +42,29 @@ let app: FastifyInstance;
 const db = () => app.potion.db.db;
 
 function chat() {
+  return serve('/v1/chat/completions');
+}
+
+/** Minimal valid body per serving route — F6: the budget gate is asserted
+ * for EVERY route in SERVING_ROUTES, driven off the fixture, so adding a
+ * spend route without wiring the gate fails here rather than in production.
+ * The bodies must be valid, because the gate runs BEFORE validation only on
+ * chat; a 400 would mask a missing 429. */
+function bodyFor(route: string): Record<string, unknown> {
+  if (route === '/v1/chat/completions') {
+    return { model: 'potion-auto', messages: [{ role: 'user', content: 'hello' }] };
+  }
+  if (route === '/v1/completions') return { model: 'potion-auto', prompt: 'hello' };
+  if (route === '/v1/embeddings') return { model: app.potion.embedderInfo.model, input: 'hello' };
+  throw new Error(`no probe body for serving route '${route}' — add one (F6 fixture)`);
+}
+
+function serve(route: string, key = KEY_A) {
   return app.inject({
     method: 'POST',
-    url: '/v1/chat/completions',
-    headers: { authorization: `Bearer ${KEY_A}`, 'content-type': 'application/json' },
-    payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'hello' }] },
+    url: route,
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    payload: bodyFor(route),
   });
 }
 
@@ -190,5 +209,50 @@ describe('serving-path hard stop', () => {
     expect(body.state).toBe('warn');
     await putBudget({ monthlyCapUsd: 1e6, hardStop: false });
     clearBudgetHardStopCache();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F6 — the hard stop binds on EVERY serving route, not just chat.
+// /v1/completions and /v1/embeddings had no budget gate at all: the same
+// credential served past an exceeded hard cap by switching endpoints. The
+// loop is driven off SERVING_ROUTES so a new spend route cannot quietly opt
+// out (the latency-policy.ts precedent: "a bound enforced only in
+// /v1/chat/completions is silently non-binding on /v1/completions").
+// ─────────────────────────────────────────────────────────────────────────────
+describe('the budget hard stop binds on EVERY serving route (F6)', () => {
+  it('every route in SERVING_ROUTES 429s budget_exceeded under a hard cap', async () => {
+    // SELF-CONTAINED: seed this test's own MTD spend rather than relying on
+    // a sibling test having run first (a test coupled to another test's
+    // state passes for the wrong reason the moment either is reordered).
+    const day = new Date().toISOString().slice(0, 10);
+    await insertRequestLog(db(), {
+      ts: new Date(`${day}T08:00:00Z`),
+      orgId: ORG_A,
+      clusterId: 'code-gen',
+      status: 'ok',
+      usage: { inputTokens: 10, outputTokens: 5, costUsd: 5, latencyMs: 10 },
+    });
+    // Arm a hard cap the org is already past.
+    await putBudget({ monthlyCapUsd: 0.01, hardStop: true });
+    clearBudgetHardStopCache();
+
+    expect(SERVING_ROUTES.length).toBeGreaterThanOrEqual(3); // fixture is populated
+    for (const route of SERVING_ROUTES) {
+      const res = await serve(route);
+      expect(
+        { route, status: res.statusCode, type: res.json()?.error?.type },
+        `${route} must refuse with the OpenAI budget shape — a serving route without the ` +
+          'hard stop spends a customer\'s money past their own cap',
+      ).toEqual({ route, status: 429, type: 'budget_exceeded' });
+    }
+
+    // Disarm: every route serves again (proves the 429 was the CAP, not a
+    // route that is simply broken).
+    await putBudget({ monthlyCapUsd: 10000, hardStop: false });
+    clearBudgetHardStopCache();
+    for (const route of SERVING_ROUTES) {
+      expect({ route, status: (await serve(route)).statusCode }).toEqual({ route, status: 200 });
+    }
   });
 });

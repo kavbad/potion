@@ -30,6 +30,7 @@
 // serving, swap in a Redis-backed RateLimiterStore (the interface is the
 // seam — see TODO in this file); the hook code does not change.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { isServingRoute } from '../security/serving-routes.js';
 import { sha256 } from '@potion/core';
 import { getApiKeyByKeyHash, insertRequestLog, type ApiKeyRow } from '@potion/db';
 import { bearerToken, openAiError } from '../auth.js';
@@ -166,9 +167,15 @@ export class InMemoryRateLimiterStore implements RateLimiterStore {
   }
 }
 
-/** The one rate-limited route (chat completions). Usage/dashboard routes are
- * local-tool read surfaces and stay unthrottled in Wave 2. */
-const RATE_LIMITED_PATH = '/v1/chat/completions';
+// F6: this was `const RATE_LIMITED_PATH = '/v1/chat/completions'` with a note
+// that "usage/dashboard routes are local-tool read surfaces and stay
+// unthrottled" — true of READ surfaces, but /v1/completions and
+// /v1/embeddings did not exist when it was written (rate limiting is M2
+// Wave 2; the parity routes are M3 #25). The single literal therefore left
+// two SPEND routes unthrottled while two comments elsewhere asserted the
+// opposite. Scope now comes from the serving-route inventory, so a new spend
+// route is throttled the moment it is registered there.
+// Read surfaces (usage/dashboard) remain deliberately unthrottled.
 
 export interface RateLimitRegistrationOptions {
   /** Store override (tests); default: a fresh InMemoryRateLimiterStore. */
@@ -199,7 +206,7 @@ export function registerRateLimiting(
   };
 
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (req.method !== 'POST' || req.routeOptions.url !== RATE_LIMITED_PATH) return;
+    if (req.method !== 'POST' || !isServingRoute(req.routeOptions.url)) return;
 
     // Resolve the key directly (no policy read — the chat route does its own
     // full authenticate()). Unknown/missing tokens pass through: the route
