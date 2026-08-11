@@ -20,7 +20,6 @@ import {
   insertIncident,
   insertPolicy,
   insertQualitySample,
-  listQualitySamples,
   upsertStrategyConfig,
 } from '@potion/db';
 import { buildServer } from '../src/server.js';

@@ -13,6 +13,7 @@ export * from './repos/verdicts.js';
 export * from './repos/judge-calibrations.js';
 export * from './repos/derived-suites.js';
 export * from './repos/suite-certifications.js';
+export * from './repos/job-executions.js';
 export * from './repos/cluster-rubrics.js';
 export * from './repos/cluster-incumbents.js';
 export * from './repos/org-delete.js';

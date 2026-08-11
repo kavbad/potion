@@ -11,7 +11,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  clusters,
   createDb,
   createOrg,
   evalResults,
@@ -19,9 +18,7 @@ import {
   insertRequestLog,
   requestLogs,
   upsertBudget,
-  loadDerivedSuite,
   migrate,
-  mtdSpendUsd,
   type DbHandle,
 } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';

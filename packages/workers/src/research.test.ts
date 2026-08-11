@@ -5,7 +5,7 @@
 // eval-cache pruning), single-recipe narrowing, and the §15.4 promotion gate
 // end-to-end (seeded LIVE heldout rows → paired bootstrap → frontier version
 // + lifecycle flips + alert fan-out; bootstrap publish with no incumbent).
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,6 @@ import {
   tracesClusterHandler,
   type JobContext,
 } from './handlers.js';
-import type { ResearchCyclePayload } from './jobs.js';
 import type { PotionQueue } from '@potion/queue';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));

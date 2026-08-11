@@ -11,6 +11,8 @@ import {
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
   certificationStateForCluster,
+  claimJobExecution,
+  completeJobExecution,
   derivedSuiteIdFor,
   insertClusterRubric,
   insertJudgeCalibration,
@@ -25,7 +27,6 @@ import {
   listPoliciesWithGuarantee,
   activeIncumbent,
   getPolicyById,
-  insertIncident,
   insertIncidentRow,
   insertGuaranteeVerdict,
   pairedQualities,
@@ -122,6 +123,7 @@ import {
   type TraceClusterSource,
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
+import type { JobKind } from './jobs.js';
 import type { FrontierLiveSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
 import { orgDeleteHandler } from './org-delete.js';
 // ---- end M5 #36 imports ----
@@ -192,6 +194,12 @@ export interface JobContext {
    * Default: the harness repo suites dir (SUITES_V2_DIR), mirroring the
    * prices.json precedent — tests/walkthrough override to a tmp copy. */
   suitesV2Dir?: string | undefined;
+  /**
+   * F10: which DELIVERY of the job this is. Absent when a handler is called
+   * directly (tests, operator scripts) — such a call is deliberate by
+   * construction, so the delivery guard lets it run unguarded.
+   */
+  delivery?: { jobId: string; attempt: number } | undefined;
 }
 
 export type WorkerHandler<K extends keyof JobPayloads = keyof JobPayloads> = (
@@ -1350,7 +1358,10 @@ async function emitPromotionAlerts(
 export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
   payload: ResearchCyclePayload,
   ctx: JobContext,
-): Promise<ResearchCycleResult> => {
+): Promise<ResearchCycleResult> =>
+  // F10: one delivery does the work. This handler SPENDS; a queue retry
+  // (or a stalled-job redelivery) must not buy the same tokens twice.
+  withDeliveryGuard('research:cycle', ctx, payload.orgId, async () => {
   const { table: prices } = loadPrices(ctx.pricesPath);
   // Live cycles are operator-enabled (POTION_RESEARCH_PROVIDER=live + real
   // provider keys); everything else runs the deterministic mock world.
@@ -1360,7 +1371,18 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     provider === 'live'
       ? (payload.capUsd ?? RESEARCH_CYCLE_DEFAULT_LIVE_CAP_USD)
       : MOCK_CYCLE_BUDGET_CAP_USD;
-  const seed = payload.seed ?? Math.floor(Math.random() * 2 ** 31);
+  // F10: seed from the DELIVERY, not Math.random() — a retry that generated a
+  // different candidate set would do different work on each attempt, which is
+  // retry non-determinism on top of the double-spend. Falls back to random
+  // only for direct (non-queued) calls, which are deliberate one-offs.
+  const seed =
+    payload.seed ??
+    (ctx.delivery
+      ? // % 2**31 because research_cycles.seed is int4 and seedFromString
+        // returns a uint32 — the same overflow schema.ts:921 already calls
+        // out for the double-precision seed column.
+        seedFromString(ctx.delivery.jobId) % 2 ** 31
+      : Math.floor(Math.random() * 2 ** 31));
   const trigger = payload.trigger ?? 'manual';
 
   // G1.8: suite PRECONDITIONS before any other work (candidate generation,
@@ -1786,7 +1808,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
     }).catch(() => {});
     throw err;
   }
-};
+  });
 
 /** The default handler set, one per JobKind. */
 // ---------------------------------------------------------------------------
@@ -2749,7 +2771,10 @@ export interface RubricGenerateResult {
 export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
   payload: RubricGeneratePayload,
   ctx: JobContext,
-): Promise<RubricGenerateResult> => {
+): Promise<RubricGenerateResult> =>
+  // F10: one delivery does the work. This handler SPENDS; a queue retry
+  // (or a stalled-job redelivery) must not buy the same tokens twice.
+  withDeliveryGuard('rubric:generate', ctx, payload.orgId, async () => {
   const { table: prices } = loadPrices(ctx.pricesPath);
   // Org isolation INSIDE the job, not just at the route: a forged payload
   // for another org's cluster dies here.
@@ -2954,7 +2979,7 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
     uncalibratedReason,
     spendUsd: genSpendUsd + calSpendUsd,
   };
-};
+  });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // G1.7 — live capped eval sweep of one org's derived replay suite.
@@ -2997,7 +3022,10 @@ export interface FrontierLiveSweepResult {
 export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = async (
   payload: FrontierLiveSweepPayload,
   ctx: JobContext,
-): Promise<FrontierLiveSweepResult> => {
+): Promise<FrontierLiveSweepResult> =>
+  // F10: one delivery does the work. This handler SPENDS; a queue retry
+  // (or a stalled-job redelivery) must not buy the same tokens twice.
+  withDeliveryGuard('frontier:live-sweep', ctx, payload.orgId, async () => {
   // 1. Env gate — REFUSE, never degrade (a "live sweep" that mocks would
   // stamp mock output as live evidence: the false-live pattern).
   if (process.env.POTION_EVAL_PROVIDER !== 'live') {
@@ -3147,7 +3175,7 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
     frontierVersion,
     points,
   };
-};
+  });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
@@ -3872,7 +3900,8 @@ const runSuiteVerify = async (
 export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'> = async (
   payload: GuaranteeSuiteVerifyPayload,
   ctx: JobContext,
-): Promise<GuaranteeSuiteVerifyResult> => {
+): Promise<GuaranteeSuiteVerifyResult> =>
+  withDeliveryGuard('guarantee:suite-verify', ctx, payload.orgId, async () => {
   const prov: VerdictProvenance = {
     incumbentHash: null,
     incumbentDesignationId: null,
@@ -3907,7 +3936,7 @@ export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'
     verdictIncidentId: result.verdictIncidentId,
   });
   return { ...result, verdictId };
-};
+  });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // suite:certify (post-capstone item 3, Decision 2) — the suite-validity gate.
@@ -4158,7 +4187,8 @@ const runSuiteCertify = async (
 export const suiteCertifyHandler: WorkerHandler<'suite:certify'> = async (
   payload: SuiteCertifyPayload,
   ctx: JobContext,
-): Promise<SuiteCertifyResult> => {
+): Promise<SuiteCertifyResult> =>
+  withDeliveryGuard('suite:certify', ctx, payload.orgId, async () => {
   const prov: CertifyProvenance = {
     suiteVersion: null,
     incumbentHash: null,
@@ -4186,7 +4216,68 @@ export const suiteCertifyHandler: WorkerHandler<'suite:certify'> = async (
     spendUsd: r.spendUsd,
   });
   return { ...r, status, certificationId, suiteVersion: prov.suiteVersion };
-};
+  });
+
+/**
+ * F10 — the delivery guard for SPEND-BEARING and CONTRACT-BEARING handlers.
+ *
+ * Production retries every job 3× (SPEC §12.2) and BullMQ redelivers stalled
+ * jobs after a worker crash regardless of the attempt limit. Nothing here was
+ * idempotent: a throw AFTER runEval re-ran the whole handler — fresh provider
+ * money, a fresh runId, a duplicate verdict row, and a second pass through
+ * contractual branches whose preconditions had already been mutated (the
+ * advisory now resolved, the rollback now restored, and the verifyAttempts
+ * ledger inflated toward an EARLY recovery-unconfirmed escalation).
+ *
+ * Three delivery states, three answers:
+ *   - first delivery      -> run
+ *   - prior COMPLETED     -> replay its recorded result; run nothing
+ *   - prior INCOMPLETE    -> REFUSE. Re-running would spend against an
+ *                            attempt whose spend we cannot account for, and
+ *                            the platform rule is that any doubt means no
+ *                            spend. Recovery is a deliberate re-enqueue,
+ *                            which mints a new job id.
+ *
+ * A handler invoked WITHOUT a delivery (tests, operator scripts) is by
+ * definition a deliberate call and runs unguarded — two verdicts for one
+ * tuple are correct when a human asked twice.
+ */
+export class JobRedeliveryRefusedError extends Error {
+  constructor(
+    readonly jobId: string,
+    readonly jobKind: string,
+  ) {
+    super(
+      `job '${jobId}' (${jobKind}) was already claimed by an attempt that did not complete — ` +
+        'refusing to re-execute: a retry would spend against unaccounted prior spend. ' +
+        're-enqueue deliberately to run it again',
+    );
+    this.name = 'JobRedeliveryRefusedError';
+  }
+}
+
+async function withDeliveryGuard<T>(
+  kind: JobKind,
+  ctx: JobContext,
+  orgId: string | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const delivery = ctx.delivery;
+  if (!delivery) return run(); // direct call — deliberate by construction
+  const claim = await claimJobExecution(ctx.db, {
+    jobId: delivery.jobId,
+    jobKind: kind,
+    orgId,
+    attempt: delivery.attempt,
+  });
+  if (claim.decision === 'already-completed') return claim.result as T;
+  if (claim.decision === 'refuse-incomplete') {
+    throw new JobRedeliveryRefusedError(delivery.jobId, kind);
+  }
+  const result = await run();
+  await completeJobExecution(ctx.db, delivery.jobId, result);
+  return result;
+}
 
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'eval:run': evalRunHandler,

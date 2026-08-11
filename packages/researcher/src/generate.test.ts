@@ -2,7 +2,7 @@
 // class-pruned registry, ≤20/cycle budget, dedupe vs existing hashes AND
 // eval-cache cells, determinism, judge-focus carve-out, decompose opt-in.
 import { describe, expect, it } from 'vitest';
-import { strategyHash, type StrategyConfig } from '@potion/core';
+import { strategyHash } from '@potion/core';
 import {
   DEFAULT_CANDIDATE_BUDGET,
   generateCandidates,

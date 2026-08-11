@@ -31,7 +31,6 @@ import {
   strategyHash,
   type ChatMessage,
   type Frontier,
-  type FrontierPoint,
   type Policy,
   type StrategyConfig,
   type ToolCall,
@@ -66,7 +65,6 @@ import {
   maintainPolicyCondition,
 } from '../latency-policy.js';
 import { enforceBudgetHardStop } from './budgets.js';
-import { recordBudgetEvent } from '@potion/db';
 import { ProviderError, breakerStates } from '@potion/providers';
 // ---- end M4 #33/#35 imports ----
 
@@ -657,7 +655,6 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           ),
         );
     }
-    const opConfig = op.config;
     if (body.tool_choice !== undefined && body.tools === undefined) {
       await logRequest({ ...logBase, status: 'invalid_request', latencyMs: elapsed() });
       return reply

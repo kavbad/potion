@@ -29,6 +29,25 @@ export interface JobStatus {
   result?: unknown;
   /** Handler error message, once failed. */
   error?: string;
+  /** Executions so far (1 on the first run). Exposed because retry
+   * re-execution is a correctness concern for spend-bearing jobs, not just
+   * an operational detail — F10. */
+  attempts?: number;
+}
+
+/**
+ * What a handler is told about the DELIVERY it is running under (F10).
+ *
+ * The job id is the only thing that distinguishes a queue RETRY from a
+ * deliberate re-run: two suite-verify verdicts for the same tuple are
+ * correct when a human asked twice, and a double-spend when the queue
+ * redelivered once. Both drivers have this in hand at the call site and
+ * used to discard it.
+ */
+export interface JobDelivery {
+  jobId: string;
+  /** 1 on first delivery; 2+ on a retry or a stall redelivery. */
+  attempt: number;
 }
 
 /**
@@ -38,7 +57,12 @@ export interface JobStatus {
  */
 export interface PotionQueue {
   enqueue(name: string, payload: unknown): Promise<string>;
-  registerHandler(name: string, fn: (payload: any) => Promise<unknown>): void;
+  /** The handler receives the delivery context as a second argument; drivers
+   * MUST supply it (F10 — see JobDelivery). */
+  registerHandler(
+    name: string,
+    fn: (payload: any, delivery: JobDelivery) => Promise<unknown>,
+  ): void;
   /** Status lookup for the jobs endpoint; null when the id is unknown. */
   getJob(id: string): Promise<JobStatus | null>;
   close(): Promise<void>;

@@ -14,7 +14,7 @@
 // customer-facing rollup behind /api/usage/current — status='ok' rows,
 // usage->>'costUsd', UTC days), so the cap compares against exactly what
 // the usage page shows.
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   budgetEvents,

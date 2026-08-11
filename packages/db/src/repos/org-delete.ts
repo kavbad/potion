@@ -16,7 +16,7 @@
 //
 // The report carries PER-TABLE deleted counts — the owner's status+evidence
 // rule applies to deletion reports too: "here's exactly what was erased".
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   alertDeliveries,

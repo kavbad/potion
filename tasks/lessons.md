@@ -361,3 +361,33 @@ three and not the fourth. The fix that holds derives the obligation from the
 schema (parse org-FK tables, assert each is handled or explicitly exempted
 with a reason), so the NEXT migration fails the build. Same shape as the
 route-inventory meta-test.
+
+## A comment asserting a protection must be traceable to the code enforcing it (2026-08-10)
+
+F6 turned up two comments claiming the rate limiter covered a path it did not
+touch; F18 turned up `docs/HA.md` calling the BYOK cache "the only
+cross-request in-memory state that matters for correctness" while the rate
+limiter's buckets and daily caps are in-memory, per-replica, and coherent
+with nothing; F19 turned up `/readyz` documented as reporting an OPEN circuit
+breaker, a state production cannot reach because `resilient()` is called
+without a breaker policy anywhere. Call these PHANTOM DECISIONS. They are
+worse than an undocumented gap: an undocumented gap invites a reader to
+check, while a phantom actively defends the hole from being looked at, and it
+survives review because reviewers read comments as evidence. Rule: when a
+comment or doc asserts a protection, name the enforcing symbol, and if you
+cannot find one, the comment is the bug — fix or delete it in the same pass.
+The durable version of this is a test that fails when the claim stops being
+true; `it.fails()` markers get this property by construction, since a fixed
+defect flips them red and forces the claim to be updated.
+
+## Run a new test in isolation before trusting it (2026-08-10)
+
+My F6 budget-parity loop passed in-suite and proved nothing: it depended on
+spend a sibling test had seeded, so it would have passed with the protection
+removed. Caught only by running it alone with `-t`. A test that shares
+fixture state with its neighbours is measuring the neighbours. Standing rule:
+every new test gets one isolated run (`vitest run <file> -t '<name>'`) before
+it counts as evidence, and any test whose result changes between the two runs
+is rewritten to be self-contained. The same rule caught the F19 marker
+failing by TIMEOUT rather than by its assertion — a pass for the wrong reason
+is still a pass for the wrong reason.

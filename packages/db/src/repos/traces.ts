@@ -3,7 +3,7 @@
 // customer data. Idempotent ingest on (orgId, traceId, spanId); retention
 // purge + redaction for §14.3; read models for the session rollup and the
 // agent-cluster synthesis (§14.2).
-import { and, asc, desc, eq, gte, lt, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lt, ne, type SQL } from 'drizzle-orm';
 import { redactAttrs } from '@potion/core';
 import type { PotionDb } from '../db.js';
 import { orgs, traceSpans, type NewTraceSpan, type TraceSpanRow } from '../schema.js';

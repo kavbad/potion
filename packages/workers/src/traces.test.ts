@@ -5,7 +5,7 @@
 // idempotent re-runs, incremental suite growth with version bump, and
 // traces:purge retention semantics (0 = metadata-only redaction; N = delete).
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

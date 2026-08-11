@@ -16,6 +16,27 @@ export const DEFAULT_QUEUE_NAME = 'potion';
 
 /** Retry policy (SPEC §12.2: "retries w/ backoff 3×"). */
 export const DEFAULT_ATTEMPTS = 3;
+
+/**
+ * F10: job kinds that SPEND a customer's money get ONE attempt.
+ *
+ * Blindly re-running a job that bought provider tokens is the wrong default:
+ * three of these re-spend IN FULL on a retry (suite:certify and
+ * research:cycle pass no `resume`; rubric:generate has no cache at all), and
+ * a retry also re-enters contractual branches whose preconditions the first
+ * attempt already mutated. These kinds already have DELIBERATE
+ * application-level retry — the G2.2 sweep re-enqueues stale advisories with
+ * its own throttle and ledger — which is a better retry than a blind one.
+ * The delivery guard (workers: withDeliveryGuard) still covers the stalled-
+ * job redelivery that no attempt limit can prevent.
+ */
+export const SINGLE_ATTEMPT_KINDS: ReadonlySet<string> = new Set([
+  'guarantee:suite-verify',
+  'suite:certify',
+  'frontier:live-sweep',
+  'research:cycle',
+  'rubric:generate',
+]);
 export const DEFAULT_BACKOFF_MS = 250;
 
 /**
@@ -61,7 +82,7 @@ export interface BullMQDriverOptions {
   backoffMs?: number;
 }
 
-type Handler = (payload: any) => Promise<unknown>;
+type Handler = (payload: any, delivery: { jobId: string; attempt: number }) => Promise<unknown>;
 
 /** Map a BullMQ job state to the driver-level JobState. */
 function toJobState(bullState: string): JobState {
@@ -91,6 +112,9 @@ async function toJobStatus(job: Job): Promise<JobStatus> {
     state,
     progress: state === 'completed' ? 100 : typeof job.progress === 'number' ? job.progress : 0,
     payload: job.data,
+    // F10: attemptsMade is 0 before the first run completes; report the
+    // execution count the same way the memory driver does.
+    attempts: (job.attemptsMade ?? 0) === 0 && state === 'active' ? 1 : (job.attemptsMade ?? 0),
   };
   if (job.returnvalue !== undefined && job.returnvalue !== null) status.result = job.returnvalue;
   if (job.failedReason !== undefined && job.failedReason !== null) status.error = job.failedReason;
@@ -137,7 +161,10 @@ export class BullMQPotionQueue implements PotionQueue {
   async enqueue(name: string, payload: unknown): Promise<string> {
     if (this.closed) throw new Error('bullmq queue is closed');
     try {
-      const job = await this.queue.add(name, payload as object, this.jobDefaults);
+      const job = await this.queue.add(name, payload as object, {
+        ...this.jobDefaults,
+        ...(SINGLE_ATTEMPT_KINDS.has(name) ? { attempts: 1 } : {}),
+      });
       return String(job.id);
     } catch (error) {
       throw new QueueUnavailableError('enqueue failed — Redis unreachable or closed', this.redisUrl, {
@@ -161,7 +188,11 @@ export class BullMQPotionQueue implements PotionQueue {
         if (!handler) throw new Error(`no handler registered for job '${job.name}'`);
         // The handler's return value becomes the BullMQ returnvalue — this is
         // what getJob().result surfaces (e.g. RunSummary for eval:run).
-        return handler(job.data);
+        // F10: forward the DELIVERY context. `job.id` and `job.attemptsMade`
+        // were already in scope here and discarded, which is why no handler
+        // could tell a retry from a first run — and therefore why a retry
+        // re-spent. attemptsMade is 0-based on the first execution.
+        return handler(job.data, { jobId: String(job.id), attempt: (job.attemptsMade ?? 0) + 1 });
       },
       { connection: this.connection },
     );

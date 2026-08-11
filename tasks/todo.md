@@ -2853,3 +2853,148 @@ guarantee gap). Also filed: a per-request call ceiling for the legacy
 route's prompt-array fan-out, and embeddings pricing.
 
 | 2026-08-10 | F6 serving-path protection parity: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |
+
+## F10 — DONE (2026-08-10): job-retry idempotency + the test-driver semantics audit
+
+Two deliverables, and the owner was right that the audit was the higher-value
+half: *"each swapped driver, with (a) where its behavior differs from what
+runs in production, and (b) whether that difference could hide a failure
+class the test suite therefore cannot see."*
+
+### The defect, and why nothing caught it
+
+Production retries every job 3× (`bullmq.ts`, applied unconditionally to
+every enqueue; SPEC §12.2 states it as contract). No handler carried an
+idempotency key. A throw AFTER the spend re-ran the whole handler: fresh
+provider money, a fresh `runId`, and a second pass through contractual
+branches whose preconditions the first attempt had already mutated.
+
+The retry map, verified against the code:
+
+- **Three handlers re-spend IN FULL.** `suite:certify` and `research:cycle`
+  pass no `resume`, so every item re-executes against the provider;
+  `rubric:generate` has no cache at all.
+- **`guarantee_verdicts` has no unique constraint** (0029 is a plain index)
+  and supersession *intends* multiple rows, so a retry's duplicate silently
+  becomes "the" verdict.
+- **A retry can fire a contractual alert early**: the recovery check counts
+  *trailing consecutive* non-confident `verifyAttempts`, and a duplicate
+  append inflates it toward `RECOVERY_UNCONFIRMED_AFTER`.
+- **`research:cycle` seeded from `Math.random()`** — attempt #2 did
+  *different work*, not the same work twice.
+- **Precedent, applied once**: `alerts:dispatch` is the one handler that
+  noticed the divergence and worked around it locally.
+
+No test caught any of it because `MemoryQueue` — every hermetic test — caught
+the throw, marked the job `failed`, and never retried. **The failure was not
+untested; it was inexpressible.** The driver had to change before the bug
+could be written down.
+
+### The fix, layered
+
+1. **Spend-bearing kinds stop auto-retrying** (`SINGLE_ATTEMPT_KINDS`,
+   `attempts: 1`). These already have *deliberate* application-level retry
+   (the G2.2 sweep re-enqueues advisories with its own throttle and ledger),
+   which is a better retry than a blind one. Non-spend kinds keep 3×.
+2. **An idempotency ledger keyed on the JOB ID** (0032 `job_executions`),
+   modeled on `budget_events` (0011) — claim with `ON CONFLICT DO NOTHING`,
+   act only if you won the insert. Keyed on the job id and not the evidence
+   because **two verdicts for one tuple are correct when a human asked
+   twice** (suite-verify's own run-twice test pins that): only the delivery
+   distinguishes a retry from a deliberate re-run.
+3. **Redelivery of a CLAIMED-but-incomplete job REFUSES.** BullMQ's
+   stalled-job reaper redelivers after a worker crash regardless of
+   `attempts` — an independent second vector that no attempt limit closes.
+   Re-running would spend against prior spend we cannot account for.
+   Deliberately NO time-based takeover: two workers can each believe the
+   other is dead, which reintroduces exactly the double-spend. Recovery is a
+   deliberate re-enqueue, which mints a new job id.
+4. **`{jobId, attempt}` threaded into `JobContext`** via a per-job ctx, and
+   `research:cycle` now seeds from the job id.
+5. **`MemoryQueue` gained a retry mode + 4 driver-parity tests**, so both
+   drivers agree on the semantics SPEC §12.2 names.
+
+**Honest residual, stated not hidden**: a crash MID-spend leaves spend that
+the next attempt refuses to complete. Per-call metering makes it visible and
+the reconcile flags it. Nothing makes provider calls transactional.
+
+### The audit: nine swaps, not four — see `docs/driver-semantics.md`
+
+Three findings outrank the one that started the search. The cross-cutting
+result is one sentence: **the test default is always the option that cannot
+fail.** MemoryQueue cannot run twice, the mock cannot throw, PGlite cannot
+have a concurrent writer, the in-memory limiter cannot be inconsistent. Each
+is individually defensible, which is why the pattern survived; the aggregate
+is that production's error branches are reachable almost nowhere.
+
+Two of the nine are **not test gaps at all — they are production gaps**:
+
+- **F18**: `InMemoryRateLimiterStore` is the ONLY implementation and it is
+  what production runs. With N replicas the rate and daily cap are N×, and a
+  rollout resets every bucket, so a client can lift its own limit by inducing
+  one. `docs/HA.md` calls the BYOK cache "the only cross-request in-memory
+  state that matters for correctness".
+- **F19**: `factory.ts` wraps every provider as `resilient(p)` with no
+  policy, and `breaker`/`hedgeAfterMs` default to absent — **the circuit
+  breaker and hedging are dead in production**, while `docs/HA.md` documents
+  `/readyz` reporting an open breaker as a live example.
+
+### Two corrections to my own filings
+
+- **F17 was filed too low.** Reproducing it showed the surviving rows still
+  reference the org, so `DELETE FROM orgs` raises 23503 and **the entire
+  erasure transaction aborts** — org deletion fails outright for any org with
+  >500 request logs, which is every real org. Raised to CRITICAL, pre-traffic.
+- **F20 was filed wrong and is withdrawn as a defect.** The mock's
+  data-sharing is disclosed in both the test's own name and the mock module's
+  header, so it is not the phantom-decision pattern and gets no marker. What
+  survives is narrower: real-Redis persistence is *unverified*, not falsely
+  claimed. The premise is now pinned by a passing test.
+
+### The filed items carry reproducing tests, as `it.fails()` markers
+
+Owner standard: every hidden class filed *with a reproducing test*. Since
+F17–F19 are not fixed here, four failing tests would leave the suite red —
+and an expected-red suite is how a real regression hides. So each marker's
+body asserts the CORRECT behavior under `it.fails()`: it passes precisely
+because the body fails. The defect is proven present every CI run, the suite
+stays green, and **it self-invalidates** — fixing the defect flips the marker
+red and forces the fixer to convert it to `it()`. A defect cannot be silently
+fixed-and-forgotten, and the marker cannot rot into a lie: the
+phantom-decision failure mode, closed by construction.
+
+Every marker was verified both ways — passing as `it.fails`, and failing
+**on its stated assertion** when flipped to `it()`. The first F19 draft
+failed by TIMEOUT, an ambiguous reason, and was rewritten until it failed on
+`expected [] to include 'openai:gpt-frontier-class'`.
+
+### Two things the verify run caught, recorded rather than quietly fixed
+
+**I walked into a trap the schema already documents.** Swapping
+`Math.random()` for `seedFromString(jobId)` overflowed `research_cycles.seed`,
+which is `int4`, because `seedFromString` returns a uint32 — and
+`schema.ts` calls out that exact hazard for its *other* seed column ("seeds
+are uint32 and would overflow", which is why that one is double precision).
+A trap documented at one column does not protect the next one. Fixed with
+`% 2 ** 31` and pinned by a range test, because the durable form of that
+knowledge is an assertion, not a comment.
+
+**`pnpm lint` was already red on trunk, on 21 errors in files this item never
+touched** (unused imports across `chat.ts`, `usage.ts`, `budgets.ts`,
+`traces.ts`, `org-delete.ts`, and five test files). `pnpm verify` runs
+`lint` *before* `test`, so the lint failure meant **the test phase never
+executed** — a full verify has been exiting early for some time, and any run
+reported as "verify passed" that ended in lint was not running the suite.
+All 21 are removed here (pure unused imports and two side-effect-free reads;
+`insertIncident` in `handlers.ts` was byte-identical at HEAD, so none of it
+is mine). Lint now exits 0 and the suite actually runs. Flagged because the
+verify discipline is load-bearing for every other claim in this file.
+
+### Pre-traffic flags
+
+**F10 (this item) and F12 (next) must land before real traffic.** Now
+**F17 and F18 join them**: F17 breaks contractual erasure for every real org,
+and F18 is a live, money-adjacent multi-replica gap. F13 conditionally if a
+partner uses embeddings.
+
+| 2026-08-10 | F10 retry idempotency + driver-semantics audit: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |

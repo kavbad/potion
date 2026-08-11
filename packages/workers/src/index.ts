@@ -77,7 +77,13 @@ export async function runWorker(opts: RunWorkerOptions): Promise<WorkerHandle> {
   const handlers = { ...defaultHandlers, ...(opts.handlers ?? {}) };
   for (const kind of JOB_KINDS) {
     const handler = handlers[kind] as WorkerHandler;
-    opts.queue.registerHandler(kind, (payload: JobPayloads[JobKind]) => handler(payload, ctx));
+    // F10: the DELIVERY rides on a per-job ctx. It is what lets a handler
+    // tell a queue RETRY (or a stall redelivery) from a deliberate re-run —
+    // the only discriminator available, since two verdicts for one tuple are
+    // legitimate when a human asked twice.
+    opts.queue.registerHandler(kind, (payload: JobPayloads[JobKind], delivery) =>
+      handler(payload, { ...ctx, delivery }),
+    );
   }
   return {
     kinds: JOB_KINDS,

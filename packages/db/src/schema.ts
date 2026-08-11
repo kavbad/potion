@@ -1156,3 +1156,31 @@ export const schema = {
 };
 
 export type Schema = typeof schema;
+
+// ---- job execution ledger (F10, migration 0032) ----
+// The dedupe ledger for job DELIVERIES. Production retries 3× and BullMQ
+// redelivers stalled jobs after a crash; handlers were not idempotent, so a
+// throw after the spend re-ran everything. Two verdicts for one tuple are
+// legitimate when a human asked twice, so dedupe cannot key on the evidence
+// — only the job id distinguishes a retry from a deliberate re-run.
+// Shape follows budget_events (0011): claim with ON CONFLICT DO NOTHING and
+// act only if you won.
+export const jobExecutions = pgTable(
+  'job_executions',
+  {
+    jobId: text('job_id').primaryKey(),
+    jobKind: text('job_kind').notNull(),
+    /** Nullable: platform jobs carry no org. */
+    orgId: text('org_id'),
+    attempt: integer('attempt').notNull().default(1),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+    /** NULL = a prior attempt claimed the job and never finished. */
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    result: jsonb('result').$type<unknown>(),
+    outcome: text('outcome'),
+  },
+  (t) => ({ kindIdx: index('job_executions_kind_idx').on(t.jobKind, t.claimedAt) }),
+);
+
+export type JobExecutionRow = typeof jobExecutions.$inferSelect;
+export type NewJobExecution = typeof jobExecutions.$inferInsert;

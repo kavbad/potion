@@ -16,10 +16,9 @@
 // come back; the hook is the single resolution point (it also enforces the
 // revoked/expired checks the old helper's resolveOrgContext path skipped).
 // Every query is org-scoped; cross-org reads are impossible by construction.
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
-  DEFAULT_ORG_ID,
   aggregateUsage,
   assertDayRange,
   isDayString,
@@ -28,14 +27,12 @@ import {
   liveUsageRollup,
   periodFromDay,
   periodToDay,
-  resolveOrgContext,
   sumRollup,
   utcDay,
-  type OrgContext,
   type UsageDailyRow,
 } from '@potion/db';
 import {
-  roleAtLeast, bearerToken, openAiError } from '../auth.js';
+  roleAtLeast, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { generateInvoice } from '../billing/invoice.js';
 import { renderInvoiceHtml } from '../billing/render-html.js';

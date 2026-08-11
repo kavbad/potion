@@ -1,4 +1,13 @@
 // In-process FIFO queue driver (SPEC §7): default for tests/dev.
+//
+// SEMANTIC PARITY (F10): this driver defaults to ONE execution per job,
+// while the production bullmq driver retries 3× (SPEC.md §12.2 states that
+// as the contract). That divergence hid a critical defect — handlers are not
+// idempotent, so a retry re-spends — because every hermetic test uses this
+// driver and no test could execute a handler twice. Pass `{attempts: N}` to
+// model production. See docs/driver-semantics.md for the full audit of
+// where each swapped driver diverges, and queue.test.ts for the parity test
+// that now pins the agreement.
 // True FIFO with head-of-line blocking: a job is processed once its handler is
 // registered, strictly in enqueue order. close() drains pending work.
 //
@@ -18,30 +27,51 @@ interface Job {
   progress: number;
   result?: unknown;
   error?: string;
+  /** Executions so far. 0 until the first run starts. */
+  attempts: number;
+}
+
+/** Options (F10). `attempts` makes the driver able to EXPRESS production's
+ * retry semantics — see the class doc. */
+export interface MemoryQueueOptions {
+  /** Max executions per job (default 1 — the historical behavior). SPEC
+   * §12.2 specifies 3 for the production driver. */
+  attempts?: number;
 }
 
 export class MemoryQueue {
   private jobs: Job[] = [];
-  private handlers = new Map<string, (payload: any) => Promise<unknown>>();
+  private handlers = new Map<
+    string,
+    (payload: any, delivery: { jobId: string; attempt: number }) => Promise<unknown>
+  >();
   private counter = 0;
+  private readonly maxAttempts: number;
   private pumping = false;
   private closed = false;
   private drainWaiters: Array<() => void> = [];
   /** All jobs ever enqueued (including completed/failed) for getJob(). */
   private records = new Map<string, Job>();
 
+  constructor(opts: MemoryQueueOptions = {}) {
+    this.maxAttempts = opts.attempts ?? 1;
+  }
+
   async enqueue(name: string, payload: unknown): Promise<string> {
     if (this.closed) throw new Error('memory queue is closed');
     this.counter += 1;
     const id = `mem-${this.counter}`;
-    const job: Job = { id, name, payload, state: 'queued', progress: 0 };
+    const job: Job = { id, name, payload, state: 'queued', progress: 0, attempts: 0 };
     this.jobs.push(job);
     this.records.set(id, job);
     void this.pump();
     return id;
   }
 
-  registerHandler(name: string, fn: (payload: any) => Promise<unknown>): void {
+  registerHandler(
+    name: string,
+    fn: (payload: any, delivery: { jobId: string; attempt: number }) => Promise<unknown>,
+  ): void {
     this.handlers.set(name, fn);
     void this.pump();
   }
@@ -61,6 +91,7 @@ export class MemoryQueue {
       state: job.state,
       progress: job.state === 'completed' ? 100 : job.progress,
       payload: job.payload,
+      attempts: job.attempts,
     };
     if (job.result !== undefined) status.result = job.result;
     if (job.error !== undefined) status.error = job.error;
@@ -77,16 +108,26 @@ export class MemoryQueue {
         if (!handler) break; // head-of-line blocking: wait for a handler
         this.jobs.shift();
         head.state = 'active';
+        head.attempts += 1;
         try {
-          const result = await handler(head.payload);
+          const result = await handler(head.payload, { jobId: head.id, attempt: head.attempts });
           head.state = 'completed';
           head.progress = 100;
           head.result = result;
         } catch (error) {
-          // Record the failure and keep draining — one bad job must not stall
-          // the queue. (Additive M3 #28 behavior; see file header.)
-          head.state = 'failed';
           head.error = error instanceof Error ? error.message : String(error);
+          // F10: RETRY, when configured. This driver used to fail a throwing
+          // job permanently while production (bullmq) retried it 3× — so no
+          // hermetic test could ever execute a handler twice, and the
+          // double-spend defect was not merely untested but INEXPRESSIBLE.
+          // Re-queued at the TAIL (bullmq's backoff likewise reorders a
+          // failing job behind its siblings) so one poison job cannot spin.
+          if (head.attempts < this.maxAttempts) {
+            head.state = 'queued';
+            this.jobs.push(head);
+          } else {
+            head.state = 'failed';
+          }
         }
       }
     } finally {
