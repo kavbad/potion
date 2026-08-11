@@ -2713,3 +2713,66 @@ framing is wrong" — those became F7 and F9 rather than being discarded.
 Zero findings would have been a signal to re-aim; this was not that.
 
 | 2026-08-10 | Post-capstone (4) invariant swarm round 1: 57 agents, mock-only, no live legs. 12 defects (5 critical); 5 fixed + pinned this commit, 7 filed. | $10.00 cap | **$0.0000** | no reconcile needed |
+
+## F11 — DONE (2026-08-10): one definition of "certified"
+
+**A certification badge shown to a customer that our own gate refuses is a
+direct honesty violation** (owner). `GET /api/certifications` derived
+`active` from the ROW's status while every other consumer used the key-based
+gate (current suite id + version), so after a re-derivation or a v1→v2 flip
+the review surface read CERTIFIED in the same second the guarantee report
+withheld the headline for that cluster.
+
+**The exploration corrected the defect's shape: there were THREE definitions,
+and the flagged one was not the visible one.** The server's `active` field
+was dead — the dashboard declared it in its DTO and never read it. The badge
+a customer actually sees came from `certBadge()` in rubrics/page.tsx, an
+INDEPENDENT second row-status derivation. Fixing only the server field would
+have left the lie on screen.
+
+### What landed
+
+- **The gate explains itself**: `ClusterCertificationState` now always
+  carries `currentSuiteId`/`currentSuiteVersion` (every branch), so consumers
+  say what moved instead of re-deriving the resolution rule — the
+  re-derivation that caused this defect.
+- **Generation-aware reasons.** `derivedSuiteIdFor` flips to `-replays-v2`
+  the moment its first item lands — no version bump, no row change — so the
+  step-level flip fell into the generic "gate not passed" branch and told the
+  customer to run a job they had already run. It now distinguishes
+  never-certified from certified-on-an-earlier-generation and names the
+  actual remedy (certify vs **re-certify**).
+- **`active` keeps its name, changes its meaning to the truth**:
+  `gate.certified && gate.certification.id === row.id` — "this row is what
+  vouches for its cluster's current suite right now". One gate call per
+  distinct cluster.
+- **New `staleReason`** — the state the surface could not previously express:
+  a real passing measurement that no longer vouches because the suite moved.
+  Distinct from FAILED (the incumbent could not reproduce its baseline) and
+  REFUSED (no measurement happened), because the remedies differ.
+- **The badge stops deriving and starts reading**: `certificationBadge()`
+  extracted to `apps/dashboard/lib/cert-badge.ts` (unit-tested, the
+  provenance.test.ts precedent), consuming the server's gate-derived fields.
+  New `STALE — NOT CERTIFIED`; `SUPERSEDED` gained the missing
+  `— NOT CERTIFIED` suffix. Closed a DTO drift found in passing:
+  `GuaranteeReportEntryDto` was missing the `certification` field the server
+  had been sending.
+- Hardening while in there (NOT reachable today — suite ids are
+  org-partitioned by construction, stated as such): `activeCertificationForSuite`
+  and the supersede demote are now org-scoped.
+
+### The regression that matters
+
+`AGREEMENT INVARIANT (F11)` asserts BOTH surfaces in ONE test: a REAL
+certification (never stubbed — the corpus-task + frontier-incumbent fixture)
+→ list says `active: true` AND the report publishes; re-derive the suite →
+list says `active: false` with a re-certify `staleReason` AND the report
+withholds. The two surfaces cannot disagree. Plus badge-vocabulary units and
+repo-level generation-aware reason tests.
+
+**Not fixed here (F7's point stands):** key-equality is necessary but not
+sufficient — `restampDerivedSuiteRubric` and `purgeDerivedSuiteItems` change
+what a suite MEANS without bumping `version`. F11 makes the surfaces agree
+with the gate; F7 makes the gate itself sound.
+
+| 2026-08-10 | F11 certification-surface agreement: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |

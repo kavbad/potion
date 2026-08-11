@@ -15,6 +15,8 @@ import {
   insertApiKey,
   insertIncident,
   insertGuaranteeVerdict,
+  derivedSuiteIdFor,
+  upsertDerivedSuite,
   supersedeVerdict,
   insertPolicy,
   insertQualitySample,
@@ -433,6 +435,83 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     expect(entry.certification.certified).toBe(true); // the CLUSTER is certified…
     expect(entry.retention).toBeNull(); // …but this number's instrument is not
     expect(entry.retentionUnavailableReason).toContain("verdict's instrument");
+  });
+
+  async function seedCertifiedCluster3(): Promise<string> {
+    const jc: JobContext = {
+      db: db(), dbHandle: app.potion.db,
+      pricesPath: fileURLToPath(new URL('../../../prices.json', import.meta.url)),
+      embedder: { async embed(t: string[]): Promise<number[][]> { return t.map(() => new Array<number>(384).fill(0.05)); } },
+    };
+    for (let i = 1; i <= 6; i++) {
+      const task = evalTaskById(`ex-0${i}`)!;
+      await insertTraceSpans(db(), [
+        { orgId: ORG, traceId: `tr_f11_${i}`, spanId: `tr_f11_${i}_r`, name: 'agent.root', model: 'mock-cheap', usage: { input_tokens: 10, output_tokens: 5 }, costUsd: 0,
+          attrs: { 'gen_ai.prompt': `Settle the f11 batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(`2026-08-06T12:0${i}:00Z`) },
+        { orgId: ORG, traceId: `tr_f11_${i}`, spanId: `tr_f11_${i}_t`, name: 'tool.f11settle', model: 'mock-cheap', usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0,
+          attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(`2026-08-06T12:0${i}:30Z`) },
+      ] as NewTraceSpan[]);
+    }
+    await tracesClusterHandler({ orgId: ORG }, jc);
+    const clusterId = `agent-${orgHashOf(ORG)}-${toolSignatureSlug(['f11settle'])}`;
+    const CFG_F = { type: 'single', model: 'mock-frontier' } as const;
+    await upsertStrategyConfig(db(), strategyHash(CFG_F), CFG_F);
+    await designateIncumbent(db(), ORG, clusterId, strategyHash(CFG_F));
+    const cert = await suiteCertifyHandler({ orgId: ORG, clusterId }, jc);
+    expect(cert.status).toBe('certified'); // a REAL measurement, never stubbed
+    await insertQualitySample(db(), { orgId: ORG, strategyHash: H_MID, quality: 0.9, createdAt: new Date(), policyId: PID, clusterId });
+    return clusterId;
+  }
+
+  it('AGREEMENT INVARIANT (F11): the certifications badge and the guarantee gate can never disagree', async () => {
+    // The review surface derived `active` from the ROW's status while the
+    // report derived withholding from the GATE (current suite + version).
+    // They diverged the moment a suite was re-derived — CERTIFIED on one
+    // screen, "not certified" on the other, in the same second.
+    const clusterId = await seedCertifiedCluster3();
+
+    const listOf = async () => {
+      const r = await app.inject({ method: 'GET', url: '/api/certifications', headers: { cookie: 'potion_session=ps_gr_admin' } });
+      expect(r.statusCode).toBe(200);
+      return (r.json().certifications as Array<Record<string, unknown>>).filter((c) => c.clusterId === clusterId);
+    };
+    const gateOf = async () => {
+      const r = await app.inject({ method: 'GET', url: `/api/reports/guarantee?from=${today}&to=${today}`, headers: { authorization: `Bearer ${KEY}` } });
+      const e = r.json().entries.find((x: { clusterId: string }) => x.clusterId === clusterId);
+      return e?.certification as { certified: boolean } | undefined;
+    };
+
+    // Freshly certified: the badge vouches and the gate agrees.
+    const before = await listOf();
+    expect(before.filter((c) => c.status === 'certified')).toHaveLength(1);
+    expect(before.find((c) => c.status === 'certified')!.active).toBe(true);
+    expect((await gateOf())?.certified).toBe(true);
+
+    // Re-derive the suite: one new item bumps derived_suites.version, which
+    // invalidates the certification BY KEY. Nothing about the row changes.
+    const suiteId = await derivedSuiteIdFor(db(), clusterId);
+    await upsertDerivedSuite(db(), {
+      suiteId, clusterId, orgId: ORG,
+      manifest: { suiteId },
+      items: [{
+        id: `${suiteId}-f11-extra`, clusterId,
+        prompt: [{ role: 'user', content: 'a new item that moves the suite' }],
+        reference: 'x',
+        scoring: { kind: 'llm-judge', rubric: 'r', judgeModel: 'mock-judge', scale: [0, 1] },
+      }],
+      itemCap: 500,
+    });
+
+    // THE INVARIANT: both surfaces move together.
+    const after = await listOf();
+    const stillCertifiedRow = after.find((c) => c.status === 'certified')!;
+    expect(stillCertifiedRow.status).toBe('certified'); // the ROW is unchanged…
+    expect(stillCertifiedRow.active).toBe(false); // …but it no longer vouches
+    expect(String(stillCertifiedRow.staleReason)).toContain('re-certify');
+    expect((await gateOf())?.certified).toBe(false);
+    // And the surface can say WHAT moved, without re-deriving the rule.
+    expect(stillCertifiedRow.currentSuiteId).toBe(suiteId);
+    expect(stillCertifiedRow.currentSuiteVersion).not.toBe(stillCertifiedRow.suiteVersion);
   });
 
   it('RETRACTED VERDICT (swarm): a superseded breach must not resurface through the pre-0029 incident fallback', async () => {

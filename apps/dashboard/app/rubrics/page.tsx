@@ -8,6 +8,7 @@
 // reason. Nothing is ever hidden: "this rubric failed calibration at r=0.6
 // and was not deployed" is the visible rigor the guarantee sells.
 import { CertifyButton, RubricGenerateButton, RubricReviewButtons } from '@/components/rubric-actions';
+import { certificationBadge } from '@/lib/cert-badge';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
 import type { FrontierListResponse } from '@/lib/types';
 import Link from 'next/link';
@@ -54,7 +55,12 @@ interface CertificationRow {
   suiteId: string;
   suiteVersion: string;
   status: 'pending' | 'certified' | 'failed' | 'superseded';
+  /** THE GATE's answer, not a row-status boolean (F11). */
   active: boolean;
+  /** Set when a passing measurement no longer vouches: the suite moved. */
+  staleReason: string | null;
+  currentSuiteId: string | null;
+  currentSuiteVersion: string | null;
   refused: boolean;
   statusReason: string | null;
   selfRetentionMean: number | null;
@@ -63,15 +69,6 @@ interface CertificationRow {
   providerMode: string;
   spendUsd: number;
   createdAt: string;
-}
-
-/** Badge vocabulary mirrors the rubric lifecycle; refusals are unmistakably
- * NOT MEASURED (a budget refusal is not evidence against the suite). */
-function certBadge(c: CertificationRow): { label: string; cls: string } {
-  if (c.status === 'certified') return { label: 'CERTIFIED', cls: 'bg-accent/15 text-accent' };
-  if (c.status === 'superseded') return { label: 'SUPERSEDED', cls: 'bg-line text-faint' };
-  if (c.refused) return { label: 'REFUSED — NOT MEASURED', cls: 'bg-line text-faint' };
-  return { label: 'FAILED — NOT CERTIFIED', cls: 'bg-warn/15 text-warn' };
 }
 
 const STATUS_BADGE: Record<RubricRow['status'], { label: string; cls: string }> = {
@@ -162,7 +159,7 @@ export default async function RubricsPage() {
         {(certs?.certifications ?? []).length > 0 ? (
           <ul className="mt-3 space-y-2 border-t border-line pt-3">
             {certs!.certifications.map((c) => {
-              const badge = certBadge(c);
+              const badge = certificationBadge(c);
               return (
                 <li key={c.id} className="text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -179,6 +176,7 @@ export default async function RubricsPage() {
                       : ''}
                     {c.providerMode} · ${c.spendUsd.toFixed(4)}
                     {c.statusReason ? ` · ${c.statusReason}` : ''}
+                    {c.staleReason ? ` · ${c.staleReason}` : ''}
                   </div>
                 </li>
               );

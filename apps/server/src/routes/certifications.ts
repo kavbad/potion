@@ -14,7 +14,7 @@
 //                                  REFUSED, NOT MEASURED), superseded.
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { getClusterByIdForOrg, listSuiteCertifications } from '@potion/db';
+import { certificationStateForCluster, getClusterByIdForOrg, listSuiteCertifications } from '@potion/db';
 import type { PotionQueue } from '@potion/queue';
 import type { SuiteCertifyPayload } from '@potion/workers';
 import { openAiError, roleAtLeast } from '../auth.js';
@@ -80,9 +80,25 @@ export function registerCertificationRoutes(
   app.get('/api/certifications', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     const rows = await listSuiteCertifications(db, org.orgId);
+    // `active` IS THE GATE'S ANSWER, not a row-status boolean (F11). It read
+    // `r.status === 'certified'` — which is a fact about the ROW, while
+    // certificationStateForCluster additionally requires the row to be the
+    // certification of the cluster's CURRENT suite at its CURRENT version.
+    // The two disagreed the moment a suite was re-derived or flipped v1→v2,
+    // so this surface showed CERTIFIED in the same second the guarantee
+    // report withheld the headline for that cluster. One predicate, called
+    // once per distinct cluster (the list is per-org and small).
+    const stateByCluster = new Map<string, Awaited<ReturnType<typeof certificationStateForCluster>>>();
+    for (const clusterId of new Set(rows.map((r) => r.clusterId))) {
+      stateByCluster.set(clusterId, await certificationStateForCluster(db, clusterId, org.orgId));
+    }
     return reply.send({
       certifications: rows.map((r) => {
         const evidence = (r.evidence ?? {}) as Record<string, unknown>;
+        const state = stateByCluster.get(r.clusterId);
+        // This row is what vouches for the cluster right now iff the gate
+        // says certified AND the gate's certification IS this row.
+        const active = state?.certified === true && state.certification?.id === r.id;
         return {
           id: r.id,
           clusterId: r.clusterId,
@@ -90,10 +106,20 @@ export function registerCertificationRoutes(
           suiteVersion: r.suiteVersion,
           incumbentHash: r.incumbentHash,
           status: r.status,
-          // Only 'certified' vouches for the suite — clients must render
+          // Only an ACTIVE row vouches for the suite — clients must render
           // everything else unmistakably as NOT CERTIFIED, and refusals
           // (evidence.refused) as NOT MEASURED.
-          active: r.status === 'certified',
+          active,
+          /** A passing measurement that no longer vouches for anything: the
+           * suite was re-derived or flipped generation underneath it. Set
+           * only for status='certified' rows the gate does not honor, and it
+           * carries the gate's own words — the customer's remedy is
+           * re-certify, which "not certified" alone never said. */
+          staleReason: r.status === 'certified' && !active ? (state?.reason ?? null) : null,
+          /** What the cluster measures on now — so the UI can say what moved
+           * without re-deriving the resolution rule. */
+          currentSuiteId: state?.currentSuiteId ?? null,
+          currentSuiteVersion: state?.currentSuiteVersion ?? null,
           refused: evidence.refused === true,
           statusReason: r.statusReason,
           selfRetentionMean:

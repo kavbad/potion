@@ -50,6 +50,7 @@ export async function insertSuiteCertificationTx(
         .where(
           and(
             eq(suiteCertifications.suiteId, row.suiteId),
+            eq(suiteCertifications.orgId, row.orgId),
             eq(suiteCertifications.status, 'certified'),
           ),
         );
@@ -72,18 +73,49 @@ export async function listSuiteCertifications(
     .orderBy(desc(suiteCertifications.createdAt));
 }
 
-/** The ACTIVE certification for a suite id (partial unique ⇒ at most one). */
+/**
+ * The ACTIVE certification for a suite id (partial unique ⇒ at most one).
+ * `orgId` is defense-in-depth: suite ids are org-partitioned by construction
+ * (`agent-<orgHash6>-<slug>-replays-vN`), so a cross-org hit is not reachable
+ * today — but a read that vouches for a contractual claim should not depend
+ * on an id-format convention holding forever.
+ */
 export async function activeCertificationForSuite(
   db: PotionDb,
   suiteId: string,
+  orgId: string,
 ): Promise<SuiteCertificationRow | null> {
   const rows = await db
     .select()
     .from(suiteCertifications)
     .where(
-      and(eq(suiteCertifications.suiteId, suiteId), eq(suiteCertifications.status, 'certified')),
+      and(
+        eq(suiteCertifications.suiteId, suiteId),
+        eq(suiteCertifications.orgId, orgId),
+        eq(suiteCertifications.status, 'certified'),
+      ),
     );
   return rows[0] ?? null;
+}
+
+/** Certified rows for a cluster REGARDLESS of suite generation — how the
+ * gate tells "never certified" apart from "certified, then the suite moved". */
+export async function certifiedRowsForCluster(
+  db: PotionDb,
+  clusterId: string,
+  orgId: string,
+): Promise<SuiteCertificationRow[]> {
+  return db
+    .select()
+    .from(suiteCertifications)
+    .where(
+      and(
+        eq(suiteCertifications.clusterId, clusterId),
+        eq(suiteCertifications.orgId, orgId),
+        eq(suiteCertifications.status, 'certified'),
+      ),
+    )
+    .orderBy(desc(suiteCertifications.createdAt));
 }
 
 export interface ClusterCertificationState {
@@ -91,6 +123,12 @@ export interface ClusterCertificationState {
   /** Set when NOT certified — the exact string surfaces on the report. */
   reason?: string;
   certification?: SuiteCertificationRow;
+  /** The instrument the cluster measures on RIGHT NOW. Always populated for
+   * agent clusters (success and failure alike) so a consumer can say what
+   * moved without re-deriving the resolution rule — the re-derivation that
+   * produced F11's disagreeing surfaces in the first place. */
+  currentSuiteId: string | null;
+  currentSuiteVersion: string | null;
 }
 
 /**
@@ -109,7 +147,9 @@ export async function certificationStateForCluster(
   clusterId: string,
   orgId: string,
 ): Promise<ClusterCertificationState> {
-  if (!clusterId.startsWith('agent-')) return { certified: true };
+  if (!clusterId.startsWith('agent-')) {
+    return { certified: true, currentSuiteId: null, currentSuiteVersion: null };
+  }
   const suiteId = await derivedSuiteIdFor(db, clusterId);
   const suiteRows = await db
     .select({ version: derivedSuites.version, orgId: derivedSuites.orgId })
@@ -120,15 +160,31 @@ export async function certificationStateForCluster(
     return {
       certified: false,
       reason: `suite not certified — no derived suite '${suiteId}' for this org`,
+      currentSuiteId: suiteId,
+      currentSuiteVersion: null,
     };
   }
-  const active = await activeCertificationForSuite(db, suiteId);
-  if (!active || active.orgId !== orgId) {
+  const current = { currentSuiteId: suiteId, currentSuiteVersion: suite.version };
+  const active = await activeCertificationForSuite(db, suiteId, orgId);
+  if (!active) {
+    // GENERATION-AWARE (F11): a cluster that certified an EARLIER generation
+    // is not the same situation as one that never certified, and the remedy
+    // differs (re-certify vs certify). derivedSuiteIdFor flips to -replays-v2
+    // the moment its first item lands — no version bump, no row change — so
+    // this branch is where the step-level flip lands, and the old generic
+    // text told the customer to run a job they had already run.
+    const priorGeneration = (await certifiedRowsForCluster(db, clusterId, orgId)).find(
+      (r) => r.suiteId !== suiteId,
+    );
     return {
       certified: false,
-      reason:
-        'suite not certified — incumbent self-retention gate not passed (run suite:certify; ' +
-        'an uncertified suite may be inspected but may not back a contractual claim)',
+      reason: priorGeneration
+        ? `suite not certified — certification is for '${priorGeneration.suiteId}'@${priorGeneration.suiteVersion}, ` +
+          `the cluster now measures on '${suiteId}'@${suite.version} (suite generation changed) — re-certify`
+        : 'suite not certified — incumbent self-retention gate not passed (run suite:certify; ' +
+          'an uncertified suite may be inspected but may not back a contractual claim)',
+      ...(priorGeneration !== undefined ? { certification: priorGeneration } : {}),
+      ...current,
     };
   }
   if (active.suiteVersion !== suite.version) {
@@ -138,7 +194,8 @@ export async function certificationStateForCluster(
         `suite not certified — certification is for suite version ${active.suiteVersion}, ` +
         `the suite is now ${suite.version} (re-derivation invalidates certification; re-certify)`,
       certification: active,
+      ...current,
     };
   }
-  return { certified: true, certification: active };
+  return { certified: true, certification: active, ...current };
 }

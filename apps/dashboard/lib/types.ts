@@ -353,6 +353,13 @@ export interface GuaranteeReportEntryDto {
   clusterId: string;
   retention: RetentionHeadlineDto | null;
   retentionUnavailableReason: string | null;
+  /** Suite-certification state (Decision 2). The server has always sent
+   * this; the DTO type had drifted without it. Null for non-agent clusters. */
+  certification: {
+    certified: boolean;
+    selfRetentionMean: number | null;
+    reason: string | null;
+  } | null;
   /** G2.2 (absent on pre-G2.2 servers). */
   verification?: VerificationStateDto;
   incumbent: { clusterId: string; strategyHash: string; designatedAt: string } | null;
