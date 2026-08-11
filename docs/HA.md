@@ -14,6 +14,25 @@ horizontally scaled.
                                        redis (pub/sub + queue) ◀── shared, optional
 ```
 
+> ## ⛔ Do not deploy multiple replicas yet
+>
+> The sentence below — "the only cross-request in-memory state that matters
+> for correctness" — is **not true today**, and this note exists so the two
+> documents cannot drift into disagreeing. The rate limiter's token buckets
+> and daily caps are also cross-request in-memory state that matters for
+> correctness, and `InMemoryRateLimiterStore` is the ONLY implementation of
+> the store seam: it is what production runs, not a test stand-in. At N
+> replicas a key's rate AND daily cap are both N×, and a rollout resets every
+> bucket. Filed as **F18** with a reproducing test.
+>
+> Likewise the `/readyz` example further down shows an **open circuit
+> breaker** — a state production cannot reach, because `factory.ts` calls
+> `resilient(p)` with no policy so the breaker and hedging are dead (**F19**).
+>
+> Until G2.5 lands, deploy ONE replica:
+> [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md), and see
+> [driver-semantics.md](driver-semantics.md) rows 4 and 6.
+
 Server replicas are **stateless**: all durable state lives in Postgres, and
 the only cross-request in-memory state that matters for correctness — the
 per-org `providersForOrg` BYOK cache — is kept coherent across replicas by

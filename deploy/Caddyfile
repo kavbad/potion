@@ -1,0 +1,24 @@
+# Potion single-instance TLS front door.
+#
+# POTION_SITE is the hostname in production (Caddy provisions a Let's Encrypt
+# certificate automatically) or `:443` for the local rehearsal, where Caddy
+# issues its own internal cert instead.
+{$POTION_SITE} {
+	encode gzip
+
+	# /metrics is classified `public` in apps/server/src/security/route-inventory.ts
+	# with the justification "the surface is network-restricted by deployment
+	# posture". THIS BLOCK IS THAT POSTURE. Without it the justification is a
+	# phantom decision — a comment asserting a protection nothing enforces.
+	#
+	# Org labels are hashed (G2.4), but the series still expose request volumes,
+	# spend and breaker state. Scrape over the private network instead: reach
+	# the container directly on the compose network, never through this listener.
+	@metrics path /metrics /metrics/*
+	respond @metrics "not available on the public listener" 403
+
+	reverse_proxy server:3000 {
+		health_uri /readyz
+		health_interval 10s
+	}
+}

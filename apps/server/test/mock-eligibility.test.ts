@@ -83,6 +83,10 @@ const NOT_A_DECISION: Record<string, string> = {
   'packages/providers/src/index.ts': 're-exports only',
   'packages/core/src/types.ts': 'type definitions (ProviderId, ProviderMode)',
   'packages/db/src/schema.ts': "column defaults ('unknown'/'mock' literals), no resolution",
+  'packages/db/src/rehearse-postgres.ts':
+    'deployment rehearsal harness; the mock literals are seeded ROW VALUES ' +
+    "(provider:'mock', providerMode:'mock') in fixture data, and it never " +
+    'constructs or resolves a provider — it makes no provider calls at all',
   'packages/db/src/repos/eval-results.ts': "narrows the stored mode string; never resolves a provider",
   'packages/db/src/repos/research.ts': 'SQL pins provider_mode; no provider resolution',
   'packages/harness/src/suites.ts': 'suite loading; mock aliases appear only inside fixture data',

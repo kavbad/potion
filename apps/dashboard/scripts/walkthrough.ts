@@ -770,7 +770,7 @@ async function main(): Promise<void> {
 
   // ---- 14. G2.7: operator create → full pipeline → TRUE-CASCADE delete →
   // NOTHING DERIVED SURVIVES (the owner's done criterion) ----
-  await step('14. operator org lifecycle (create → pipeline → delete → nothing derived survives)', async () => {
+  await step('14. operator org lifecycle (create → pipeline → delete → nothing derived survives AT FIXTURE SCALE)', async () => {
     const OP = { authorization: `Bearer ${OPERATOR_TOKEN}` };
     const OPJ = { ...OP, 'content-type': 'application/json' };
     const savedCookie = sessionCookie; // demo org cookie — restored at the end
@@ -897,7 +897,16 @@ async function main(): Promise<void> {
       assert((demoTraces.sessions ?? []).length >= 1, 'demo traces disturbed by cascade');
 
       const tables = Object.entries(report.deleted ?? {}).filter(([, n]) => (n as number) > 0).length;
-      return `org created via operator → 3 traces → cluster → rubric approved → TRUE-CASCADE deleted (${tables} tables touched) → session+key dead, platform intact`;
+      // CLAIM LANGUAGE, corrected 2026-08-10 (F17). This step runs on PGlite,
+      // whose db.execute() returns no `rowCount`, so deleteOrgCascade's chunked
+      // loop breaks after ONE chunk. The fixture is far under the 500-row chunk
+      // size, so the deletion completes and the step passes — but it therefore
+      // proves erasure only AT FIXTURE SCALE. It does NOT exercise the chunked
+      // path, and must not be cited as proof that a real org's data is erased.
+      // node-postgres does return rowCount, so production is expected to be
+      // correct; "expected" is not "shown", and showing it needs a >500-row
+      // offboarding drill against real Postgres.
+      return `org created via operator → 3 traces → cluster → rubric approved → TRUE-CASCADE deleted (${tables} tables touched) → session+key dead, platform intact — FIXTURE SCALE ONLY (<1 chunk; the >500-row chunked path is unproven here, see F17)`;
     } finally {
       sessionCookie = savedCookie;
     }

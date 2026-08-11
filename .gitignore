@@ -1,6 +1,12 @@
 node_modules/
 dist/
 .env
+# Every env variant is a secrets file. `.env` alone did not cover .env.prod,
+# .env.local, .env.staging — a filled deployment env was committable until
+# this rule existed. The example file is the ONE exception: it holds variable
+# names and generation commands, never values.
+.env.*
+!.env.example
 *.tsbuildinfo
 coverage/
 .next/

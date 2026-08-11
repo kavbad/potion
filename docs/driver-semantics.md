@@ -67,6 +67,53 @@ used by most tests; it exists so the failure is *expressible*.
 
 ---
 
+## A worked example: the audit biting mid-investigation (F21)
+
+The table above is a list of hazards. This is what one actually felt like.
+
+While writing the F12 repair migration I used an ASCII divider in a comment:
+
+```sql
+-- ---- frontiers ----------------------------------------------------------
+```
+
+The boot hung. Not slowed — **hung**, with no error, no stack, no log line.
+
+The cause was a latent defect in the migration runner's statement splitter,
+which filtered comment-only chunks with `/^(--[^\n]*\n?)*$/`. Every `--`
+*inside* a comment line is another place the group can begin an iteration, so
+a divider gives the engine exponentially many ways to partition the line; on a
+chunk that then fails to match, it backtracks through all of them. The defect
+had been sitting on the boot path since the runner was written. Nothing
+triggered it because no migration had ever used a divider comment.
+
+Three things about the diagnosis are the point:
+
+1. **The watchdog could not fire.** I wrapped each statement in a
+   `setTimeout` that would print which one hung. It never printed, because
+   PGlite executes WASM synchronously on the event loop — the blocked
+   operation and the timer that was supposed to observe it share the single
+   thread. *An instrument sharing the resource it measures measures nothing.*
+   That is row 5 of this table (PGlite ↔ node-postgres) reaching out and
+   breaking an investigation into an unrelated defect.
+2. **Every convenience that buffers output hid it.** `| tail`, `| head`, and
+   piped stdout all withheld the progress lines. Finding the failing statement
+   needed `appendFileSync` to a file — synchronous, unbuffered, survives a
+   kill.
+3. **The failure mode had no detector.** The suite has assertions for wrong
+   answers and for thrown errors. It had nothing that says "this should
+   finish." A hang reads as a slow test, and a slow test reads as CI being
+   busy.
+
+Recorded here rather than only in the changelog because it is the clearest
+demonstration of the cross-cutting finding: *the test default is always the
+option that cannot fail* — and when that default does fail, it fails in a mode
+the harness has no vocabulary for. `migration-safety.test.ts` now asserts wall
+-clock bounds on parsing every migration file, which is the smallest thing
+that would have caught it.
+
+---
+
 ## Two corrections to my own filings
 
 Both were caught by applying the swarm's "fails for the right reason"
@@ -93,7 +140,20 @@ What it does invalidate is the **walkthrough's own erasure proof** — step 14
 ("nothing derived survives") runs on PGlite, so above the 500-row chunk it
 proves nothing. The diligence claim is *unproven at scale*, not false. F17
 stands as a real defect for any PGlite-backed deployment, and drops to
-MEDIUM. To be settled empirically against real Postgres.
+MEDIUM.
+
+**Settled empirically (2026-08-10).** The deployment rehearsal ran the
+cascade against PostgreSQL 17.10 with 1200 request_logs — four times the
+chunk size:
+
+```
+5. F17: TRUE-CASCADE erasure of an org with 1200 request_logs
+   seeded 1200, report says 1200, rows left 0
+```
+
+Production erasure is correct, and the walkthrough's claim language has been
+narrowed to what it actually proves on PGlite ("FIXTURE SCALE ONLY"). The
+diligence claim now rests on a measurement instead of an inference.
 
 The lesson is row 5's, applied to its own author: a finding measured under a
 stand-in is a finding about the stand-in until it is re-measured.

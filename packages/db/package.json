@@ -14,7 +14,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "inspect-attribution": "tsx src/inspect-attribution.ts"
+    "inspect-attribution": "tsx src/inspect-attribution.ts",
+    "rehearse-postgres": "tsx src/rehearse-postgres.ts"
   },
   "dependencies": {
     "@potion/core": "workspace:*",

@@ -3132,3 +3132,82 @@ untouched with an empty audit table; every migration file parses in
 milliseconds. db suite 23 files / 167 tests.
 
 | 2026-08-10 | F12 boot re-attribution + ledger + 0033 repair: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |
+
+## DEPLOY phase 1 — DONE (2026-08-10): local rehearsal against REAL Postgres
+
+Owner: *"an unexecuted runbook is exactly the species this codebase keeps
+getting bitten by; execute it."* Executed — with one substitution, disclosed
+below.
+
+### Substitution: Homebrew Postgres, not Docker
+
+There was no container runtime on this machine (no Docker/Colima/Podman/
+OrbStack) and no local Postgres. Owner chose `brew install postgresql@17 +
+pgvector` over installing Docker Desktop, on the reasoning that **every risk
+on the plan's own table is a database risk**. pgvector's bottle ships only for
+PG17/18, so the rehearsal ran on **17.10 + pgvector 0.8.6** (still ≥15, which
+is what 0023's `NULLS NOT DISTINCT` requires). `deploy/docker-compose.prod.yml`
+is pinned to `pgvector/pgvector:pg17` so the artifact names the version that
+was measured rather than one that was assumed.
+
+### The database layer: 9/9, and every step a first
+
+`pnpm --filter @potion/db rehearse-postgres` — see `docs/REHEARSAL-COVERAGE.md`
+for the full record. Everything below had **never run outside PGlite**,
+including code written the same day (the F12 ledger, its baselining probe,
+transaction-per-migration, and 0033).
+
+```
+PASS 0. PostgreSQL >= 15                    server_version_num=170010
+PASS 0. pgvector present                    vector v0.8.6
+PASS 1. first boot: 34/34 migrations apply on node-postgres
+PASS 2. second boot: executes nothing (the F12 ledger, real driver)
+PASS 3. platform evidence survives two reboots (F12, real Postgres)
+PASS 4. upgrade boot: prefix baselined WITHOUT executing
+PASS 5. F17: erasure of an org with 1200 request_logs — 0 rows left
+PASS 6. F21: a migration with divider comments boots (1ms, real path)
+PASS 7. schema_migrations readable and complete (34 rows)
+```
+
+**F17 is settled, and it converts a diligence claim we would otherwise have
+made falsely into a true one.** 1200 request_logs — four times the chunk size
+— erased completely with the true count reported. Production erasure works;
+the second correction was right. The walkthrough's own step 14 now says
+`FIXTURE SCALE ONLY (<1 chunk; the >500-row chunked path is unproven here)`,
+because on PGlite that is exactly what it proves.
+
+**F21 proven on the real boot path**, not just in unit timing: a throwaway
+migration carrying two ASCII divider comments was written into `drizzle/`,
+applied in 1ms, and removed. Before the fix that file would have hung startup
+forever.
+
+### Honest coverage: the container/TLS layer is UNEXECUTED
+
+Recorded in `docs/REHEARSAL-COVERAGE.md` and at the TOP of
+`docs/DEPLOY-RUNBOOK.md` (§0), not in a footnote. Compose bring-up, image
+build, healthchecks, ACME issuance, the `/metrics` 403, HTTP→HTTPS, and
+**BullMQ against real Redis** all first execute on the production host. Each
+carries a "what to watch" note.
+
+Worth naming: real Redis is a genuine first anywhere — every test uses
+`ioredis-mock`, which shares one in-process data context (F20).
+
+### Deliverables
+
+`deploy/docker-compose.prod.yml` (single instance, STOP block on scaling),
+`deploy/Caddyfile` (the `/metrics` 403 that makes route-inventory's
+"network-restricted by deployment posture" true instead of phantom),
+`.env.example`, `docs/DEPLOY-RUNBOOK.md`, `docs/ROLLBACK-RUNBOOK.md` (decision
+table: revert vs restore vs offboard vs pause), `docs/REHEARSAL-COVERAGE.md`,
+and `packages/db/src/rehearse-postgres.ts` as a re-runnable preflight against
+the real production database.
+
+### A gitignore hole found while writing .env.example
+
+`.gitignore` had `.env` only. `.env.prod`, `.env.local`, `.env.staging` were
+all **committable** — and the deploy runbook was about to instruct an operator
+to create `.env.prod` holding `POTION_MASTER_KEY`. Now `.env.*` is ignored with
+`!.env.example` as the sole exception. Found by checking rather than assuming,
+which is the only reason it did not become an incident.
+
+| 2026-08-10 | Deploy rehearsal: local Postgres 17.10, no provider calls. | n/a | **$0.0000** | no reconcile needed |
