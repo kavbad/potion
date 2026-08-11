@@ -31,7 +31,7 @@ started the search.
 | 2 | **`ioredis-mock` ↔ Redis** | The BullMQ "control group" is itself a stub: blocking pops are a polling polyfill, `XTRIM` is a no-op, Lua is shimmed, and **one data context is shared per host:port across every instance in the process** | Nothing *claimed* falsely — both the test name and the mock's header disclose the sharing. But **no test crosses a real process boundary**, so BullMQ persistence is *unverified*, not falsely proven | F20 (**corrected**, see below) |
 | 3 | **Mock ↔ live providers** | The mock never throws, never rate-limits, never times out, always returns logprobs, and bills `chars/4` tokens instead of a real tokenizer | Every 429 / 5xx / timeout / auth / content-refusal path; cost drift between estimated and billed tokens | partly F19 |
 | 4 | **`resilient(p)` as production builds it** | **Not a test swap — a production gap.** `factory.ts` wraps every provider with no policy, and `breaker`/`hedgeAfterMs` default to *absent*, so the circuit breaker and hedging are **dead in production**. `docs/HA.md` shows `/readyz` reporting an open breaker — a state the running system cannot reach | An upstream outage becomes a latency outage: every request pays the full retry ladder instead of failing fast | **F19** |
-| 5 | **PGlite ↔ node-postgres** | Single in-process connection: no lock waits, no deadlocks, no serialization failures, no concurrent writer. Separately, `db.execute()` returns **no `rowCount`** | Lost updates under concurrent writes; cascade aborts under load. And a **live defect**: the chunked cascade delete reads `rowCount` | **F17** (severity raised — see below) |
+| 5 | **PGlite ↔ node-postgres** | Single in-process connection: no lock waits, no deadlocks, no serialization failures, no concurrent writer. Separately, `db.execute()` returns **no `rowCount`** | Lost updates under concurrent writes; cascade aborts under load. And the trap I fell into myself: the chunked cascade delete reads `rowCount`, which fails **only under the stand-in** | **F17** (severity raised, then *reversed* — see below) |
 | 6 | **In-memory rate limiter** | **Not a test swap at all.** `InMemoryRateLimiterStore` is the only implementation and it is what production runs. The `opts.store` seam exists and nothing fills it | With N replicas: N× the contracted rate and N× the daily cap; a rollout resets every bucket, so a client can lift its own limit by inducing one | **F18** |
 | 7 | **Cache invalidation bus** | `REDIS_URL` unset → memory-only mode, where `invalidate()` is a no-op that never throws. Tests run in that mode | A BYOK key rotation that fails to fan out to sibling replicas — stale provider credentials serving live traffic | — |
 | 8 | **Deterministic ↔ real embedder** | The mock embedder is a seeded synthetic vector generator; clustering fixtures are built to separate cleanly | Real-embedding degeneracy: clusters that do not separate, dimension drift, provider changes to the embedding model | — |
@@ -73,19 +73,30 @@ Both were caught by applying the swarm's "fails for the right reason"
 standard to my own findings. Recording them because a finding that survives
 scrutiny unchanged is rarer than the filings suggest.
 
-**F17 was filed too low.** Filed as "under-deletes and reports 0". Actually
-reproducing it showed worse: the rows that survive the truncated loop still
-reference the org, so the final `DELETE FROM orgs` raises `23503` and **the
-entire erasure transaction aborts**:
+**F17 — corrected TWICE, and the second correction reverses the first.**
+Filed as "under-deletes and reports 0". Reproducing it on PGlite showed
+worse: surviving rows still reference the org, so `DELETE FROM orgs` raises
+`23503` and the entire erasure transaction aborts —
 
 ```
 Key (id)=(org_f17) is still referenced from table "request_logs".
 ```
 
-So org deletion does not quietly under-delete — it **fails outright for any
-org with more than 500 request logs**, which is every real org. The existing
-cascade tests pass only because their fixtures stay under the chunk size.
-Raised to CRITICAL and pre-traffic.
+— on the strength of which I raised it to CRITICAL/pre-traffic. **That
+escalation was wrong**, and wrong in the exact way this document is about: I
+measured a swapped driver and reported the result as production behavior.
+`node-postgres` DOES return `rowCount`; only PGlite omits it. So on managed
+Postgres the loop terminates and cascade erasure works, and F17 does **not**
+gate production.
+
+What it does invalidate is the **walkthrough's own erasure proof** — step 14
+("nothing derived survives") runs on PGlite, so above the 500-row chunk it
+proves nothing. The diligence claim is *unproven at scale*, not false. F17
+stands as a real defect for any PGlite-backed deployment, and drops to
+MEDIUM. To be settled empirically against real Postgres.
+
+The lesson is row 5's, applied to its own author: a finding measured under a
+stand-in is a finding about the stand-in until it is re-measured.
 
 **F20 was filed wrong and is withdrawn as a defect.** It claimed the BullMQ
 durability test was a phantom proof. It is not: the test is named `jobs

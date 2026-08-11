@@ -391,3 +391,35 @@ it counts as evidence, and any test whose result changes between the two runs
 is rewritten to be self-contained. The same rule caught the F19 marker
 failing by TIMEOUT rather than by its assertion — a pass for the wrong reason
 is still a pass for the wrong reason.
+
+## "Every statement is idempotent" is a claim about statements not yet written (2026-08-10)
+
+The migration runner had no ledger and re-executed every file on every boot.
+Its header said that was safe because "every statement is idempotent
+(CREATE ... IF NOT EXISTS)" — true of the DDL that existed when the sentence
+was written, and false the moment 0023 added a tenancy backfill against four
+NULLABLE org_id columns where NULL means *platform*. Every restart then moved
+platform evidence into a tenant's pool, and once the tenant owned the same
+(cluster, version) the UPDATE hit a unique index and the boot THREW. Two
+lessons, and the second is the general one: (1) a safety property that
+depends on all future contributors obeying it is not a property, it is a
+hope — make it structural (a ledger) and add a meta-test so violating it
+fails the build; (2) a comment describing the code's current contents ages
+into a lie as soon as the contents change, whereas a comment describing an
+enforced INVARIANT stays true or breaks a test.
+
+## A hang is a failure mode, and it is the one you cannot debug (2026-08-10)
+
+Writing the F12 repair migration wedged the boot completely. Cause: the
+statement splitter filtered comment-only chunks with `/^(--[^\n]*\n?)*$/`,
+and every `--` INSIDE a comment line is another place the group can begin an
+iteration — so an ASCII divider (`-- ---- frontiers -----`) makes the parse
+space exponential and a failed match backtracks through all of it. It had sat
+there harmlessly because no migration had ever used a divider comment. The
+part worth keeping: a hang emits no error, no stack, and no log line, and
+because PGlite runs WASM on the event loop, the watchdog timer written to
+catch it could never fire either. Bisecting needed synchronous appends to a
+file. Rules: prefer linear string logic to clever regex anywhere on the boot
+path, treat "no output" as a symptom with a cause rather than a slow test,
+and remember that an instrument sharing the thing it measures (a JS timer
+watching a JS-blocking loop) measures nothing.

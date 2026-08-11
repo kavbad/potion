@@ -1184,3 +1184,46 @@ export const jobExecutions = pgTable(
 
 export type JobExecutionRow = typeof jobExecutions.$inferSelect;
 export type NewJobExecution = typeof jobExecutions.$inferInsert;
+
+/**
+ * Migration ledger (F12). Bootstrapped directly by `migrate()` — it cannot be
+ * a migration file, since it is what decides which files run. Declared here
+ * so operators and tests can read it as a table like any other.
+ */
+export const schemaMigrations = pgTable('schema_migrations', {
+  filename: text('filename').primaryKey(),
+  appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+  /** true = accepted as already-applied on a pre-ledger database WITHOUT
+   * being executed (see BASELINE_THROUGH). */
+  baselined: boolean('baselined').notNull().default(false),
+});
+
+/**
+ * F12 attribution audit (0033). One row per piece of evidence that was found
+ * attributed to the org owning its cluster — the fingerprint of the boot-time
+ * re-attribution.
+ *
+ * Deliberately NO foreign key to orgs: this is an operator record about a
+ * data-integrity incident, and it must outlive the org whose attribution it
+ * describes (a row that vanishes when you delete the org cannot tell you what
+ * happened before the deletion). It holds org IDs and timestamps only — no
+ * prompts, completions, or customer content — so it is not in scope for the
+ * TRUE-CASCADE erasure guarantee.
+ */
+export const evidenceAttributionAudit = pgTable('evidence_attribution_audit', {
+  id: serial('id').primaryKey(),
+  tableName: text('table_name').notNull(),
+  rowKey: text('row_key').notNull(),
+  clusterId: text('cluster_id'),
+  claimedOrgId: text('claimed_org_id').notNull(),
+  rowCreatedAt: timestamp('row_created_at', { withTimezone: true }),
+  orgCreatedAt: timestamp('org_created_at', { withTimezone: true }),
+  /** 'reset-to-platform' = provably impossible, org_id set back to NULL.
+   *  'ambiguous-review'  = indistinguishable from legitimate ownership; the
+   *                        row was NOT modified. An operator decides. */
+  disposition: text('disposition').notNull(),
+  notedAt: timestamp('noted_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SchemaMigrationRow = typeof schemaMigrations.$inferSelect;
+export type EvidenceAttributionAuditRow = typeof evidenceAttributionAudit.$inferSelect;

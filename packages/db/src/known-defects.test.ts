@@ -24,7 +24,17 @@ describe('KNOWN DEFECT F17: chunked cascade delete reads rowCount, which PGlite 
   // WHY IT MATTERS: org:delete is the GDPR/contract erasure path. The loop
   // deletes ONE chunk, reads rowCount (undefined on PGlite) as 0, and breaks.
   //
-  // SEVERITY IS HIGHER THAN FILED. Reproducing it showed the failure is not
+  // SEVERITY CORRECTION (2026-08-10): this is a PGlite-PATH defect, and the
+  // escalation below was measured on PGlite only. node-postgres DOES return
+  // `rowCount`, so on the managed Postgres production runs, the loop
+  // terminates correctly and cascade erasure works. What this actually
+  // invalidates is the WALKTHROUGH's "nothing derived survives" proof, which
+  // runs on PGlite and is therefore vacuous above the 500-row chunk size —
+  // the diligence claim is UNPROVEN at scale, not false. Still a real defect
+  // for any PGlite-backed deployment. To be settled empirically against real
+  // Postgres during the deployment rehearsal.
+  //
+  // On PGlite the failure is not
   // "under-deletes and reports 0" — the surviving rows still reference the
   // org, so the final `DELETE FROM orgs` raises 23503 and the WHOLE
   // TRANSACTION ABORTS:

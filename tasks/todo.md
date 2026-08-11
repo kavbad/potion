@@ -659,6 +659,20 @@ capstone everything else serves.)
 - [ ] G2.5 DEFERRED TO LAST (post-capstone): Redis rate limiting + shared caches —
       build when deployment reality demands multi-replica correctness; the
       RateLimiterStore seam (apps/server/src/middleware/ratelimit.ts) stays documented. [M]
+      **REFRAMED by the F10 driver audit (2026-08-10, owner-noted): this is not
+      only a scaling deferral — it is a TEST-BLINDNESS gap.**
+      `InMemoryRateLimiterStore` is the only implementation of the seam, so it is
+      what PRODUCTION runs, not a test stand-in: with N replicas the contracted
+      rate and daily cap are both N×, and a rollout resets every bucket, so a
+      client can lift its own limit by inducing one. `docs/HA.md` compounds it by
+      calling the BYOK cache "the only cross-request in-memory state that matters
+      for correctness". Filed as **F18 (HIGH, PRE-TRAFFIC)** with a reproducing
+      `it.fails()` marker in `apps/server/test/known-defects.test.ts` that models
+      two replicas and shows one key's daily cap holding at 2×. See
+      `docs/driver-semantics.md` row 6. The consequence for sequencing: the
+      minimum pre-traffic slice of G2.5 (a shared limiter store) is no longer
+      "build when deployment demands it" — it is required before multi-replica
+      traffic, independent of scale.
 
 DEMOTED (parked): public pricing page, catalog breadth, self-serve funnel, SDK publishing,
 SMTP, cloud-KMS, Stripe.
@@ -2998,3 +3012,123 @@ and F18 is a live, money-adjacent multi-replica gap. F13 conditionally if a
 partner uses embeddings.
 
 | 2026-08-10 | F10 retry idempotency + driver-semantics audit: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |
+
+## F12 — DONE (2026-08-10): evidence cannot cross the org boundary at boot
+
+Owner framing: *"for a product whose entire value is per-customer measurement
+with clean provenance, evidence crossing the org boundary at startup is
+disqualifying."* Agreed, and it was worse than filed.
+
+### Root cause, established empirically rather than by reading
+
+`migrate()` had **no ledger**: every boot re-executed every statement of every
+file, and `apps/server/src/context.ts` calls it on the boot path. The runner's
+own header asserted the property that made this safe — *"every statement is
+idempotent (CREATE ... IF NOT EXISTS)"* — and that assertion was false.
+
+Exhaustive scan: only 0003 and 0023 carry data statements. **0003 is inert**
+(its four UPDATEs target columns the same file then sets NOT NULL, so
+`WHERE org_id IS NULL` can never match again). **0023 is live** — its four
+UPDATEs target `frontiers`, `frontier_points`, `eval_results`, `eval_runs`,
+all of which have NULLABLE `org_id`, where **NULL means platform**.
+
+Probe — org-owned cluster carrying a platform frontier + platform evidence,
+then one more `migrate()`:
+
+```
+BEFORE reboot: {plat_frontiers:1, tenant_frontiers:0, plat_evals:1, tenant_evals:0}
+AFTER  reboot: {plat_frontiers:0, tenant_frontiers:1, plat_evals:0, tenant_evals:1}
+```
+
+**Moved, not copied.** And the state it destroyed is load-bearing:
+`repos/frontiers.ts` documents the serving read as org-preferred **with
+platform fallback**, and share links + the public leaderboard are
+platform-only by design.
+
+### Second failure mode: the boot CRASHED (raised to CRITICAL)
+
+With the tenant already owning the same `(cluster, version)`, the UPDATE
+violates `frontiers_org_cluster_version` and `migrate()` throws — on the boot
+path, so **the server does not start**. Reached naturally when a tenant
+recomputes its own v1 while a platform v1 exists. So the first re-attribution
+*arms* a permanent startup outage.
+
+### The fix — structural, two layers
+
+1. **A migrations ledger** (`schema_migrations`, bootstrapped by the runner
+   since it decides which files run). Each file executes exactly once, ever —
+   closing the whole class, not just 0023. Statements and the ledger row
+   commit in one transaction, so a crash mid-file leaves it unrecorded and it
+   retries.
+2. **Baselining**, decided before anything executes: on a database where the
+   ledger is absent but schema exists, everything through `BASELINE_THROUGH`
+   (`0032_job_executions.sql`) is marked applied **without running** —
+   otherwise the very boot that installs the fix performs one last
+   re-attribution on its way in.
+3. **A meta-test** (`migration-safety.test.ts`) that fails the build when a
+   migration carries an undeclared data statement. Fixing the runner alone
+   would leave the authoring habit that produced 0023 intact. 0003, 0023 and
+   0033 are declared with the reason each is safe; 0023's entry says plainly
+   that it is the defect itself, kept verbatim as history.
+
+### F21 — a NEW defect found while writing the repair: the boot could HANG
+
+`splitStatements` filtered comment-only chunks with `/^(--[^\n]*\n?)*$/`.
+Every `--` *inside* a comment line is another place the group can start an
+iteration, so an ASCII divider (`-- ---- frontiers -----`) makes the parse
+space exponential; on a chunk that then fails to match, the engine backtracks
+through all of it. **A migration with a divider comment would have hung
+startup silently and forever** — no error, no log, and because PGlite runs
+WASM on the event loop, the watchdog timer written to catch it could not fire
+either. Rewritten to linear line-scanning and pinned by timing tests. It had
+been latent since the runner was written; only a migration that used a
+divider comment could trigger it.
+
+### The repair (0033), and its honest limit
+
+**The damage is lossy.** `SET org_id = c.org_id WHERE org_id IS NULL`
+destroys the only bit that said "platform"; there is no shadow column and no
+audit row, so the general case **cannot be reliably reversed** and 0033 does
+not guess. What is provable: a row whose `created_at` precedes its claimed
+org's own `created_at` cannot belong to that org — zero false positives.
+0033 resets exactly that subset to NULL and writes everything merely
+suspicious to `evidence_attribution_audit` as `ambiguous-review`, unmodified,
+for an operator to decide. A wrong "repair" of tenant attribution is the same
+class of harm as the bug.
+
+The symmetry is deliberate: a data migration caused this, so the repair had
+to be one that can only ever run once — which layer 1 now guarantees.
+
+### Contamination check on the real instances — NOTHING TO WITHDRAW
+
+Contamination *can* flow: `pareto/recompute.ts` selects evidence with
+`eq(evalResults.orgId, opts.orgId)`, so re-attributed platform evidence would
+become an input to that org's frontier recompute → incumbent → retention and
+savings on the customer report.
+
+All five local `.pglite/` instances were inspected **on copies** (the curated
+`g28-live` verdict trail was never opened in place):
+
+| instance | provable re-attribution | vulnerable state remaining |
+|---|---|---|
+| **g28-live** (capstone, 4 verdicts) | **0** | 0 platform rows on org clusters |
+| g28-mock | 0 | 0 |
+| livesweep-g17 | 0 | 0 |
+| calibration, rubric-g15 | n/a — pre-0023 schema, no `org_id` column, so the backfill never applied |
+
+**The capstone verdict shows no evidence of contamination, so nothing is
+superseded.** Stated with its limit: the detection is one-sided, so absence
+of the fingerprint is consistent with no damage without proving it. The
+supersession trigger is evidence of contamination, and there is none. The
+diagnostic is committed as `pnpm --filter @potion/db inspect-attribution` so
+the production database can be checked the same way.
+
+### Verification
+
+Ledger applies-once; baselining executes nothing on the upgrade boot; the
+collision state that used to throw now boots clean; the repair resets the
+provable subset and leaves the ambiguous one; a never-damaged database is
+untouched with an empty audit table; every migration file parses in
+milliseconds. db suite 23 files / 167 tests.
+
+| 2026-08-10 | F12 boot re-attribution + ledger + 0033 repair: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |
