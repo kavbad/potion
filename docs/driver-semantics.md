@@ -30,7 +30,7 @@ started the search.
 | 1 | **`MemoryQueue` ↔ BullMQ** | Globally serial (one job at a time, in-process); a throw marked the job `failed` with **no retry** where production retries 3×; `close()` drains the whole backlog where BullMQ drains only in-flight work; job ids are `mem-N` and **restart at 1** each process | Retry double-execution of spend and contractual effects; stalled-job redelivery; head-of-line behavior; job-id collision across restarts. **This is F10** | **F10 — fixed here** |
 | 2 | **`ioredis-mock` ↔ Redis** | The BullMQ "control group" is itself a stub: blocking pops are a polling polyfill, `XTRIM` is a no-op, Lua is shimmed, and **one data context is shared per host:port across every instance in the process** | Nothing *claimed* falsely — both the test name and the mock's header disclose the sharing. But **no test crosses a real process boundary**, so BullMQ persistence is *unverified*, not falsely proven | F20 (**corrected**, see below) |
 | 3 | **Mock ↔ live providers** | The mock never throws, never rate-limits, never times out, always returns logprobs, and bills `chars/4` tokens instead of a real tokenizer | Every 429 / 5xx / timeout / auth / content-refusal path; cost drift between estimated and billed tokens | partly F19 |
-| 4 | **`resilient(p)` as production builds it** | **Not a test swap — a production gap.** `factory.ts` wraps every provider with no policy, and `breaker`/`hedgeAfterMs` default to *absent*, so the circuit breaker and hedging are **dead in production**. `docs/HA.md` shows `/readyz` reporting an open breaker — a state the running system cannot reach | An upstream outage becomes a latency outage: every request pays the full retry ladder instead of failing fast | **F19** |
+| 4 | **`resilient(p)` as production builds it** | **Was a production gap, now FIXED.** `factory.ts` wrapped every provider with no policy, so the breaker and hedging were dead while `/readyz`, `docs/HA.md` and a customer-facing `breaker_open` **alert** were all built against a state that could not occur. F19 wires `DEFAULT_BREAKER` (requests, not attempts; `client_4xx` excluded) and forwards `req.signal`. **Hedging stays off** — see below | An upstream outage became a latency outage. Now: fast-fail, a real `/readyz` reading, and an alert that can fire | **F19 — fixed** |
 | 5 | **PGlite ↔ node-postgres** | Single in-process connection: no lock waits, no deadlocks, no serialization failures, no concurrent writer. Separately, `db.execute()` returns **no `rowCount`** | Lost updates under concurrent writes; cascade aborts under load. And the trap I fell into myself: the chunked cascade delete reads `rowCount`, which fails **only under the stand-in** | **F17** (severity raised, then *reversed* — see below) |
 | 6 | **In-memory rate limiter** | **Not a test swap at all.** `InMemoryRateLimiterStore` is the only implementation and it is what production runs. The `opts.store` seam exists and nothing fills it | With N replicas: N× the contracted rate and N× the daily cap; a rollout resets every bucket, so a client can lift its own limit by inducing one | **F18** |
 | 7 | **Cache invalidation bus** | `REDIS_URL` unset → memory-only mode, where `invalidate()` is a no-op that never throws. Tests run in that mode | A BYOK key rotation that fails to fan out to sibling replicas — stale provider credentials serving live traffic | — |
@@ -111,6 +111,21 @@ option that cannot fail* — and when that default does fail, it fails in a mode
 the harness has no vocabulary for. `migration-safety.test.ts` now asserts wall
 -clock bounds on parsing every migration file, which is the smallest thing
 that would have caught it.
+
+---
+
+## Why hedging is still off (F19, deliberate)
+
+`hedgeAfterMs` duplicates an in-flight call and aborts the loser through
+`req.signal`. Until F19 the live transports discarded that signal and made
+their own controller, so a hedge loser would have kept running at the provider
+**and kept being billed** — a silent double-spend on every hedged request,
+directly against the per-call metering work.
+
+F19 forwards the signal, so the mechanism would now work. Enabling it is still
+a **spend decision**, not a resilience default: hedging trades money for tail
+latency on purpose. It stays filed until someone decides that trade is worth
+making, rather than arriving as a side effect of a reliability fix.
 
 ---
 

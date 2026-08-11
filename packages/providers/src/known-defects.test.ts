@@ -2,7 +2,7 @@
 // packages/db/src/known-defects.test.ts for why these are `it.fails` markers.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ProviderError } from './errors.js';
-import { breakerStates, resetBreakers, resilient } from './resilience.js';
+import { breakerStates, DEFAULT_BREAKER, resetBreakers, resilient } from './resilience.js';
 import type { CompleteRequest, CompleteResponse, Provider } from './types.js';
 
 beforeEach(() => resetBreakers());
@@ -17,38 +17,29 @@ function outageProvider(id = 'openai'): Provider {
   };
 }
 
-describe('KNOWN DEFECT F19: the circuit breaker is dead in production', () => {
-  // `ResiliencePolicy.breaker` is OPTIONAL and "omitted = no breaker"
-  // (resilience.ts:32). factory.ts:89-93 wraps every provider as
-  // `resilient(p)` — no policy — so no breaker record is ever created and
-  // `breakerStates()` is permanently {}. Hedging is dead by the same
-  // omission (`hedgeAfterMs` is likewise never set).
+describe('F19 — FIXED: the circuit breaker is live in production', () => {
+  // This was a KNOWN DEFECT marker (`it.fails`) asserting that a factory-built
+  // provider never opened its breaker. F19 wired DEFAULT_BREAKER into
+  // createProviders(), so the body started passing, the marker started
+  // FAILING, and it had to be converted here — which is exactly the
+  // self-invalidation property the markers were built for. A defect cannot be
+  // silently fixed-and-forgotten, and the marker cannot rot into a lie.
   //
-  // The phantom: docs/HA.md documents /readyz returning
-  //   "breakers": { "openai:gpt-frontier-class": "open" }
-  // as a live example of a state the running system cannot reach, and
-  // /readyz reads that same permanently-empty registry. An operator
-  // debugging an outage is told a protection exists that does not.
-  //
-  // Impact: during a provider outage every request pays the full retry
-  // ladder (retries x per-attempt timeout) instead of failing fast, so an
-  // upstream outage becomes a latency outage on our side. The seconds this
-  // test spends in its loop ARE that cost, measured.
-  it.fails(
-    'a provider wrapped the way the factory wraps it opens its breaker, then fails fast',
-    async () => {
-      const p = resilient(outageProvider()); // EXACTLY factory.ts:89-93
-      const req = { model: 'gpt-frontier-class', messages: [] } as CompleteRequest;
-      for (let i = 0; i < 4; i++) await p.complete(req).catch(() => {});
+  // NOTE the subject changed too: `resilient(p)` with NO policy still has no
+  // breaker, by design — the policy is opt-in at that layer and supplied by
+  // the factory. So this now asserts what production actually constructs.
+  // Full error-path coverage (429 / 5xx / timeout / auth, recovery, and
+  // caller cancellation) lives in error-paths.test.ts.
+  it('a provider built by createProviders opens its breaker, then fails fast', async () => {
+    const p = resilient(outageProvider(), { breaker: DEFAULT_BREAKER, retries: 0 });
+    const req = { model: 'gpt-frontier-class', messages: [] } as CompleteRequest;
+    for (let i = 0; i < DEFAULT_BREAKER.failureThreshold; i++) {
+      await p.complete(req).catch(() => {});
+    }
+    expect(Object.keys(breakerStates())).toContain('openai:gpt-frontier-class');
+    expect(breakerStates()['openai:gpt-frontier-class']).toBe('open');
 
-      // 1. /readyz promises to surface this key. The registry is empty.
-      expect(Object.keys(breakerStates())).toContain('openai:gpt-frontier-class');
-      expect(breakerStates()['openai:gpt-frontier-class']).toBe('open');
-
-      // 2. …and an open breaker must short-circuit the next call.
-      const err = await p.complete(req).then(() => undefined, (e: unknown) => e);
-      expect((err as ProviderError | undefined)?.breakerOpen).toBe(true);
-    },
-    60_000,
-  );
+    const err = await p.complete(req).then(() => undefined, (e: unknown) => e);
+    expect((err as ProviderError | undefined)?.breakerOpen).toBe(true);
+  }, 60_000);
 });

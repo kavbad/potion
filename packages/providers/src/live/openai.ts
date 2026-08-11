@@ -70,6 +70,8 @@ export async function openAiCompatibleComplete(
       url: baseUrl,
       headers: { authorization: `Bearer ${apiKey}`, ...extraHeaders },
       body,
+      // F19: the caller's cancellation reaches the socket.
+      signal: req.signal,
     },
     retry,
   );

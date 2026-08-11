@@ -35,6 +35,40 @@ export interface ResiliencePolicy {
 
 export type BreakerState = 'closed' | 'open' | 'half-open';
 
+/**
+ * F19: the breaker policy production actually runs.
+ *
+ * Before this existed, `factory.ts` called `resilient(p)` with no policy, so
+ * `breaker` was undefined and NO breaker record was ever created. The
+ * mechanism worked and was tested (tests/chaos/breaker-exhaustion) — nothing
+ * wired it. Three consumers were built against a state that could not occur:
+ * docs/HA.md's /readyz example, /readyz's own `breakers` summary (permanently
+ * {}), and chat.ts's `breaker_open` ALERT, which is customer-facing and was
+ * dead on arrival. An alert that cannot fire is worse than no alert: it
+ * occupies the slot where a real one would go.
+ *
+ * Deliberately conservative. An open breaker turns slow failures into fast
+ * ones, which is the point; a threshold set too low turns transient blips
+ * into refusals for a partner. Tunable per deployment, and switchable off.
+ */
+export const DEFAULT_BREAKER: BreakerPolicy = {
+  failureThreshold: 5,
+  cooldownMs: 30_000,
+  halfOpenProbes: 2,
+};
+
+/**
+ * Which failures count toward opening the breaker.
+ *
+ * `client_4xx` — including auth — deliberately does NOT. A bad or expired API
+ * key is not a provider outage, and counting it would let one tenant's
+ * misconfiguration open the breaker for the provider, taking it out for every
+ * other org. Only genuine unavailability counts.
+ */
+export function countsTowardBreaker(kind: ProviderErrorKind): boolean {
+  return kind === 'rate_limit' || kind === 'timeout' || kind === 'server_5xx' || kind === 'network';
+}
+
 const DEFAULT_RETRIES = 3;
 const DEFAULT_BACKOFF_BASE_MS = 250;
 const DEFAULT_BACKOFF_MAX_MS = 8_000;
@@ -310,27 +344,49 @@ export function resilient(p: Provider, policy?: Partial<ResiliencePolicy>): Prov
       const key = `${p.id}:${req.model}`;
       const rec = resolved.breaker ? breakerRecord(key, resolved.breaker) : undefined;
 
+      // F19 — the breaker counts REQUESTS, not attempts.
+      //
+      // The gate is checked once, and the outcome settled once, around the
+      // whole retry ladder. Counting each retry separately made
+      // `failureThreshold: 5` trip after ~1.25 failing requests (1 call = 1 +
+      // 3 retries = 4 failures), which is not what the number says and not
+      // what an operator tuning it would expect. Caught by a test asserting
+      // the kind of the FIRST error and getting the breaker's own fast-reject
+      // instead.
+      //
+      // Settling once also keeps half-open probe accounting paired: exactly
+      // one breakerBeforeCall for exactly one success-or-failure, so
+      // probesInFlight cannot leak.
+      if (rec) breakerBeforeCall(rec, p.id, req.model);
+
       let lastErr: ProviderError | undefined;
       for (let attempt = 0; attempt <= resolved.retries; attempt++) {
         if (attempt > 0) {
           await sleep(resilienceBackoffMs(attempt, resolved.backoff));
         }
         try {
-          if (rec) breakerBeforeCall(rec, p.id, req.model);
           const res = await attemptCall(p, req, resolved);
           if (rec) breakerOnSuccess(rec);
           return res;
         } catch (err) {
           const pErr = asProviderError(err, p.id, req.model);
-          if (rec && !pErr.breakerOpen) breakerOnFailure(rec);
-          // Breaker fast-rejects are not retried inside this wrapper (the
-          // breaker state will not change within one call).
-          if (pErr.breakerOpen) throw pErr;
           lastErr = pErr;
-          if (!pErr.retryable || attempt >= resolved.retries) throw pErr;
+          if (!pErr.retryable || attempt >= resolved.retries) {
+            // Terminal for this request. A non-qualifying failure (auth,
+            // malformed request) must not move the breaker in EITHER
+            // direction — it is evidence about the caller, not about the
+            // provider's health — but the half-open probe still has to be
+            // released, so settle it as a success in that case.
+            if (rec) {
+              if (countsTowardBreaker(pErr.kind)) breakerOnFailure(rec);
+              else breakerOnSuccess(rec);
+            }
+            throw pErr;
+          }
         }
       }
       // Unreachable (loop always returns/throws), kept for the type checker.
+      if (rec) breakerOnFailure(rec);
       throw lastErr ?? new ProviderError(p.id, `provider '${p.id}': exhausted retries`);
     },
   };

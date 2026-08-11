@@ -11,7 +11,7 @@ import { createOpenAiProvider } from './live/openai.js';
 import { createGoogleProvider } from './live/google.js';
 import { createOpenRouterProvider } from './live/openrouter.js';
 import type { LiveProviderOptions } from './live/common.js';
-import { resilient } from './resilience.js';
+import { DEFAULT_BREAKER, resilient, type BreakerPolicy } from './resilience.js';
 
 type LiveFactory = (opts: LiveProviderOptions) => Provider;
 
@@ -80,16 +80,45 @@ function lazyLiveProvider(id: Exclude<ProviderId, 'mock'>, opts: ProviderFactory
   return provider;
 }
 
+/**
+ * F19: resolve the breaker policy from the environment.
+ *
+ * `POTION_BREAKER=off` disables it entirely (back to the pre-F19 behavior) —
+ * an escape hatch for an operator who finds it opening spuriously, so the
+ * remedy is a config change rather than a redeploy of patched code.
+ */
+export function breakerPolicyFromEnv(env: NodeJS.ProcessEnv = process.env): BreakerPolicy | undefined {
+  if (env.POTION_BREAKER === 'off' || env.POTION_BREAKER === '0') return undefined;
+  const int = (raw: string | undefined, fallback: number): number => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  };
+  return {
+    failureThreshold: int(env.POTION_BREAKER_THRESHOLD, DEFAULT_BREAKER.failureThreshold),
+    cooldownMs: int(env.POTION_BREAKER_COOLDOWN_MS, DEFAULT_BREAKER.cooldownMs),
+    halfOpenProbes: int(env.POTION_BREAKER_PROBES, DEFAULT_BREAKER.halfOpenProbes),
+  };
+}
+
 export function createProviders(opts: ProviderFactoryOptions): Record<ProviderId, Provider> {
   // SPEC §12.1: every provider is wrapped with `resilient` defaults (3 retries,
-  // full-jitter backoff 250→8000ms, 60s per-attempt timeout; no breaker, no
-  // hedging). Successful calls pass through untouched, so mock determinism
-  // (SPEC §2) is fully preserved.
+  // full-jitter backoff 250→8000ms, 60s per-attempt timeout) PLUS, since F19,
+  // a real circuit breaker (DEFAULT_BREAKER, POTION_BREAKER=off to disable).
+  // Successful calls pass through untouched, so mock determinism (SPEC §2) is
+  // fully preserved.
+  //
+  // HEDGING REMAINS OFF, deliberately. `hedgeAfterMs` starts a duplicate call
+  // and aborts the loser through `req.signal`; until every live transport
+  // honors that signal (it now does — see http.ts), a hedged request would
+  // keep paying for the loser at the provider. Turning it on is a spend
+  // decision, not a resilience default, and stays filed.
+  const breaker = opts.breaker === undefined ? breakerPolicyFromEnv() : (opts.breaker ?? undefined);
+  const policy = breaker === undefined ? {} : { breaker };
   return {
-    mock: resilient(createMockProvider(opts.prices)),
-    anthropic: resilient(lazyLiveProvider('anthropic', opts)),
-    openai: resilient(lazyLiveProvider('openai', opts)),
-    google: resilient(lazyLiveProvider('google', opts)),
-    openrouter: resilient(lazyLiveProvider('openrouter', opts)),
+    mock: resilient(createMockProvider(opts.prices), policy),
+    anthropic: resilient(lazyLiveProvider('anthropic', opts), policy),
+    openai: resilient(lazyLiveProvider('openai', opts), policy),
+    google: resilient(lazyLiveProvider('google', opts), policy),
+    openrouter: resilient(lazyLiveProvider('openrouter', opts), policy),
   };
 }

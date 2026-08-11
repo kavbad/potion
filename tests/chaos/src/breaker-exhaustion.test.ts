@@ -21,10 +21,13 @@ import { buildServer } from '@potion/server/server';
 
 const MODEL = 'chaos-breaker-model';
 const KEY = `mock:${MODEL}`;
-// The breaker counts failed ATTEMPTS (resilient() calls breakerOnFailure per
-// retry). With retries:2 one complete() costs up to 3 failures, so a
-// threshold of 4 keeps the first call closed and trips mid-second-call.
-const BREAKER = { failureThreshold: 4, cooldownMs: 60_000, halfOpenProbes: 1 };
+// F19: the breaker counts REQUESTS, not attempts. It used to call
+// breakerOnFailure once per retry, so with retries:2 a single complete()
+// cost 3 failures and `failureThreshold: 4` tripped in under two requests —
+// not what the number says, and not what an operator tuning it would expect.
+// Now one complete() settles exactly once, so threshold 2 = two failed
+// requests.
+const BREAKER = { failureThreshold: 2, cooldownMs: 60_000, halfOpenProbes: 1 };
 
 const REQ = {
   model: MODEL,
@@ -56,19 +59,18 @@ describe('chaos: breaker exhaustion', () => {
     const retryBudgetMs = Date.now() - t0;
     expect(firstErr).toBeInstanceOf(ProviderError);
     expect(retryBudgetMs).toBeGreaterThan(500); // backoff actually happened
-    expect(breakerStates()[KEY]).toBe('closed'); // 3 failed attempts < threshold 4
+    expect(breakerStates()[KEY]).toBe('closed'); // 1 failed REQUEST < threshold 2
 
-    // Second call trips the breaker on its first attempt (failure #4), then
-    // the remaining attempts fast-reject — the whole call is far cheaper than
-    // the retry budget of the first.
-    const t1b = Date.now();
+    // The second failed request settles the breaker OPEN. It still pays its
+    // own full retry ladder first — the breaker gates entry to a request, it
+    // does not abort one in flight — so this call is NOT cheaper than the
+    // first. The saving starts on the call after it.
     const secondErr = await p.complete(REQ).then(
       () => null,
       (e: unknown) => e,
     );
-    const secondMs = Date.now() - t1b;
     expect(secondErr).toBeInstanceOf(ProviderError);
-    expect(secondMs).toBeLessThan(retryBudgetMs);
+    expect((secondErr as ProviderError).breakerOpen).not.toBe(true); // ran for real
     expect(breakerStates()[KEY]).toBe('open');
 
     // Open breaker → fail FAST: no retries, no backoff.

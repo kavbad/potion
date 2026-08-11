@@ -3211,3 +3211,80 @@ to create `.env.prod` holding `POTION_MASTER_KEY`. Now `.env.*` is ignored with
 which is the only reason it did not become an incident.
 
 | 2026-08-10 | Deploy rehearsal: local Postgres 17.10, no provider calls. | n/a | **$0.0000** | no reconcile needed |
+
+## F19 — DONE (2026-08-10): the resilience policy made real
+
+### The filing needed a refinement: factory.ts was HONEST
+
+Its comment said plainly *"3 retries, full-jitter backoff, 60s per-attempt
+timeout; **no breaker, no hedging**"* — an accurate description of a
+deliberate choice. The phantom was downstream, in three consumers built
+against a state the system could not reach:
+
+1. `docs/HA.md` documented `/readyz` returning an **open breaker** as a live
+   example.
+2. `/readyz` really did report `breakerStates()` — permanently `{}`.
+3. `chat.ts:notifyBreakerOpen` emits a **`breaker_open` alert**, dedupes per
+   key, and re-arms on recovery. **Customer-facing alerting, dead on
+   arrival.**
+
+An alert that cannot fire is worse than no alert: it occupies the slot where a
+real one would go. That was the severity, not the missing policy. The
+mechanism itself was fine and already tested — nothing wired it.
+
+### The fix
+
+- **`DEFAULT_BREAKER`** (5 failures / 30s cooldown / 2 half-open probes) wired
+  into `createProviders`, env-tunable, with `POTION_BREAKER=off` as a real
+  escape hatch so a spuriously-opening breaker is a config change rather than
+  a redeploy of patched code.
+- **`client_4xx`/auth excluded from breaker accounting.** A bad or expired key
+  is evidence about the CALLER, not the provider: counting it would let one
+  tenant's misconfiguration open the breaker for every other org.
+- **`req.signal` forwarded** through every live `complete()` path
+  (anthropic/openai/google, and openrouter via `openAiCompatibleComplete`),
+  linked to the per-attempt timeout controller and torn down per attempt so a
+  long-lived caller signal cannot accumulate listeners across retries.
+- **Hedging stays OFF, deliberately** — see the new section in
+  `docs/driver-semantics.md`. It trades money for tail latency; that is a
+  spend decision and should not arrive as a side effect of a reliability fix.
+
+### A defect found in my own change: the threshold did not mean what it said
+
+The breaker called `breakerOnFailure` once **per retry**, so with 3 retries a
+single request cost 4 failures and `failureThreshold: 5` tripped in ~1.25
+requests. Caught by a test asserting the kind of the FIRST error and getting
+the breaker's own fast-reject instead. Now the gate is checked once and the
+outcome settled once around the whole ladder: **the breaker counts REQUESTS,
+not attempts**, which is what an operator tuning the number would expect.
+Settling once also keeps half-open probe accounting paired, so
+`probesInFlight` cannot leak.
+
+The old chaos test's comment documented the surprising behavior explicitly
+("the breaker counts failed ATTEMPTS… a threshold of 4 keeps the first call
+closed and trips mid-second-call") — needing that much explanation was itself
+the signal. Updated to the new semantics rather than loosened.
+
+### Error paths, driven through what production BUILDS
+
+`error-paths.test.ts` drives `createProviders()`' own output over a stubbed
+`fetch` — real status codes, real bodies, real retry ladder, real breaker.
+Only the socket is swapped, not the always-succeeds mock.
+
+| Injected | Asserted |
+|---|---|
+| `server_5xx` | retried, counted, breaker OPENS, next call never reaches the network |
+| `429 rate_limit` | counted the same way |
+| `401 auth` | **not** retried (one call), **does not** trip the breaker |
+| recovery | cooldown → half-open probe → closed |
+| caller abort | the abort reaches the outbound `fetch` |
+
+### The `it.fails` marker did its job
+
+The F19 marker started passing once the fix landed, which made `it.fails`
+start FAILING, which forced conversion to `it()` — the self-invalidation
+property working exactly as designed. Its subject needed correcting too:
+`resilient(p)` with no policy still has no breaker (opt-in at that layer), so
+the test now asserts what production actually constructs.
+
+| 2026-08-10 | F19 breaker + signal forwarding: keyless, stubbed fetch, no live legs. | n/a | **$0.0000** | no reconcile needed |

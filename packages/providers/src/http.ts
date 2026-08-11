@@ -33,6 +33,18 @@ export interface HttpJsonRequest {
   url: string;
   headers: Record<string, string>;
   body: unknown;
+  /**
+   * F19: the CALLER's cancellation signal (CompleteRequest.signal), linked to
+   * this attempt's own timeout controller.
+   *
+   * Before F19 the live transports created a controller and discarded the
+   * caller's signal entirely, so an aborted call kept running at the provider
+   * — and kept being billed. That was latent while hedging was off (nothing
+   * aborted anything), but it is also the precondition for ever turning
+   * hedging on: a hedge that cannot cancel its loser is a duplicate purchase,
+   * not an optimization.
+   */
+  signal?: AbortSignal | undefined;
 }
 
 export interface HttpJsonResponse<T> {
@@ -107,6 +119,12 @@ export async function postJsonWithRetry<T = unknown>(
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Caller abort propagates to this attempt. Registered per attempt and
+    // torn down in the same finally as the timer, so a long-lived caller
+    // signal never accumulates listeners across retries.
+    const onCallerAbort = (): void => controller.abort();
+    req.signal?.addEventListener('abort', onCallerAbort, { once: true });
+    if (req.signal?.aborted === true) controller.abort();
     let res: Response;
     try {
       res = await fetchFn(req.url, {
@@ -130,6 +148,7 @@ export async function postJsonWithRetry<T = unknown>(
       );
     } finally {
       clearTimeout(timer);
+      req.signal?.removeEventListener('abort', onCallerAbort);
     }
 
     const json = (await res.json().catch(() => undefined)) as T;

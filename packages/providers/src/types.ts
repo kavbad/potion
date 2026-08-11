@@ -3,6 +3,8 @@
 // tools/tool_choice passthrough and CompleteResponse gains optional
 // toolCalls — all optional, backward-compatible with the §2 contract.
 import type { ChatMessage, PriceTable, ProviderId, Tool, ToolCall, ToolChoice } from '@potion/core';
+// type-only, so the resilience <-> types cycle never exists at runtime
+import type { BreakerPolicy } from './resilience.js';
 
 export interface CompleteRequest {
   model: string; // alias resolved via PriceTable, or native id
@@ -47,4 +49,9 @@ export interface ProviderFactoryOptions {
   timeoutMs?: number;
   maxRetries?: number;
   prices: PriceTable;
+  /** F19: circuit-breaker policy. Omitted → resolved from the environment
+   * (DEFAULT_BREAKER, or none when POTION_BREAKER=off). Pass `null` to
+   * disable it explicitly — tests that assert the pre-F19 behavior, and
+   * anything that must not carry breaker state across cases, use that. */
+  breaker?: BreakerPolicy | null;
 }

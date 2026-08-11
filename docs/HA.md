@@ -25,9 +25,11 @@ horizontally scaled.
 > replicas a key's rate AND daily cap are both N×, and a rollout resets every
 > bucket. Filed as **F18** with a reproducing test.
 >
-> Likewise the `/readyz` example further down shows an **open circuit
-> breaker** — a state production cannot reach, because `factory.ts` calls
-> `resilient(p)` with no policy so the breaker and hedging are dead (**F19**).
+> (The `/readyz` example further down showing an **open circuit breaker** used
+> to be unreachable for the same reason — `factory.ts` called `resilient(p)`
+> with no policy. **F19 fixed that**: `DEFAULT_BREAKER` is wired in, so that
+> example is now a state the system can actually be in. Hedging remains off
+> deliberately — see `docs/driver-semantics.md` row 4.)
 >
 > Until G2.5 lands, deploy ONE replica:
 > [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md), and see

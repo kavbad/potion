@@ -62,6 +62,8 @@ export function createGoogleProvider(opts: LiveProviderOptions): Provider {
           url: `${API_BASE}/${encodeURIComponent(native)}:generateContent?key=${encodeURIComponent(apiKey)}`,
           headers: {},
           body,
+          // F19: the caller's cancellation reaches the socket.
+          signal: req.signal,
         },
         retry,
       );

@@ -42,6 +42,8 @@ export function createAnthropicProvider(opts: LiveProviderOptions): Provider {
           url: API_URL,
           headers: { 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION },
           body,
+          // F19: the caller's cancellation reaches the socket.
+          signal: req.signal,
         },
         retry,
       );
