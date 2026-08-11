@@ -16,8 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "bullmq": "^5.81.3",
-    "ioredis": "^5.11.1"
+    "bullmq": "^6.0.9",
+    "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "@types/ioredis-mock": "^8.2.8",
