@@ -8,7 +8,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 
 | Step | Name | Date | Commit | Status |
 |---|---|---|---|---|
-| 1 | File and consolidate | 2026-08-11 | (stamped below) | **complete** |
+| 1 | File and consolidate | 2026-08-11 | `3829cf9` | **complete** |
 | 2 | Harness spec | — | — | not started |
 | 3 | Runtime core | — | — | not started |
 | 4 | Run records and deterministic replay | — | — | not started |
@@ -55,8 +55,8 @@ phase was skipped for this step only, per the operator's instruction
 ("docs-only, so skip the spec phase for this step only").
 
 Residual risks: none — no code was touched, so nothing can have regressed.
-The commit hash for this step is stamped in the row above by the follow-up
-ledger commit (the hash cannot be known before the commit exists).
+Step commit: `3829cf9`; this hash was stamped by the follow-up ledger commit
+(the hash cannot be known before the commit exists).
 
-Proof: `git show --stat <commit>` lists only `docs/LAB-BUILD-PLAN.md`,
+Proof: `git show --stat 3829cf9` lists only `docs/LAB-BUILD-PLAN.md`,
 `docs/LAB-BUILD-STATUS.md`, `docs/LAB-ROADMAP.md`, and `CLAUDE.md`.
