@@ -11,7 +11,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 1 | File and consolidate | 2026-08-11 | `3829cf9` | **complete** |
 | 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
 | 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
-| 4 | Run records and deterministic replay | — | — | not started |
+| 4 | Run records and deterministic replay | 2026-08-12 | — | **spec ready for review** (`docs/specs/step-04-run-records-replay.md`) |
 | 5 | Platform live sweep (rule-2 core work) | — | — | not started |
 | 6 | Intent → spec generation | — | — | not started |
 | 7 | The dial | — | — | not started |
