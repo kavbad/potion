@@ -45,6 +45,9 @@ import {
   policies,
   providerKeys,
   qualitySamples,
+  labHarnessMemory,
+  labRuns,
+  labRunSteps,
   requestLogs,
   researchCycles,
   sessions,
@@ -228,6 +231,15 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
 
   // ---- 3. Hot tables, chunked, outside any transaction ----
   deleted.request_logs = await chunkedDeleteByOrg(db, requestLogs, orgId);
+
+  // ---- Lab runtime (Step 3, 0035): runs, checkpoints, harness memory ----
+  // Harness memory is the most privacy-sensitive data the Lab holds; steps
+  // carry verbatim model I/O. Steps go first (FK to runs), then runs, then
+  // memory. Covered by the F5 schema-derived completeness meta-test from the
+  // same commit that created the tables.
+  await count('lab_run_steps', db.delete(labRunSteps).where(eq(labRunSteps.orgId, orgId)).returning({ x: labRunSteps.seq }));
+  await count('lab_runs', db.delete(labRuns).where(eq(labRuns.orgId, orgId)).returning({ x: labRuns.id }));
+  await count('lab_harness_memory', db.delete(labHarnessMemory).where(eq(labHarnessMemory.orgId, orgId)).returning({ x: labHarnessMemory.key }));
   deleted.trace_spans = await chunkedDeleteByOrg(db, traceSpans, orgId);
 
   // ---- 4. Free-order bulk ----

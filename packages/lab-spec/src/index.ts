@@ -8,4 +8,7 @@ export * from './types.js';
 export { HarnessSpecSchema, LabPolicySchema } from './schema.js';
 export { parseHarnessSpec, parseHarnessSpecText } from './parse.js';
 export { harnessSpecHash } from './hash.js';
+// Step 3 uses the same scanner on every checkpoint payload before write —
+// the custody rule applied to run records, not just specs.
+export { scanRawValue } from './security.js';
 export * as SPEC_LIMITS from './limits.js';

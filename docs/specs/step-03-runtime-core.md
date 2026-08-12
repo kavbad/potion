@@ -259,3 +259,68 @@ Autopilot (6), dial enforcement (7), chat surface/narration (8), MCP (10),
 triggers/schedules/queue (L4), deterministic replay itself (4 — this step
 only guarantees its inputs exist), run routes (route inventory untouched —
 CLI only).
+
+---
+
+## Review outcomes (operator ruling + additions, 2026-08-11)
+
+**Ruling — memory store: option 1 confirmed.** All Step 3 org-FK tables
+(runs, steps/checkpoints, memory) land in `@potion/db`: migration 0035,
+`deleteOrgCascade` extended, F5 meta-test green in the same commit. L0's
+"zero core changes" is hereby RESOLVED as **zero SEMANTIC core changes** —
+schema-additive extensions land under rule 2, recorded as such, with cascade
+coverage proven at birth. Lab-private storage rejected: it dodges the
+tenancy machinery, and harness memory is the most privacy-sensitive data the
+Lab will hold.
+
+**Additions folded in as review outcomes:**
+
+1. **Claim expiry for the resume CAS.** A winner that dies mid-run must not
+   hold the claim forever. Design: lease (`claim_expires_at`) + fencing
+   token (`invocation_seq`). Reclaim after expiry bumps the fence; EVERY
+   write from an invocation carries its fence and is guarded
+   `WHERE invocation_seq = mine` — a zombie winner's late writes are
+   rejected, not merged. Tested: claim → expire → reclaim → zombie append
+   fenced out.
+2. **Checkpoints structurally cannot contain secret material.** The
+   checkpoint writer runs lab-spec's secret scanner over the full step
+   payload BEFORE write and refuses with a typed reason on any hit —
+   fail-closed by construction, not review. Tested with planted key-shaped
+   strings in tool output and model response.
+3. **Cross-org non-readability of memory, runs, and checkpoints** proven on
+   the multi-org fixture in the same commit as the tables.
+
+---
+
+## Build-phase deviations and findings (recorded per the binding protocol)
+
+1. **`brain.policy` does not yet drive serving selection.** The runtime sends
+   the documented `potion-auto` label; serving routes by cluster + the API
+   KEY's policy. The spec's brain slot is recorded in the run but the dial
+   wiring is Step 6/7 work, exactly as the phase plan sequences it — noted so
+   nobody reads the slot as live before then.
+2. **Check-in answer consumption semantics** (design decision made during
+   build): a recorded answer authorizes the NEXT external action, once.
+   Without consumption the resumed leg would re-ask on the very tool call the
+   human just approved — an infinite politeness loop. One answer, one action.
+3. **The org-budget mid-run kill leg was REDESIGNED after two falsifications,
+   both recorded:**
+   - A fresh `buildServer()` in the same process does NOT get a fresh budget
+     gate cache — `hardStopCache` is module-scoped, shared across server
+     instances in one process. This is F18's per-replica cache observed from
+     the inside; a "new session" in-process is not a new session.
+   - **Finding, ledger-worthy: some mock-stack serving calls meter
+     `usage.costUsd = 0`** (measured — a fallback-path call landed cost 0
+     while a code-gen-clustered call landed $0.00009). Month-to-date spend
+     therefore may never cross a cap on mock, and the org gate CORRECTLY
+     never fires. An org-budget mid-run kill keyed to metered mock spend is
+     nondeterministic BY CONSTRUCTION. Resolution: leg 2a proves the org 429
+     path first-touch (pre-seeded spend, deterministic); leg 2b proves the
+     MID-RUN kill through the real route at the harness-fuel layer, which
+     derives from response TOKENS (always present on mock). Live pricing
+     makes the org-layer mid-run case deterministic on a real deployment —
+     added to the deployment checklist rather than faked here.
+4. **`releaseLabRunLease`** added to the repo (leg boundary for standing
+   missions) — implied by leg-per-invocation, made explicit.
+5. **`drizzle-orm` added as a devDependency** of lab-runtime (test assertions
+   query rows directly); not a runtime dependency.

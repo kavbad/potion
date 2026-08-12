@@ -273,6 +273,25 @@ importers:
         specifier: ^2.0.5
         version: 2.1.9(@types/node@20.19.43)
 
+  packages/lab-runtime:
+    dependencies:
+      '@potion/core':
+        specifier: workspace:*
+        version: link:../core
+      '@potion/db':
+        specifier: workspace:*
+        version: link:../db
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:../lab-spec
+    devDependencies:
+      '@potion/server':
+        specifier: workspace:*
+        version: link:../../apps/server
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
+
   packages/lab-spec:
     dependencies:
       '@potion/core':

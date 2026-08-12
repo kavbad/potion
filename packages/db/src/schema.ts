@@ -1245,3 +1245,81 @@ export const evidenceAttributionAudit = pgTable('evidence_attribution_audit', {
 
 export type SchemaMigrationRow = typeof schemaMigrations.$inferSelect;
 export type EvidenceAttributionAuditRow = typeof evidenceAttributionAudit.$inferSelect;
+
+/**
+ * Lab runtime (Step 3, migration 0035). Operator ruling: schema-ADDITIVE
+ * core under rule 2 — no guarantee code path reads these; the additive
+ * contract protects guarantee SEMANTICS. All three are org-FK tables so the
+ * F5 cascade meta-test covers them from birth.
+ */
+export const labRuns = pgTable('lab_runs', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  /** Spec content hash (Step 2) — the resume identity gate. */
+  harnessHash: text('harness_hash').notNull(),
+  harnessName: text('harness_name').notNull(),
+  /** The spec AS RUN, frozen. Replay/fork read this copy, never a file. */
+  spec: jsonb('spec').notNull(),
+  state: text('state')
+    .$type<
+      | 'pending'
+      | 'running'
+      | 'awaiting-human'
+      | 'completed'
+      | 'failed'
+      | 'killed-budget'
+      | 'killed-operator'
+    >()
+    .notNull(),
+  stateReason: text('state_reason'),
+  /** Last checkpointed step — steps <= cursor are never re-executed (F10 at
+   * the run level: a resume must not re-buy step N's tokens). */
+  cursorSeq: integer('cursor_seq').notNull().default(0),
+  /** Fencing token: bumped per claim; every invocation write is guarded
+   * `WHERE invocation_seq = mine`, so zombie writes are rejected. */
+  invocationSeq: integer('invocation_seq').notNull().default(0),
+  /** Lease: a dead winner's claim is reclaimable after this instant. */
+  claimExpiresAt: timestamp('claim_expires_at', { withTimezone: true }),
+  pendingQuestion: text('pending_question'),
+  pendingAnswer: text('pending_answer'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const labRunSteps = pgTable(
+  'lab_run_steps',
+  {
+    runId: text('run_id')
+      .notNull()
+      .references(() => labRuns.id, { onDelete: 'cascade' }),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    seq: integer('seq').notNull(),
+    kind: text('kind').$type<'model' | 'tool' | 'check-in'>().notNull(),
+    /** Verbatim step record — secret-scanned BEFORE write (fail-closed). */
+    payload: jsonb('payload').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.runId, t.seq] })],
+);
+
+export const labHarnessMemory = pgTable(
+  'lab_harness_memory',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    harnessHash: text('harness_hash').notNull(),
+    key: text('key').notNull(),
+    value: jsonb('value').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.harnessHash, t.key] })],
+);
+
+export type LabRunRow = typeof labRuns.$inferSelect;
+export type LabRunStepRow = typeof labRunSteps.$inferSelect;
+export type LabRunState = LabRunRow['state'];

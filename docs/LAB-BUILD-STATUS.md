@@ -10,7 +10,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 |---|---|---|---|---|
 | 1 | File and consolidate | 2026-08-11 | `3829cf9` | **complete** |
 | 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
-| 3 | Runtime core | 2026-08-11 | — | **spec ready for review** (`docs/specs/step-03-runtime-core.md`) |
+| 3 | Runtime core | 2026-08-12 | (stamped below) | **complete** |
 | 4 | Run records and deterministic replay | — | — | not started |
 | 5 | Platform live sweep (rule-2 core work) | — | — | not started |
 | 6 | Intent → spec generation | — | — | not started |
@@ -112,3 +112,74 @@ custody tests re-verify both copies.
 Proof: `git show --stat 4862b78` — the step touches only
 `packages/lab-spec/**`, `docs/specs/step-02-harness-spec.md`, this ledger,
 and lockfile/workspace wiring. Zero changes to guarantee-product code.
+
+---
+
+## Step 3 — Runtime core (2026-08-12)
+
+**Done when** (plan): a harness runs headless from a file, every model call
+writes its own metered row, a mid-run budget hard-stop provably kills it, and
+a walkthrough leg shows checkpoints survive the kill. **All proven**, plus the
+three review additions, walkthrough-style against the REAL serving route
+(`buildServer` on an ephemeral port — actual metering, budget gate, rate
+limiter; no in-process shortcut exists in the test file).
+
+What landed:
+
+- **`@potion/lab-runtime`**: ServingClient (the ONE outbound module,
+  touchpoint 1; `potion-auto` label; budget/rate-limit 429 taxonomy), the leg
+  executor (leg-per-invocation, checkpoint-per-step, fenced writes,
+  awaiting-human first-class with consume-on-use answer semantics), the
+  secret gate on every checkpoint, llm.call span emission per the A3 shape,
+  CLI (run/resume/answer/kill/show).
+- **Migration 0035 + `@potion/db` repos** (operator ruling: schema-additive
+  core under rule 2): `lab_runs` (state machine, cursor, fence, lease),
+  `lab_run_steps` (verbatim step records), `lab_harness_memory`
+  ((org, harness)-scoped). `deleteOrgCascade` extended and the F5
+  schema-derived meta-test green in the same commit.
+
+Proof lines (all green; every new test also green in isolation):
+
+- db store: 9/9 — one CAS winner, expired-lease reclaim with the ZOMBIE'S
+  LATE WRITE FENCED OUT, ordered appends, unfenced operator kill fencing the
+  running invocation, terminal-refuses-with-fork-remedy, spec-drift refusal,
+  awaiting-human answer lifecycle, cross-org invisibility of runs/steps/
+  memory, cascade erasure with counts.
+- runtime: 10/10 — tool execution with memory projection, suspend BEFORE the
+  external tool runs → answer → resume completes with exactly one send,
+  fuel kill mid-run with surviving checkpoint, secret-in-checkpoint typed
+  failure (model step kept, leaky tool step refused), structural
+  no-provider-imports test.
+- walkthrough legs vs the real route: headless completion with the METERING
+  JOIN (every model step's completionId ↔ exactly one request_logs row, our
+  org) + spans ingested idempotently; org-budget 429 → killed-budget,
+  terminal, resume refused; fuel hard stop mid-run through the real route
+  with checkpoint surviving; spec-drift refusal end to end.
+- Full `pnpm verify` exit 0 (unfiltered log retained): 1,513 tests repo-wide;
+  guarantee-product dashboard walkthrough 18/18 untouched. The Step-2 workers
+  flake did NOT recur across this step's four full verify runs.
+
+**Findings, recorded not smoothed** (details in the spec file's deviations):
+
+1. **Some mock-stack serving calls meter `usage.costUsd = 0`** (measured: a
+   fallback-path call landed cost 0; a code-gen call landed $0.00009). An
+   org-budget MID-RUN kill keyed to metered mock spend is therefore
+   nondeterministic by construction — leg 2 proves the org 429 first-touch
+   and the mid-run kill at the fuel layer (token-derived, deterministic).
+   Deployment checklist item: re-prove the org-layer mid-run kill on live
+   pricing.
+2. **The budget gate cache is module-scoped**: a second `buildServer` in the
+   same process shares it. F18 observed from inside a test — an in-process
+   "new session" is not a new session. The cross-session resume story in the
+   walkthrough uses the same db with a fresh client instead.
+3. `brain.policy` does not yet drive serving selection (Step 6/7); recorded
+   so the slot is not read as live.
+
+Residual risks: checkpoint payload growth is O(context²) per run (accepted
+v1, bounded by fuel; Step 4 revisits); cron check-ins are inert until L4
+triggers exist; the CLI is programmatic-first and its argv surface is
+untested beyond types (exercised properly in Step 8's novice loop).
+
+Proof: `git show --stat <commit>` — guarantee-product sources untouched
+except `packages/db` schema-additive files and the cascade extension the
+ruling authorized.
