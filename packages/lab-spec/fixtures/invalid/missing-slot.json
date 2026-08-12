@@ -1,0 +1,21 @@
+{
+  "specVersion": 1,
+  "name": "No fuel slot",
+  "brain": {
+    "policy": {
+      "type": "min_cost",
+      "qualityFloor": 0.8
+    }
+  },
+  "mission": {
+    "kind": "task",
+    "goal": "Summarize the weekly report",
+    "doneDefinition": "A summary under 200 words exists"
+  },
+  "superpowers": [],
+  "memory": {
+    "enabled": false
+  },
+  "rules": [],
+  "checkIns": []
+}

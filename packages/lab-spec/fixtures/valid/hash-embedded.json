@@ -1,0 +1,26 @@
+{
+  "specVersion": 1,
+  "name": "Hash-embedded harness",
+  "brain": {
+    "policy": {
+      "type": "min_cost",
+      "qualityFloor": 0.8
+    }
+  },
+  "mission": {
+    "kind": "task",
+    "goal": "Summarize the weekly report",
+    "doneDefinition": "A summary under 200 words exists"
+  },
+  "superpowers": [],
+  "memory": {
+    "enabled": false
+  },
+  "rules": [],
+  "fuel": {
+    "maxUsdPerRun": 0.5,
+    "hardStop": true
+  },
+  "checkIns": [],
+  "hash": "eafcf087914eac51666a27027b998f3bea11db5970aac1e6bb5f59532c72cbf0"
+}

@@ -1,0 +1,68 @@
+{
+  "specVersion": 1,
+  "name": "Depth bomb",
+  "brain": {
+    "policy": {
+      "type": "min_cost",
+      "qualityFloor": 0.8
+    }
+  },
+  "mission": {
+    "kind": "task",
+    "goal": "Summarize the weekly report",
+    "doneDefinition": "A summary under 200 words exists"
+  },
+  "superpowers": [],
+  "memory": {
+    "enabled": false
+  },
+  "rules": [],
+  "fuel": {
+    "maxUsdPerRun": 0.5,
+    "hardStop": true
+  },
+  "checkIns": [],
+  "unknownCarrier": {
+    "deeper": {
+      "deeper": {
+        "deeper": {
+          "deeper": {
+            "deeper": {
+              "deeper": {
+                "deeper": {
+                  "deeper": {
+                    "deeper": {
+                      "deeper": {
+                        "deeper": {
+                          "deeper": {
+                            "deeper": {
+                              "deeper": {
+                                "deeper": {
+                                  "deeper": {
+                                    "deeper": {
+                                      "deeper": {
+                                        "deeper": {
+                                          "deeper": {
+                                            "boom": true
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

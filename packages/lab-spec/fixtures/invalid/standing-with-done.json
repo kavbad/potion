@@ -1,0 +1,25 @@
+{
+  "specVersion": 1,
+  "name": "Minimal task harness",
+  "brain": {
+    "policy": {
+      "type": "min_cost",
+      "qualityFloor": 0.8
+    }
+  },
+  "mission": {
+    "kind": "standing",
+    "goal": "Watch the queue",
+    "doneDefinition": "never"
+  },
+  "superpowers": [],
+  "memory": {
+    "enabled": false
+  },
+  "rules": [],
+  "fuel": {
+    "maxUsdPerRun": 0.5,
+    "hardStop": true
+  },
+  "checkIns": []
+}

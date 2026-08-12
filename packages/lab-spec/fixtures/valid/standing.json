@@ -1,0 +1,50 @@
+{
+  "specVersion": 1,
+  "name": "Standing inbox triage",
+  "brain": {
+    "policy": {
+      "type": "compound",
+      "qualityFloor": 0.85,
+      "p95Ms": 2000
+    }
+  },
+  "mission": {
+    "kind": "standing",
+    "goal": "Keep the support inbox triaged"
+  },
+  "superpowers": [
+    {
+      "id": "catalog/gmail-read",
+      "scopes": [
+        "read"
+      ]
+    }
+  ],
+  "memory": {
+    "enabled": true,
+    "retentionDays": 30
+  },
+  "rules": [
+    "Never send email without a check-in",
+    "Escalate anything mentioning refunds"
+  ],
+  "fuel": {
+    "maxUsdPerRun": 1,
+    "maxUsdPerDay": 10,
+    "hardStop": true
+  },
+  "checkIns": [
+    {
+      "trigger": "before-external-action"
+    },
+    {
+      "trigger": "on-budget-fraction",
+      "fraction": 0.8
+    },
+    {
+      "trigger": "cron",
+      "schedule": "0 9 * * 1-5",
+      "question": "Anything unusual in the inbox overnight?"
+    }
+  ]
+}

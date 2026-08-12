@@ -276,3 +276,39 @@ covers it — expected automatic).
 Runtime (Step 3), replay (4), autopilot filling (6), dial enforcement of the
 tools partition (7), MCP/custody beyond the spec-layer secret rejection (10).
 No routes → no route-inventory rows. No spend → no ledger movement.
+
+---
+
+## Build-phase deviations (recorded per the binding protocol)
+
+Two, both made on contact with real code and both narrowing rather than
+widening:
+
+1. **`LabPolicySchema` is a strict subset, not a reuse of core's
+   `PolicySchema`.** The spec said "reuse". On contact: (a) core's
+   `z.object` defaults STRIP unknown keys, which would violate the
+   unknown-field rule inside the policy slot; (b) core policies carry
+   `shadow`/`guarantee` — serving-side configuration a harness runtime will
+   not honor, and an accepted-but-unenforced slot is the phantom-decision
+   pattern. Resolution: same four discriminants, identical field validators,
+   minus shadow/guarantee, `.strict()` — and the subset relationship is
+   PROVEN by test (`parse.test.ts`: every Lab-valid policy parses under core
+   `PolicySchema`; a core-valid shadow-carrying policy is rejected by the
+   Lab schema), so drift from core's vocabulary fails the build. "One dial
+   vocabulary" became an enforced fact instead of an import statement.
+
+2. **The ajv agreement test is scoped per-fixture, not "identical
+   classification".** The spec claimed both validators would classify every
+   fixture identically. Too strong: JSON Schema cannot express total input
+   size, secret detection, control-character scanning, the fuel
+   `day >= run` relation, or embedded-hash verification. Resolution:
+   `fixtures/expected.ts` carries an explicit ajv column per fixture, every
+   parse↔ajv divergence must carry a stated `layer` reason, and a meta-test
+   fails on any unexplained divergence — so the published schema cannot
+   silently claim to enforce what it cannot.
+
+One test-authoring correction worth the record: the first draft of the
+"Lab rejects shadow config" proof used `candidates: []`, which CORE also
+rejects (`.min(1)`), so the assertion was failing for the wrong reason — the
+exact class the swarm's fails-for-the-right-reason audit exists to catch.
+Fixed to `candidates: 'frontier'`, which core accepts and the Lab refuses.

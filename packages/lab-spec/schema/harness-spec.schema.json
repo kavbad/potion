@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://potion.dev/schemas/harness-spec/v1",
+  "title": "Potion harness spec (Lab), v1",
+  "description": "The published STRUCTURAL contract for harness files. This schema documents shape; @potion/lab-spec enforces MORE (secret material, control characters, nesting depth, total size, fuel day>=run, embedded-hash verification) — layers JSON Schema cannot express. The fixture corpus pins the agreement between the two validators, including exactly which rejections are semantic-layer-only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specVersion", "name", "brain", "mission", "superpowers", "memory", "rules", "fuel", "checkIns"],
+  "properties": {
+    "specVersion": { "const": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "brain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy"],
+      "properties": {
+        "policy": { "$ref": "#/$defs/labPolicy" },
+        "toolPolicy": { "$ref": "#/$defs/labPolicy" }
+      }
+    },
+    "mission": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "goal", "doneDefinition"],
+          "properties": {
+            "kind": { "const": "task" },
+            "goal": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "doneDefinition": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "worthPerRunUsd": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "goal"],
+          "properties": {
+            "kind": { "const": "standing" },
+            "goal": { "type": "string", "minLength": 1, "maxLength": 4000 }
+          }
+        }
+      ]
+    },
+    "superpowers": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "scopes"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "scopes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "maxSpendUsdPerRun": { "type": "number", "exclusiveMinimum": 0 },
+          "maxSpendUsdPerDay": { "type": "number", "exclusiveMinimum": 0 }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "retentionDays": { "type": "integer", "exclusiveMinimum": 0 }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "type": "string", "minLength": 1, "maxLength": 2000 }
+    },
+    "fuel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxUsdPerRun", "hardStop"],
+      "properties": {
+        "maxUsdPerRun": { "type": "number", "exclusiveMinimum": 0 },
+        "maxUsdPerDay": { "type": "number", "exclusiveMinimum": 0 },
+        "hardStop": { "const": true }
+      }
+    },
+    "checkIns": {
+      "type": "array",
+      "maxItems": 25,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trigger"],
+            "properties": { "trigger": { "const": "before-external-action" } }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trigger", "fraction"],
+            "properties": {
+              "trigger": { "const": "on-budget-fraction" },
+              "fraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trigger", "schedule", "question"],
+            "properties": {
+              "trigger": { "const": "cron" },
+              "schedule": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "question": { "type": "string", "minLength": 1, "maxLength": 1000 }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "labPolicy": {
+      "description": "Strict subset of Potion core's Policy union: same four discriminants, no shadow/guarantee (serving-side config a harness runtime does not honor).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "costCeilingPer1K"],
+          "properties": {
+            "type": { "const": "max_quality" },
+            "costCeilingPer1K": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "qualityFloor"],
+          "properties": {
+            "type": { "const": "min_cost" },
+            "qualityFloor": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "p95Ms"],
+          "properties": {
+            "type": { "const": "latency_bound" },
+            "p95Ms": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "qualityFloor", "p95Ms"],
+          "properties": {
+            "type": { "const": "compound" },
+            "qualityFloor": { "type": "number", "minimum": 0, "maximum": 1 },
+            "p95Ms": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      ]
+    }
+  }
+}

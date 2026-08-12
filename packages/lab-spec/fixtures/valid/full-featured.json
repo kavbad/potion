@@ -1,0 +1,56 @@
+{
+  "specVersion": 1,
+  "name": "Full-featured research harness",
+  "brain": {
+    "policy": {
+      "type": "max_quality",
+      "costCeilingPer1K": 5
+    },
+    "toolPolicy": {
+      "type": "latency_bound",
+      "p95Ms": 3000
+    }
+  },
+  "mission": {
+    "kind": "task",
+    "goal": "Compile a competitive landscape brief",
+    "doneDefinition": "A brief with at least five sourced competitor profiles",
+    "worthPerRunUsd": 25
+  },
+  "superpowers": [
+    {
+      "id": "catalog/web-search",
+      "scopes": [
+        "search"
+      ],
+      "maxSpendUsdPerRun": 0.5
+    },
+    {
+      "id": "catalog/notion-write",
+      "scopes": [
+        "pages:write"
+      ],
+      "maxSpendUsdPerRun": 0.1,
+      "maxSpendUsdPerDay": 1
+    }
+  ],
+  "memory": {
+    "enabled": true,
+    "retentionDays": 90
+  },
+  "rules": [
+    "Cite every claim",
+    "Never fabricate a source"
+  ],
+  "fuel": {
+    "maxUsdPerRun": 5,
+    "maxUsdPerDay": 20,
+    "hardStop": true
+  },
+  "checkIns": [
+    {
+      "trigger": "on-budget-fraction",
+      "fraction": 0.5
+    }
+  ]
+}
