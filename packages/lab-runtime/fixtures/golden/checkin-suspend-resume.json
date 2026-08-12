@@ -1,0 +1,248 @@
+{
+  "name": "checkin-suspend-resume",
+  "spec": {
+    "specVersion": 1,
+    "name": "golden checkin harness",
+    "brain": {
+      "policy": {
+        "type": "min_cost",
+        "qualityFloor": 0
+      }
+    },
+    "mission": {
+      "kind": "task",
+      "goal": "Summarize the weekly report",
+      "doneDefinition": "A summary exists"
+    },
+    "superpowers": [],
+    "memory": {
+      "enabled": true
+    },
+    "rules": [
+      "be terse"
+    ],
+    "fuel": {
+      "maxUsdPerRun": 1,
+      "hardStop": true
+    },
+    "checkIns": [
+      {
+        "trigger": "before-external-action"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "seq": 1,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000001000,
+        "rngSample": 0.2752357276622206,
+        "toolCalls": [
+          {
+            "id": "t1",
+            "type": "function",
+            "function": {
+              "name": "send_email",
+              "arguments": "{}"
+            }
+          }
+        ],
+        "estCostUsd": 0.00015,
+        "memoryReads": {},
+        "completionId": "chatcmpl-golden0001",
+        "finishReason": "tool_calls",
+        "responseText": "",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "send_email",
+                "parameters": {
+                  "type": "object"
+                },
+                "description": "send an email"
+              }
+            }
+          ],
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "check-in",
+      "payload": {
+        "kind": "check-in",
+        "clockMs": 1780000003000,
+        "rngSample": 0.3526497078128159,
+        "checkInTrigger": "before-external-action",
+        "checkInQuestion": "About to run external tool 'send_email' with input \"{}\". Proceed?"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000007000,
+        "rngSample": 0.2752357276622206,
+        "toolCalls": [
+          {
+            "id": "t2",
+            "type": "function",
+            "function": {
+              "name": "send_email",
+              "arguments": "{}"
+            }
+          }
+        ],
+        "estCostUsd": 0.00015,
+        "completionId": "chatcmpl-golden0002",
+        "finishReason": "tool_calls",
+        "responseText": "",
+        "checkInAnswer": "yes, send it",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "send_email",
+                "parameters": {
+                  "type": "object"
+                },
+                "description": "send an email"
+              }
+            }
+          ],
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[check-in answer] yes, send it"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "tool",
+      "payload": {
+        "kind": "tool",
+        "clockMs": 1780000009000,
+        "toolName": "send_email",
+        "rngSample": 0.3526497078128159,
+        "toolInput": {},
+        "toolOutput": {
+          "sent": true
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000011000,
+        "rngSample": 0.0852009505033493,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "completionId": "chatcmpl-golden0003",
+        "finishReason": "stop",
+        "responseText": "sent; mission complete.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "send_email",
+                "parameters": {
+                  "type": "object"
+                },
+                "description": "send an email"
+              }
+            }
+          ],
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[check-in answer] yes, send it"
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[tool send_email result] {\"sent\":true}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "terminal": {
+    "state": "completed",
+    "reason": null
+  },
+  "outcomes": [
+    "awaiting-human",
+    "completed"
+  ]
+}

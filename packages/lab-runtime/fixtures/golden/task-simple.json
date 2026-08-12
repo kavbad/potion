@@ -1,0 +1,73 @@
+{
+  "name": "task-simple",
+  "spec": {
+    "specVersion": 1,
+    "name": "golden harness",
+    "brain": {
+      "policy": {
+        "type": "min_cost",
+        "qualityFloor": 0
+      }
+    },
+    "mission": {
+      "kind": "task",
+      "goal": "Summarize the weekly report",
+      "doneDefinition": "A summary exists"
+    },
+    "superpowers": [],
+    "memory": {
+      "enabled": true
+    },
+    "rules": [
+      "be terse"
+    ],
+    "fuel": {
+      "maxUsdPerRun": 1,
+      "hardStop": true
+    },
+    "checkIns": []
+  },
+  "steps": [
+    {
+      "seq": 1,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000001000,
+        "rngSample": 0.47776959952898324,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "memoryReads": {},
+        "completionId": "chatcmpl-golden0001",
+        "finishReason": "stop",
+        "responseText": "The weekly report says all is well.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "terminal": {
+    "state": "completed",
+    "reason": null
+  },
+  "outcomes": [
+    "completed"
+  ]
+}

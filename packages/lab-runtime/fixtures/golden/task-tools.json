@@ -1,0 +1,170 @@
+{
+  "name": "task-tools",
+  "spec": {
+    "specVersion": 1,
+    "name": "golden tools harness",
+    "brain": {
+      "policy": {
+        "type": "min_cost",
+        "qualityFloor": 0
+      }
+    },
+    "mission": {
+      "kind": "task",
+      "goal": "Summarize the weekly report",
+      "doneDefinition": "A summary exists"
+    },
+    "superpowers": [],
+    "memory": {
+      "enabled": true
+    },
+    "rules": [
+      "be terse"
+    ],
+    "fuel": {
+      "maxUsdPerRun": 1,
+      "hardStop": true
+    },
+    "checkIns": []
+  },
+  "steps": [
+    {
+      "seq": 1,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000001000,
+        "rngSample": 0.6101794545538723,
+        "toolCalls": [
+          {
+            "id": "t1",
+            "type": "function",
+            "function": {
+              "name": "search",
+              "arguments": "{\"q\":\"weekly report\"}"
+            }
+          }
+        ],
+        "estCostUsd": 0.00015,
+        "memoryReads": {},
+        "completionId": "chatcmpl-golden0001",
+        "finishReason": "tool_calls",
+        "responseText": "",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search",
+                "parameters": {
+                  "type": "object"
+                },
+                "description": "search the corpus"
+              }
+            }
+          ],
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden tools harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "tool",
+      "payload": {
+        "kind": "tool",
+        "clockMs": 1780000003000,
+        "toolName": "search",
+        "rngSample": 0.18226705002598464,
+        "toolInput": {
+          "q": "weekly report"
+        },
+        "toolOutput": {
+          "hits": [
+            "result for {\"q\":\"weekly report\"}"
+          ],
+          "_memoryWrites": {
+            "lastQuery": {
+              "q": "weekly report"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000005000,
+        "rngSample": 0.16984086064621806,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "completionId": "chatcmpl-golden0002",
+        "finishReason": "stop",
+        "responseText": "Summary based on the search: all is well.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search",
+                "parameters": {
+                  "type": "object"
+                },
+                "description": "search the corpus"
+              }
+            }
+          ],
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden tools harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[tool search result] {\"hits\":[\"result for {\\\"q\\\":\\\"weekly report\\\"}\"],\"_memoryWrites\":{\"lastQuery\":{\"q\":\"weekly report\"}}}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "terminal": {
+    "state": "completed",
+    "reason": null
+  },
+  "outcomes": [
+    "completed"
+  ]
+}

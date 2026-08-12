@@ -1,0 +1,89 @@
+{
+  "name": "memory-carry",
+  "spec": {
+    "specVersion": 1,
+    "name": "golden memory harness",
+    "brain": {
+      "policy": {
+        "type": "min_cost",
+        "qualityFloor": 0
+      }
+    },
+    "mission": {
+      "kind": "task",
+      "goal": "Summarize the weekly report",
+      "doneDefinition": "A summary exists"
+    },
+    "superpowers": [],
+    "memory": {
+      "enabled": true
+    },
+    "rules": [
+      "be terse"
+    ],
+    "fuel": {
+      "maxUsdPerRun": 1,
+      "hardStop": true
+    },
+    "checkIns": []
+  },
+  "steps": [
+    {
+      "seq": 1,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000009000,
+        "rngSample": 0.8755499834660441,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "memoryReads": {
+          "lastQuery": {
+            "q": "history"
+          }
+        },
+        "completionId": "chatcmpl-golden0001",
+        "finishReason": "stop",
+        "responseText": "I remember the last query; summary complete.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search",
+                "parameters": {
+                  "type": "object"
+                },
+                "description": "search the corpus"
+              }
+            }
+          ],
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden memory harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMemory:\n{\"lastQuery\":{}}\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "terminal": {
+    "state": "completed",
+    "reason": null
+  },
+  "outcomes": [
+    "completed"
+  ]
+}

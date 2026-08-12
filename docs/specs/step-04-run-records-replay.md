@@ -218,3 +218,34 @@ packages/lab-runtime/
 The bench UI and fork-from-step execution (Step 16 — this step guarantees
 their inputs); re-execution drift tooling (L5); any converter, workers, or
 serving change; routes (none — still CLI/test surface only).
+
+---
+
+## Build-phase deviations and findings (recorded per the binding protocol)
+
+1. **Two Step 3 record gaps, found by this step's re-derivation design and
+   fixed in the loop** (also appended to the Step 3 spec's record): the
+   Step 3 checkpoint contract promised `memoryReads` and `checkInAnswer`;
+   the Step 3 build populated neither, which made records NON-self-contained
+   — replay could not re-derive the system prompt or the answer injection.
+   The first step a leg appends now carries `memoryReads` (fresh run) or
+   `checkInAnswer` (resumed leg). Golden fixtures were generated AFTER the
+   fix, so the corpus pins the corrected contract.
+2. **Replay is a verifier built on the loop's own exported helpers**
+   (`systemPrompt`, `conversationFromSteps`, and two new exported
+   message-shape functions `checkInAnswerMessage`/`toolResultMessage`,
+   extracted so replay cannot drift from the loop by re-implementation).
+   After each model-step comparison the RECORDED request is adopted, so one
+   drift stays local instead of cascading.
+3. **Adversarial fixtures are in-test mutants of the goldens** rather than
+   corrupted files on disk — same "generated from the golden ones" property,
+   less fixture surface. Each mutant is pinned to its named divergence code;
+   the dead-code meta-test covers all six.
+4. **The fake embedder is duplicated** from workers' traces tests (test
+   fixtures are not importable across packages), with the same divergence
+   note: real embeddings cluster differently; the synthesis E2E proves the
+   PIPELINE, not embedding quality.
+5. **Prompt de-duplication in the emitter**: `gen_ai.prompt` is emitted only
+   when the user turn CHANGED, because the read model appends every prompt to
+   the running context — re-emitting per step would duplicate turns in
+   `contextBefore`.

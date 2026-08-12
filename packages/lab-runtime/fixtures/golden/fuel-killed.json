@@ -1,0 +1,72 @@
+{
+  "name": "fuel-killed",
+  "spec": {
+    "specVersion": 1,
+    "name": "golden fuel harness",
+    "brain": {
+      "policy": {
+        "type": "min_cost",
+        "qualityFloor": 0
+      }
+    },
+    "mission": {
+      "kind": "standing",
+      "goal": "watch the queue"
+    },
+    "superpowers": [],
+    "memory": {
+      "enabled": true
+    },
+    "rules": [
+      "be terse"
+    ],
+    "fuel": {
+      "maxUsdPerRun": 1e-7,
+      "hardStop": true
+    },
+    "checkIns": []
+  },
+  "steps": [
+    {
+      "seq": 1,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000001000,
+        "rngSample": 0.07031650841236115,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "memoryReads": {},
+        "completionId": "chatcmpl-golden0001",
+        "finishReason": "stop",
+        "responseText": "first observation.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden fuel harness'.\nMission (standing): watch the queue\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "terminal": {
+    "state": "killed-budget",
+    "reason": "fuel exhausted: est $0.0001 >= maxUsdPerRun $1e-7"
+  },
+  "outcomes": [
+    "killed-budget"
+  ]
+}

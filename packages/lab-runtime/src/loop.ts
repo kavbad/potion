@@ -46,6 +46,17 @@ export interface Clock {
 }
 export const systemClock: Clock = { now: () => Date.now() };
 
+/** The exact message shape a consumed check-in answer becomes. Exported so
+ * replay derives it from the SAME code, never a re-implementation. */
+export function checkInAnswerMessage(answer: string): ChatMessage {
+  return { role: 'user', content: `[check-in answer] ${answer}` };
+}
+
+/** The exact message shape a tool result becomes (same reasoning). */
+export function toolResultMessage(toolName: string, output: unknown): ChatMessage {
+  return { role: 'user', content: `[tool ${toolName} result] ${JSON.stringify(output)}` };
+}
+
 export interface RunLegOptions {
   db: PotionDb;
   client: ServingClient;
@@ -82,7 +93,7 @@ function mulberry32(seed: number): () => number {
 
 /** System prompt: mission + rules + memory snapshot. Deterministic given the
  * same spec + memory — this text is part of every step's requestPayload. */
-function systemPrompt(spec: HarnessSpec, memory: Record<string, unknown>): string {
+export function systemPrompt(spec: HarnessSpec, memory: Record<string, unknown>): string {
   const mission =
     spec.mission.kind === 'task'
       ? `Mission (task): ${spec.mission.goal}\nDone when: ${spec.mission.doneDefinition}`
@@ -97,7 +108,7 @@ function systemPrompt(spec: HarnessSpec, memory: Record<string, unknown>): strin
 
 /** Rebuild the conversation from checkpointed steps — replay-grade: the
  * verbatim recorded messages, never a re-derivation. */
-function conversationFromSteps(steps: Array<{ kind: string; payload: unknown }>): ChatMessage[] {
+export function conversationFromSteps(steps: Array<{ kind: string; payload: unknown }>): ChatMessage[] {
   const last = [...steps].reverse().find((s) => s.kind === 'model');
   if (!last) return [];
   const p = last.payload as StepPayload;
@@ -109,10 +120,7 @@ function conversationFromSteps(steps: Array<{ kind: string; payload: unknown }>)
   for (const s of steps.slice(lastIdx + 1)) {
     if (s.kind === 'tool') {
       const tp = s.payload as StepPayload;
-      messages.push({
-        role: 'user',
-        content: `[tool ${tp.toolName ?? '?'} result] ${JSON.stringify(tp.toolOutput ?? null)}`,
-      });
+      messages.push(toolResultMessage(tp.toolName ?? '?', tp.toolOutput ?? null));
     }
   }
   return messages;
@@ -159,7 +167,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     } else {
       messages = conversationFromSteps(priorSteps);
       if (claim.pendingAnswer !== null) {
-        messages.push({ role: 'user', content: `[check-in answer] ${claim.pendingAnswer}` });
+        messages.push(checkInAnswerMessage(claim.pendingAnswer));
       }
     }
 
@@ -185,6 +193,23 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           }))
         : undefined;
 
+    // Step 4 (recorded finding): the Step 3 spec's checkpoint table promised
+    // memoryReads and checkInAnswer; the build never populated them, which
+    // makes a record NON-self-contained (replay cannot re-derive the system
+    // prompt or the answer injection). The first step a leg appends now
+    // carries them.
+    let legStamp: Partial<StepPayload> | null =
+      priorSteps.length === 0
+        ? { memoryReads: memory }
+        : claim.pendingAnswer !== null
+          ? { checkInAnswer: claim.pendingAnswer }
+          : null;
+    const takeLegStamp = (): Partial<StepPayload> => {
+      const stamp = legStamp ?? {};
+      legStamp = null;
+      return stamp;
+    };
+
     let stepsThisLeg = 0;
     while (stepsThisLeg < maxSteps) {
       // ---- fuel hard stop (harness-level; the org-level one is serving's) ----
@@ -204,7 +229,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         seq += 1;
         await appendLabStep(opts.db, {
           runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
-          payload: buildStepPayload({ kind: 'check-in', checkInTrigger: 'on-budget-fraction', checkInQuestion: question, clockMs: clock.now(), rngSample: rng() }),
+          payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'on-budget-fraction', checkInQuestion: question, clockMs: clock.now(), rngSample: rng() }),
           harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
         });
         budgetFractionAsked = true;
@@ -234,6 +259,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       await appendLabStep(opts.db, {
         runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'model',
         payload: buildStepPayload({
+          ...takeLegStamp(),
           kind: 'model', requestPayload, responseText: result.text,
           toolCalls: result.toolCalls, finishReason: result.finishReason,
           completionId: result.completionId, frontierTrace: result.frontierTrace,
@@ -265,7 +291,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             seq += 1;
             await appendLabStep(opts.db, {
               runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
-              payload: buildStepPayload({ kind: 'check-in', checkInTrigger: 'before-external-action', checkInQuestion: question, clockMs: clock.now(), rngSample: rng() }),
+              payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'before-external-action', checkInQuestion: question, clockMs: clock.now(), rngSample: rng() }),
               harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
             });
             await fenced.transition('awaiting-human', undefined, question);
@@ -277,6 +303,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           await appendLabStep(opts.db, {
             runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'tool',
             payload: buildStepPayload({
+              ...takeLegStamp(),
               kind: 'tool', toolName: tool.name, toolInput: input, toolOutput: output,
               clockMs: clock.now(), rngSample: rng(),
             }),
@@ -286,10 +313,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             ...(isMemoryCarrier(output) ? { memoryWrites: output._memoryWrites } : {}),
             leaseMs, now: new Date(clock.now()),
           });
-          messages.push({
-            role: 'user',
-            content: `[tool ${tool.name} result] ${JSON.stringify(output)}`,
-          });
+          messages.push(toolResultMessage(tool.name, output));
         }
         continue;
       }

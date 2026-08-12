@@ -8,5 +8,13 @@
 export { ServingClient, type ServingResult, type ServingRequest } from './serving-client.js';
 export { runLeg, systemClock, type Clock, type LabTool, type LegOutcome, type RunLegOptions } from './loop.js';
 export { buildStepPayload, SecretInCheckpointError, type StepPayload } from './checkpoint.js';
-export { spansForSteps } from './spans.js';
+export { spansForSteps, capContent, SPAN_CONTENT_MAX_CHARS, SPAN_TRUNCATION_MARKER } from './spans.js';
+export {
+  replayRun,
+  type RecordedStep,
+  type RecordedTerminal,
+  type ReplayDivergence,
+  type ReplayDivergenceCode,
+  type ReplayResult,
+} from './replay.js';
 export { startRun, resumeRun } from './cli.js';

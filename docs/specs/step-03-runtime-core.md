@@ -324,3 +324,9 @@ Lab will hold.
    missions) — implied by leg-per-invocation, made explicit.
 5. **`drizzle-orm` added as a devDependency** of lab-runtime (test assertions
    query rows directly); not a runtime dependency.
+
+6. **(Appended by Step 4, 2026-08-12)** Two checkpoint-contract fields this
+   spec promised — `memoryReads` and `checkInAnswer` — were never populated
+   by the Step 3 build. Found by Step 4's re-derivation design (a record
+   without them is not self-contained); fixed in Step 4's commit with the
+   loop stamping both on the first step of each leg.

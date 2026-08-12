@@ -26,6 +26,9 @@ export interface StepPayload {
   toolName?: string;
   toolInput?: unknown;
   toolOutput?: unknown;
+  /** Fresh-run leg start only: the memory snapshot AS SEEN when the system
+   * prompt was built — what makes the record self-contained (Step 4). */
+  memoryReads?: Record<string, unknown>;
   // check-in steps
   checkInTrigger?: 'before-external-action' | 'on-budget-fraction' | 'cron';
   checkInQuestion?: string;

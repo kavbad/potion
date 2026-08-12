@@ -11,7 +11,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 1 | File and consolidate | 2026-08-11 | `3829cf9` | **complete** |
 | 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
 | 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
-| 4 | Run records and deterministic replay | 2026-08-12 | — | **spec ready for review** (`docs/specs/step-04-run-records-replay.md`) |
+| 4 | Run records and deterministic replay | 2026-08-12 | (stamped below) | **complete** |
 | 5 | Platform live sweep (rule-2 core work) | — | — | not started |
 | 6 | Intent → spec generation | — | — | not started |
 | 7 | The dial | — | — | not started |
@@ -183,3 +183,54 @@ untested beyond types (exercised properly in Step 8's novice loop).
 Proof: `git show --stat fe5dd27` — guarantee-product sources untouched
 except `packages/db` schema-additive files and the cascade extension the
 ruling authorized.
+
+---
+
+## Step 4 — Run records and deterministic replay (2026-08-12)
+
+**Done when** (plan): a recorded run replays deterministically in mock, and
+its steps land as eval items without converter changes. **Both proven.**
+
+- **Playback carries the DoD** (per the approved spec): `replayRun(spec,
+  steps, terminal)` — pure, no network, no db handle (the signature is the
+  fence) — re-derives every model step's request using the loop's OWN
+  exported helpers and compares byte-for-byte. All six golden fixtures
+  replay `ok`, twice, byte-identically (`assertReproducible` discipline).
+- **Golden corpus, generated**: six recorded runs (task, tools,
+  suspend/answer/resume across the invocation boundary, fuel-killed,
+  standing leg-cap, memory-carry) from a committed generator with fixed
+  clock/ids; **regeneration is byte-identical to the committed fixtures,
+  asserted by test**. Six adversarial mutants each pinned to its named
+  divergence code; the dead-code meta-test covers all six codes.
+- **Inertness proven as a count invariant**: six tables (`request_logs`,
+  `trace_spans`, `lab_runs`, `lab_run_steps`, `lab_harness_memory`,
+  `usage_daily`) byte-equal counts around a full corpus playback — playback
+  cannot meter spend, which also keeps it clear of the Step 3 $0-mock-cost
+  nondeterminism.
+- **Steps → eval items, zero converter changes**: the emitter now carries
+  `gen_ai.prompt`/`gen_ai.completion` on llm.call spans and
+  `tool.args`/`tool.result` on tool spans (content from checkpoints, which
+  passed the secret gate; truncation-marker contract at 8,000 chars). E2E:
+  enriched spans through the REAL `POST /v1/traces` (idempotent re-emission
+  asserted) → the REAL `tracesClusterHandler` → step items present in the
+  `-replays-v2` suite with the recorded context as prompt and the recorded
+  completion as reference. `packages/workers`, `scripts/`, and the traces
+  read model: **untouched, confirmed by git status in the run log**.
+
+**Finding (recorded in both Step 3 and Step 4 spec files):** Step 3's
+checkpoint contract promised `memoryReads` and `checkInAnswer`; the Step 3
+build populated neither — records were NOT self-contained, surfaced the
+moment replay tried to re-derive the system prompt. Fixed in this commit
+(the first step of each leg now carries the stamp); the golden corpus was
+generated after the fix and pins the corrected contract.
+
+Numbers: lab-runtime 28/28 (replay 17, synthesis 1, loop 6, walkthrough 4),
+each file green in isolation; full `pnpm verify` exit 0 (unfiltered log
+retained); guarantee-product walkthrough 18/18.
+
+Residual risks: golden fixtures pin today's prompt text — a deliberate
+prompt change regenerates the corpus in the same commit, reviewed as such;
+the fake embedder proves the synthesis PIPELINE, not embedding quality
+(real-embedder clustering belongs to Step 5's live sweep and beyond).
+
+Proof: `git show --stat <commit>`.
