@@ -9,7 +9,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | Step | Name | Date | Commit | Status |
 |---|---|---|---|---|
 | 1 | File and consolidate | 2026-08-11 | `3829cf9` | **complete** |
-| 2 | Harness spec | 2026-08-11 | (stamped below) | **complete** |
+| 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
 | 3 | Runtime core | — | — | not started |
 | 4 | Run records and deterministic replay | — | — | not started |
 | 5 | Platform live sweep (rule-2 core work) | — | — | not started |
@@ -109,6 +109,6 @@ filed properly. Also standing: the secret-material patterns are deliberately
 DUPLICATED from the G2.8 scrubber (scripts are not importable) — Step 10's
 custody tests re-verify both copies.
 
-Proof: `git show --stat <commit>` — the step touches only
+Proof: `git show --stat 4862b78` — the step touches only
 `packages/lab-spec/**`, `docs/specs/step-02-harness-spec.md`, this ledger,
 and lockfile/workspace wiring. Zero changes to guarantee-product code.
