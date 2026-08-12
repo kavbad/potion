@@ -10,7 +10,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 |---|---|---|---|---|
 | 1 | File and consolidate | 2026-08-11 | `3829cf9` | **complete** |
 | 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
-| 3 | Runtime core | 2026-08-12 | (stamped below) | **complete** |
+| 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
 | 4 | Run records and deterministic replay | — | — | not started |
 | 5 | Platform live sweep (rule-2 core work) | — | — | not started |
 | 6 | Intent → spec generation | — | — | not started |
@@ -180,6 +180,6 @@ v1, bounded by fuel; Step 4 revisits); cron check-ins are inert until L4
 triggers exist; the CLI is programmatic-first and its argv surface is
 untested beyond types (exercised properly in Step 8's novice loop).
 
-Proof: `git show --stat <commit>` — guarantee-product sources untouched
+Proof: `git show --stat fe5dd27` — guarantee-product sources untouched
 except `packages/db` schema-additive files and the cascade extension the
 ruling authorized.
