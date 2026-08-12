@@ -83,6 +83,25 @@ product-agnostic core work first, under rule 2:
 - POTION_SELF_SERVE remains the single flag governing self-serve posture; it
   stays off until Gate C.
 
+### Verification outcome (2026-08-11)
+
+All five assumptions were checked read-only; evidence in
+[LAB-ROADMAP-VERIFICATION.md](LAB-ROADMAP-VERIFICATION.md). Three
+carry-forwards are folded into this document:
+
+1. The **L1 single-strategy-tools partition** (A2) — recorded in L1 above.
+2. **Gate C flips only with explicit `POTION_SELF_SERVE=1`** (A5) — recorded
+   in the Gate C definition above.
+3. **Named rule-2 work item — platform-scope live sweep** (A1): platform
+   frontiers are first-class (`org_id NULL`, serving fallback) but live
+   generic coverage does not exist — the seed covers 2/10 taxonomy clusters
+   on the MOCK provider (SIMULATED, excluded from autopilot by dial
+   honesty), and `frontier:live-sweep` is org-scoped. The gap lands as
+   product-agnostic core work (it also enriches the guarantee product's
+   platform fallback) and is scheduled as **Step 5 of
+   [LAB-BUILD-PLAN.md](LAB-BUILD-PLAN.md)** — honest autopilot cold start is
+   blocked on it.
+
 ## Gates
 
 - **Gate A — standing, unchanged, first. NOT STARTED.** Provision managed
@@ -97,7 +116,10 @@ product-agnostic core work first, under rule 2:
 - **Gate C — public beta.** L0–L3 complete, the novice loop holds (intent to
   first live run, no documentation, under ten minutes), and the self-serve
   prerequisites are in place: payments and credits for fuel, abuse controls,
-  and POTION_SELF_SERVE deliberately flipped on.
+  and self-serve deliberately flipped on with an **explicit
+  `POTION_SELF_SERVE=1`** — never an inherited default (verification
+  carry-forward, A5: unset means ON whenever the dev-auth bypass is active,
+  so only the explicit value counts as the Gate C decision).
 
 North-star acceptance test for the end state: a non-engineer assembles an
 OpenClaw-class standing harness — hosted, permissioned, metered — without
@@ -136,6 +158,15 @@ Intent becomes a harness; the dial becomes honest.
 - Dial = the existing compound policy (quality floor + latency bound +
   minimized cost), read through touchpoint 2, surfaced per slot and per
   harness.
+- **Single-strategy-tools partition (verification carry-forward, A2):**
+  serving forwards `tools`/`tool_choice` on `single` strategies ONLY and
+  400s them on composites, by its own documented contract
+  (`apps/server/src/routes/chat.ts:671-677`). Autopilot and the dial
+  therefore partition by construction: tool-bearing slots draw only
+  single-model frontier points; tool-free slots keep the full composite
+  frontier; serving's 400 is unreachable from Lab-generated configs. This is
+  a design input, not a defect — changing serving's contract would violate
+  the additive contract.
 - Felt samples: eval runs at dial points, so moving the dial shows projected
   cost, latency, and a sample output on the user's own task — never a label.
 

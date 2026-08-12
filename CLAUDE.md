@@ -238,8 +238,10 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   invoiced billing already works — `pnpm --filter @potion/server invoice`).
 - **Potion Lab (L0–L6, paper-only, gated behind Gate B):** the
   harness-builder product line — see `docs/LAB-ROADMAP.md` (assumption
-  verification: `docs/LAB-ROADMAP-VERIFICATION.md`). No Lab code before
-  Gate B; Gate A (deployment) is unchanged and first.
+  verification: `docs/LAB-ROADMAP-VERIFICATION.md`). Build ladder:
+  `docs/LAB-BUILD-PLAN.md` (Steps 1–17, operator-stepped, spec-then-build
+  per step; status ledger `docs/LAB-BUILD-STATUS.md`). No Lab code before
+  the operator names the step; Gate A (deployment) is unchanged and first.
 
 ## Working conventions (owner's rules)
 
