@@ -236,6 +236,10 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   self-serve signup funnel, SDK publishing, cloud-KMS custody (BYOK works),
   SMTP (dev-link hand-delivery suffices for partners), Stripe (LAST;
   invoiced billing already works — `pnpm --filter @potion/server invoice`).
+- **Potion Lab (L0–L6, paper-only, gated behind Gate B):** the
+  harness-builder product line — see `docs/LAB-ROADMAP.md` (assumption
+  verification: `docs/LAB-ROADMAP-VERIFICATION.md`). No Lab code before
+  Gate B; Gate A (deployment) is unchanged and first.
 
 ## Working conventions (owner's rules)
 
