@@ -15,7 +15,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
 | 6 | Intent → spec generation | 2026-08-12 | `13c7665` | **complete** |
 | 7 | The dial | 2026-08-13 | `4932e55` | **complete** |
-| 8 | The novice loop, ugly | — | — | not started |
+| 8 | The novice loop, ugly | 2026-08-13 | — | **spec ready** — [step-08-novice-loop.md](specs/step-08-novice-loop.md), awaiting build approval |
 | 9 | The derived form [design gate] | — | — | not started |
 | 10 | MCP client and token custody | — | — | not started |
 | 11 | Superpower packaging and catalog | — | — | not started |
