@@ -1320,6 +1320,32 @@ export const labHarnessMemory = pgTable(
   (t) => [primaryKey({ columns: [t.orgId, t.harnessHash, t.key] })],
 );
 
+/** Lab Step 7: felt-sample cache — repeated dial positions cost nothing.
+ * Org-scoped (rule-2 additive, the 0035 pattern); erased by
+ * deleteOrgCascade; F5 meta-test covers the cascade at birth. */
+export const labFeltSamples = pgTable(
+  'lab_felt_samples',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    probeHash: text('probe_hash').notNull(),
+    policyHash: text('policy_hash').notNull(),
+    frontierId: text('frontier_id').notNull(),
+    strategyHash: text('strategy_hash').notNull(),
+    frontierVersion: integer('frontier_version').notNull(),
+    provenance: text('provenance').notNull(),
+    output: text('output').notNull(),
+    costUsd: doublePrecision('cost_usd'),
+    latencyMs: integer('latency_ms').notNull(),
+    completionId: text('completion_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.probeHash, t.policyHash, t.frontierId] })],
+);
+
+export type LabFeltSampleRow = typeof labFeltSamples.$inferSelect;
+
 export type LabRunRow = typeof labRuns.$inferSelect;
 export type LabRunStepRow = typeof labRunSteps.$inferSelect;
 export type LabRunState = LabRunRow['state'];

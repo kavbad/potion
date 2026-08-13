@@ -238,6 +238,155 @@ tests per plan. Deps: `@potion/core`, `@potion/lab-spec`,
 `ServingClient` header support and migration 0036 are the two touches
 outside the new package — both additive, both recorded.
 
+## Review outcomes (operator approval, 2026-08-12) — folded in as binding
+
+Pushback accepted: **no live felt leg in Step 7**; the first live felt leg
+is a **named Step 8 DoD item** (recorded in the status ledger's Step 7
+section as a carry-forward). Three additions:
+
+1. **toolPolicy exit criterion (the phantom-decision warning applied to
+   ourselves).** What marks a step tool-free: a model call the loop issues
+   WITHOUT the tools array — today `runLeg` attaches `toolDefs` to every
+   call of a tool-bearing harness (loop.ts:241), so no such step exists.
+   The activation is OWNED BY STEP 8: the novice loop's run narration work
+   makes the loop distinguish deliberate tool-free calls (e.g. the final
+   summary/report call), stamp each step payload with its slot
+   (`'brain' | 'tools'`), and send the corresponding policy ref per call.
+   Exit criterion, verifiable: a Step 8 walkthrough leg showing one run
+   whose step payloads carry BOTH slot values, each call served under its
+   slot's policy (trace-header proof). Until that leg exists, `toolPolicy`
+   is materialized-but-inert and this paragraph is the recorded reason.
+2. **Policy-row lifecycle, stated and tested.** A dial move produces a NEW
+   spec hash, hence a NEW deterministic policy row id — the superseded
+   spec's rows are RETAINED as history, never garbage-collected in this
+   step, so an old spec+sidecar pair still resolves its policy ref after a
+   dial move. Proven by test: materialize → move → both generations'
+   rows exist and resolve by name. Same-spec re-materialization stays
+   idempotent (upsert by id). Policy rows are org-owned and cascade-covered
+   like everything org-owned (existing `deleteOrgCascade` + F5 meta-test).
+3. **The relax hint is evidence-sourced.** `relaxHintMs` = the exact
+   `latencyP95` of the fastest quality-qualifying point in the eligible
+   set — the nearest feasible rung of the ACTUAL ladder, a value copied
+   from a frontier row, never an arithmetic blend. Pinned by test against
+   the R/M/K fixture (hint === K's measured 900).
+
+## Build-phase deviations and notes (recorded, never silent)
+
+1. **The trace's `strategy=` is serving's RECOMPUTED `strategyHash(config)`**
+   — a frontier row's stored hash string only matches when it is
+   self-consistent with its config. The walkthrough's first run used
+   fabricated hashes and failed exactly there; the fixture now derives
+   hashes from configs (a healthy pin: real sweeps write self-consistent
+   rows by construction, and the walkthrough would catch a future writer
+   that doesn't).
+2. **The trace's `provenance=` echoes the POINT's evidence lineage**
+   (G1.7), not the deployment's execution mode. The felt layer labels
+   whatever the trace says; the mock-deployment → mock-provenance →
+   simulated-label pairing is pinned in felt.test.ts, and the walkthrough's
+   fabricated live-points-on-mock-server case is documented in-test as a
+   fixture artifact reality does not produce.
+3. **`AutopilotChoice.slot` widened** (lab-gen, additive) to
+   `'brain.policy' | 'brain.toolPolicy'` so dial moves on the tool slot
+   record choices in the same provenance vocabulary.
+4. **The felt cache is an injectable seam** (`FeltCache`): db-backed in
+   production (`lab_felt_samples` via 0036), memory-backed in golden
+   fixtures — the byte-reproducible corpus needs no database while the
+   walkthrough proves the durable path with the request_logs invariant.
+5. **Gap-code completeness is split across two surfaces** (recorded in the
+   golden test): `frontier-not-live` and `position-infeasible` live in the
+   golden corpus; `frontier-missing`, `no-single-points`, and
+   `felt-cap-reached` are pinned by geometry/felt unit tests. Both-ways
+   coverage holds across the union.
+6. **ServingClient pins ride BOTH call paths** (complete + emitSpans) via
+   constructor-level headers — zero loop changes; the runtime threads pins
+   by constructing a pinned client, which is how the walkthrough's Leg 2
+   run is served under the dial's policy row.
+7. **BUILD FINDING (high, fixed): the serve-side partition hole.** Serving
+   400s tools+composite POST-selection (chat.ts:671) and selects over the
+   FULL frontier — no compound policy can exclude a composite that is
+   cheaper-feasible within its constraints, so a tool-bearing position the
+   dial showed as a single could be CAPTURED by a composite at serve time
+   (run → 400; the first Leg 4 run silently served the composite because
+   it only asserted `ok`). Fixed at the dial: single-only views run a
+   second `selectPoint` over the full frontier, and a captured position is
+   the typed gap **`serve-partition-divergence`** (naming the capturing
+   composite) — unrepresentable rather than 400-bound. Pinned by the
+   golden tool sweep (cascade-dominating world → refusals on the captured
+   rungs, feasible singles elsewhere) and walkthrough Leg 4 (felt on a
+   feasible rung serves exactly the named single; the cascade hash is
+   asserted absent).
+8. **BUILD FINDING (medium, fixed): policy-row org collision.**
+   `policies.id` is a GLOBAL primary key while resolution is org-scoped —
+   two orgs dialing the SAME spec (identical hash) would have collided on
+   the deterministic id, the second org's upsert rewriting the first org's
+   row while its own ref resolved to nothing. Ids/names now carry a 6-char
+   org discriminator.
+9. **Walkthrough lessons pinned in-test**: the trace recomputes
+   `strategyHash(config)` (fixtures must be self-consistent), and the
+   serve-agreement check must always see the REAL frontier — a
+   singles-filtered fabricated world hid the cascade from the check and
+   serving promptly served it (the version-race honesty note, enforced).
+
+## Pre-commit adversarial review (build phase, $0) — 15 confirmed, 0 contested
+
+Two lenses, two refuters per finding, several CONFIRMED BY EXECUTION. The
+headline: the dial was evaluating in a DIFFERENT SELECTION CONTEXT than
+serving — the one-authority principle held for the function but not its
+inputs. Resolutions, all fixed with pinned regressions before commit:
+
+1. **[high ×2, executed] G2.6 serving-grade latency substitution.** Serving
+   substitutes org-measured p95 (n≥30, 60-min window) into points BEFORE
+   selection; the dial evaluated harness latencies — displayed and served
+   diverged at the SAME frontier version, and the serve-agreement guard
+   itself had the hole. Fixed: **`loadDialContext`** reproduces serving's
+   context with serving's own primitives (`getServingFrontier` org-
+   preferred, core `resolveLatency`, db `servingLatencyP95`); every view
+   carries `latencyBasis`; walkthrough Leg 5 executes the review's exact
+   scenario (35 measured samples flip the same rung R→K in view AND felt,
+   in clean agreement).
+2. **[high ×2] Org-preferred frontier.** The dial swept the platform
+   frontier while serving prefers the org's. Fixed in the same context
+   module — the domain's production path is `domainFromContext`.
+3. **[medium] Guarantee rollback override.** An active rollback IS the
+   operating point post-selection. Fixed: `loadDialContext` refuses with
+   the typed **`rollback-active`** gap.
+4. **[medium+high] Felt cache poisoning + dropped honesty markers.**
+   `fallback=` and `latency_violated=` are now parsed and carried;
+   `expectedStrategyHash` arms divergence detection; divergent samples
+   (mismatch / fallback-served / violation-labeled) are returned TYPED and
+   **never cached**.
+5. **[high+medium ×3] Felt cap fail-open.** Fixed fail-closed: `costLookup`
+   is REQUIRED (production impl `requestLogCostLookup` — the request_logs
+   join now exists), unknown cost consumes the remaining cap, the first
+   call projects a conservative floor, cache lookups happen BEFORE the cap
+   gate (hits free, never blocked), and truncation past the sweep bound is
+   reported (`dropped`), not silent.
+6. **[low+medium] Policy-row collision residue.** The upsert now guards the
+   update with the org (`setWhere`) and post-checks ownership — a 24-bit
+   discriminator collision is a loud `DialPolicyCollisionError`, never a
+   silent cross-org rewrite or no-op.
+7. **[low] Sidecar choice history.** `applyDialPosition` carries prior
+   choices for unmoved slots (`priorSidecar`); only the moved slot's choice
+   is replaced.
+8. **[low] `strategyHash` naming.** The felt sample field is
+   **`strategyHash8`** — named for what the trace actually carries; all
+   comparisons slice the view's full hash explicitly.
+9. **Serving's REAL infeasibility behavior stated**: serving never refuses
+   a compound policy — `position-infeasible` now carries `serveWouldServe`
+   (fastest quality-qualifying with `latency-violated`, or the
+   `null-fallback`), and a fallback landing on a composite for a
+   single-only domain is the same `serve-partition-divergence` refusal.
+10. **Walkthrough lesson (Leg 5 build)**: the domain's DEFAULT tolerance
+    re-derives from bound points and stretches to re-admit a slowed point —
+    the flip is only visible under a HELD tolerance, which is the honest
+    user story (a tolerance set when the world was faster) and is how the
+    leg pins it.
+
+Residual, recorded: `SERVING_LATENCY_WINDOW_MIN` mirrors
+latency-policy.ts:44 by value (apps/server is not importable from Lab
+code); the rollup read is uncached on the dial side while serving caches
+60s — a small freshness race in the visible-not-prevented class.
+
 ## Risks and pushback
 
 - **The tolerance knob doubles the dial's cognitive surface.** Deliberate:

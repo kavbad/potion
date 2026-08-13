@@ -14,7 +14,9 @@ export type GenerationGap =
   | { code: 'no-single-points'; clusterId: string; frontierId: string; question: string };
 
 export interface AutopilotChoice {
-  slot: 'brain.policy';
+  /** 'brain.toolPolicy' added in Step 7 (additive): dial moves on the tool
+   * slot record choices in the same provenance vocabulary. */
+  slot: 'brain.policy' | 'brain.toolPolicy';
   decision: Policy;
   basis: {
     clusterId: string;

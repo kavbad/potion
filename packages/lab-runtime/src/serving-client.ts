@@ -12,6 +12,14 @@ export interface ServingClientOptions {
   baseUrl: string;
   apiKey: string;
   fetchFn?: typeof fetch;
+  /** Lab Step 7 (touchpoint 2, additive): ride serving's EXISTING
+   * per-request pins on every call this client makes. `policyRef` becomes
+   * X-Potion-Policy (an org policy id or name — the dial's materialized
+   * row); `clusterHint` becomes X-Potion-Cluster. Serving resolves,
+   * records, and echoes both on x-frontier-trace; unknown refs are
+   * serving's documented 400s, surfaced as ServingResult errors. */
+  policyRef?: string;
+  clusterHint?: string;
 }
 
 export interface ServingRequest {
@@ -44,11 +52,16 @@ export class ServingClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly fetchFn: typeof fetch;
+  private readonly pinHeaders: Record<string, string>;
 
   constructor(opts: ServingClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, '');
     this.apiKey = opts.apiKey;
     this.fetchFn = opts.fetchFn ?? ((...a: Parameters<typeof fetch>) => globalThis.fetch(...a));
+    this.pinHeaders = {
+      ...(opts.policyRef !== undefined ? { 'x-potion-policy': opts.policyRef } : {}),
+      ...(opts.clusterHint !== undefined ? { 'x-potion-cluster': opts.clusterHint } : {}),
+    };
   }
 
   async complete(req: ServingRequest): Promise<ServingResult> {
@@ -65,6 +78,7 @@ export class ServingClient {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${this.apiKey}`,
+          ...this.pinHeaders,
         },
         body: JSON.stringify(body),
         ...(req.signal !== undefined ? { signal: req.signal } : {}),
@@ -133,6 +147,7 @@ export class ServingClient {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${this.apiKey}`,
+          ...this.pinHeaders,
         },
         body: JSON.stringify({ spans }),
       });

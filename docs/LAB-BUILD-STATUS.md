@@ -14,7 +14,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 4 | Run records and deterministic replay | 2026-08-12 | `2b18136` | **complete** |
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
 | 6 | Intent → spec generation | 2026-08-12 | `13c7665` | **complete** |
-| 7 | The dial | 2026-08-12 | — | **spec ready** — [step-07-dial.md](specs/step-07-dial.md), awaiting build approval |
+| 7 | The dial | 2026-08-13 | — | **complete** (hash stamped by the follow-up ledger commit) |
 | 8 | The novice loop, ugly | — | — | not started |
 | 9 | The derived form [design gate] | — | — | not started |
 | 10 | MCP client and token custody | — | — | not started |
@@ -381,3 +381,61 @@ asked-question; basis rides every choice for Step 8's report); the knee
 default embeds taste until Step 7's dial; `WORTH_TO_FUEL_RATIO` awaits
 Step 8 traffic for re-derivation; no CLI shipped (deviation 8 — the
 sidecar meets users in Step 8's chat loop).
+
+---
+
+## Step 7 — The dial (2026-08-13)
+
+**Done when:** a dial move produces measured, demonstrable differences, and
+no Lab-generated config can request tools on a composite strategy. **Both
+proven walkthrough-style** against the real serving route, five legs:
+
+1. Felt sweep with the DURABLE cache (migration 0036): first sweep meters
+   real request_logs rows, the repeat adds ZERO — the count invariant.
+2. Three-surface strategy-hash agreement: dial view === felt trace === run
+   step traces, under the same materialized policy row
+   (`policy_override=` echoed on every step's x-frontier-trace).
+3. The R/M/K flip measured through the route: a tolerance move changes
+   which strategy ACTUALLY serves the same quality rung; the infeasible
+   edge yields the typed gap with its evidence-sourced relax hint.
+4. Partition under motion: on a cascade-dominating frontier, captured
+   positions are the typed `serve-partition-divergence` refusal (the 400
+   unreachable from Lab paths); feasible rungs felt-serve the exact single.
+5. **The review's production scenario, executed**: 35 measured servings
+   flip the SAME rung R→K under serving-grade latency substitution, in
+   view AND felt, in clean agreement — the case no prior test could see.
+
+**What landed:** `@potion/lab-dial` (geometry with exact-float ladders +
+tolerance knob; **the selection-context module** reproducing serving's
+context with serving's own primitives — org-preferred frontier, G2.6
+latency substitution, rollback-active refusal; spec motion with carried
+sidecar provenance; org-scoped policy materialization with retained
+generations and loud collision errors; felt samples with divergence
+detection, poison-proof caching, and a fail-closed cap incl. the
+production request_logs cost join); migration **0036 lab_felt_samples**
+(cascade-covered at birth); ServingClient pin headers (X-Potion-Policy /
+X-Potion-Cluster — touchpoint 2 consumed exactly as serving shipped it,
+zero serving changes); `AutopilotChoice.slot` widened for tool-slot moves.
+
+**Review outcomes honored:** toolPolicy exit criterion documented (Step 8
+owns activation — the tool-free-step walkthrough leg is its verifiable
+exit); policy-row lifecycle proven (dial move → new row, history retained
+and resolving); relax hints evidence-sourced (exact frontier-row p95).
+**Carry-forward:** the FIRST LIVE FELT LEG is a named Step 8 DoD item.
+
+**Two adversarial review rounds** (the second the strongest of the ladder:
+15 confirmed, 0 contested, several proven by execution) — full record in
+the spec. The headline lesson, now structural: one authority means one
+function AND one selection context; the dial evaluates with serving's own
+primitives on serving's own inputs or it is a parallel computation
+wearing the authority's clothes.
+
+Proof: verify exit 0 unfiltered (lab-dial 31/31; all packages green),
+Gate 6 walkthrough OK — guarantee product untouched semantically (the one
+core touch is additive: 0036 + cascade coverage + client pin headers).
+
+**Residual risks (recorded):** SERVING_LATENCY_WINDOW_MIN mirrors
+latency-policy.ts by value; the dial-side rollup read is uncached vs
+serving's 60s cache (freshness race, visible-not-prevented class);
+frontier-version races remain visible-not-prevented; toolPolicy inert
+until Step 8's activation leg.
