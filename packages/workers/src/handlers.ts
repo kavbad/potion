@@ -4,7 +4,7 @@
 import { fileURLToPath } from 'node:url';
 import {
   redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi, costUsd, roundCost,
-  type ProviderId, seedFromString, sha256, strategyHash, wrapUntrustedData,
+  type ProviderId, seedFromString, sha256, strategyHash, suiteContentHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
   type ChatMessage, type EvalItem, type Policy, type StrategyConfig } from '@potion/core';
 import {
@@ -117,6 +117,7 @@ import { SUITES_V2_DIR } from '@potion/harness';
 import {
   clusterExemplars,
   clusters,
+  orgs,
   deleteSpansOlderThan,
   getOrgTraceRetentionDays,
   listOrgIdsWithSpans,
@@ -126,7 +127,7 @@ import {
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
 import type { JobKind } from './jobs.js';
-import type { FrontierLiveSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
 import { orgDeleteHandler } from './org-delete.js';
 // ---- end M5 #36 imports ----
 import {
@@ -3203,6 +3204,296 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
   });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Lab Step 5 — frontier:platform-sweep: the org sweep generalized to
+// PLATFORM scope, one taxonomy cluster per job. Evidence lands org-NULL
+// (the platform default the aggregation reads); spend meters under the
+// reserved PLATFORM_OPS_ORG_ID because request_logs.org_id is NOT NULL —
+// spend attribution and evidence attribution are deliberately different
+// things (the F12 line). Every gate refuses BEFORE any spend; capUsd is
+// REQUIRED (no inherited default — platform spend is operator money) and
+// the hard-stop budget belt on the ops org must EXIST (review outcome 1:
+// job caps and the org budget layer enforce independently).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const PLATFORM_OPS_ORG_ID = 'org_platform_ops';
+
+/** m1b live-sweep precedent: or-gpt-mini→or-sonnet escalated at 0.72. */
+export const PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW = 0.72;
+
+/**
+ * The committed platform suite for each taxonomy cluster. v1 ids resolve to
+ * suites/<id>.jsonl (top level — the simulated/ fallback would throw
+ * SimulatedSuiteError in runEval, a wrong mapping fails loudly); v2 ids
+ * resolve to suites/v2/<id>/ authored suites whose manifests pin clusterId.
+ * A both-directions completeness test guards this map against the taxonomy.
+ */
+export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
+  Record<string, { kind: 'v1' | 'v2'; suiteId: string }>
+> = {
+  'code-gen': { kind: 'v2', suiteId: 'code-gen-potion-v2' },
+  extraction: { kind: 'v2', suiteId: 'extraction-potion-v2' },
+  classification: { kind: 'v1', suiteId: 'classification' },
+  'multi-step-reasoning': { kind: 'v1', suiteId: 'multi-step-reasoning' },
+  'rag-answer': { kind: 'v1', suiteId: 'rag-answer' },
+  'agentic-tool-use': { kind: 'v1', suiteId: 'agentic-tool-use' },
+  'code-review': { kind: 'v1', suiteId: 'code-review' },
+  creative: { kind: 'v1', suiteId: 'creative' },
+  'rewrite-edit': { kind: 'v1', suiteId: 'rewrite-edit' },
+  summarization: { kind: 'v1', suiteId: 'summarization' },
+};
+
+export type PlatformSweepRefusalReason =
+  | 'env-gate'
+  | 'cap-missing'
+  | 'unknown-cluster'
+  | 'org-owned-cluster'
+  | 'belt-missing'
+  | 'no-keys'
+  | 'class-unrepresented';
+
+/** Typed refusal, all pre-spend: the reason is machine-checkable so tests
+ * pin fails-for-the-RIGHT-reason, never just "it threw". */
+export class PlatformSweepRefusalError extends Error {
+  constructor(
+    public readonly reason: PlatformSweepRefusalReason,
+    detail: string,
+  ) {
+    super(`platform sweep refused (${reason}): ${detail} — no spend occurred`);
+    this.name = 'PlatformSweepRefusalError';
+  }
+}
+
+export interface FrontierPlatformSweepResult {
+  runId: string;
+  spendUsd: number;
+  projectedSpendUsd: number;
+  executed: number;
+  cacheHits: number;
+  itemCount: number;
+  candidates: string[];
+  frontierId: string | null;
+  frontierVersion: number | null;
+  points: number;
+  /** DoD acceptance surface (review outcome 3): measured candidates all
+   * aggregate; the published point set is what domination honestly yields,
+   * and these counts make any pruning visible per cluster, never quiet. */
+  singlesOnFrontier: number;
+  compositesOnFrontier: number;
+}
+
+export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-sweep'> = async (
+  payload: FrontierPlatformSweepPayload,
+  ctx: JobContext,
+): Promise<FrontierPlatformSweepResult> =>
+  // F10: this handler SPENDS; org `undefined` scopes the claim by jobId.
+  withDeliveryGuard('frontier:platform-sweep', ctx, undefined, async () => {
+    // 1. Env gate — REFUSE, never degrade. A "platform live sweep" that
+    // mocked would stamp SIMULATED evidence as live at platform scope: the
+    // false-live pattern at maximum blast radius (every fallback-riding org
+    // inherits the platform frontier).
+    if (process.env.POTION_EVAL_PROVIDER !== 'live') {
+      throw new PlatformSweepRefusalError(
+        'env-gate',
+        'frontier:platform-sweep requires POTION_EVAL_PROVIDER=live',
+      );
+    }
+    // 2. Cap gate — REQUIRED, no inherited default.
+    if (typeof payload.capUsd !== 'number' || !Number.isFinite(payload.capUsd) || payload.capUsd <= 0) {
+      throw new PlatformSweepRefusalError(
+        'cap-missing',
+        'capUsd is required (a positive number) — only an explicitly approved cap authorizes platform spend',
+      );
+    }
+    // 3. Suite map + cluster gate. The map IS the taxonomy allowlist; the
+    // row check is containment's front door — an org-owned cluster is
+    // refused by name (the mirror image of the org sweep's ownership check).
+    const mapped = PLATFORM_SUITE_BY_CLUSTER[payload.clusterId];
+    if (!mapped) {
+      throw new PlatformSweepRefusalError(
+        'unknown-cluster',
+        `'${payload.clusterId}' is not a taxonomy cluster (expected one of: ${Object.keys(PLATFORM_SUITE_BY_CLUSTER).sort().join(', ')})`,
+      );
+    }
+    const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
+    const existingCluster = clusterRows[0];
+    if (existingCluster !== undefined && existingCluster.orgId !== null) {
+      throw new PlatformSweepRefusalError(
+        'org-owned-cluster',
+        `cluster '${payload.clusterId}' is owned by org '${existingCluster.orgId}' — platform sweeps run only on platform clusters`,
+      );
+    }
+    if (existingCluster === undefined) {
+      // Taxonomy rows are created by consumers, not migrations (the F12
+      // lesson: no boot-time data statements). org_id NULL = platform.
+      await ctx.db
+        .insert(clusters)
+        .values({
+          id: payload.clusterId,
+          name: payload.clusterId,
+          description: 'Taxonomy cluster (platform scope)',
+        })
+        .onConflictDoNothing();
+    }
+    // 4. Spend home + the REQUIRED belt. The reserved ops org exists so
+    // operator money is visible through the same usage-rollup chokepoint as
+    // everything else; the belt row must exist AND hard-stop, and the
+    // org-sweep's fail-closed pre-check then runs verbatim.
+    await ctx.db
+      .insert(orgs)
+      .values({ id: PLATFORM_OPS_ORG_ID, name: 'Platform operations' })
+      .onConflictDoNothing();
+    const belt = await getBudget(ctx.db, PLATFORM_OPS_ORG_ID);
+    if (belt === null || !belt.hardStop) {
+      throw new PlatformSweepRefusalError(
+        'belt-missing',
+        `no hard-stop budget row on '${PLATFORM_OPS_ORG_ID}' — the approved total cap must be set as a budget belt before any live call (review outcome 1)`,
+      );
+    }
+    const mtd = await mtdSpendUsd(ctx.db, PLATFORM_OPS_ORG_ID, new Date());
+    if (mtd + payload.capUsd > belt.monthlyCapUsd) {
+      throw new OrgBudgetRefusalError(PLATFORM_OPS_ORG_ID, mtd, payload.capUsd, belt.monthlyCapUsd);
+    }
+    // 5. LIVE class representatives — key-reachability filtered (the org
+    // sweep's mechanism), but REFUSING on any unrepresented answerer class:
+    // the DoD needs all three singles, and a silent two-single sweep would
+    // publish a frontier that under-measures by construction.
+    const { table: prices } = loadPrices(ctx.pricesPath);
+    const reachable = (p: string): boolean =>
+      p !== 'mock' &&
+      process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
+    const registry = buildRegistry(prices).filter((e) => reachable(e.provider));
+    if (registry.length === 0) {
+      throw new PlatformSweepRefusalError(
+        'no-keys',
+        'no provider API keys in env (set OPENROUTER_API_KEY or peers)',
+      );
+    }
+    const repFor = (cls: 'cheap' | 'mid' | 'strong' | 'judge') => {
+      const rep = classRepresentative(registry, cls);
+      if (rep === null || rep === undefined) {
+        throw new PlatformSweepRefusalError(
+          'class-unrepresented',
+          `no reachable live ${cls}-class model in the registry — the sweep needs every class represented (check provider keys / prices.json aliases)`,
+        );
+      }
+      return rep;
+    };
+    const cheap = repFor('cheap');
+    const mid = repFor('mid');
+    const strong = repFor('strong');
+    const judgeEntry = repFor('judge');
+    const singles: StrategyConfig[] = [cheap, mid, strong].map(
+      (e) => ({ type: 'single', model: e.alias }) as StrategyConfig,
+    );
+    const cascade: StrategyConfig = {
+      type: 'cascade',
+      stages: [
+        { model: cheap.alias, escalateIf: { confidenceBelow: PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW } },
+        { model: strong.alias },
+      ],
+      confidenceMethod: 'self-report-calibrated',
+    };
+    const byHash = new Map<string, StrategyConfig>();
+    for (const cfg of [...singles, cascade]) byHash.set(strategyHash(cfg), cfg);
+    const strategies = [...byHash.values()];
+    for (const [hash, config] of byHash) {
+      await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
+    }
+    // 6. Content identity of the COMMITTED instrument (F7 at birth): the
+    // full suite is hashed — the evidence rows' cacheKeys already pin the
+    // per-item identity of whatever sample actually ran.
+    const committedItems =
+      mapped.kind === 'v1' ? loadSuite(mapped.suiteId) : loadSuiteV2(mapped.suiteId).items;
+    const contentHash = suiteContentHash(
+      committedItems.map((i) => ({
+        itemId: i.id,
+        prompt: i.prompt,
+        reference: i.reference,
+        scoring: i.scoring,
+      })),
+    );
+    // 7. The live run — PLATFORM evidence (no orgId: rows land org-NULL,
+    // cache keys carry |live but no |org segment), spend metered per call
+    // under the ops org. resume:true + per-call metering give resumable
+    // legs for free: a killed leg re-enqueues and pays only the remainder.
+    const meter = perCallRequestLogSink(ctx.db, {
+      orgId: PLATFORM_OPS_ORG_ID,
+      clusterId: payload.clusterId,
+      status: 'eval_live',
+    });
+    const summary: RunSummary = await runEval(
+      {
+        suiteIds: mapped.kind === 'v1' ? [mapped.suiteId] : [],
+        suiteV2Ids: mapped.kind === 'v2' ? [mapped.suiteId] : [],
+        strategies,
+        budgetCapUsd: payload.capUsd,
+        provider: 'live',
+        resume: true,
+        judgeModelOverride: judgeEntry.alias,
+        judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
+        maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
+        ...(payload.sampleN !== undefined ? { itemSampleN: payload.sampleN } : {}),
+      },
+      { db: ctx.dbHandle, pricesPath: ctx.pricesPath, spendSink: meter.sink },
+    );
+    // 8. Run row — platform (org NULL); completion RECONCILES the per-call
+    // record, never writes spend anew.
+    await ctx.db.insert(evalRuns).values({
+      id: summary.runId,
+      options: {
+        suiteIds: mapped.kind === 'v1' ? [mapped.suiteId] : [],
+        suiteV2Ids: mapped.kind === 'v2' ? [mapped.suiteId] : [],
+        strategyHashes: [...byHash.keys()],
+        agentCluster: payload.clusterId,
+        ...(payload.sampleN !== undefined ? { itemSampleN: payload.sampleN } : {}),
+        suiteContentHash: contentHash,
+        metering: reconcileMetering(meter, summary, `frontier:platform-sweep ${payload.clusterId}`),
+      },
+      budgetCapUsd: payload.capUsd,
+      provider: 'live',
+      status: 'completed',
+      spendUsd: summary.spendUsd,
+    });
+    // 9. Provenance-pure LIVE aggregation at PLATFORM scope (orgId absent →
+    // IS NULL rows only; providerMode live → the seed's SIMULATED rows at
+    // the same coordinates are excluded by construction) → the platform
+    // frontier chain every fallback-riding org inherits.
+    const aggregates = await aggregatesFromEvalResults(
+      ctx.db,
+      payload.clusterId,
+      strategies,
+      prices.version,
+      { providerMode: 'live' },
+    );
+    let frontierId: string | null = null;
+    let frontierVersion: number | null = null;
+    let frontierPoints: FrontierPoint[] = [];
+    if (aggregates.length > 0) {
+      const computed = computeFrontier(aggregates);
+      const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
+        provenance: { suiteId: mapped.suiteId, suiteContentHash: contentHash },
+      });
+      frontierId = saved.id;
+      frontierVersion = saved.version;
+      frontierPoints = saved.points;
+    }
+    return {
+      runId: summary.runId,
+      spendUsd: summary.spendUsd,
+      projectedSpendUsd: summary.projectedSpendUsd,
+      executed: summary.executed,
+      cacheHits: summary.cacheHits,
+      itemCount: new Set(summary.results.map((r) => r.itemId)).size,
+      candidates: [...byHash.keys()],
+      frontierId,
+      frontierVersion,
+      points: frontierPoints.length,
+      singlesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type === 'single').length,
+      compositesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type !== 'single').length,
+    };
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
 // G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
 //
 // The advisory serve leg only ever trips a wire; THIS job renders the
@@ -4327,6 +4618,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'rubric:generate': rubricGenerateHandler,
   // ---- G1.7 live capped org evals ----
   'frontier:live-sweep': frontierLiveSweepHandler,
+  'frontier:platform-sweep': frontierPlatformSweepHandler,
   // ---- G2.7 operator org deletion ----
   'org:delete': orgDeleteHandler,
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----

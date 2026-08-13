@@ -159,6 +159,31 @@ export function registerOperatorRoutes(
     return reply.code(202).send({ jobId });
   });
 
+  // ---- POST /operator/frontiers/platform-sweep (Lab Step 5) ----
+  // Enqueues one PLATFORM-scope live sweep leg for a taxonomy cluster.
+  // capUsd is REQUIRED end-to-end (the handler refuses without it); the
+  // route ceiling matches the operator-approved Step 5 envelope. Platform
+  // jobs carry no orgId, so /api/jobs/:id 404s on them by design — status
+  // reads go through the operator mirror below.
+  app.post('/operator/frontiers/platform-sweep', async (req, reply) => {
+    if (!isOperator(req)) return reply.code(401).send(unauthorized);
+    const Body = z.object({
+      clusterId: z.string().min(1),
+      capUsd: z.number().positive().max(60),
+      sampleN: z.number().int().positive().max(500).optional(),
+      judgeMaxTokens: z.number().int().positive().max(4096).optional(),
+      maxOutputTokens: z.number().int().positive().max(8192).optional(),
+    });
+    const parsed = Body.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send(openAiError(parsed.error.message, 'invalid_request_error', 'invalid_body'));
+    }
+    const jobId = await opts.queue.enqueue('frontier:platform-sweep', parsed.data);
+    return reply.code(202).send({ jobId });
+  });
+
   // ---- GET /operator/jobs/:id (mirror — no org check) ----
   app.get('/operator/jobs/:id', async (req, reply) => {
     if (!isOperator(req)) return reply.code(401).send(unauthorized);

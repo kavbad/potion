@@ -183,5 +183,6 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/operator/orgs', surface: 'operator', mutating: true, guard: 'operator', tenancyClass: 'operator', crossOrgProbe: { expect: 'skip', skipReason: "operator token surface — outside the tenant model" } },
   { method: 'GET', path: '/operator/orgs', surface: 'operator', mutating: false, guard: 'operator', tenancyClass: 'operator', crossOrgProbe: { expect: 'skip', skipReason: "operator token surface — outside the tenant model" } },
   { method: 'DELETE', path: '/operator/orgs/:id', surface: 'operator', mutating: true, guard: 'operator', tenancyClass: 'operator', crossOrgProbe: { expect: 'skip', skipReason: "operator token surface — outside the tenant model" } },
+  { method: 'POST', path: '/operator/frontiers/platform-sweep', surface: 'operator', mutating: true, guard: 'operator', tenancyClass: 'operator', crossOrgProbe: { expect: 'skip', skipReason: "operator token surface — platform-scope spend job, no tenant dimension" } },
   { method: 'GET', path: '/operator/jobs/:id', surface: 'operator', mutating: false, guard: 'operator', tenancyClass: 'operator', crossOrgProbe: { expect: 'skip', skipReason: "operator token surface — the deliberate platform-job mirror" } },
 ];

@@ -23,6 +23,8 @@ export type JobKind =
   | 'rubric:generate'
   // ---- G1.7 live capped org evals ----
   | 'frontier:live-sweep'
+  // ---- Lab Step 5: platform-scope live sweep (taxonomy clusters) ----
+  | 'frontier:platform-sweep'
   // ---- G2.7 operator org deletion ----
   | 'org:delete'
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
@@ -45,6 +47,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'traces:redact',
   'rubric:generate',
   'frontier:live-sweep',
+  'frontier:platform-sweep',
   'org:delete',
   'guarantee:suite-verify',
   'suite:certify',
@@ -114,6 +117,7 @@ export interface JobPayloads {
   'traces:redact': TracesRedactPayload;
   'rubric:generate': RubricGeneratePayload;
   'frontier:live-sweep': FrontierLiveSweepPayload;
+  'frontier:platform-sweep': FrontierPlatformSweepPayload;
   'org:delete': OrgDeletePayload;
   'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
   'suite:certify': SuiteCertifyPayload;
@@ -323,6 +327,33 @@ export interface FrontierLiveSweepPayload {
   /** Answer output ceiling (default 1600 — G1.1: best answers hit 1501). */
   maxOutputTokens?: number;
   seed?: number;
+}
+
+/**
+ * Lab Step 5: live sweep of ONE taxonomy cluster at PLATFORM scope. No
+ * orgId — that absence is the point: evidence lands org-NULL (the platform
+ * default `aggregatesFromEvalResults` reads), cache keys carry no org
+ * segment, and the published frontier joins the platform chain every
+ * fallback-riding org inherits. Spend (request_logs is NOT NULL on org)
+ * meters under the reserved PLATFORM_OPS_ORG_ID — spend attribution and
+ * evidence attribution are deliberately different things (the F12 line).
+ * Env-gated (POTION_EVAL_PROVIDER=live, refuses, never degrades); capUsd
+ * REQUIRED — no default: platform spend is operator money and only an
+ * explicitly approved number authorizes it. Operator-triggered only.
+ */
+export interface FrontierPlatformSweepPayload {
+  /** Taxonomy cluster (org_id NULL); org-owned clusters are refused. */
+  clusterId: string;
+  /** REQUIRED live spend cap for this cluster leg. Absent → refusal. */
+  capUsd: number;
+  /** Deterministic sample: first N items sorted by item id (byte-stable →
+   * stable cache keys; a later full run pays only for the remainder). */
+  sampleN?: number;
+  /** Judge completion budget (default 768 — the org sweep's knob). */
+  judgeMaxTokens?: number;
+  /** Answer output ceiling (default 1600 — uniform across candidates:
+   * per-candidate ceilings would change what is being measured). */
+  maxOutputTokens?: number;
 }
 
 /**

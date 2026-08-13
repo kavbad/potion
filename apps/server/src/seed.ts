@@ -22,7 +22,7 @@ import {
   listPolicies,
 } from '@potion/db';
 import { runEval } from '@potion/harness';
-import { computeFrontier, saveFrontier } from '@potion/pareto';
+import { computeFrontier, loadCurrentFrontier, saveFrontier } from '@potion/pareto';
 import { DEFAULT_PRICES_PATH, type PotionContext } from './context.js';
 
 /** Well-known demo key (documented; deterministic so the quickstart works on
@@ -162,6 +162,16 @@ export async function seedIfEmpty(
     { db: ctx.db, pricesPath: DEFAULT_PRICES_PATH },
   );
   for (const clusterId of SEED_CLUSTERS) {
+    // Platform-scope ratchet (Lab Step 5, the G1.7 taint rule extended to
+    // the seed): a LIVE-evidenced platform frontier exists only after a
+    // paid platform sweep, and this mock seed must never supersede it —
+    // before Step 5 this branch was unreachable (no platform live evidence
+    // existed), so all pre-existing boots behave identically.
+    const current = await loadCurrentFrontier(ctx.db.db, clusterId);
+    if (current !== null && current.points.length > 0 && current.points.every((p) => p.providerMode === 'live')) {
+      log(`seed SKIPPED ${clusterId} frontier: live platform frontier v${current.version} stays latest (mock never clobbers live)`);
+      continue;
+    }
     const aggs = summary.aggregates.filter((a) => a.clusterId === clusterId);
     const points = computeFrontier(aggs);
     const saved = await saveFrontier(ctx.db.db, clusterId, points, 'manual', ctx.prices.version);

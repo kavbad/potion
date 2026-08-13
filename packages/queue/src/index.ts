@@ -104,5 +104,6 @@ export {
   createBullMQQueue,
   DEFAULT_QUEUE_NAME,
   DEFAULT_REDIS_URL,
+  SINGLE_ATTEMPT_KINDS,
   type BullMQDriverOptions,
 } from './bullmq.js';

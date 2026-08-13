@@ -90,6 +90,15 @@ export interface RunOptions {
    * default cap would truncate the BEST answers; see SUITE_OUTPUT_CEILINGS).
    */
   maxOutputTokens?: number;
+  /**
+   * Lab Step 5: deterministic sample — sort the run's items by id
+   * (lexicographic, byte-stable) and keep the first N. Applied BEFORE the
+   * false-live guard and the preflight projection so both bind to the set
+   * that actually runs. Because cache keys are per item id, a later full
+   * run over the same suite reuses every sampled cell and pays only for the
+   * remainder.
+   */
+  itemSampleN?: number;
 }
 
 /** Injectable seams for tests/CLI (all optional). */
@@ -368,6 +377,14 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         ? { ...item, scoring: { ...item.scoring, judgeModel: override } }
         : item,
     );
+  }
+
+  // ---- Lab Step 5: deterministic item sample ----
+  if (opts.itemSampleN !== undefined) {
+    if (!Number.isInteger(opts.itemSampleN) || opts.itemSampleN < 1) {
+      throw new Error(`itemSampleN must be a positive integer, got ${opts.itemSampleN}`);
+    }
+    runItems = [...runItems].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).slice(0, opts.itemSampleN);
   }
 
   // ---- G1.7: false-live guard ----

@@ -115,6 +115,13 @@
       "outputPer1M": 15.0
     },
     {
+      "alias": "or-opus",
+      "provider": "openrouter",
+      "model": "anthropic/claude-opus-4.5",
+      "inputPer1M": 5.0,
+      "outputPer1M": 25.0
+    },
+    {
       "alias": "or-gpt-mini",
       "provider": "openrouter",
       "model": "openai/gpt-4.1-mini",

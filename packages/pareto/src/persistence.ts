@@ -24,6 +24,8 @@ export interface FrontierProvenanceContext {
   suiteVersion?: string;
   rubricHash?: string;
   calibrationId?: string;
+  /** Lab Step 5: content identity of the committed suite (F7 at birth). */
+  suiteContentHash?: string;
 }
 
 export interface SaveFrontierOpts {
@@ -75,6 +77,7 @@ export async function saveFrontier(
           if (ev.suiteVersion === undefined && opts.provenance!.suiteVersion !== undefined) ev.suiteVersion = opts.provenance!.suiteVersion;
           if (ev.rubricHash === undefined && opts.provenance!.rubricHash !== undefined) ev.rubricHash = opts.provenance!.rubricHash;
           if (ev.calibrationId === undefined && opts.provenance!.calibrationId !== undefined) ev.calibrationId = opts.provenance!.calibrationId;
+          if (ev.suiteContentHash === undefined && opts.provenance!.suiteContentHash !== undefined) ev.suiteContentHash = opts.provenance!.suiteContentHash;
           return { ...p, evidence: ev };
         });
   let lastErr: unknown;

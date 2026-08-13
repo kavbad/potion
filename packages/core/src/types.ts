@@ -187,6 +187,13 @@ export interface FrontierPointEvidence {
   rubricHash?: string;
   /** judge_calibrations uuid backing trust in that rubric×judge. */
   calibrationId?: string;
+  /**
+   * Lab Step 5 (the F7 discipline at birth): sha256 over the canonical
+   * items of the COMMITTED suite the evidence was evaluated against —
+   * binds the point to what the instrument WAS, not to a filename whose
+   * contents can drift. Stamped by the platform sweep; absent elsewhere.
+   */
+  suiteContentHash?: string;
 }
 
 export interface StrategyAggregate {
