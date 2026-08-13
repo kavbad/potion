@@ -13,7 +13,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
 | 4 | Run records and deterministic replay | 2026-08-12 | `2b18136` | **complete** |
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
-| 6 | Intent → spec generation | 2026-08-12 | — | **spec ready** — [step-06-intent-gen.md](specs/step-06-intent-gen.md), awaiting build approval |
+| 6 | Intent → spec generation | 2026-08-12 | — | **complete** (hash stamped by the follow-up ledger commit) |
 | 7 | The dial | — | — | not started |
 | 8 | The novice loop, ugly | — | — | not started |
 | 9 | The derived form [design gate] | — | — | not started |
@@ -329,3 +329,55 @@ same way a missing cap would be. (Origin: the Step 5 attestation arrived
 with a placeholder date twice; the canary proves key validity, never
 novelty, so the dated attestation is the only control for an unrotated,
 still-valid credential.)
+
+---
+
+## Step 6 — Intent → spec generation (2026-08-12)
+
+**Done when:** a plain-language mission produces a valid, runnable spec
+where every autopilot choice traces to a frontier point. **Proven
+walkthrough-style**: Leg B generates from a live-evidenced platform
+frontier seeded in the real db (choice basis = the saved frontier row's
+id/version/strategyHash/suiteContentHash, binding verified), the spec
+parses under lab-spec, and `startRun` executes the GENERATED file to
+completion against the real server. Leg A pins the generator as a metered
+model call: real route, exactly `GEN_MAX_MODEL_CALLS` (2) request_logs
+rows, typed refusal when the mock provider can't speak extraction JSON.
+
+**`@potion/lab-gen`** (new package; deps core + lab-spec + lab-runtime;
+zero guarantee-product changes): four-question interview (task/standing
+ASKED never inferred; worth per run / per check-cycle per review outcome
+1), `WORTH_TO_FUEL_RATIO = 0.25` as a provisional labeled constant with
+its re-derivation path in code, one structured-extraction call through
+ServingClient (≤2, strict-zod + raw-scan gated, one repair pass),
+lexical+hint cluster assignment that returns drafts with open questions
+instead of guessing, autopilot knee-shaped compound policy with **the
+policy as authority** (the recorded choice is what `selectPoint` actually
+selects), the single-strategy partition enforced by construction, and a
+two-way hash-bound provenance sidecar (review outcome 2: edited spec
+orphans; tampered sidecar self-detects).
+
+**Closure property (the load-bearing proof):** 500 seeded cases over
+benign/adversarial/degenerate answers × scripted-model behaviors ×
+frontier variants — an invalid spec is unrepresentable as an output;
+outcome-mix floors keep the fuzz honest. Golden corpus: 11 byte-reproducible
+fixtures including the review-outcome-3 minimums (standing mission,
+partition demonstration, tools+composite unrepresentable, frontier-gap
+draft with typed question, typed refusals), completeness meta-tests both
+directions, generator regeneration byte-identical.
+
+**Pre-commit adversarial review:** 11 raw findings, 8 confirmed (2
+duplicates), 0 surviving — including two EXECUTION-PROVEN closure
+violations (degenerate worth crash; knee/reselect throw on legitimate
+3-axis Pareto frontiers) fixed before commit with committed regressions.
+Full record in the spec's review section.
+
+Proof: verify exit 0 unfiltered (lab-gen 48/48; all packages green), Gate
+6 walkthrough OK — guarantee product untouched.
+
+**Residual risks (recorded):** cluster assignment remains the weakest link
+on real user language (visible-degrade converts silent-wrong into
+asked-question; basis rides every choice for Step 8's report); the knee
+default embeds taste until Step 7's dial; `WORTH_TO_FUEL_RATIO` awaits
+Step 8 traffic for re-derivation; no CLI shipped (deviation 8 — the
+sidecar meets users in Step 8's chat loop).

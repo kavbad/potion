@@ -1,0 +1,1 @@
+{"answers":{"accounts":[],"doneDefinition":"a digest exists","goal":"summarize my weekly meeting notes","kind":"task","worthUsd":0},"expected":{"detail":"worth must be a positive dollar amount, got 0","kind":"refused","reason":"invalid-worth"},"frontier":null,"name":"invalid-worth","responses":[]}
