@@ -14,7 +14,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 4 | Run records and deterministic replay | 2026-08-12 | `2b18136` | **complete** |
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
 | 6 | Intent → spec generation | 2026-08-12 | `13c7665` | **complete** |
-| 7 | The dial | — | — | not started |
+| 7 | The dial | 2026-08-12 | — | **spec ready** — [step-07-dial.md](specs/step-07-dial.md), awaiting build approval |
 | 8 | The novice loop, ugly | — | — | not started |
 | 9 | The derived form [design gate] | — | — | not started |
 | 10 | MCP client and token custody | — | — | not started |
