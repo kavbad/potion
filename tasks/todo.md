@@ -3367,3 +3367,35 @@ Tested, along with hash order-independence, byte-stability across re-reads,
 fail-closed on NULL, and idempotent invalidation.
 
 | 2026-08-11 | F7 certification content binding: keyless, no live legs. | n/a | **$0.0000** | no reconcile needed |
+
+## Lab Step 5 — platform live sweep (2026-08-12, Tier B approved)
+
+Campaign: 10 taxonomy clusters, one leg per invocation, sample 15/cluster,
+$6/cluster sub-cap, **$60 total hard cap** enforced twice (per-leg capUsd +
+hard-stop budget belt on `org_platform_ops` in the durable campaign db
+`.pglite/platform-sweep-step5`). Candidates (openrouter-only BY POLICY —
+the rotation attestation covers OPENROUTER_API_KEY only; the leg script
+refuses other provider keys): or-deepseek / or-gemini-pro / or-opus singles
++ cascade(or-deepseek→or-opus @0.72), judge judge-class. Leg 0 estimator
+worst-case: $19.58 total ($1.50–$2.43/cluster). Pre-spend adversarial
+review: 9 confirmed findings fixed/recorded before any spend (spec §review).
+
+Walkthrough scope note (operator query resolved): the Gate 6 walkthrough
+emits 20 PASS lines = 2 boot legs + numbered legs 0–17. "18/18" in the
+Step 3/4 ledger rows counts the numbered legs; a report quoting "17" quoted
+the highest ordinal. Same gate, same scope, nothing dropped.
+
+| date | run | projected | actual | cumulative |
+|---|---|---|---|---|
+| 2026-08-12 | LEDGER RECONCILE pre-run — OpenRouter dashboard baseline to be countersigned by operator against post-campaign total | — | — | baseline at campaign start (OpenRouter) |
+| 2026-08-12 | Step5 CANARY summarization **DETACHED**: 14 items × 4 candidates → 56 executed / 0 cached → platform frontier v1 (3 pts: 2 single + 1 composite, all-live, contentHash stamped). Post-leg acceptance: containment 0/0, spend home clean, belt intact. | $6.00 cap, $2.4257 projected | $0.3625 metered | $0.3625 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 classification **DETACHED**: 49 executed / 11 cached (batch-kill resume metered $0 for cached cells — the resumability design proven live) → platform frontier v1 (2 pts: 2 single, 0 composite — cascade dominated). | $6.00 cap, $1.5052 projected | $0.0790 metered | $0.4415 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 multi-step-reasoning **DETACHED**: 60 executed / 0 cached → platform frontier v1 (4 pts: 3 single + 1 composite, full candidate set on the frontier). | $6.00 cap, $1.5017 projected | $0.1697 metered | $0.6112 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 rag-answer **DETACHED**: 60 executed / 0 cached → platform frontier v1 (3 pts: 3 single, 0 composite — cascade dominated). | $6.00 cap, $1.5136 projected | $0.0549 metered | $0.6661 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 code-gen **DETACHED**: 60 executed / 0 cached (code-exec scoring, no judge spend on scored cells) → platform frontier v1 (2 pts: 2 single, 0 composite — cascade dominated). SUPERSEDES the mock seed frontier as latest for the serving fallback. | $6.00 cap, $1.5105 projected | $0.2864 metered | $0.9525 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 extraction **DETACHED**: 60 executed / 0 cached (field-match scoring) → platform frontier v1 (2 pts: 2 single, 0 composite — cascade dominated). Second formerly-SIMULATED cluster now live-evidenced. | $6.00 cap, $1.5545 projected | $0.1705 metered | $1.1230 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 creative **DETACHED**: 56 executed / 0 cached (longest leg, 916s — long-form outputs) → platform frontier v1 (3 pts: 2 single + 1 composite). | $6.00 cap, $2.3709 projected | $0.5402 metered | $1.6632 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 code-review **DETACHED**: 56 executed / 0 cached → platform frontier v1 (3 pts: 2 single + 1 composite). (Row corrected: first write carried a figure recorded before the leg's LEDGER line was read — a process error caught immediately; the metered value here is from the leg output verbatim.) | $6.00 cap, $2.3829 projected | $0.5614 metered | $2.2246 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 rewrite-edit **DETACHED**: 56 executed / 0 cached → platform frontier v1 (3 pts: 2 single + 1 composite). | $6.00 cap, $2.3936 projected | $0.4424 metered | $2.6670 / $60.00 (OpenRouter) |
+| 2026-08-12 | Step5 agentic-tool-use **DETACHED** (final leg): 56 executed / 0 cached (longest leg 1436s — tool-use answers) → platform frontier v1 (4 pts: 3 single + 1 composite, full candidate set). CAMPAIGN COMPLETE: 10/10 clusters. | $6.00 cap, $2.4193 projected | $0.9105 metered | $3.5775 / $60.00 (OpenRouter) |
+| 2026-08-12 | LEDGER RECONCILE post-campaign — per-model sheet from request_logs (org_platform_ops, eval_live): judge-class 280 calls $1.1493; or-deepseek 435 calls $0.0606; or-gemini-pro 145 calls $1.6204; or-opus 150 calls $0.7471. **TOTAL $3.5774** (db-exact; per-leg row sum $3.5775 differs by $0.0001 rounding). Acceptance re-read twice from fresh processes, byte-identical. AWAITING OPERATOR COUNTERSIGN against the OpenRouter dashboard for the campaign window — "ledgered and reconciled" is the operator's to declare. | — | $3.5774 metered | $3.5774 / $60.00 (OpenRouter) |

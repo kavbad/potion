@@ -12,7 +12,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
 | 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
 | 4 | Run records and deterministic replay | 2026-08-12 | `2b18136` | **complete** |
-| 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | — | **spec ready** — [step-05-platform-sweep.md](specs/step-05-platform-sweep.md), awaiting build approval + rotated keys + approved cap |
+| 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
 | 6 | Intent → spec generation | — | — | not started |
 | 7 | The dial | — | — | not started |
 | 8 | The novice loop, ugly | — | — | not started |
@@ -234,3 +234,84 @@ the fake embedder proves the synthesis PIPELINE, not embedding quality
 (real-embedder clustering belongs to Step 5's live sweep and beyond).
 
 Proof: `git show --stat 2b18136`.
+
+---
+
+## Step 5 — Platform live sweep (2026-08-12)
+
+**Done when:** all ten taxonomy clusters carry a platform frontier whose
+latest version aggregates exclusively live-evidenced rows, under the
+approved Tier B envelope. **Holds** — proven on the durable campaign db
+(`.pglite/platform-sweep-step5`), acceptance re-read twice from fresh
+processes byte-identically.
+
+Build commit `64b3ea8` (code + pre-spend review fixes; spec:
+[step-05-platform-sweep.md](specs/step-05-platform-sweep.md) carries the
+approved review outcomes, the attestation record, eight recorded
+deviations, and the 9-finding pre-spend adversarial review).
+
+**Campaign:** 10 legs, one cluster each, sample 15 (small suites run whole
+at their measured 14), $6/cluster sub-caps, $60 hard-stop belt on
+`org_platform_ops` — **total metered $3.5774**, 18% of the estimator's
+worst-case $19.58, 6% of the cap. Candidates openrouter-only by policy
+(the rotation attestation covers OPENROUTER_API_KEY only; the leg script
+structurally refuses other provider keys): or-deepseek / or-gemini-pro /
+or-opus singles + cascade(or-deepseek→or-opus @0.72), judge judge-class.
+
+**DoD acceptance (operator addition 3), per the recorded interpretation —
+all four candidates measured live in every cluster (56–60 evidence rows =
+the full grid); the published point set is what Pareto domination honestly
+yields, noted per cluster:**
+
+| cluster | pts | singles | composites | note |
+|---|---|---|---|---|
+| multi-step-reasoning | 4 | 3 | 1 | full candidate set on frontier (literal DoD met) |
+| agentic-tool-use | 4 | 3 | 1 | full candidate set on frontier (literal DoD met) |
+| rag-answer | 3 | 3 | 0 | cascade dominated |
+| summarization | 3 | 2 | 1 | one single dominated |
+| creative | 3 | 2 | 1 | one single dominated |
+| code-review | 3 | 2 | 1 | one single dominated |
+| rewrite-edit | 3 | 2 | 1 | one single dominated |
+| code-gen | 2 | 2 | 0 | one single + cascade dominated |
+| extraction | 2 | 2 | 0 | one single + cascade dominated |
+| classification | 2 | 2 | 0 | one single + cascade dominated |
+
+Every cluster has ≥2 singles on its frontier — the tool-bearing partition
+always has single-model points to draw from. Zero SIMULATED provenance
+anywhere autopilot-facing: every published point is providerMode live with
+suiteContentHash provenance (F7 at birth), and the seed ratchet
+(`seed-ratchet.test.ts`) pins that no future boot's mock seed can supersede
+these frontiers. The two formerly SIMULATED-seeded clusters (code-gen,
+extraction) are now live-evidenced.
+
+**Containment (F12):** zero org-attributed eval_results/frontiers rows in
+the campaign db; all spend under `org_platform_ops` (`status='eval_live'`);
+evidence org-NULL throughout — the spend/evidence attribution split held
+exactly as designed.
+
+**Reconciliation sheet** (in `tasks/todo.md`, awaiting operator
+countersign): judge-class 280 calls $1.1493 · or-deepseek 435 calls
+$0.0606 · or-gemini-pro 145 calls $1.6204 · or-opus 150 calls $0.7471 —
+total $3.5774.
+
+**Walkthrough scope confirmation (operator query):** the Gate 6
+walkthrough emits 20 PASS lines = 2 boot legs + numbered legs 0–17. The
+"18/18" in the Step 3/4 rows counts the numbered legs; a report quoting
+"17" quoted the highest ordinal. Same gate, same scope, nothing dropped.
+
+**Residual risks (recorded, not smoothed):**
+- The belt is a leg-start check; worst-case overshoot is one leg's cap
+  ($6) under sequential legs (spec review §8). The operator route admits
+  capUsd ≤ $60/job — token-gated, belt-bounded.
+- `prices.json` version deliberately unbumped for the additive `or-opus`
+  entry (spec deviation 3); the next legitimate price change must bump.
+- or-opus now exists for every future OpenRouter-only registry consumer
+  (org sweeps, researcher) — designed registry growth, recorded (spec
+  review §7).
+- Cascade self-report calibration constant was fitted on mock (spec
+  deviation 4); live cascades survived domination in 6/10 clusters, so
+  the composite's live behavior now has real evidence for a later
+  recalibration pass.
+- Process error recorded in the ledger: one code-review row was first
+  written with a figure not yet read from the leg output; corrected in
+  place with the error noted in the row.
