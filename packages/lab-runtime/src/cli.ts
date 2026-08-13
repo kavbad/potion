@@ -24,6 +24,8 @@ export interface StartRunOptions {
   tools?: LabTool[];
   runId?: string;
   maxStepsPerLeg?: number;
+  /** Step 8 per-slot policy pins, threaded to the loop. */
+  policyRefs?: { brain?: string; tools?: string };
 }
 
 /** Parse+validate the spec (every Step 2 gate applies), create the run,
@@ -72,6 +74,7 @@ async function executeLeg(
     harnessHash: hash,
     ...(opts.tools !== undefined ? { tools: opts.tools } : {}),
     ...(opts.maxStepsPerLeg !== undefined ? { maxStepsPerLeg: opts.maxStepsPerLeg } : {}),
+    ...(opts.policyRefs !== undefined ? { policyRefs: opts.policyRefs } : {}),
   });
   // Span emission after the leg: idempotent, safe to re-send on resume.
   const steps = await listLabSteps(opts.db, runId, opts.orgId);

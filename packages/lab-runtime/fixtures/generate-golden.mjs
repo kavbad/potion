@@ -129,6 +129,8 @@ await record('task-tools', baseSpec({ name: 'golden tools harness' }), [
   { results: [
       ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't1', type: 'function', function: { name: 'search', arguments: '{"q":"weekly report"}' } }] }),
       ok({ text: 'Summary based on the search: all is well.' }),
+      // Step 8: the deliberate tool-free wrap-up call of a tool-bearing run.
+      ok({ text: 'Wrap-up: searched the corpus and summarized; done-definition met.' }),
   ] },
 ], { runId: 'golden-task-tools', tools: [searchTool] });
 
@@ -140,6 +142,7 @@ await record('checkin-suspend-resume',
       results: [
         ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't2', type: 'function', function: { name: 'send_email', arguments: '{}' } }] }),
         ok({ text: 'sent; mission complete.' }),
+        ok({ text: 'Wrap-up: sent the email after approval; done-definition met.' }),
       ] },
   ],
   { runId: 'golden-checkin', tools: [emailTool] });
@@ -155,13 +158,17 @@ await record('standing-legcap',
   { runId: 'golden-standing' });
 
 await record('memory-carry', baseSpec({ name: 'golden memory harness' }),
-  [{ results: [ok({ text: 'I remember the last query; summary complete.' })] }],
+  [{ results: [
+      ok({ text: 'I remember the last query; summary complete.' }),
+      ok({ text: 'Wrap-up: recalled memory and summarized; done-definition met.' }),
+  ] }],
   {
     runId: 'golden-memory',
     tools: [searchTool],
     preMemoryRun: { results: [
       ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't1', type: 'function', function: { name: 'search', arguments: '{"q":"history"}' } }] }),
       ok({ text: 'noted.' }),
+      ok({ text: 'Wrap-up: noted the search history; done-definition met.' }),
     ] },
   });
 

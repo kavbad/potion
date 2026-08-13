@@ -357,3 +357,56 @@ export async function getLabMemory(
   for (const r of rows) out[r.key] = r.value;
   return out;
 }
+
+/** Memory rows WITH updatedAt — the Step 8 view surface (key, value, when). */
+export async function listLabMemoryEntries(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+): Promise<Array<{ key: string; value: unknown; updatedAt: Date }>> {
+  return db
+    .select({ key: labHarnessMemory.key, value: labHarnessMemory.value, updatedAt: labHarnessMemory.updatedAt })
+    .from(labHarnessMemory)
+    .where(and(eq(labHarnessMemory.orgId, orgId), eq(labHarnessMemory.harnessHash, harnessHash)))
+    .orderBy(labHarnessMemory.key);
+}
+
+/** Step 8 memory edit: upsert one entry. In-flight legs are unaffected
+ * mid-leg (they snapshot memoryReads at leg start); the NEXT leg reads the
+ * store as edited. */
+export async function setLabMemoryKey(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  await db
+    .insert(labHarnessMemory)
+    .values({ orgId, harnessHash, key, value })
+    .onConflictDoUpdate({
+      target: [labHarnessMemory.orgId, labHarnessMemory.harnessHash, labHarnessMemory.key],
+      set: { value, updatedAt: new Date() },
+    });
+}
+
+/** Step 8 memory delete: PERMANENT and immediate — no tombstone (stated
+ * semantics). Returns whether a row existed (route 404s on false). */
+export async function deleteLabMemoryKey(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+  key: string,
+): Promise<boolean> {
+  const gone = await db
+    .delete(labHarnessMemory)
+    .where(
+      and(
+        eq(labHarnessMemory.orgId, orgId),
+        eq(labHarnessMemory.harnessHash, harnessHash),
+        eq(labHarnessMemory.key, key),
+      ),
+    )
+    .returning({ key: labHarnessMemory.key });
+  return gone.length > 0;
+}

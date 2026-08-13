@@ -32,6 +32,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "brain",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
@@ -66,6 +67,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "brain",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,

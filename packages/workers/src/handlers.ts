@@ -112,7 +112,7 @@ import {
   type ItemPair,
 } from '@potion/researcher';
 // ---- M5 #36 agent workloads (SPEC §14) ----
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { SUITES_V2_DIR } from '@potion/harness';
 import {
   clusterExemplars,
@@ -127,7 +127,18 @@ import {
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
 import type { JobKind } from './jobs.js';
-import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload, GuaranteeSuiteVerifyPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload, GuaranteeSuiteVerifyPayload, LabRunJobPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import {
+  apiKeys,
+  getLabHarness,
+  getLabRun,
+  insertApiKey,
+  revokeApiKey,
+} from '@potion/db';
+import { resumeRun, ServingClient } from '@potion/lab-runtime';
+import type { HarnessSpec } from '@potion/lab-spec';
+import { materializeDialPolicy } from '@potion/lab-dial';
+import { like, isNull as colIsNull } from 'drizzle-orm';
 import { orgDeleteHandler } from './org-delete.js';
 // ---- end M5 #36 imports ----
 import {
@@ -3494,6 +3505,124 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
   });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Lab Step 8 — lab:run: execute a trial run's legs until terminal or
+// awaiting-human. Custody: an EPHEMERAL run-scoped serve key per
+// invocation — raw never persisted, hash via the existing key machinery,
+// policy-bound to the harness's materialized brain row, revoked in
+// finally; any surviving key from a ZOMBIE invocation of the same run is
+// revoked on entry (review outcome 1 — the fence/reclaim path).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LAB_RUN_TERMINAL_STATES = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
+
+/** Test seam: how the handler builds its serving client. The default is a
+ * real ServingClient over POTION_SERVING_URL; custody tests inject a
+ * scripted double so every terminal state is drivable at $0. */
+export interface LabRunHandlerDeps {
+  clientFactory?: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
+}
+
+export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run'> {
+  return async (
+    payload: LabRunJobPayload,
+    ctx: JobContext,
+  ): Promise<{ state: string; noop?: boolean }> =>
+  withDeliveryGuard('lab:run', ctx, payload.orgId, async () => {
+    const servingUrl = process.env.POTION_SERVING_URL;
+    if (servingUrl === undefined || servingUrl === '') {
+      throw new Error('lab:run requires POTION_SERVING_URL (the serving base url)');
+    }
+    const run = await getLabRun(ctx.db, payload.runId, payload.orgId);
+    if (run === null) throw new Error(`unknown lab run '${payload.runId}' for org`);
+
+    // ZOMBIE-KEY SWEEP (review outcome 1): revoke any unrevoked ephemeral
+    // key a prior invocation of THIS run left behind (crash before its
+    // finally). Runs BEFORE the terminal no-op: a crash between the terminal
+    // transition and the finally leaves a live key on a terminal run, and
+    // this re-entry is the only reaper that ever sees it.
+    //
+    // Gated on NO LIVE CLAIM (review finding): a duplicate lab:run job
+    // arriving while a healthy invocation holds an unexpired lease must not
+    // revoke the LIVE invocation's key mid-leg — the duplicate will bounce
+    // off the claim anyway. A truly dead winner's lease expires, and the
+    // next entry sweeps then.
+    const claimLive = run.claimExpiresAt !== null && run.claimExpiresAt > new Date();
+    if (!claimLive) {
+      const stale = await ctx.db
+        .select({ id: apiKeys.id })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.orgId, payload.orgId), like(apiKeys.name, `lab-run-${payload.runId}-%`), colIsNull(apiKeys.revokedAt)));
+      for (const row of stale) {
+        await revokeApiKey(ctx.db, payload.orgId, row.id, new Date());
+      }
+    }
+
+    if (LAB_RUN_TERMINAL_STATES.has(run.state)) {
+      return { state: run.state, noop: true };
+    }
+    const spec = run.spec as HarnessSpec;
+    const specText = JSON.stringify({ ...spec, hash: run.harnessHash });
+
+    // Per-slot policy rows (idempotent — the dial's materialization).
+    const brainRow = await materializeDialPolicy(ctx.db, {
+      orgId: payload.orgId, harnessHash: run.harnessHash, slot: 'brain', policy: spec.brain.policy,
+    });
+    const toolsRow = spec.brain.toolPolicy !== undefined
+      ? await materializeDialPolicy(ctx.db, {
+          orgId: payload.orgId, harnessHash: run.harnessHash, slot: 'tools', policy: spec.brain.toolPolicy,
+        })
+      : undefined;
+
+    // The ephemeral key: raw exists only in this invocation.
+    const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
+    const rawKey = `pk_labrun_${suffix}${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const keyId = `key-labrun-${payload.runId}-${suffix}`;
+    await insertApiKey(ctx.db, {
+      id: keyId,
+      keyHash: sha256(rawKey),
+      name: `lab-run-${payload.runId}-${suffix}`,
+      orgId: payload.orgId,
+      policyId: brainRow.id,
+      rateRps: 50,
+      dailyCap: 10_000,
+      // Belt to the sweep's suspenders: even if the finally's revoke fails
+      // AND no re-entry ever runs the zombie sweep, the row self-expires.
+      // 6h — far above any single invocation (fuel caps bound the leg loop;
+      // the longest live leg observed is ~24min), so a healthy run can
+      // never lose its key mid-leg to its own belt.
+      expiresAt: new Date(Date.now() + 6 * 60 * 60_000),
+    });
+    try {
+      const catalog = await getLabHarness(ctx.db, payload.orgId, run.harnessHash);
+      const clientFactory =
+        deps.clientFactory ?? ((o: { baseUrl: string; apiKey: string; clusterHint?: string }) => new ServingClient(o));
+      const client = clientFactory({
+        baseUrl: servingUrl,
+        apiKey: rawKey,
+        ...(catalog !== null && catalog.clusterId !== null ? { clusterHint: catalog.clusterId } : {}),
+      });
+      const policyRefs = { brain: brainRow.name, ...(toolsRow !== undefined ? { tools: toolsRow.name } : {}) };
+      let outcome = await resumeRun({
+        db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId,
+        ...(payload.answer !== undefined ? { answer: payload.answer } : {}),
+        policyRefs,
+      });
+      while (outcome.status === 'leg-cap') {
+        outcome = await resumeRun({
+          db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId, policyRefs,
+        });
+      }
+      return { state: outcome.status };
+    } finally {
+      // Key death at EVERY exit — terminal, awaiting-human, refusal, throw.
+      await revokeApiKey(ctx.db, payload.orgId, keyId, new Date()).catch(() => {});
+    }
+  });
+}
+
+export const labRunHandler: WorkerHandler<'lab:run'> = createLabRunHandler();
+
+// ─────────────────────────────────────────────────────────────────────────────
 // G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
 //
 // The advisory serve leg only ever trips a wire; THIS job renders the
@@ -4619,6 +4748,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   // ---- G1.7 live capped org evals ----
   'frontier:live-sweep': frontierLiveSweepHandler,
   'frontier:platform-sweep': frontierPlatformSweepHandler,
+  'lab:run': labRunHandler,
   // ---- G2.7 operator org deletion ----
   'org:delete': orgDeleteHandler,
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----

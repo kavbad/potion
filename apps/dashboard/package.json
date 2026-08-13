@@ -9,7 +9,8 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "walkthrough": "tsx scripts/walkthrough.ts"
+    "walkthrough": "tsx scripts/walkthrough.ts",
+    "lab-walkthrough": "tsx scripts/lab-walkthrough.ts"
   },
   "dependencies": {
     "next": "15.5.22",

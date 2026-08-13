@@ -48,6 +48,17 @@ export const systemClock: Clock = { now: () => Date.now() };
 
 /** The exact message shape a consumed check-in answer becomes. Exported so
  * replay derives it from the SAME code, never a re-implementation. */
+/** Step 8 (the toolPolicy activation): the loop's ONE deliberate tool-free
+ * call — issued without tools at the end of a TOOL-BEARING task run,
+ * served under brain.policy's ref, stamped slot 'brain'. Its text feeds
+ * run report v1's "what happened". Exported for replay derivation. */
+export const WRAP_UP_PROMPT =
+  'Summarize what you did in this run and state plainly whether the done-definition is met.';
+
+export function wrapUpMessage(): ChatMessage {
+  return { role: 'user', content: WRAP_UP_PROMPT };
+}
+
 export function checkInAnswerMessage(answer: string): ChatMessage {
   return { role: 'user', content: `[check-in answer] ${answer}` };
 }
@@ -65,6 +76,9 @@ export interface RunLegOptions {
   spec: HarnessSpec;
   harnessHash: string;
   tools?: LabTool[];
+  /** Step 8 per-slot policy pins (the dial's materialized rows): tool-capable
+   * calls ride tools ?? brain; tool-free calls (incl. the wrap-up) ride brain. */
+  policyRefs?: { brain?: string; tools?: string };
   clock?: Clock;
   sleep?: (ms: number) => Promise<void>;
   maxStepsPerLeg?: number;
@@ -177,10 +191,16 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       (acc, s) => acc + ((s.payload as StepPayload).estCostUsd ?? 0),
       0,
     );
-    // A recorded check-in answer AUTHORIZES the next external action, once.
-    // Without consumption semantics the resumed leg would re-ask on the very
-    // tool call the human just approved — an infinite politeness loop.
-    let externalAuthorized = claim.pendingAnswer !== null;
+    // A recorded check-in answer AUTHORIZES the next external action, once —
+    // but ONLY when the question it answered WAS the external-action gate
+    // (review finding: a fuel check-in's "keep going" must never authorize
+    // an external action the human was not shown). Without consumption
+    // semantics the resumed leg would re-ask on the very tool call the
+    // human just approved — an infinite politeness loop.
+    const lastCheckIn = [...priorSteps].reverse().find((s) => s.kind === 'check-in');
+    let externalAuthorized =
+      claim.pendingAnswer !== null &&
+      (lastCheckIn?.payload as StepPayload | undefined)?.checkInTrigger === 'before-external-action';
     let budgetFractionAsked = priorSteps.some(
       (s) => s.kind === 'check-in' && (s.payload as StepPayload).checkInTrigger === 'on-budget-fraction',
     );
@@ -238,11 +258,15 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       }
 
       // ---- model step (with bounded rate-limit retry) ----
+      const slot: 'brain' | 'tools' = toolDefs ? 'tools' : 'brain';
+      const slotRef = toolDefs
+        ? (opts.policyRefs?.tools ?? opts.policyRefs?.brain)
+        : opts.policyRefs?.brain;
       const requestPayload = { model: 'potion-auto', messages: [...messages], ...(toolDefs ? { tools: toolDefs } : {}) };
-      let result = await opts.client.complete({ messages, ...(toolDefs ? { tools: toolDefs } : {}) });
+      let result = await opts.client.complete({ messages, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
       for (let retry = 0; result.kind === 'rate-limited' && retry < (opts.rateRetries ?? 3); retry++) {
         await sleep(result.retryAfterMs);
-        result = await opts.client.complete({ messages, ...(toolDefs ? { tools: toolDefs } : {}) });
+        result = await opts.client.complete({ messages, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
       }
       if (result.kind === 'budget-exceeded') {
         // The ORG hard stop — serving refused to spend. Terminal.
@@ -260,7 +284,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'model',
         payload: buildStepPayload({
           ...takeLegStamp(),
-          kind: 'model', requestPayload, responseText: result.text,
+          kind: 'model', slot, requestPayload, responseText: result.text,
           toolCalls: result.toolCalls, finishReason: result.finishReason,
           completionId: result.completionId, frontierTrace: result.frontierTrace,
           usage: result.usage, clockMs: clock.now(), rngSample: rng(),
@@ -321,6 +345,46 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       // No tool calls + natural stop → a TASK mission is complete. Standing
       // missions keep going until the leg cap (heartbeat-shaped by design).
       if (opts.spec.mission.kind === 'task' && result.finishReason === 'stop') {
+        // Step 8: TOOL-BEARING runs end with ONE deliberate tool-free call
+        // — the wrap-up — served under brain.policy and stamped 'brain'
+        // (the toolPolicy activation; Step 7's exit criterion). Its text
+        // is report material. Toolless runs already ended on a brain call.
+        if (toolDefs && estSpentUsd < opts.spec.fuel.maxUsdPerRun) {
+          // The wrap-up is a PAID call — it rides only when fuel remains
+          // (review finding: no serving call after the cap, not even the
+          // deliberate one; the report already tolerates a missing wrap-up).
+          messages.push(wrapUpMessage());
+          const wrapPayload = { model: 'potion-auto', messages: [...messages] };
+          let wrap = await opts.client.complete({
+            messages,
+            ...(opts.policyRefs?.brain !== undefined ? { policyRef: opts.policyRefs.brain } : {}),
+          });
+          for (let retry = 0; wrap.kind === 'rate-limited' && retry < (opts.rateRetries ?? 3); retry++) {
+            await sleep(wrap.retryAfterMs);
+            wrap = await opts.client.complete({
+              messages,
+              ...(opts.policyRefs?.brain !== undefined ? { policyRef: opts.policyRefs.brain } : {}),
+            });
+          }
+          if (wrap.kind === 'ok') {
+            seq += 1;
+            await appendLabStep(opts.db, {
+              runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'model',
+              payload: buildStepPayload({
+                ...takeLegStamp(),
+                kind: 'model', slot: 'brain', requestPayload: wrapPayload,
+                responseText: wrap.text, toolCalls: wrap.toolCalls,
+                finishReason: wrap.finishReason, completionId: wrap.completionId,
+                frontierTrace: wrap.frontierTrace, usage: wrap.usage,
+                clockMs: clock.now(), rngSample: rng(),
+              }),
+              harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
+            });
+            stepsThisLeg += 1;
+          }
+          // A failed wrap-up never blocks completion — the mission is done;
+          // the report falls back to the final mission response.
+        }
         await fenced.transition('completed');
         return { status: 'completed', steps: stepsThisLeg };
       }

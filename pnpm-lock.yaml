@@ -19,9 +19,18 @@ importers:
       '@potion/core':
         specifier: workspace:*
         version: link:packages/core
+      '@potion/db':
+        specifier: workspace:*
+        version: link:packages/db
       '@potion/harness':
         specifier: workspace:*
         version: link:packages/harness
+      '@potion/lab-dial':
+        specifier: workspace:*
+        version: link:packages/lab-dial
+      '@potion/lab-runtime':
+        specifier: workspace:*
+        version: link:packages/lab-runtime
       '@potion/observability':
         specifier: workspace:*
         version: link:packages/observability
@@ -40,6 +49,9 @@ importers:
       '@potion/strategies':
         specifier: workspace:*
         version: link:packages/strategies
+      '@potion/workers':
+        specifier: workspace:*
+        version: link:packages/workers
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.43
@@ -116,6 +128,18 @@ importers:
       '@potion/harness':
         specifier: workspace:*
         version: link:../../packages/harness
+      '@potion/lab-dial':
+        specifier: workspace:*
+        version: link:../../packages/lab-dial
+      '@potion/lab-gen':
+        specifier: workspace:*
+        version: link:../../packages/lab-gen
+      '@potion/lab-runtime':
+        specifier: workspace:*
+        version: link:../../packages/lab-runtime
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:../../packages/lab-spec
       '@potion/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -341,6 +365,12 @@ importers:
         specifier: workspace:*
         version: link:../lab-spec
     devDependencies:
+      '@potion/lab-dial':
+        specifier: workspace:*
+        version: link:../lab-dial
+      '@potion/pareto':
+        specifier: workspace:*
+        version: link:../pareto
       '@potion/server':
         specifier: workspace:*
         version: link:../../apps/server
@@ -529,6 +559,15 @@ importers:
       '@potion/harness':
         specifier: workspace:*
         version: link:../harness
+      '@potion/lab-dial':
+        specifier: workspace:*
+        version: link:../lab-dial
+      '@potion/lab-runtime':
+        specifier: workspace:*
+        version: link:../lab-runtime
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:../lab-spec
       '@potion/pareto':
         specifier: workspace:*
         version: link:../pareto

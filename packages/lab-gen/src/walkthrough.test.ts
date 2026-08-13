@@ -95,18 +95,26 @@ afterAll(async () => {
 });
 
 describe('Leg A — the generator is a metered model call (real route)', () => {
-  it('extraction attempts meter as request_logs and stop at the call bound', async () => {
+  it('extraction meters as request_logs; a missing frontier is an honest draft, never a fabricated spec', async () => {
     const before = (await h.db.select().from(requestLogs).where(eq(requestLogs.orgId, ORG))).length;
     const r = await generateSpec(ANSWERS, {
       client,
       loadFrontier: async () => null,
     });
-    // The mock provider cannot emit extraction JSON: typed refusal, never a
-    // malformed spec.
-    expect(r.kind).toBe('refused');
-    if (r.kind === 'refused') expect(r.reason).toBe('extraction-unparseable');
+    // Step 8: the mock provider answers the extraction prompt with valid
+    // JSON (the additive lab-extraction fixture — the $0 novice loop needs
+    // a completable interview), so generation now proceeds PAST extraction
+    // and stops honestly at the missing frontier: a DRAFT with the typed
+    // frontier gap, never a spec invented without live evidence.
+    expect(r.kind).toBe('draft');
+    if (r.kind === 'draft') {
+      expect(r.gaps.some((g) => g.code === 'frontier-missing' || g.code === 'frontier-not-live')).toBe(true);
+    }
     const after = (await h.db.select().from(requestLogs).where(eq(requestLogs.orgId, ORG))).length;
-    expect(after - before).toBe(GEN_MAX_MODEL_CALLS);
+    // ONE successful extraction call metered (the repair pass is unneeded
+    // now that the first reply parses) — still within GEN_MAX_MODEL_CALLS.
+    expect(after - before).toBe(1);
+    expect(1).toBeLessThanOrEqual(GEN_MAX_MODEL_CALLS);
   }, 120_000);
 });
 

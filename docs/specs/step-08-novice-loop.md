@@ -219,6 +219,29 @@ zero knowledge a novice wouldn't have (no ids, no db reads on the driving
 path — assertions may read the db to VERIFY, never to advance). Runs in
 verify as the Lab's own gate leg, mock providers, $0.
 
+## Review outcomes (operator approval, 2026-08-13) — folded in as binding
+
+0. **Standing-rule amendment (docs-first, committed before code):** the
+   ATTESTED_ON rotation attestation is superseded by the operator's
+   risk-acceptance gate — `KEY_RISK_ACCEPTED=<ISO date>`, fail-closed;
+   the operator accepts live spend on the current chat-transited
+   OPENROUTER key on the basis of its provider-side cap; a future
+   rotation supersedes. The Step 5 spec's open attestation item is closed
+   by pointer.
+1. **Serve-key death at EVERY terminal state, including fence/reclaim:**
+   a fenced zombie invocation's ephemeral key is revoked or dies with the
+   fence — proven BY TEST across the outcome enumeration (completed,
+   killed-budget, failed, kill route, awaiting-human invocation-end, and
+   the reclaim path revoking the zombie's key on entry).
+2. **Catalog edits never touch run-frozen specs:** after editing a
+   `lab_harnesses` row, a pre-edit run still replays byte-identically —
+   proven by test, tying 0037 to the Step 4 invariants.
+3. **The live felt leg runs under `KEY_RISK_ACCEPTED=2026-08-13`** with
+   the $1 cap against the Step 5 campaign frontiers; the operator's
+   reading of the samples is recorded as part of the leg's evidence (the
+   samples land verbatim in the ledger; the reading completes at
+   countersign).
+
 ## Package layout / touches
 
 - `apps/server/src/routes/lab.ts` + ROUTE_INVENTORY rows + tenancy
@@ -278,3 +301,151 @@ MCP execution / OAuth / real tool wiring (Step 10); the derived form and
 any visual polish (Step 9); SSE/streaming; model-phrased report prose;
 user-supplied probe examples beyond the interview (recorded Step 6 debt);
 standing-mission scheduling; multi-run dashboards (Step 14/16 surfaces).
+
+## Build findings (recorded during the build phase, per protocol)
+
+- **Calendar-rotted fixtures in pre-existing workers tests (2026-08-13).**
+  On entering the build, 22 pre-existing tests across
+  `packages/workers/src/traces.test.ts` and `suite-verify.test.ts` were
+  failing with zero Step 8 involvement: their trace fixtures hardcoded
+  `'2026-08-06T…'` timestamps, and the clustering window is `sinceDays: 7`
+  back from *now* — the fixtures aged out of the window the day the
+  calendar reached 2026-08-13 (one file's own comment says "recent sessions
+  so the 7-day clustering window sees them"; they were recent when
+  written). Fix: a module-level `FIXTURE_BASE_MS = Date.now() − 24h` base
+  with minute offsets replacing every date literal, preserving relative
+  ordering; the `2026-08-09`/`08-10` literals in suite-verify (still
+  inside the window, due to rot within days) were converted in the same
+  pass. Test-only change, no product code touched; determinism tests
+  unaffected (they compare id/prompt/reference, and the base is constant
+  within a run). Both suites green after: traces 32/32, workers 136/136.
+
+- **Mock extraction fixture (additive, providers).** The mock provider had
+  no answer shape for the generator's mission-interview extraction prompt —
+  under a real mock deployment every interview refused
+  `extraction-unparseable`, making the $0 novice loop impossible. Added
+  `labExtractionFixtureText` behind `LAB_EXTRACTION_MARKER` in
+  `packages/providers/src/mock/fixtures.ts`, the same Phase 1 additive
+  discipline as the CONFIDENCE/PICK/decompose fixtures: a prompt that
+  requests a machine-readable shape gets that exact shape, derived
+  deterministically from the prompt's own embedded answers (no rng draws;
+  ordinary prompts byte-identical).
+
+- **Standing missions check in at half fuel (lab-gen assembly).** As
+  specced, generated specs carried a check-in only when tool-bearing
+  (`before-external-action`) — a trigger that structurally cannot fire
+  pre-MCP (no toolDefs → no tool calls), while task missions complete on
+  their first done-shaped answer. The scripted session's "poll until the
+  check-in appears" leg was therefore UNREACHABLE for any generated spec.
+  Resolution: `assembleSpec` now gives STANDING missions
+  `{ trigger: 'on-budget-fraction', fraction: 0.5 }` — "a standing mission
+  has no natural run in the user's head; a check does" (Step 6 review
+  outcome 1's own rationale). The walkthrough novice builds a standing
+  mission and hits the pause honestly. lab-gen goldens regenerated in the
+  same commit (Step 4 regeneration discipline).
+
+- **Mock tool-echo becomes call-then-answer (additive, providers).** The
+  tool-call echo fixture answered EVERY tools-bearing request with another
+  tool call, so no tool-bearing run could ever complete against the mock
+  route (the activation leg's wrap-up was unreachable). Added: once the
+  transcript carries a `[tool … result]` message, the mock answers with
+  text — the call-then-answer shape of real models. Transcripts without
+  tool results are byte-identical (all pre-existing fixtures/tests hold).
+
+- **Where the Step 8 proofs live.** Key custody enumeration:
+  `packages/workers/src/lab-run.test.ts` (10 tests — every exit + the
+  fence/reclaim sweep, incl. terminal-no-op reaping and org/run scoping).
+  Catalog-edit replay invariance:
+  `packages/lab-runtime/src/catalog-invariance.test.ts`. toolPolicy
+  activation (both slots, per-slot `policy_override=` trace proof, tool-free
+  wrap-up): `packages/lab-runtime/src/walkthrough.test.ts`. Report ladder /
+  taxonomy / est-vs-metered pins: `packages/lab-runtime/src/report.test.ts`.
+  Tool posture in all three places: `apps/server/test/lab-posture.test.ts`.
+  The ten-minute clock: `apps/dashboard/scripts/lab-walkthrough.ts`
+  (measured 3.2s of the 600s budget at $0, mock).
+
+- **The live felt leg's first run caught a leg-script custody bug — via the
+  product's own divergence detector.** The script materialized BOTH rungs of
+  a cluster under one harness-hash prefix; the dial-policy row name embeds
+  only the first 12 chars of the hash, so both rungs shared one row, the
+  second materialization overwrote the first, and rung 0's felt call served
+  rung 2's policy. Step 7's strategy-mismatch detection returned the sample
+  TYPED as divergent (expected 6efe8a56, served 10b2d052) and refused to
+  cache it — exactly the failure mode the surface was built for, caught on
+  its first live exercise. Fix: the rung discriminator leads the hash
+  (`s8r<k><cluster>`), one policy row per rung; the re-run was clean (all
+  samples match their views; zero divergence). Both runs are ledger rows.
+
+## Pre-commit adversarial review (2026-08-13, standing practice)
+
+Five-dimension finder swarm over the Step 8 diff (custody/tenancy, money,
+replay/catalog, serving contract, concurrency/crash), 21 claims, each
+adversarially verified by two independent refuters; verification was
+completed by the operator's agent in the main loop for the eight claims
+whose refuter agents died on usage-credit exhaustion (process note — the
+verdicts below were reached by reading the code, same standard).
+
+**Confirmed and FIXED (each with a pinned regression):**
+
+1. Route-scoped `lab-io` ephemeral keys had NO reaper (unlike the lab-run
+   keys' sweep) — a crash or swallowed revoke failure left a live
+   credential row forever. Fix: hard `expiresAt` (15 min) on lab-io keys;
+   the lab-run keys gained a 6h belt to the sweep's suspenders.
+2. POST /api/lab/runs' cross-org probe was VACUOUS — the resource id
+   travels in the body, which the sweep never substituted; all three probe
+   arms were byte-identical. Fix: `resourceBodyField` on the inventory row
+   + body substitution in the sweep — applied to the four pre-existing
+   same-class rows too (live-sweep, research/cycle, rubrics/generate,
+   certifications/run), all of which pass with REAL foreign ids (their org
+   scoping was correct; only the probe was vacuous).
+3. The answer route dropped `answerLabRun`'s guarded-update verdict — a
+   lost race got a 202 and a spurious enqueue while the answer vanished.
+   Fix: 409 `answer_not_accepted` when the guard loses.
+4. The felt ROUTE materialized every position onto ONE policy row (the
+   same 12-char name-prefix collapse the live leg exposed in the script) —
+   every probe rode the last position's policy and clobbered an in-flight
+   run's pin rows. Fix: per-position leading discriminator, disjoint from
+   run pins.
+5. The zombie-key sweep could revoke a LIVE invocation's key when a
+   duplicate lab:run job arrived mid-leg. Fix: the sweep is gated on no
+   unexpired claim — a dead winner's lease expires and the next entry
+   sweeps; a healthy run is never disarmed.
+6. Replay falsely diverged on a legitimately recorded tool-bearing run
+   whose wrap-up FAILED at runtime (the loop tolerates that; replay did
+   not). Fix: the wrap-up is optional under replay, matching the loop's
+   own rule.
+7. A FUEL check-in answer doubled as before-external-action authorization
+   — "yes, keep going" would have approved an external action the human
+   never saw. Fix: the recorded answer authorizes an external action only
+   when the answered check-in WAS the external-action gate.
+8. The wrap-up was a paid call issued even after the fuel cap was crossed.
+   Fix: skipped when fuel is exhausted (the report already tolerates a
+   missing wrap-up).
+9. The live felt leg script NaN'd its ledger arithmetic and crashed on an
+   unresolved metered cost. Fix: unresolved cost consumes the remaining
+   cap (the sweep's own fail-closed rule) and prints as UNRESOLVED.
+
+**Confirmed as ACCEPTED v1 semantics / residual risks (recorded, not
+fixed this step):**
+
+- Fuel is denominated in the flat token-rate ESTIMATE — premium rungs can
+  meter well above `maxUsdPerRun` before the est-cap trips. This is the
+  labeled Step 6 fuel currency; the org-level metered budget hard stop
+  remains the outer belt, and the recorded WORTH_TO_FUEL_RATIO
+  re-derivation path (from observed Step 8 traffic) is where fuel becomes
+  measurement-priced.
+- `lab:run` reads the catalog row per invocation for the serving
+  clusterHint — an in-place catalog edit can redirect the remaining legs
+  of an existing run to a different cluster. The frozen spec and replay
+  are unaffected (steps record what was served); freezing the hint on the
+  run row is a schema-additive follow-up, deferred.
+- A dial move that lands on an ALREADY-CATALOGED hash replaces that row's
+  sidecar — the catalog holds the LATEST provenance per content-addressed
+  spec; both sidecars bind the same specHash, so nothing is orphaned.
+- A worker crash mid-leg leaves the run 'running' until its lease expires;
+  no automatic re-enqueue exists — the kill route is the operator
+  recovery, and run retention owns the cleanup story.
+- Refuted/vacuous claims from the finder pass (report torn reads,
+  walkthrough poll masking, dashboard answer-box clearing, ensureLabIoPolicy
+  insert race) were either killed by the refuters or fall below the
+  fix-now line and ride the same v1-simplicity ledger as polling narration.

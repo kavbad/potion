@@ -109,6 +109,14 @@ function ctx(): JobContext {
   return { db: db.db, dbHandle: db, pricesPath, suitesV2Dir, embedder: fakeEmbedder };
 }
 
+// Fixture times are RELATIVE to the test run (base = 24h ago): the clustering
+// window is `sinceDays: 7` back from now, so hardcoded calendar dates rot out
+// of it as real time advances (the '2026-08-06T…' literals these replace
+// expired on 2026-08-13). One module-level base keeps every seeded session
+// inside the window forever while preserving the fixtures' relative ordering.
+const FIXTURE_BASE_MS = Date.now() - 24 * 60 * 60 * 1000;
+const fixtureTs = (minutes = 0): string => new Date(FIXTURE_BASE_MS + minutes * 60_000).toISOString();
+
 function span(over: Partial<NewTraceSpan>): NewTraceSpan {
   return {
     orgId: 'org_a',
@@ -119,7 +127,7 @@ function span(over: Partial<NewTraceSpan>): NewTraceSpan {
     usage: { input_tokens: 10, output_tokens: 5 },
     costUsd: 0,
     attrs: {},
-    ts: new Date('2026-08-06T10:00:00Z'),
+    ts: new Date(FIXTURE_BASE_MS),
     ...over,
   };
 }
@@ -130,7 +138,7 @@ async function seedSession(
   traceId: string,
   prompt: string,
   tool: string | null,
-  ts = '2026-08-06T10:00:00Z',
+  ts = fixtureTs(),
   completion?: string,
 ): Promise<void> {
   const spans: NewTraceSpan[] = [
@@ -348,7 +356,7 @@ describe('traces:cluster (M5 #36, SPEC §14.2)', () => {
       'tr_b1',
       'Refactor the billing retry loop for invoices',
       'search',
-      '2026-08-06T10:00:00Z',
+      fixtureTs(),
       'Done — the retry loop now backs off for account 99887766.',
     );
     await seedSession('org_a', 'tr_b2', 'Refactor the billing retry loop for receipts', 'search');
@@ -556,7 +564,7 @@ describe('G1.6 evidence retirement on purge', () => {
     // Build an org cluster with evidence + frontier (recent sessions so the
     // 7-day clustering window sees them), then retention 0 → purge ALL.
     await seedSession('org_a', 'tr_p1', 'Reconcile the billing ledger for March', 'search');
-    await seedSession('org_a', 'tr_p2', 'Reconcile the billing ledger for April', 'search', '2026-08-06T11:00:00Z');
+    await seedSession('org_a', 'tr_p2', 'Reconcile the billing ledger for April', 'search', fixtureTs(60));
     await tracesClusterHandler({ orgId: 'org_a' }, ctx());
     await setOrgTraceRetentionDays(db.db, 'org_a', 0);
     const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
@@ -593,9 +601,9 @@ describe('G1.6 evidence retirement on purge', () => {
 describe('rubric:generate (G1.5)', () => {
   const seedBilling = async (withCompletions: boolean) => {
     const done = (n: string) => (withCompletions ? `Done — resolved billing case ${n} fully.` : undefined);
-    await seedSession('org_a', 'tr_b1', 'Refactor the billing retry loop for invoices', 'search', '2026-08-06T10:00:00Z', done('one'));
-    await seedSession('org_a', 'tr_b2', 'Refactor the billing retry loop for receipts', 'search', '2026-08-06T10:05:00Z', done('two'));
-    await seedSession('org_a', 'tr_b3', 'Refactor the billing retry loop for refunds', 'search', '2026-08-06T10:10:00Z', done('three'));
+    await seedSession('org_a', 'tr_b1', 'Refactor the billing retry loop for invoices', 'search', fixtureTs(0), done('one'));
+    await seedSession('org_a', 'tr_b2', 'Refactor the billing retry loop for receipts', 'search', fixtureTs(5), done('two'));
+    await seedSession('org_a', 'tr_b3', 'Refactor the billing retry loop for refunds', 'search', fixtureTs(10), done('three'));
     await tracesClusterHandler({ orgId: 'org_a' }, ctx());
     return `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
   };
@@ -641,7 +649,7 @@ describe('rubric:generate (G1.5)', () => {
 
     // …and NEW synthesis picks the approved rubric up (new session appends
     // an item that carries it from birth).
-    await seedSession('org_a', 'tr_b4', 'Refactor the billing retry loop for credit notes', 'search', '2026-08-06T10:15:00Z');
+    await seedSession('org_a', 'tr_b4', 'Refactor the billing retry loop for credit notes', 'search', fixtureTs(15));
     await tracesClusterHandler({ orgId: 'org_a' }, ctx());
     const grown = (await loadDerivedSuite(db.db, suiteId))!;
     expect(grown.items.length).toBe(before.items.length + 1);
@@ -710,7 +718,7 @@ async function seedStepSession(
   traceId: string,
   prompt: string,
   stepCount: number,
-  ts = '2026-08-06T10:00:00Z',
+  ts = fixtureTs(),
 ): Promise<void> {
   const t0 = new Date(ts).getTime();
   const spans: NewTraceSpan[] = [
@@ -818,9 +826,9 @@ describe('step-level synthesis (traces:cluster over converter-v2 spans)', () => 
 
   it('caps steps per session and fills the cluster round-robin — no session monopolizes', async () => {
     // 3 sessions × 12 steps = 36 raw; per-session cap 8 → 24 items.
-    await seedStepSession('org_a', 'tr_v1', 'Refactor the billing retry loop for invoices', 12, '2026-08-06T10:00:00Z');
-    await seedStepSession('org_a', 'tr_v2', 'Refactor the billing retry loop for receipts', 12, '2026-08-06T11:00:00Z');
-    await seedStepSession('org_a', 'tr_v3', 'Refactor the billing retry loop for refunds', 12, '2026-08-06T12:00:00Z');
+    await seedStepSession('org_a', 'tr_v1', 'Refactor the billing retry loop for invoices', 12, fixtureTs(0));
+    await seedStepSession('org_a', 'tr_v2', 'Refactor the billing retry loop for receipts', 12, fixtureTs(60));
+    await seedStepSession('org_a', 'tr_v3', 'Refactor the billing retry loop for refunds', 12, fixtureTs(120));
     await tracesClusterHandler({ orgId: 'org_a' }, ctx());
     const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
     const loaded = (await loadDerivedSuite(db.db, `${clusterId}-replays-v2`))!;
@@ -849,7 +857,7 @@ describe('step-level synthesis (traces:cluster over converter-v2 spans)', () => 
           // Insert a second session's spans in REVERSE batch order — the read
           // model orders by (ts, spanId), so synthesis must not care.
           const spans: NewTraceSpan[] = [];
-          const t0 = new Date('2026-08-06T13:00:00Z').getTime();
+          const t0 = FIXTURE_BASE_MS + 180 * 60_000;
           spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: 'tr_d2_root', attrs: { 'gen_ai.prompt': 'Refactor the billing retry loop for receipts' }, ts: new Date(t0) }));
           for (let k = 1; k <= 3; k++) {
             spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: `tr_d2_s${k}`, name: 'llm.call', attrs: { 'gen_ai.operation.name': 'llm_call', 'gen_ai.completion': `step ${k} output of tr_d2`, 'potion.step_index': k }, ts: new Date(t0 + k * 60_000) }));
@@ -858,7 +866,7 @@ describe('step-level synthesis (traces:cluster over converter-v2 spans)', () => 
           spans.push(span({ orgId: 'org_det2', traceId: 'tr_d2', spanId: 'tr_d2_chat', name: 'chat', attrs: { 'gen_ai.completion': 'step 3 output of tr_d2' }, ts: new Date(t0 + 180_000) }));
           await insertTraceSpans(h.db, spans.reverse());
         } else {
-          await seedStepSession('org_det2', 'tr_d2', 'Refactor the billing retry loop for receipts', 3, '2026-08-06T13:00:00Z');
+          await seedStepSession('org_det2', 'tr_d2', 'Refactor the billing retry loop for receipts', 3, fixtureTs(180));
         }
         await tracesClusterHandler({ orgId: 'org_det2' }, ctx());
         const clusterId = `agent-${orgHashOf('org_det2')}-${toolSignatureSlug(['search'])}`;
@@ -881,7 +889,7 @@ describe('step-level synthesis (traces:cluster over converter-v2 spans)', () => 
 
   it('mixed corpus: legacy sessions (no llm.call spans) contribute their session item into the v2 suite', async () => {
     await seedStepSession('org_a', 'tr_mx1', 'Refactor the billing retry loop for invoices', 3);
-    await seedSession('org_a', 'tr_mx2', 'Refactor the billing retry loop for receipts', 'search', '2026-08-06T11:00:00Z', 'legacy final answer');
+    await seedSession('org_a', 'tr_mx2', 'Refactor the billing retry loop for receipts', 'search', fixtureTs(60), 'legacy final answer');
     await tracesClusterHandler({ orgId: 'org_a' }, ctx());
     const clusterId = `agent-${orgHashOf('org_a')}-${toolSignatureSlug(['search'])}`;
     const loaded = (await loadDerivedSuite(db.db, `${clusterId}-replays-v2`))!;

@@ -97,6 +97,7 @@ describe('tool execution + memory projection', () => {
         toolCalls: [{ id: 't1', type: 'function', function: { name: 'record_note', arguments: '{"text":"hello"}' } }],
       }),
       ok({ text: 'noted and done.' }),
+      ok({ text: 'Wrap-up: tool ran, memory noted; done.' }),
     ]);
     const outcome = await runLeg({
       db: h.db, client, runId: 'run-loop', orgId: ORG, spec: s, harnessHash: hash, tools: [noteTool],
@@ -104,7 +105,7 @@ describe('tool execution + memory projection', () => {
     expect(outcome.status).toBe('completed');
 
     const steps = await listLabSteps(h.db, 'run-loop', ORG);
-    expect(steps.map((x) => x.kind)).toEqual(['model', 'tool', 'model']);
+    expect(steps.map((x) => x.kind)).toEqual(['model', 'tool', 'model', 'model']); // + the Step 8 wrap-up
     // Memory is the projection of the step history.
     expect(await getLabMemory(h.db, ORG, hash)).toEqual({ lastNote: { text: 'hello' } });
     await h.close();
@@ -138,6 +139,7 @@ describe('pause-for-human (first-class, across invocations)', () => {
       // Resumed conversation carries the answer; model calls the tool again.
       ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't2', type: 'function', function: { name: 'send_email', arguments: '{}' } }] }),
       ok({ text: 'sent. done.' }),
+      ok({ text: 'Wrap-up: email sent after approval; done.' }),
     ]);
     // NOTE: the gate fires per tool call; the resumed leg re-asks unless the
     // answer covers it. v1 semantics: the gate consumes the pending answer —
@@ -234,4 +236,73 @@ describe('structural: no provider-call paths (touchpoint 1)', () => {
       );
     }
   });
+});
+
+describe('Step 8 review pins — answer scope and wrap-up fuel', () => {
+  it('a FUEL check-in answer never authorizes an external action (the gate re-fires)', async () => {
+    const s = spec({
+      fuel: { maxUsdPerRun: 0.0002, hardStop: true },
+      checkIns: [
+        { trigger: 'on-budget-fraction', fraction: 0.5 },
+        { trigger: 'before-external-action' },
+      ],
+    });
+    const { h, hash } = await freshRun(s);
+    let sent = 0;
+    const emailTool: LabTool = {
+      name: 'send_email', description: 'send an email', parameters: { type: 'object' },
+      external: true,
+      run: async () => { sent += 1; return { sent: true }; },
+    };
+    // Leg 1: one non-done call crosses the budget fraction → FUEL check-in.
+    const leg1 = await runLeg({
+      db: h.db, client: scripted([ok({ text: 'still working', finishReason: 'length' })]),
+      runId: 'run-loop', orgId: ORG, spec: s, harnessHash: hash, tools: [emailTool],
+    });
+    expect(leg1.status).toBe('awaiting-human');
+    if (leg1.status === 'awaiting-human') expect(leg1.question).toContain('Fuel');
+
+    // The human answers THE FUEL QUESTION — that answer must not double as
+    // external-action authorization (review pin).
+    const { answerLabRun } = await import('@potion/db');
+    expect(await answerLabRun(h.db, 'run-loop', ORG, 'yes, keep going')).toBe(true);
+    const leg2 = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't1', type: 'function', function: { name: 'send_email', arguments: '{}' } }] }),
+      ]),
+      runId: 'run-loop', orgId: ORG, spec: s, harnessHash: hash, tools: [emailTool],
+    });
+    // The resumed leg's external call must PAUSE at its own gate — the tool
+    // never ran on the strength of the fuel answer.
+    expect(leg2.status).toBe('awaiting-human');
+    expect(sent).toBe(0);
+    await h.close();
+  }, 60_000);
+
+  it('the wrap-up is skipped when fuel is exhausted — no paid call after the cap', async () => {
+    // Two model calls of 15 tokens est $0.00015 each; cap $0.0002 → after
+    // the done-shaped second call the cap is crossed, so the deliberate
+    // tool-free wrap-up must NOT be issued (scripted client has no third
+    // response — an attempted wrap-up would throw 'exhausted').
+    const s = spec({ fuel: { maxUsdPerRun: 0.0002, hardStop: true } });
+    const { h, hash } = await freshRun(s);
+    const noteTool: LabTool = {
+      name: 'record_note', description: 'record a note', parameters: { type: 'object' },
+      external: false,
+      run: async (input) => ({ noted: input }),
+    };
+    const outcome = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't1', type: 'function', function: { name: 'record_note', arguments: '{}' } }] }),
+        ok({ text: 'noted and done.' }),
+      ]),
+      runId: 'run-loop', orgId: ORG, spec: s, harnessHash: hash, tools: [noteTool],
+    });
+    expect(outcome.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-loop', ORG);
+    expect(steps.map((x) => x.kind)).toEqual(['model', 'tool', 'model']); // NO wrap-up step
+    await h.close();
+  }, 60_000);
 });

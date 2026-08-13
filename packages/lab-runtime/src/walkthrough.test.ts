@@ -238,3 +238,104 @@ describe('DoD leg 3: spec drift refuses a resume (F7 applied to runs)', () => {
     }
   }, 120_000);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 8 — THE TOOLPOLICY ACTIVATION LEG (carried DoD item 1, Step 7's exit
+// criterion, verbatim): one walkthrough run with a test-local executable
+// tool whose step payloads carry BOTH slot values, each call's
+// x-frontier-trace showing `policy_override=` of ITS slot's materialized
+// row. Served through the REAL route — the pins are HTTP headers, the
+// traces are serving's own answers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Step 8 — the toolPolicy activation leg', () => {
+  it('tool-bearing run: tools steps under the tools row, the wrap-up under brain — trace-proven', async () => {
+    const { strategyHash } = await import('@potion/core');
+    const { saveFrontier } = await import('@potion/pareto');
+    const { materializeDialPolicy } = await import('@potion/lab-dial');
+    const { clusters } = await import('@potion/db');
+
+    // A singles-only cluster world (live-labeled, self-consistent hashes)
+    // so BOTH pinned policies select executable singles — the activation
+    // proof is about slot custody, not the partition gap (Step 7 pinned
+    // that separately).
+    await h.db.insert(clusters).values({
+      id: 'activation-cluster', name: 'activation', description: 'Step 8 activation leg',
+    }).onConflictDoNothing();
+    const cfgCheap = { type: 'single' as const, model: 'mock-cheap' };
+    const cfgMid = { type: 'single' as const, model: 'mock-mid' };
+    await saveFrontier(h.db, 'activation-cluster', [
+      {
+        clusterId: 'activation-cluster', strategyHash: strategyHash(cfgCheap), strategyConfig: cfgCheap,
+        quality: 0.6, costPer1K: 0.004, latencyP95: 300, providerMode: 'live',
+        evidence: { cacheKeys: ['ck-act'], runIds: ['run-act'], n: 12, qualityCi95: 0.02 },
+      },
+      {
+        clusterId: 'activation-cluster', strategyHash: strategyHash(cfgMid), strategyConfig: cfgMid,
+        quality: 0.9, costPer1K: 0.02, latencyP95: 600, providerMode: 'live',
+        evidence: { cacheKeys: ['ck-act2'], runIds: ['run-act2'], n: 12, qualityCi95: 0.02 },
+      },
+    ], 'recompute', 'pv-activation');
+
+    // DISTINCT policies per slot → distinct materialized rows → distinct
+    // policy_override values in the traces (the proof discriminator).
+    const s = taskSpec({
+      name: 'activation harness',
+      brain: {
+        policy: { type: 'min_cost', qualityFloor: 0 },
+        toolPolicy: { type: 'min_cost', qualityFloor: 0.8 },
+      },
+      superpowers: [{ id: 'notes', scopes: ['write'] }],
+    });
+    const hash = harnessSpecHash(s);
+    const brainRow = await materializeDialPolicy(h.db, {
+      orgId: ORG, harnessHash: hash, slot: 'brain', policy: s.brain.policy,
+    });
+    const toolsRow = await materializeDialPolicy(h.db, {
+      orgId: ORG, harnessHash: hash, slot: 'tools', policy: s.brain.toolPolicy!,
+    });
+    expect(brainRow.name).not.toBe(toolsRow.name);
+
+    const noteTool = {
+      name: 'record_note', description: 'record a note', parameters: { type: 'object' as const },
+      external: false,
+      run: async (input: unknown) => ({ noted: input }),
+    };
+    const actClient = new ServingClient({ baseUrl, apiKey: RAW_KEY, clusterHint: 'activation-cluster' });
+    const { runId, outcome } = await startRun({
+      db: h.db,
+      client: actClient,
+      orgId: ORG,
+      specText: JSON.stringify(s),
+      tools: [noteTool],
+      policyRefs: { brain: brainRow.name, tools: toolsRow.name },
+    });
+    expect(outcome.status).toBe('completed');
+
+    const steps = await listLabSteps(h.db, runId, ORG);
+    const modelSteps = steps.filter((x) => x.kind === 'model').map((x) => x.payload as StepPayload);
+    // BOTH slot values present in one run — the activation.
+    const slots = new Set(modelSteps.map((p) => p.slot));
+    expect(slots).toEqual(new Set(['tools', 'brain']));
+    // Every call's trace carries the POLICY OVERRIDE of its slot's row —
+    // serving's own answer, not a runtime annotation.
+    for (const p of modelSteps) {
+      const trace = p.frontierTrace ?? '';
+      const expected = p.slot === 'tools' ? toolsRow.name : brainRow.name;
+      expect(trace, `slot ${p.slot} trace: ${trace}`).toContain(`policy_override=${expected}`);
+    }
+    // The wrap-up (the deliberate tool-free brain call) is the LAST model
+    // step and its request carried no tools.
+    const last = modelSteps[modelSteps.length - 1]!;
+    expect(last.slot).toBe('brain');
+    expect((last.requestPayload as { tools?: unknown }).tools).toBeUndefined();
+    // And the two slots really rode DIFFERENT strategies (0.8 floor vs 0):
+    // the discriminator that makes the custody visible in the serving data.
+    const strat = (p: StepPayload) => /(?:^|;)strategy=([0-9a-f]+)/.exec(p.frontierTrace ?? '')?.[1];
+    const toolsStrats = new Set(modelSteps.filter((p) => p.slot === 'tools').map(strat));
+    const brainStrats = new Set(modelSteps.filter((p) => p.slot === 'brain').map(strat));
+    expect([...toolsStrats][0]).toBeDefined();
+    expect([...brainStrats][0]).toBeDefined();
+    expect([...toolsStrats][0]).not.toBe([...brainStrats][0]);
+  }, 120_000);
+});

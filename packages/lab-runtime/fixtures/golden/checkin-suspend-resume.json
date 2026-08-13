@@ -37,6 +37,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "tools",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
@@ -103,6 +104,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "tools",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
@@ -180,6 +182,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "tools",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
@@ -231,6 +234,64 @@
             {
               "role": "user",
               "content": "[tool send_email result] {\"sent\":true}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "slot": "brain",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000013000,
+        "rngSample": 0.6462852046824992,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "completionId": "chatcmpl-golden0004",
+        "finishReason": "stop",
+        "responseText": "Wrap-up: sent the email after approval; done-definition met.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[check-in answer] yes, send it"
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[tool send_email result] {\"sent\":true}"
+            },
+            {
+              "role": "assistant",
+              "content": "sent; mission complete."
+            },
+            {
+              "role": "user",
+              "content": "Summarize what you did in this run and state plainly whether the done-definition is met."
             }
           ]
         }

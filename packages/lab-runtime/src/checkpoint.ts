@@ -22,6 +22,10 @@ export interface StepPayload {
   /** LABELED ESTIMATE (flat per-1K figure). The completionId join to
    * request_logs is the auditable number. */
   estCostUsd?: number;
+  /** Step 8 (the toolPolicy activation): which policy slot served this
+   * model step — calls carrying toolDefs are 'tools', deliberate tool-free
+   * calls (the wrap-up) and toolless runs are 'brain'. */
+  slot?: 'brain' | 'tools';
   // tool steps
   toolName?: string;
   toolInput?: unknown;

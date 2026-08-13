@@ -110,6 +110,65 @@ export const DECOMPOSE_SHAPE_MARKER = /\{"kind"/;
 /** Kind vocabulary for mock-decomposed subtasks (deterministic pick via rng). */
 export const DECOMPOSE_KINDS = ['analysis', 'extraction', 'summary', 'general'] as const;
 
+/** Marker: the Lab generator's mission-interview extraction prompt (Step 6,
+ * packages/lab-gen/src/extract.ts — the generator's one model surface). */
+export const LAB_EXTRACTION_MARKER = /convert a mission interview into a STRICT JSON object/i;
+
+/** The Lab taxonomy (must stay in sync with lab-gen's TAXONOMY_CLUSTERS —
+ * pinned by the fixture test). CLUSTER_KEYWORDS ids are this same set plus
+ * the 'general' fallback, which is NOT a taxonomy member. */
+const LAB_TAXONOMY = new Set([
+  'agentic-tool-use', 'classification', 'code-gen', 'code-review', 'creative',
+  'extraction', 'multi-step-reasoning', 'rag-answer', 'rewrite-edit', 'summarization',
+]);
+
+/**
+ * Deterministic extraction answer for the Lab interview prompt (ADDITIVE —
+ * the same Phase 1 discipline as CONFIDENCE/PICK/decompose: a prompt that
+ * explicitly requests a machine-readable shape gets that exact shape, so the
+ * mock deployment can run the novice loop end-to-end at $0). Derives every
+ * field from the prompt's own embedded answers JSON; consumes NO rng draws.
+ */
+export function labExtractionFixtureText(promptText: string): string | null {
+  // The answers ride the prompt's last JSON-object line.
+  interface EmbeddedAnswers {
+    goal?: string;
+    kind?: string;
+    doneDefinition?: string;
+  }
+  const lines = promptText.trim().split('\n');
+  let answers: EmbeddedAnswers | null = null;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!.trim();
+    if (!line.startsWith('{')) continue;
+    try {
+      answers = JSON.parse(line) as EmbeddedAnswers;
+      break;
+    } catch {
+      /* keep scanning */
+    }
+  }
+  if (answers === null || typeof answers.goal !== 'string' || answers.goal.length === 0) return null;
+  const goal = answers.goal.replace(/\s+/g, ' ').trim();
+  const slugBase = goal
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '');
+  const nameSlug = slugBase.length >= 2 ? slugBase : 'mock-harness';
+  const inferred = seedClusterOf(goal);
+  const clusterHint = LAB_TAXONOMY.has(inferred) ? inferred : 'multi-step-reasoning';
+  return JSON.stringify({
+    normalizedGoal: goal,
+    ...(answers.kind === 'task'
+      ? { doneDefinition: answers.doneDefinition ?? `${goal} — demonstrably complete.` }
+      : {}),
+    nameSlug,
+    clusterHint,
+  });
+}
+
 /**
  * Deterministic structured answer for strategy-interpreter prompts, or null
  * when the prompt matches no special marker (caller falls back to word-bank
@@ -141,6 +200,11 @@ export function specialFixtureText(
     const max = rangeMatch ? Number(rangeMatch[1]) : 0;
     const pick = Math.floor(rng() * (max + 1));
     return `PICK: ${pick}`;
+  }
+  if (LAB_EXTRACTION_MARKER.test(promptText)) {
+    // Lab Step 8: the interview extraction fixture (no rng draws consumed).
+    const text = labExtractionFixtureText(promptText);
+    if (text !== null) return text;
   }
   if (DECOMPOSE_MARKER.test(promptText) && DECOMPOSE_SHAPE_MARKER.test(promptText)) {
     const count = 2 + Math.floor(rng() * 2); // 2 or 3 subtasks

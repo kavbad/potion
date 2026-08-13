@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import type { HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, systemPrompt, toolResultMessage } from './loop.js';
+import { checkInAnswerMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
 
 export type ReplayDivergenceCode =
   | 'request-drift'
@@ -95,6 +95,13 @@ export function replayRun(
   let estSpent = 0;
   let modelSteps = 0;
   let derivedTerminal: { state: string; atSeq: number } | null = null;
+  // Step 8: a TOOL-BEARING task run ends with the loop's deliberate
+  // tool-free wrap-up call — after a done-shaped step, expect exactly one
+  // more model step derived as messages + wrapUpMessage().
+  const runHadTools = ordered.some(
+    (s) => s.kind === 'model' && (s.payload.requestPayload as { tools?: unknown } | undefined)?.tools !== undefined,
+  );
+  let expectWrapUp = false;
 
   for (const step of ordered) {
     const p = step.payload;
@@ -153,7 +160,13 @@ export function replayRun(
       pendingToolCalls = calls.map((c) => ({ name: c.function.name, args: c.function.arguments }));
 
       if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task') {
-        derivedTerminal = { state: 'completed', atSeq: step.seq };
+        if (runHadTools && !expectWrapUp) {
+          // The wrap-up follows; terminal completes AFTER it.
+          expectWrapUp = true;
+          messages.push(wrapUpMessage());
+        } else {
+          derivedTerminal = { state: 'completed', atSeq: step.seq };
+        }
       }
       if (estSpent >= spec.fuel.maxUsdPerRun && derivedTerminal === null) {
         derivedTerminal = { state: 'killed-budget', atSeq: step.seq };
@@ -203,6 +216,13 @@ export function replayRun(
     divergences.push(
       div('record-exhausted', lastSeq, `${pendingToolCalls.length} pending tool call(s) executed`, 'record ends'),
     );
+  }
+  // The wrap-up is OPTIONAL by the loop's own rule ("a failed wrap-up never
+  // blocks completion") — a record ending at the done-shaped step with the
+  // wrap-up expected-but-absent is a legitimate completion, not a
+  // divergence (review finding: replay must tolerate what the loop does).
+  if (derivedTerminal === null && expectWrapUp) {
+    derivedTerminal = { state: 'completed', atSeq: lastSeq };
   }
   const expectedState = derivedTerminal?.state ?? 'running';
   if (expectedState !== terminal.state) {

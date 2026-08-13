@@ -11,7 +11,7 @@
 //   - cache lookups happen BEFORE the cap gate (hits are free and never
 //     blocked); truncation beyond the sweep bound is reported, not silent.
 import { canonicalJson, sha256, type Policy } from '@potion/core';
-import { requestLogs, type PotionDb } from '@potion/db';
+import { getFeltSample, insertFeltSample, requestLogs, type PotionDb } from '@potion/db';
 import { eq } from 'drizzle-orm';
 import type { ServingClient } from '@potion/lab-runtime';
 import type { DialGap } from './gaps.js';
@@ -93,6 +93,50 @@ export function requestLogCostLookup(db: PotionDb): (completionId: string) => Pr
       .where(eq(requestLogs.completionId, completionId));
     const usage = rows[0]?.usage as { costUsd?: number } | undefined;
     return typeof usage?.costUsd === 'number' ? usage.costUsd : null;
+  };
+}
+
+/** The production cache: 0036 lab_felt_samples via the db repos (Step 8 —
+ * the walkthrough's dbCache promoted to a shared impl). Only CLEAN samples
+ * are ever cached, so the divergence markers are false by construction on
+ * read. */
+export function feltSampleCache(db: PotionDb): FeltCache {
+  return {
+    get: async (key) => {
+      const row = await getFeltSample(db, key);
+      if (row === null) return null;
+      return {
+        orgId: row.orgId,
+        probeHash: row.probeHash,
+        policyHash: row.policyHash,
+        frontierId: row.frontierId,
+        strategyHash8: row.strategyHash,
+        frontierVersion: row.frontierVersion,
+        provenance: row.provenance,
+        fallback: false,
+        latencyViolated: false,
+        output: row.output,
+        costUsd: row.costUsd,
+        latencyMs: row.latencyMs,
+        completionId: row.completionId,
+        cached: true,
+      };
+    },
+    put: async (row) => {
+      await insertFeltSample(db, {
+        orgId: row.orgId,
+        probeHash: row.probeHash,
+        policyHash: row.policyHash,
+        frontierId: row.frontierId,
+        strategyHash: row.strategyHash8,
+        frontierVersion: row.frontierVersion,
+        provenance: row.provenance,
+        output: row.output,
+        costUsd: row.costUsd,
+        latencyMs: row.latencyMs,
+        completionId: row.completionId,
+      });
+    },
   };
 }
 

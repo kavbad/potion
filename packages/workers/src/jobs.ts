@@ -25,6 +25,8 @@ export type JobKind =
   | 'frontier:live-sweep'
   // ---- Lab Step 5: platform-scope live sweep (taxonomy clusters) ----
   | 'frontier:platform-sweep'
+  // ---- Lab Step 8: trial-run executor (legs until terminal/awaiting) ----
+  | 'lab:run'
   // ---- G2.7 operator org deletion ----
   | 'org:delete'
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
@@ -48,6 +50,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'rubric:generate',
   'frontier:live-sweep',
   'frontier:platform-sweep',
+  'lab:run',
   'org:delete',
   'guarantee:suite-verify',
   'suite:certify',
@@ -118,6 +121,7 @@ export interface JobPayloads {
   'rubric:generate': RubricGeneratePayload;
   'frontier:live-sweep': FrontierLiveSweepPayload;
   'frontier:platform-sweep': FrontierPlatformSweepPayload;
+  'lab:run': LabRunJobPayload;
   'org:delete': OrgDeletePayload;
   'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
   'suite:certify': SuiteCertifyPayload;
@@ -341,6 +345,21 @@ export interface FrontierLiveSweepPayload {
  * REQUIRED — no default: platform spend is operator money and only an
  * explicitly approved number authorizes it. Operator-triggered only.
  */
+/**
+ * Lab Step 8: execute a trial run's legs until terminal or awaiting-human.
+ * Custody: each invocation mints an EPHEMERAL run-scoped serve key (raw
+ * never persisted; hash via the existing key machinery; policy-bound to
+ * the harness's materialized brain row) and revokes it before returning —
+ * including on the fence/reclaim path, where any surviving key from a
+ * zombie invocation is revoked on entry (review outcome 1).
+ */
+export interface LabRunJobPayload {
+  orgId: string;
+  runId: string;
+  /** Present on answer-resume enqueues. */
+  answer?: string;
+}
+
 export interface FrontierPlatformSweepPayload {
   /** Taxonomy cluster (org_id NULL); org-owned clusters are refused. */
   clusterId: string;

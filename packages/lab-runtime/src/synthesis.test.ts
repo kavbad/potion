@@ -127,6 +127,13 @@ describe('steps → eval items, zero converter changes', () => {
         usage: { promptTokens: 40, completionTokens: 20, totalTokens: 60 },
         frontierTrace: 'cluster=code-gen;strategy=synth;frontier=v1;policy=min_cost;fallback=0;provenance=mock',
       },
+      {
+        kind: 'ok', completionId: 'chatcmpl-synth0003',
+        text: 'Wrap-up: refactored and verified; done-definition met.',
+        toolCalls: [], finishReason: 'stop',
+        usage: { promptTokens: 50, completionTokens: 12, totalTokens: 62 },
+        frontierTrace: 'cluster=code-gen;strategy=synth;frontier=v1;policy=min_cost;fallback=0;provenance=mock',
+      },
     ];
     const q = [...scriptedResults];
     const scripted = {
@@ -147,7 +154,7 @@ describe('steps → eval items, zero converter changes', () => {
     // The enrichment is what makes synthesis possible: prompt + completion on
     // llm.call spans, args/result on the tool span.
     const llm = spans.filter((s) => s.name === 'llm.call');
-    expect(llm.length).toBe(2);
+    expect(llm.length).toBe(3);
     expect((llm[0]!.attributes as Record<string, unknown>)['gen_ai.prompt']).toBe('Begin the mission.');
     expect((llm[1]!.attributes as Record<string, unknown>)['gen_ai.completion']).toContain('exponential backoff');
     expect(spans.some((s) => (s.name as string) === 'tool.search')).toBe(true);

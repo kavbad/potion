@@ -91,6 +91,13 @@ function ctx(queue?: { enqueue(kind: string, payload: unknown): Promise<void> })
   };
 }
 
+// Fixture times are RELATIVE to the test run (base = 24h ago): clustering
+// windows `sinceDays: 7` back from now, so hardcoded calendar dates rot out
+// of the window as real time advances (the '2026-08-06T…' literals these
+// replace expired on 2026-08-13).
+const FIXTURE_BASE_MS = Date.now() - 24 * 60 * 60 * 1000;
+const fixtureTs = (minutes = 0): string => new Date(FIXTURE_BASE_MS + minutes * 60_000).toISOString();
+
 function span(over: Partial<NewTraceSpan>): NewTraceSpan {
   return {
     orgId: ORG,
@@ -156,14 +163,14 @@ async function seedCertifiableCluster(): Promise<string> {
         traceId: t,
         spanId: `${t}_root`,
         attrs: { 'gen_ai.prompt': prompt, 'gen_ai.completion': task.reference },
-        ts: new Date(`2026-08-06T10:0${i}:00Z`),
+        ts: new Date(FIXTURE_BASE_MS + i * 60_000),
       }),
       span({
         traceId: t,
         spanId: `${t}_tool`,
         name: 'tool.ledger',
         attrs: { 'gen_ai.operation.name': 'execute_tool' },
-        ts: new Date(`2026-08-06T10:0${i}:30Z`),
+        ts: new Date(FIXTURE_BASE_MS + i * 60_000 + 30_000),
       }),
     ]);
   }
@@ -711,7 +718,7 @@ describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lo
       providerMode: 'live',
       orgId: ORG,
       cacheKey: `ck-live-${clusterId}`,
-      createdAt: '2026-08-09T00:00:00.000Z',
+      createdAt: fixtureTs(),
     };
   }
 
@@ -914,7 +921,7 @@ describe('suite:certify + contractual gating (post-capstone item 3, Decision 2)'
       usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.01, latencyMs: 1 },
       latencyMs: { p50: 1, p95: 1, mean: 1 }, modelVersions: {}, pricesVersion: 'pv',
       providerMode: 'live', orgId: ORG, cacheKey: `ck-live-cert-${clusterId}`,
-      createdAt: '2026-08-10T00:00:00.000Z',
+      createdAt: fixtureTs(),
     });
     const r3 = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
     expect(r3.outcome).toBe('mode-mismatch');
@@ -965,8 +972,8 @@ describe('suite:certify + contractual gating (post-capstone item 3, Decision 2)'
     // A new session re-derives the suite → version bump → certification stale.
     const task = evalTaskById('ex-07')!;
     await insertTraceSpans(db.db, [
-      span({ traceId: 'tr_cert7', spanId: 'tr_cert7_root', attrs: { 'gen_ai.prompt': `Reconcile the ledger batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date('2026-08-06T10:07:00Z') }),
-      span({ traceId: 'tr_cert7', spanId: 'tr_cert7_tool', name: 'tool.ledger', attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date('2026-08-06T10:07:30Z') }),
+      span({ traceId: 'tr_cert7', spanId: 'tr_cert7_root', attrs: { 'gen_ai.prompt': `Reconcile the ledger batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(FIXTURE_BASE_MS + 7 * 60_000) }),
+      span({ traceId: 'tr_cert7', spanId: 'tr_cert7_tool', name: 'tool.ledger', attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(FIXTURE_BASE_MS + 7 * 60_000 + 30_000) }),
     ]);
     await tracesClusterHandler({ orgId: ORG }, ctx());
     const after = await verify(clusterId, { servingStrategyHash: H_INCUMBENT });

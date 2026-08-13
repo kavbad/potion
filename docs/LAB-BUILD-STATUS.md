@@ -15,7 +15,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
 | 6 | Intent → spec generation | 2026-08-12 | `13c7665` | **complete** |
 | 7 | The dial | 2026-08-13 | `4932e55` | **complete** |
-| 8 | The novice loop, ugly | 2026-08-13 | — | **spec ready** — [step-08-novice-loop.md](specs/step-08-novice-loop.md), awaiting build approval |
+| 8 | The novice loop, ugly | 2026-08-13 | (this commit) | **complete** — [step-08-novice-loop.md](specs/step-08-novice-loop.md); ten-minute clock 3.2s/$0, custody + catalog + activation + posture proven by test, live felt leg $0.0418 under KEY_RISK_ACCEPTED=2026-08-13 (operator countersign pending) |
 | 9 | The derived form [design gate] | — | — | not started |
 | 10 | MCP client and token custody | — | — | not started |
 | 11 | Superpower packaging and catalog | — | — | not started |
@@ -447,3 +447,231 @@ latency-policy.ts by value; the dial-side rollup read is uncached vs
 serving's 60s cache (freshness race, visible-not-prevented class);
 frontier-version races remain visible-not-prevented; toolPolicy inert
 until Step 8's activation leg.
+
+## Step 8 — The novice loop, ugly (2026-08-13)
+
+**What was proven (walkthrough-style, all DoD items):**
+
+- **The ten-minute clock:** `apps/dashboard/scripts/lab-walkthrough.ts` boots
+  server+dashboard fresh-db and performs only what the UI affords: sign in →
+  /lab → four interview answers → submit → generated summary → trial →
+  narration polling → the check-in appears → answer → terminal → the report
+  with all four sections and the single evidence-chosen upgrade. **Wall
+  clock interview→report: 3.2s of the 600s budget, $0, mock.** The novice
+  builds a STANDING mission — standing specs now carry the half-fuel
+  check-in (build finding: the specced tool-gated check-in cannot fire
+  pre-MCP and tasks complete on their first done-shaped answer).
+- **13 `/api/lab/*` routes** (spec table verbatim) in apps/server, every row
+  classified in ROUTE_INVENTORY; key-role-split 37/37 (route tree matches
+  both ways), tenancy sweep 92/92 (uniform-404 probes over seeded
+  labHarness/labRun rows under both credential kinds), classification
+  artifact regenerated (97 routes). Dashboard pages /lab, /lab/harness/:hash,
+  /lab/run/:id, /lab/run/:id/report, /lab/memory/:hash + thin proxies.
+- **Serve-key custody (review outcome 1):** 10 tests
+  (packages/workers/src/lab-run.test.ts) — the ephemeral run-scoped key dies
+  at completed / failed / killed-budget (fuel AND org hard-stop) /
+  awaiting-human / crash-rethrow; the fence/reclaim sweep reaps zombie keys
+  on entry INCLUDING on terminal runs (sweep moved ahead of the terminal
+  no-op — a crash between the terminal transition and the finally would
+  otherwise orphan a live key forever); sweeps are run- and org-scoped.
+  Missing POTION_SERVING_URL fails closed before any mint.
+- **Catalog invariance (review outcome 2):**
+  packages/lab-runtime/src/catalog-invariance.test.ts — after an aggressive
+  lab_harnesses edit (name, specText, sidecar, clusterId), a pre-edit run's
+  replay input bytes and replay verdict are identical (0037 tied to Step 4).
+- **The toolPolicy activation leg (Step 7's exit, verbatim):**
+  packages/lab-runtime/src/walkthrough.test.ts — one run against the REAL
+  route with a test-local tool: step payloads carry BOTH slot values;
+  every call's x-frontier-trace shows `policy_override=` of ITS slot's row;
+  the two slots rode DIFFERENT strategies (0.8 floor vs 0); the wrap-up is
+  the last model step, tool-free, under brain. (Enabled by an additive mock
+  change: call-then-answer once a tool result is in the transcript.)
+- **Report v1:** packages/lab-runtime/src/report.test.ts — struggle taxonomy
+  complete both directions vs the upgrade ladder, deterministic first-match
+  ladder (not-connected beats budget-killed), est-vs-metered NEVER blends
+  (no blended field exists to leak).
+- **Tool posture in three places:** apps/server/test/lab-posture.test.ts —
+  a declared-account mission completes brain-only and says so typed in the
+  harness DTO, the run DTO, and the report struggle; the upgrade slot
+  prefers "connect calendar".
+- **The first live felt leg (review outcome 3):** three runs under
+  KEY_RISK_ACCEPTED=2026-08-13, $1.00/run cap, OPENROUTER only, against a
+  COPY of the Step 5 campaign db. Run 1's divergent sample was the
+  product's own strategy-mismatch detector catching a leg-script custody
+  bug (both rungs materialized onto one policy row — the 12-char name
+  prefix truncated the rung suffix); run 3 CLEAN: 3 samples, all
+  provenance=live, zero divergence, the dial flip visible in live serving
+  (rung 0 → 6efe8a56, rung 2 → 10b2d052). Metered $0.0418 total across the
+  three runs. Samples verbatim below; **operator reading completes at
+  countersign.**
+
+**Build findings** (recorded in the spec, never silently): calendar-rotted
+fixtures in four pre-existing test files (traces, suite-verify,
+guarantee-report ×2 — hardcoded '2026-08-06T…' aged out of the 7-day
+clustering window the day the calendar reached 2026-08-13; converted to
+run-relative bases); the mock extraction fixture; the standing-mission
+half-fuel check-in; the call-then-answer mock tool rule; the felt-leg
+policy-row name-truncation bug caught live by divergence detection.
+
+**Residual risks:** the ten-minute clock measures the mock path (the DoD's
+own definition); polling narration is 1–2s deliberate simplicity; report
+v1 prose is dry by design (no model phrasing until a later step);
+lab_harnesses key-table churn cleanup belongs to run retention; the
+lab:run worker's adversarial pass over user-authored missions is Step 12
+by plan.
+
+### Live felt leg — clean-run samples (verbatim, run 3)
+
+```
+━━ cluster summarization ━━
+  rung 0: q=0.8571428571428573 $2.2681428571428572/1K p95=17519ms → lab-7c5f14-s8r0summariz-brain
+  rung 2: q=0.9214285714285716 $5.8680714285714295/1K p95=7471ms → lab-7c5f14-s8r2summariz-brain
+
+  ── SAMPLE (lab-7c5f14-s8r0summariz-brain) ──
+  strategy=6efe8a56 provenance=live cached=false
+  costUsd=$0.0003 latencyMs=11086
+  output (verbatim):
+  | Aggressive CDN caching for a news site offers significant performance and cost benefits but introduces critical challenges around content freshness. The primary tradeoff is between **speed and staleness**.
+  | 
+  | **Benefits (Why you'd do it):**
+  | * **Extreme Performance:** Static assets (images, CSS, JS) and even article pages load instantly from nearby edge servers, improving user experience and SEO.
+  | * **Massive Scalability:** The origin server is shielded from traffic spikes (e.g., breaking news), preventing crashes.
+  | * **Reduced Costs:** Dramatically lowers origin server bandwidth, compute load, and infrastructure costs.
+  | 
+  | **Risks (What you sacrifice):**
+  | * **Content Staleness:** The core problem. Aggressively cached articles may not reflect critical updates, corrections, or developing stories, damaging credibility.
+  | * **Poor Personalization:** Cached pages cannot show dynamic, user-specific elements (e.g., "Recommended for you," logged-in status) without complex workarounds.
+  | * **Complex Invalidation:** Managing cache purges (TTLs, purge APIs) for urgent updates adds operational overhead and risk if not instantaneous.
+  | 
+  | **The Key Balance:** Successful implementation requires a **granular caching strategy**:
+  | * **Cache forever:** Static assets.
+  | * **Cache with moderate TTL (e.g., 1-10 min):** Article body text, allowing a balance of performance and acceptable update latency.
+  | * **Never cache:** Dynamic components (comments, live counters, user-specific modules), fetched separately via AJAX or edge-side includes.
+  | 
+  | In essence, aggressive edge caching is a powerful tool for a news site, but it must be applied with precise rules to avoid serving outdated news, thereby trading some theoretical freshness for resilience, speed, and cost-efficiency.
+
+  ── SAMPLE (lab-7c5f14-s8r2summariz-brain) ──
+  strategy=10b2d052 provenance=live cached=false
+  costUsd=$0.0082 latencyMs=8309
+  output (verbatim):
+  | # Tradeoffs of Aggressive CDN Edge Caching for News Sites
+  | 
+  | ## Benefits
+  | 
+  | - **Performance**: Dramatically faster page loads for readers worldwide
+  | - **Scalability**: Handles traffic spikes during breaking news without origin server strain
+  | - **Cost reduction**: Lower bandwidth and compute costs at origin
+  | - **Reliability**: Site stays available even if origin has issues
+  | 
+  | ## Drawbacks
+  | 
+  | - **Stale content**: Readers may see outdated headlines, incorrect information, or old versions of developing stories
+  | - **Cache invalidation complexity**: Purging content across global edge nodes takes time and adds operational overhead
+  | - **Personalization challenges**: Harder to serve user-specific content (paywalls, recommendations, regional variants)
+  | - **Breaking news delays**: Critical updates may not reach readers immediately
+  | - **Analytics gaps**: Cached responses don't hit origin, potentially skewing traffic data
+  | 
+  | ## Common Mitigation Strategies
+  | 
+  | - Use short TTLs (seconds to minutes) for frequently-updated sections
+  | - Implement cache tags for selective, targeted purging
+  | - Cache static assets aggressively, dynamic content conservatively
+  | - Use stale-while-revalidate to balance freshness and speed
+  | - Edge-side includes (ESI) to mix cached and dynamic content
+  | 
+  | ## Bottom Line
+  | 
+  | Aggressive caching works well for news sites on static assets and older articles, but requires careful tuning for homepages and breaking content where freshness directly impacts editorial credibility.
+
+━━ cluster code-gen ━━
+  rung 0: q=1 $0.10439999999999998/1K p95=14073ms → lab-7c5f14-s8r0codegen0-brain
+
+  ── SAMPLE (lab-7c5f14-s8r0codegen0-brain) ──
+  strategy=6efe8a56 provenance=live cached=false
+  costUsd=$0.0005 latencyMs=40189
+  output (verbatim):
+  | Here's a Python function that merges two sorted lists into one sorted list:
+  | 
+  | ```python
+  | def merge_sorted_lists(list1, list2):
+  |     """
+  |     Merge two sorted lists into one sorted list.
+  |     
+  |     Args:
+  |         list1: First sorted list
+  |         list2: Second sorted list
+  |         
+  |     Returns:
+  |         A new sorted list containing all elements from both input lists
+  |     """
+  |     merged = []
+  |     i = j = 0
+  |     
+  |     # Merge elements while both lists have items
+  |     while i < len(list1) and j < len(list2):
+  |         if list1[i] <= list2[j]:
+  |             merged.append(list1[i])
+  |             i += 1
+  |         else:
+  |             merged.append(list2[j])
+  |             j += 1
+  |     
+  |     # Add remaining elements from list1 (if any)
+  |     while i < len(list1):
+  |         merged.append(list1[i])
+  |         i += 1
+  |     
+  |     # Add remaining elements from list2 (if any)
+  |     while j < len(list2):
+  |         merged.append(list2[j])
+  |         j += 1
+  |     
+  |     return merged
+  | ```
+  | 
+  | **Example usage:**
+  | ```python
+  | list1 = [1, 3, 5, 7]
+  | list2 = [2, 4, 6, 8]
+  | result = merge_sorted_lists(list1, list2)
+  | print(result)  # Output: [1, 2, 3, 4, 5, 6, 7, 8]
+  | 
+  | # Works with lists of different lengths
+  | list3 = [1, 5, 9]
+  | list4 = [2, 3, 4, 6, 7, 8]
+  | result2 = merge_sorted_lists(list3, list4)
+  | print(result2)  # Output: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  | ```
+  | 
+  | **Key features:**
+  | - Uses the merge algorithm from merge sort
+  | - Time complexity: O(n + m) where n and m are the lengths of the input lists
+  | - Space complexity: O(n + m) for the merged result
+  | - Handles lists of different lengths
+  | - Preserves the sorted order efficiently
+  | - Works with any comparable data types (numbers, strings, etc.)
+
+── leg complete — metered total $0.0090 of $1.00 cap ──
+Samples above are the ledger evidence VERBATIM; the operator’s reading completes at countersign.
+```
+
+### Step 8 pre-commit review (standing practice) — outcome
+
+Five finder dimensions over the diff, 21 claims, two adversarial refuters
+each (eight verdicts completed by the operator's agent in the main loop
+after subagent credit exhaustion — same read-the-code standard). **Nine
+confirmed and fixed with pinned regressions**: lab-io key expiry (no
+reaper existed), the vacuous body-carried cross-org probe (mechanism fixed
+for the whole class — four pre-existing G2.4 rows now probe with REAL
+foreign ids), the answer route's dropped guard verdict (now 409), the felt
+route's one-row policy materialization (the live leg's own bug, in the
+route), the zombie sweep disarming healthy runs (now gated on no live
+claim), replay's false divergence on failed-wrap-up records, the fuel
+check-in answer doubling as external-action authorization, the paid
+wrap-up after the fuel cap, and the felt leg script's NaN/crash on
+unresolved metered cost. **Four accepted as recorded v1 residuals**:
+est-denominated fuel (outer belt = org metered hard stop; re-derivation
+path recorded), per-invocation catalog clusterHint reads, latest-sidecar
+catalog semantics on revisited dial positions, and lease-expiry-plus-kill
+as the stranded-run recovery. Post-fix: lab-runtime 37/37, workers
+147/147, server 530/530, walkthrough 3.2s/600s — all green.

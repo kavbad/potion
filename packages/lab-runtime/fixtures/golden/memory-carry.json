@@ -33,12 +33,13 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "tools",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
           "completionTokens": 5
         },
-        "clockMs": 1780000009000,
+        "clockMs": 1780000011000,
         "rngSample": 0.8755499834660441,
         "toolCalls": [],
         "estCostUsd": 0.00015,
@@ -73,6 +74,48 @@
             {
               "role": "user",
               "content": "Begin the mission."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "slot": "brain",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000013000,
+        "rngSample": 0.825264292769134,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "completionId": "chatcmpl-golden0002",
+        "finishReason": "stop",
+        "responseText": "Wrap-up: recalled memory and summarized; done-definition met.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden memory harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMemory:\n{\"lastQuery\":{}}\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            },
+            {
+              "role": "assistant",
+              "content": "I remember the last query; summary complete."
+            },
+            {
+              "role": "user",
+              "content": "Summarize what you did in this run and state plainly whether the done-definition is met."
             }
           ]
         }

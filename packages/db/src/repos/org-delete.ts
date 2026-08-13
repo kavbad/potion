@@ -46,6 +46,7 @@ import {
   providerKeys,
   qualitySamples,
   labFeltSamples,
+  labHarnesses,
   labHarnessMemory,
   labRuns,
   labRunSteps,
@@ -243,6 +244,8 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count('lab_harness_memory', db.delete(labHarnessMemory).where(eq(labHarnessMemory.orgId, orgId)).returning({ x: labHarnessMemory.key }));
   // Lab Step 7 (0036): felt-sample cache — org-scoped like all lab data.
   await count('lab_felt_samples', db.delete(labFeltSamples).where(eq(labFeltSamples.orgId, orgId)).returning({ x: labFeltSamples.probeHash }));
+  // Lab Step 8 (0037): harness catalog.
+  await count('lab_harnesses', db.delete(labHarnesses).where(eq(labHarnesses.orgId, orgId)).returning({ x: labHarnesses.harnessHash }));
   deleted.trace_spans = await chunkedDeleteByOrg(db, traceSpans, orgId);
 
   // ---- 4. Free-order bulk ----

@@ -21,8 +21,10 @@
     "@potion/lab-spec": "workspace:*"
   },
   "devDependencies": {
+    "@potion/lab-dial": "workspace:*",
+    "@potion/pareto": "workspace:*",
     "@potion/server": "workspace:*",
-    "drizzle-orm": "0.45.2",
-    "@potion/workers": "workspace:*"
+    "@potion/workers": "workspace:*",
+    "drizzle-orm": "0.45.2"
   }
 }

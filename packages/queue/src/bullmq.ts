@@ -35,6 +35,7 @@ export const SINGLE_ATTEMPT_KINDS: ReadonlySet<string> = new Set([
   'suite:certify',
   'frontier:live-sweep',
   'frontier:platform-sweep',
+  'lab:run',
   'research:cycle',
   'rubric:generate',
 ]);

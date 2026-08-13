@@ -74,6 +74,16 @@ export function toolCallEchoFixture(req: CompleteRequest, seed: number): ToolCal
   if (!tools || tools.length === 0) return null;
   const first = tools[0];
   if (!first) return null;
+  // Step 8 (ADDITIVE): once the transcript carries a TOOL RESULT (the lab
+  // runtime's `[tool <name> result]` user message), answer with TEXT like a
+  // real model — call-then-answer. Without this no tool-bearing run can ever
+  // complete against the mock route (every call would echo another tool
+  // call forever). Transcripts without tool results keep the original
+  // always-echo behavior byte-identical.
+  const hasToolResult = req.messages.some(
+    (m) => typeof m.content === 'string' && m.content.startsWith('[tool ') && m.content.includes(' result]'),
+  );
+  if (hasToolResult) return null;
   const lastUser = [...req.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const idHex = hashString(`${req.model}|${first.function.name}|${promptTextOf(req)}`)
     .toString(16)

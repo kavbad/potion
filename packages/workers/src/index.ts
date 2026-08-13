@@ -147,6 +147,10 @@ export {
   PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW,
   type FrontierPlatformSweepResult,
   type PlatformSweepRefusalReason,
+  // ---- Lab Step 8 trial runs ----
+  labRunHandler,
+  createLabRunHandler,
+  type LabRunHandlerDeps,
   rubricTemplateFor,
   validateGeneratedRubric,
   buildRubricGenerationMessages,

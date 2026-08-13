@@ -1346,6 +1346,26 @@ export const labFeltSamples = pgTable(
 
 export type LabFeltSampleRow = typeof labFeltSamples.$inferSelect;
 
+/** Lab Step 8: harness catalog (0037) — org-scoped, cascade-covered; runs
+ * freeze their own spec copy, so catalog edits never touch run records. */
+export const labHarnesses = pgTable(
+  'lab_harnesses',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    harnessHash: text('harness_hash').notNull(),
+    name: text('name').notNull(),
+    specText: text('spec_text').notNull(),
+    sidecar: jsonb('sidecar').notNull(),
+    clusterId: text('cluster_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.harnessHash] })],
+);
+
+export type LabHarnessRow = typeof labHarnesses.$inferSelect;
+
 export type LabRunRow = typeof labRuns.$inferSelect;
 export type LabRunStepRow = typeof labRunSteps.$inferSelect;
 export type LabRunState = LabRunRow['state'];

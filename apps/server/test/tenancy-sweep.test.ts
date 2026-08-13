@@ -37,7 +37,9 @@ import {
   insertProviderKey,
   insertShareToken,
   insertTraceSpans,
+  createLabRun,
   upsertDerivedSuite,
+  upsertLabHarness,
   upsertStrategyConfig,
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
@@ -67,6 +69,8 @@ const UNKNOWN: Record<string, string> = {
   rubric: '00000000-0000-4000-8000-00000000beef',
   shareToken: 'st_does_not_exist',
   alertRule: '00000000-0000-4000-8000-000000000404',
+  labHarness: 'f'.repeat(64),
+  labRun: 'run-neverexist',
 };
 
 let app: FastifyInstance;
@@ -241,6 +245,31 @@ beforeAll(async () => {
   });
   seeded.alertRule = rule.id;
 
+  // Lab Step 8: a catalog harness + a trial run in ORG_A (the /api/lab rows).
+  seeded.labHarness = 'ab'.repeat(32);
+  const labSpec = {
+    specVersion: 1, name: 'sweep harness', brain: { policy: POLICY },
+    mission: { kind: 'task', goal: 'sweep the tenancy', doneDefinition: 'swept' },
+    superpowers: [], memory: { enabled: false }, rules: [],
+    fuel: { maxUsdPerRun: 1, hardStop: true }, checkIns: [],
+  };
+  await upsertLabHarness(db(), {
+    orgId: ORG_A,
+    harnessHash: seeded.labHarness,
+    name: 'sweep harness',
+    specText: JSON.stringify(labSpec),
+    sidecar: { specHash: seeded.labHarness, choicesHash: 'x', choices: [] },
+    clusterId: 'code-gen',
+  });
+  seeded.labRun = 'run-sweepa1';
+  await createLabRun(db(), {
+    id: seeded.labRun,
+    orgId: ORG_A,
+    harnessHash: seeded.labHarness,
+    harnessName: 'sweep harness',
+    spec: labSpec,
+  });
+
   // A job OWNED by ORG_A (the org-scoped arm of the platform-job row).
   seeded.job = await app.potion.queue!.enqueue('guarantee:evaluate', { orgId: ORG_A });
   // A PLATFORM job — no orgId in the payload (the D2 arm).
@@ -310,12 +339,22 @@ function urlFor(row: RouteInventoryRow, id: string): string {
   return row.path.replace(param, id);
 }
 
-function inject(row: RouteInventoryRow, url: string, creds: Record<string, string>) {
+function inject(row: RouteInventoryRow, url: string, creds: Record<string, string>, id?: string) {
+  // Body-carried resource ids (resourceBodyField) are SUBSTITUTED per probe
+  // arm — without this, routes whose id travels in the body get three
+  // byte-identical requests and the uniform-404 comparison is vacuous
+  // (Step 8 review finding).
+  const payload =
+    row.probeBody !== undefined
+      ? row.resourceBodyField !== undefined && id !== undefined
+        ? { ...row.probeBody, [row.resourceBodyField]: id }
+        : row.probeBody
+      : undefined;
   return app.inject({
     method: row.method,
     url,
-    headers: { ...creds, ...(row.probeBody ? { 'content-type': 'application/json' } : {}) },
-    ...(row.probeBody ? { payload: row.probeBody } : {}),
+    headers: { ...creds, ...(payload ? { 'content-type': 'application/json' } : {}) },
+    ...(payload ? { payload } : {}),
   });
 }
 
@@ -329,14 +368,14 @@ describe('cross-org probes: ORG_A’s real id is indistinguishable from a nonexi
         const kind = row.seededResource!;
         const foreignId = kind === 'job' ? seeded.job! : seeded[kind]!;
         const unknownId = UNKNOWN[kind]!;
-        const foreign = await inject(row, urlFor(row, foreignId), creds);
-        const unknown = await inject(row, urlFor(row, unknownId), creds);
+        const foreign = await inject(row, urlFor(row, foreignId), creds, foreignId);
+        const unknown = await inject(row, urlFor(row, unknownId), creds, unknownId);
         // Third arm: a MALFORMED id must be REFUSED, not crash. 400 (input
         // validation, uniform for every caller) and 404 (indistinguishable
         // from not-found) are both honest; a 5xx is not — it means the param
         // reached the db, and it returns a raw SQL error in the body while
         // making "malformed" distinguishable from "not yours".
-        const malformed = await inject(row, urlFor(row, 'not-an-id-%21'), creds);
+        const malformed = await inject(row, urlFor(row, 'not-an-id-%21'), creds, 'not-an-id-%21');
         expect(
           malformed.statusCode,
           `${row.method} ${row.path}: a malformed id returned ${malformed.statusCode} — ` +

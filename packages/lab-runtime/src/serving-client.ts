@@ -27,6 +27,10 @@ export interface ServingRequest {
   tools?: Tool[] | undefined;
   toolChoice?: ToolChoice | undefined;
   signal?: AbortSignal | undefined;
+  /** Step 8: per-call policy pin — overrides the constructor's policyRef
+   * for THIS call (the per-slot dial: tool steps ride toolPolicy's row,
+   * the wrap-up rides brain's). */
+  policyRef?: string | undefined;
 }
 
 export type ServingResult =
@@ -79,6 +83,7 @@ export class ServingClient {
           'content-type': 'application/json',
           authorization: `Bearer ${this.apiKey}`,
           ...this.pinHeaders,
+          ...(req.policyRef !== undefined ? { 'x-potion-policy': req.policyRef } : {}),
         },
         body: JSON.stringify(body),
         ...(req.signal !== undefined ? { signal: req.signal } : {}),

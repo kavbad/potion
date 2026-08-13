@@ -33,6 +33,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "tools",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
@@ -111,6 +112,7 @@
       "kind": "model",
       "payload": {
         "kind": "model",
+        "slot": "tools",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
@@ -154,6 +156,56 @@
             {
               "role": "user",
               "content": "[tool search result] {\"hits\":[\"result for {\\\"q\\\":\\\"weekly report\\\"}\"],\"_memoryWrites\":{\"lastQuery\":{\"q\":\"weekly report\"}}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "model",
+      "payload": {
+        "kind": "model",
+        "slot": "brain",
+        "usage": {
+          "totalTokens": 15,
+          "promptTokens": 10,
+          "completionTokens": 5
+        },
+        "clockMs": 1780000007000,
+        "rngSample": 0.48694825009442866,
+        "toolCalls": [],
+        "estCostUsd": 0.00015,
+        "completionId": "chatcmpl-golden0003",
+        "finishReason": "stop",
+        "responseText": "Wrap-up: searched the corpus and summarized; done-definition met.",
+        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
+        "requestPayload": {
+          "model": "potion-auto",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a harness named 'golden tools harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+            },
+            {
+              "role": "user",
+              "content": "Begin the mission."
+            },
+            {
+              "role": "assistant",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "[tool search result] {\"hits\":[\"result for {\\\"q\\\":\\\"weekly report\\\"}\"],\"_memoryWrites\":{\"lastQuery\":{\"q\":\"weekly report\"}}}"
+            },
+            {
+              "role": "assistant",
+              "content": "Summary based on the search: all is well."
+            },
+            {
+              "role": "user",
+              "content": "Summarize what you did in this run and state plainly whether the done-definition is met."
             }
           ]
         }

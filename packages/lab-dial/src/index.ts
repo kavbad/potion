@@ -30,6 +30,7 @@ export {
   FELT_SWEEP_MAX_POSITIONS,
   feltCacheKey,
   feltPosition,
+  feltSampleCache,
   feltSweep,
   missionProbe,
   requestLogCostLookup,

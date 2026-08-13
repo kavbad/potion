@@ -65,6 +65,13 @@ export interface RouteInventoryRow {
   tenancyClass?: TenancyClass;
   /** The path param naming the org-owned resource (org-param rows). */
   resourceParam?: string;
+  /** For org-param routes whose resource id travels in the BODY, not the
+   * path (POST /api/lab/runs, the clusterId job triggers): the probeBody
+   * field the sweep must substitute with the foreign/unknown/malformed id.
+   * Without this the cross-org probe is VACUOUS — every arm sends the same
+   * fixed body and the uniform-404 comparison passes trivially (Step 8
+   * review finding). */
+  resourceBodyField?: string;
   /** What the sweep must seed in ORG_A so the probe uses a REAL foreign id. */
   seededResource?:
     | 'providerKey'
@@ -77,6 +84,8 @@ export interface RouteInventoryRow {
     | 'certification'
     | 'shareToken'
     | 'alertRule'
+    | 'labHarness'
+    | 'labRun'
     | 'none';
   crossOrgProbe?: CrossOrgProbe;
 }
@@ -127,6 +136,21 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/traces/retention', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/traces/:traceId', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':traceId', seededResource: 'trace', crossOrgProbe: { expect: 'uniform-404' } },
 
+  // ---- /api/lab (Step 8, the novice-loop surface — spec routes table) ----
+  { method: 'POST', path: '/api/lab/harnesses', surface: 'api', mutating: true, guard: 'member', probeUrl: '/api/lab/harnesses', probeBody: { answers: { goal: 'probe goal', kind: 'task', doneDefinition: 'probe done', accounts: [], worthUsd: 1 } }, notes: 'interview → generateSpec; ≤2 model calls via serving under an ephemeral key', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "creates in the CALLER’s org catalog" } },
+  { method: 'GET', path: '/api/lab/harnesses', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'labHarness', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'GET', path: '/api/lab/harnesses/:hash', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/harnesses/:hash/dial', surface: 'api', mutating: true, guard: 'admin', probeUrl: `/api/lab/harnesses/${'0'.repeat(64)}/dial`, probeBody: { slot: 'brain', qualityIndex: 0 }, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/harnesses/:hash/felt', surface: 'api', mutating: true, guard: 'member', probeUrl: `/api/lab/harnesses/${'0'.repeat(64)}/felt`, probeBody: { positions: [{ qualityIndex: 0 }] }, notes: 'SPEND-bearing (cap-bound, cached)', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/runs', surface: 'api', mutating: true, guard: 'member', probeUrl: '/api/lab/runs', probeBody: { harnessHash: '0'.repeat(64) }, notes: 'starts a trial run; spend bounded by the harness fuel', tenancyClass: 'org-param', resourceBodyField: 'harnessHash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'GET', path: '/api/lab/runs/:id', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'labRun', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/runs/:id/answer', surface: 'api', mutating: true, guard: 'member', probeUrl: '/api/lab/runs/run-00000000/answer', probeBody: { answer: 'probe answer' }, tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'labRun', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/runs/:id/kill', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/lab/runs/run-00000000/kill', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'labRun', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'GET', path: '/api/lab/runs/:id/report', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'labRun', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'GET', path: '/api/lab/memory/:hash', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'PUT', path: '/api/lab/memory/:hash/:key', surface: 'api', mutating: true, guard: 'member', probeUrl: `/api/lab/memory/${'0'.repeat(64)}/probekey`, probeBody: { text: 'probe' }, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'DELETE', path: '/api/lab/memory/:hash/:key', surface: 'api', mutating: true, guard: 'admin', probeUrl: `/api/lab/memory/${'0'.repeat(64)}/probekey`, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+
   // ---- /api public exemptions (hook-level carve-outs) ----
   { method: 'GET', path: '/api/public/share/:token/frontier', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "the TOKEN is the credential; unknown/revoked tokens 404 uniformly (share.test.ts)" } },
   { method: 'GET', path: '/api/public/share/:token/report', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "as above; org identity comes from the token row, redacted by default" } },
@@ -143,7 +167,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/api/share', surface: 'api', mutating: true, guard: 'member', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "mints a token for the CALLER’s org over a platform frontier" } },
 
   // ---- /api ADMIN mutations (G2.3: serve keys get 403 on EVERY row) ----
-  { method: 'POST', path: '/api/frontiers/live-sweep', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/frontiers/live-sweep', probeBody: { clusterId: 'agent-x' }, notes: 'SPEND-bearing', tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/frontiers/live-sweep', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/frontiers/live-sweep', probeBody: { clusterId: 'agent-x' }, notes: 'SPEND-bearing', tenancyClass: 'org-param', resourceBodyField: 'clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/usage/aggregate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/usage/aggregate', probeBody: { from: '2026-08-01', to: '2026-08-02' }, notes: 'G2.3-tightened (had no check)', tenancyClass: 'non-tenant', crossOrgProbe: { expect: 'skip', skipReason: "admin-only platform rollup trigger; names no tenant resource" } },
   { method: 'POST', path: '/api/keys/:id/rotate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/keys/k-x/rotate', probeBody: { apiKey: 'sk-rotated-000000' }, tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'providerKey', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/keys/:id/revoke', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/keys/k-x/revoke', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'providerKey', crossOrgProbe: { expect: 'uniform-404' } },
@@ -159,10 +183,10 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/api/guarantee/clusters/:clusterId/verify', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/guarantee/clusters/agent-x/verify', probeBody: { policyId: 'pol-x', servingStrategyHash: 'sha-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/incidents/:id/resolve', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/incidents/00000000-0000-4000-8000-000000000000/resolve', notes: 'THE G2.3 headline: serving keys must not resolve incidents', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'incident', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/research/scan', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/research/scan', probeBody: {}, tenancyClass: 'non-tenant', crossOrgProbe: { expect: 'skip', skipReason: "platform registry scan; the job carries the caller’s org for attribution only" } },
-  { method: 'POST', path: '/api/research/cycle', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/research/cycle', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/research/cycle', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/research/cycle', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceBodyField: 'clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/recipes/:hash/evaluate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/recipes/sha-x/evaluate', probeBody: {}, tenancyClass: 'shared-global', resourceParam: ':hash', crossOrgProbe: { expect: 'skip', skipReason: "recipes are content-addressed PLATFORM configs; unknown hashes 404 for everyone" } },
-  { method: 'POST', path: '/api/rubrics/generate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/generate', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
-  { method: 'POST', path: '/api/certifications/run', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/certifications/run', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/rubrics/generate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/generate', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceBodyField: 'clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/certifications/run', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/certifications/run', probeBody: { clusterId: 'agent-x' }, tenancyClass: 'org-param', resourceBodyField: 'clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/rubrics/:id/approve', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/00000000-0000-4000-8000-000000000000/approve', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'rubric', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/rubrics/:id/reject', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/rubrics/00000000-0000-4000-8000-000000000000/reject', probeBody: { reason: 'probe' }, tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'rubric', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/share/:id/revoke', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/share/st_x/revoke', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'shareToken', crossOrgProbe: { expect: 'uniform-404' } },

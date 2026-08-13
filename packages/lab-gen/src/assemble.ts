@@ -58,7 +58,16 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
     memory: { enabled: answers.kind === 'standing' },
     rules,
     fuel: { maxUsdPerRun: fuelFromWorth(answers.worthUsd), hardStop: true },
-    checkIns: superpowers.length > 0 ? [{ trigger: 'before-external-action' }] : [],
+    // Step 8: a STANDING mission checks in at half fuel — "a standing
+    // mission has no natural run in the user's head; a check does" (Step 6
+    // review outcome 1). Without this a Step 8 standing trial (tools not
+    // yet wired) burns to its hard stop with no human touchpoint; tasks
+    // complete on their own done-definition and stay check-in-free unless
+    // tool-bearing.
+    checkIns: [
+      ...(answers.kind === 'standing' ? [{ trigger: 'on-budget-fraction', fraction: 0.5 } as const] : []),
+      ...(superpowers.length > 0 ? [{ trigger: 'before-external-action' } as const] : []),
+    ],
   };
 }
 

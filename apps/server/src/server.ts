@@ -59,6 +59,7 @@ import { registerResearchRoutes } from './routes/research.js';
 import { registerTraceRoutes } from './routes/traces.js';
 import { registerRubricRoutes } from './routes/rubrics.js';
 import { registerCertificationRoutes } from './routes/certifications.js';
+import { registerLabRoutes } from './routes/lab.js';
 import { registerOperatorRoutes } from './routes/operator.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
 import { createBudgetEvaluateHandler } from '@potion/workers';
@@ -335,6 +336,9 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // G1.5: per-cluster rubric review surface (generate/list/approve/reject).
   registerRubricRoutes(app, ctx, { queue });
   registerCertificationRoutes(app, ctx, { queue });
+  // Lab Step 8: the novice loop surface (/api/lab/*) — interview → catalog →
+  // dial/felt → trial runs → report/memory. Every row in ROUTE_INVENTORY.
+  registerLabRoutes(app, ctx, { queue });
   // G2.7: operator surface (create/list/delete orgs + jobs mirror) —
   // fail-closed POTION_OPERATOR_TOKEN bearer, outside the /api auth hook.
   registerOperatorRoutes(app, ctx, { queue });

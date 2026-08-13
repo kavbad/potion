@@ -1,0 +1,302 @@
+// Lab Step 8 — lab:run key custody (review outcome 1): the ephemeral
+// run-scoped serve key DIES at every exit — completed, failed, killed-budget
+// (fuel and org hard-stop), awaiting-human, crash — and the fence/reclaim
+// entry sweep reaps any key a zombie invocation left behind, including on a
+// run that already reached a terminal state. Scripted serving double: every
+// state is drivable at $0 (the real serving contract is proven in the
+// walkthrough against buildServer).
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  apiKeys,
+  createDb,
+  createLabRun,
+  getLabRun,
+  insertApiKey,
+  killLabRun,
+  migrate,
+  seedIsolationOrgs,
+  ORG_A,
+  ORG_B,
+  type DbHandle,
+} from '@potion/db';
+import { and, eq, like } from 'drizzle-orm';
+import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
+import { materializeDialPolicy } from '@potion/lab-dial';
+import type { ServingClient, ServingRequest, ServingResult } from '@potion/lab-runtime';
+import { createLabRunHandler, DEFAULT_PRICES_PATH, type JobContext } from './handlers.js';
+
+const ORG = ORG_A;
+const SERVING_URL = 'http://serving.test';
+
+let db: DbHandle;
+
+beforeEach(async () => {
+  db = await createDb();
+  await migrate(db.db);
+  await seedIsolationOrgs(db.db);
+  process.env.POTION_SERVING_URL = SERVING_URL;
+});
+
+afterEach(async () => {
+  delete process.env.POTION_SERVING_URL;
+  await db.close();
+});
+
+function ctx(): JobContext {
+  return { db: db.db, dbHandle: db, pricesPath: DEFAULT_PRICES_PATH };
+}
+
+function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
+  return {
+    specVersion: 1,
+    name: 'custody test harness',
+    brain: { policy: { type: 'min_cost', qualityFloor: 0 } },
+    mission: { kind: 'task', goal: 'do the thing', doneDefinition: 'the thing is done' },
+    superpowers: [],
+    memory: { enabled: true },
+    rules: ['be terse'],
+    fuel: { maxUsdPerRun: 1, hardStop: true },
+    checkIns: [],
+    ...over,
+  };
+}
+
+function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult {
+  return {
+    kind: 'ok',
+    completionId: `chatcmpl-${Math.random().toString(36).slice(2, 10)}`,
+    text: 'done.',
+    toolCalls: [],
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+    frontierTrace: 'cluster=code-gen;strategy=test;frontier=v1;policy=min_cost;fallback=0;provenance=mock',
+    ...over,
+  };
+}
+
+/** Scripted client factory: pops one result per complete(); records the
+ * apiKey the handler minted so tests can assert the raw is the one in use. */
+function scriptedFactory(results: ServingResult[]): {
+  factory: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
+  seen: { apiKey?: string; baseUrl?: string; requests: ServingRequest[] };
+} {
+  const queue = [...results];
+  const seen: { apiKey?: string; baseUrl?: string; requests: ServingRequest[] } = { requests: [] };
+  const factory = (opts: { baseUrl: string; apiKey: string; clusterHint?: string }): ServingClient => {
+    seen.apiKey = opts.apiKey;
+    seen.baseUrl = opts.baseUrl;
+    return {
+      complete: async (req: ServingRequest) => {
+        seen.requests.push(req);
+        const next = queue.shift();
+        if (!next) throw new Error('scripted client exhausted');
+        return next;
+      },
+      emitSpans: async () => true,
+    } as unknown as ServingClient;
+  };
+  return { factory, seen };
+}
+
+async function seedRun(runId: string, s: HarnessSpec): Promise<string> {
+  const hash = harnessSpecHash(s);
+  await createLabRun(db.db, { id: runId, orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+  return hash;
+}
+
+/** All ephemeral key rows for a run, by the custody naming convention. */
+async function keysForRun(runId: string): Promise<Array<{ id: string; revokedAt: Date | null }>> {
+  return db.db
+    .select({ id: apiKeys.id, revokedAt: apiKeys.revokedAt })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.orgId, ORG), like(apiKeys.name, `lab-run-${runId}-%`)));
+}
+
+async function expectAllKeysDead(runId: string, count: number): Promise<void> {
+  const rows = await keysForRun(runId);
+  expect(rows).toHaveLength(count);
+  for (const row of rows) expect(row.revokedAt).not.toBeNull();
+}
+
+describe('lab:run key custody — death at every exit', () => {
+  it('completed: one key minted, used by the client, revoked after', async () => {
+    await seedRun('run-c1', spec());
+    const { factory, seen } = scriptedFactory([ok()]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-c1' }, ctx());
+    expect(res.state).toBe('completed');
+    expect((await getLabRun(db.db, 'run-c1', ORG))!.state).toBe('completed');
+    expect(seen.baseUrl).toBe(SERVING_URL);
+    expect(seen.apiKey).toMatch(/^pk_labrun_/); // the raw rides only in-process
+    await expectAllKeysDead('run-c1', 1);
+  });
+
+  it('failed (serving error): key revoked', async () => {
+    await seedRun('run-f1', spec());
+    const { factory } = scriptedFactory([{ kind: 'error', status: 500, code: 'boom', detail: 'upstream' }]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-f1' }, ctx());
+    expect(res.state).toBe('failed');
+    await expectAllKeysDead('run-f1', 1);
+  });
+
+  it('killed-budget (fuel exhausted): key revoked', async () => {
+    // est = totalTokens/1000 × $0.01 = $0.00015 per scripted call ≥ the cap.
+    await seedRun('run-kb1', spec({ fuel: { maxUsdPerRun: 0.0001, hardStop: true } }));
+    const { factory } = scriptedFactory([ok({ text: 'still going', finishReason: 'length' })]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-kb1' }, ctx());
+    expect(res.state).toBe('killed-budget');
+    await expectAllKeysDead('run-kb1', 1);
+  });
+
+  it('killed-budget (org hard stop from serving): key revoked', async () => {
+    await seedRun('run-kb2', spec());
+    const { factory } = scriptedFactory([{ kind: 'budget-exceeded', detail: 'org budget hard stop' }]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-kb2' }, ctx());
+    expect(res.state).toBe('killed-budget');
+    await expectAllKeysDead('run-kb2', 1);
+  });
+
+  it('awaiting-human: the key NEVER lives across the wait', async () => {
+    // fraction 0.5 × $0.0002 = $0.0001 crossed by the first call's $0.00015,
+    // which stays under the $0.0002 kill line → check-in, not kill.
+    await seedRun(
+      'run-ah1',
+      spec({
+        fuel: { maxUsdPerRun: 0.0002, hardStop: true },
+        checkIns: [{ trigger: 'on-budget-fraction', fraction: 0.5 }],
+      }),
+    );
+    const { factory } = scriptedFactory([ok({ text: 'still going', finishReason: 'length' })]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-ah1' }, ctx());
+    expect(res.state).toBe('awaiting-human');
+    expect((await getLabRun(db.db, 'run-ah1', ORG))!.state).toBe('awaiting-human');
+    await expectAllKeysDead('run-ah1', 1);
+  });
+
+  it('crash (client throws mid-leg): handler rethrows AND the key is revoked', async () => {
+    await seedRun('run-x1', spec());
+    const { factory } = scriptedFactory([]); // first complete() throws
+    await expect(
+      createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-x1' }, ctx()),
+    ).rejects.toThrow('scripted client exhausted');
+    await expectAllKeysDead('run-x1', 1);
+  });
+
+  it('missing POTION_SERVING_URL: fail-closed BEFORE any key is minted', async () => {
+    await seedRun('run-env1', spec());
+    delete process.env.POTION_SERVING_URL;
+    const { factory } = scriptedFactory([ok()]);
+    await expect(
+      createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-env1' }, ctx()),
+    ).rejects.toThrow('POTION_SERVING_URL');
+    expect(await keysForRun('run-env1')).toHaveLength(0);
+  });
+});
+
+describe('lab:run fence/reclaim — the zombie-key sweep', () => {
+  /** Plant an unrevoked key AS IF a prior invocation crashed before its
+   * finally. policyId must be real — materialize the run's own brain row. */
+  async function plantZombie(runId: string, harnessHash: string, s: HarnessSpec, keySuffix: string, orgId = ORG): Promise<string> {
+    const row = await materializeDialPolicy(db.db, {
+      orgId,
+      harnessHash,
+      slot: 'brain',
+      policy: s.brain.policy,
+    });
+    const id = `key-labrun-${runId}-${keySuffix}`;
+    await insertApiKey(db.db, {
+      id,
+      keyHash: `hash-${runId}-${keySuffix}`,
+      name: `lab-run-${runId}-${keySuffix}`,
+      orgId,
+      policyId: row.id,
+      rateRps: 50,
+      dailyCap: 10_000,
+    });
+    return id;
+  }
+
+  it('reclaim sweeps the zombie, scoped to THIS run — a sibling run key survives', async () => {
+    const s = spec();
+    const hash = await seedRun('run-z1', s);
+    await seedRun('run-z2', s);
+    await plantZombie('run-z1', hash, s, 'zombie1');
+    const siblingId = await plantZombie('run-z2', hash, s, 'alive1');
+
+    const { factory } = scriptedFactory([ok()]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z1' }, ctx());
+    expect(res.state).toBe('completed');
+
+    // run-z1: the zombie AND the invocation's own key are both dead.
+    await expectAllKeysDead('run-z1', 2);
+    // run-z2's key is untouched — the sweep never crosses runs.
+    const sibling = await keysForRun('run-z2');
+    expect(sibling).toHaveLength(1);
+    expect(sibling[0]!.id).toBe(siblingId);
+    expect(sibling[0]!.revokedAt).toBeNull();
+  });
+
+  it('terminal no-op STILL reaps: a key orphaned between the terminal transition and its finally dies on re-entry, and no new key is minted', async () => {
+    const s = spec();
+    const hash = await seedRun('run-z3', s);
+    await killLabRun(db.db, 'run-z3', ORG); // state: killed-operator (terminal)
+    await plantZombie('run-z3', hash, s, 'orphan1');
+
+    const { factory, seen } = scriptedFactory([ok()]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z3' }, ctx());
+    expect(res).toEqual({ state: 'killed-operator', noop: true });
+    expect(seen.requests).toHaveLength(0); // no serving traffic on a no-op
+    await expectAllKeysDead('run-z3', 1); // the orphan died; nothing new minted
+  });
+
+  it('the sweep is org-scoped: an identically named key in ANOTHER org is not touched', async () => {
+    const s = spec();
+    const hash = await seedRun('run-z4', s);
+    // Same run-id naming, different org — tenancy boundary must hold.
+    const foreignId = await plantZombie('run-z4', hash, s, 'foreign1', ORG_B);
+
+    const { factory } = scriptedFactory([ok()]);
+    await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z4' }, ctx());
+
+    const foreign = await db.db
+      .select({ id: apiKeys.id, revokedAt: apiKeys.revokedAt })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.orgId, ORG_B), eq(apiKeys.id, foreignId)));
+    expect(foreign).toHaveLength(1);
+    expect(foreign[0]!.revokedAt).toBeNull();
+  });
+});
+
+describe('lab:run fence/reclaim — the sweep never kills a LIVE invocation', () => {
+  it('a duplicate job arriving while a claim is HELD leaves the live key untouched', async () => {
+    const s = spec();
+    const hash = await seedRun('run-live1', s);
+    // Invocation A holds an unexpired claim (mid-leg) with its key live.
+    const { claimLabRun } = await import('@potion/db');
+    const claim = await claimLabRun(db.db, {
+      runId: 'run-live1', orgId: ORG, expectedHarnessHash: hash, leaseMs: 60_000,
+    });
+    if (!claim.ok) throw new Error(`claim failed: ${claim.reason}`);
+    const liveKeyId = await (async () => {
+      const row = await materializeDialPolicy(db.db, { orgId: ORG, harnessHash: hash, slot: 'brain', policy: s.brain.policy });
+      const id = 'key-labrun-run-live1-live1';
+      await insertApiKey(db.db, {
+        id, keyHash: 'hash-live1', name: 'lab-run-run-live1-live1', orgId: ORG,
+        policyId: row.id, rateRps: 50, dailyCap: 10_000,
+      });
+      return id;
+    })();
+
+    // The duplicate invocation: must NOT sweep (claim is live); its own
+    // resume attempt bounces off the held claim.
+    const { factory } = scriptedFactory([ok()]);
+    await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-live1' }, ctx()).catch(() => {
+      /* claim-held surfaces however resumeRun surfaces it — custody is the assertion */
+    });
+    const live = await db.db
+      .select({ id: apiKeys.id, revokedAt: apiKeys.revokedAt })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.orgId, ORG), eq(apiKeys.id, liveKeyId)));
+    expect(live).toHaveLength(1);
+    expect(live[0]!.revokedAt, 'the LIVE invocation key must survive a duplicate job').toBeNull();
+  });
+});

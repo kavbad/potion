@@ -193,3 +193,15 @@ describe('generator reproducibility', () => {
     }
   }, 120_000);
 });
+
+describe('Step 8 review pin — the wrap-up is optional under replay', () => {
+  it('a tool-bearing completed record WITHOUT its wrap-up (runtime wrap-up failed) replays ok', () => {
+    const g = JSON.parse(JSON.stringify(loadGolden('task-tools'))) as GoldenFixture;
+    // Drop the final wrap-up model step, renumber nothing (it is the last
+    // step), keep terminal 'completed' — exactly what the loop records when
+    // the wrap-up call fails ("a failed wrap-up never blocks completion").
+    g.steps.pop();
+    const result = replayRun(g.spec, g.steps, g.terminal);
+    expect(result.ok, JSON.stringify(!result.ok ? result.divergences : [])).toBe(true);
+  });
+});

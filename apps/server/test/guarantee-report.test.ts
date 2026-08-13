@@ -60,6 +60,11 @@ let app: FastifyInstance;
 const db = () => app.potion.db.db;
 
 const today = new Date().toISOString().slice(0, 10);
+// Fixture times RELATIVE to the test run (base = 24h ago): the clustering
+// window is `sinceDays: 7` back from now, so hardcoded calendar dates rot
+// out of it (the '2026-08-06T…' literals these replace expired 2026-08-13).
+const FIXTURE_BASE_MS = Date.now() - 24 * 60 * 60 * 1000;
+
 
 function retentionBlock(over: Record<string, unknown> = {}) {
   return {
@@ -256,13 +261,13 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
           orgId: ORG, traceId: t, spanId: `${t}_root`, name: 'agent.root', model: 'mock-cheap',
           usage: { input_tokens: 10, output_tokens: 5 }, costUsd: 0,
           attrs: { 'gen_ai.prompt': `Reconcile the ledger batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference },
-          ts: new Date(`2026-08-06T10:0${i}:00Z`),
+          ts: new Date(FIXTURE_BASE_MS + i * 60_000),
         },
         {
           orgId: ORG, traceId: t, spanId: `${t}_tool`, name: 'tool.grledger', model: 'mock-cheap',
           usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0,
           attrs: { 'gen_ai.operation.name': 'execute_tool' },
-          ts: new Date(`2026-08-06T10:0${i}:30Z`),
+          ts: new Date(FIXTURE_BASE_MS + i * 60_000 + 30_000),
         },
       ];
       await insertTraceSpans(db(), spans);
@@ -282,9 +287,9 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
       const task = evalTaskById(`ex-0${i}`)!;
       await insertTraceSpans(db(), [
         { orgId: ORG, traceId: `tr_gr2_${i}`, spanId: `tr_gr2_${i}_r`, name: 'agent.root', model: 'mock-cheap', usage: { input_tokens: 10, output_tokens: 5 }, costUsd: 0,
-          attrs: { 'gen_ai.prompt': `Reconcile the audit batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(`2026-08-06T11:0${i}:00Z`) },
+          attrs: { 'gen_ai.prompt': `Reconcile the audit batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(FIXTURE_BASE_MS + 3_600_000 + i * 60_000) },
         { orgId: ORG, traceId: `tr_gr2_${i}`, spanId: `tr_gr2_${i}_t`, name: 'tool.graudit', model: 'mock-cheap', usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0,
-          attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(`2026-08-06T11:0${i}:30Z`) },
+          attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(FIXTURE_BASE_MS + 3_600_000 + i * 60_000 + 30_000) },
       ] as NewTraceSpan[]);
     }
     const fakeEmbedder2 = { async embed(texts: string[]): Promise<number[][]> { return texts.map(() => new Array<number>(384).fill(0.05)); } };
@@ -447,9 +452,9 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
       const task = evalTaskById(`ex-0${i}`)!;
       await insertTraceSpans(db(), [
         { orgId: ORG, traceId: `tr_f11_${i}`, spanId: `tr_f11_${i}_r`, name: 'agent.root', model: 'mock-cheap', usage: { input_tokens: 10, output_tokens: 5 }, costUsd: 0,
-          attrs: { 'gen_ai.prompt': `Settle the f11 batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(`2026-08-06T12:0${i}:00Z`) },
+          attrs: { 'gen_ai.prompt': `Settle the f11 batch and answer the embedded record task. EVAL: ${task.id}`, 'gen_ai.completion': task.reference }, ts: new Date(FIXTURE_BASE_MS + 7_200_000 + i * 60_000) },
         { orgId: ORG, traceId: `tr_f11_${i}`, spanId: `tr_f11_${i}_t`, name: 'tool.f11settle', model: 'mock-cheap', usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0,
-          attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(`2026-08-06T12:0${i}:30Z`) },
+          attrs: { 'gen_ai.operation.name': 'execute_tool' }, ts: new Date(FIXTURE_BASE_MS + 7_200_000 + i * 60_000 + 30_000) },
       ] as NewTraceSpan[]);
     }
     await tracesClusterHandler({ orgId: ORG }, jc);
