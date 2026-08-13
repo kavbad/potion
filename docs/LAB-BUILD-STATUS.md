@@ -12,7 +12,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 2 | Harness spec | 2026-08-11 | `4862b78` | **complete** |
 | 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
 | 4 | Run records and deterministic replay | 2026-08-12 | `2b18136` | **complete** |
-| 5 | Platform live sweep (rule-2 core work) | — | — | not started |
+| 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | — | **spec ready** — [step-05-platform-sweep.md](specs/step-05-platform-sweep.md), awaiting build approval + rotated keys + approved cap |
 | 6 | Intent → spec generation | — | — | not started |
 | 7 | The dial | — | — | not started |
 | 8 | The novice loop, ugly | — | — | not started |
