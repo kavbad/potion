@@ -337,6 +337,12 @@ template placeholder ("<fill in the real date>"); the interjection's direct
 instruction to proceed to the live legs is the operative authorization, and
 both are recorded here verbatim rather than smoothed over.
 
+**CLOSED (2026-08-13):** the open attestation item is resolved by the
+standing-rule amendment in docs/LAB-BUILD-STATUS.md — the operator
+accepts live spend on the current chat-transited key on the basis of its
+provider-side spend cap (`KEY_RISK_ACCEPTED=<ISO date>` gate, fail-closed);
+a future rotation supersedes the acceptance.
+
 **Correction (operator ruling, superseding the earlier backstop claim):**
 the canary backstop covers only a revoked-but-stale key in `.env` — it
 fails closed on the first call. It does NOT cover an unrotated,

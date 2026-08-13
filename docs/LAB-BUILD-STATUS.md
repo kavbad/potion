@@ -318,17 +318,25 @@ walkthrough emits 20 PASS lines = 2 boot legs + numbered legs 0–17. The
 
 ---
 
-## Standing rule — live-spend attestation moves from prose to code (2026-08-12)
+## Standing rule — live-spend gate: operator risk acceptance (amended 2026-08-13)
 
-Any future live-spend script MUST refuse to start unless an explicit
-`ATTESTED_ON=<ISO date>` value is present in its environment. The value is
-the operator's key-rotation attestation date, supplied at invocation time —
-paste-time diligence is no longer a control. A script that can spend real
-money without this variable set is a build defect, in scope for review the
-same way a missing cap would be. (Origin: the Step 5 attestation arrived
-with a placeholder date twice; the canary proves key validity, never
-novelty, so the dated attestation is the only control for an unrotated,
-still-valid credential.)
+**Deliberate operator decision, dated 2026-08-13, superseding the
+2026-08-12 ATTESTED_ON rotation-attestation rule:** the operator accepts
+live spend on the current `OPENROUTER_API_KEY` — which transited chat — on
+the basis of its provider-side spend cap. The mechanism stays FAIL-CLOSED:
+any live-spend script MUST refuse to start unless
+`KEY_RISK_ACCEPTED=<ISO date>` is present in its environment; silence
+still spends nothing. A future key rotation SUPERSEDES this acceptance —
+on rotation, the gate's meaning reverts to a rotation attestation and this
+entry is amended again. A script that can spend real money without this
+variable set is a build defect, in scope for review the same way a missing
+cap would be.
+
+History: the original rule (2026-08-12) required `ATTESTED_ON=<ISO date>`
+as a key-rotation attestation, after the Step 5 attestation arrived with a
+placeholder date twice; the canary proves key validity, never novelty. The
+Step 5 spec's open attestation item is CLOSED by this amendment (see
+docs/specs/step-05-platform-sweep.md, attestation note).
 
 ---
 
