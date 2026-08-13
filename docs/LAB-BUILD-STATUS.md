@@ -15,7 +15,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
 | 6 | Intent → spec generation | 2026-08-12 | `13c7665` | **complete** |
 | 7 | The dial | 2026-08-13 | `4932e55` | **complete** |
-| 8 | The novice loop, ugly | 2026-08-13 | (this commit) | **complete** — [step-08-novice-loop.md](specs/step-08-novice-loop.md); ten-minute clock 3.2s/$0, custody + catalog + activation + posture proven by test, live felt leg $0.0418 under KEY_RISK_ACCEPTED=2026-08-13 (operator countersign pending) |
+| 8 | The novice loop, ugly | 2026-08-13 | cfa7dda | **complete** — [step-08-novice-loop.md](specs/step-08-novice-loop.md); ten-minute clock 3.2s/$0, custody + catalog + activation + posture proven by test, live felt leg $0.0418 under KEY_RISK_ACCEPTED=2026-08-13 (operator countersign pending) |
 | 9 | The derived form [design gate] | — | — | not started |
 | 10 | MCP client and token custody | — | — | not started |
 | 11 | Superpower packaging and catalog | — | — | not started |
