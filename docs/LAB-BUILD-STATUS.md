@@ -13,7 +13,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 3 | Runtime core | 2026-08-12 | `fe5dd27` | **complete** |
 | 4 | Run records and deterministic replay | 2026-08-12 | `2b18136` | **complete** |
 | 5 | Platform live sweep (rule-2 core work) | 2026-08-12 | `64b3ea8` | **complete** (awaiting operator countersign on the reconciliation sheet) |
-| 6 | Intent → spec generation | — | — | not started |
+| 6 | Intent → spec generation | 2026-08-12 | — | **spec ready** — [step-06-intent-gen.md](specs/step-06-intent-gen.md), awaiting build approval |
 | 7 | The dial | — | — | not started |
 | 8 | The novice loop, ugly | — | — | not started |
 | 9 | The derived form [design gate] | — | — | not started |
