@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Step 9 motion study — the derived form</title>
+<!--
+  THE DERIVED FORM — motion study (Step 9 phase one, design gate).
+
+  Every animated value in this file comes from ./step-09-captured-data.js —
+  verbatim /api/lab/* responses captured from a mock deployment (see the
+  provenance block in the data file), plus ONE verbatim live felt sample
+  from the Step 8 ledger. Nothing is hand-authored. Motion eases between
+  measured states; no event is drawn that did not arrive as data.
+
+  Substrate = the product substrate proposed in the spec: Canvas 2D for the
+  form, DOM overlay for labels/readout. fps meter on. prefers-reduced-motion
+  renders the static form.
+-->
+<style>
+  :root {
+    --field: #0a0c11; --field2: #0d1017;
+    --ink: #c9d2e0; --ink-dim: #6b7688; --ink-faint: #3b4354;
+    --hair: #1c2230;
+    /* THEME (audit: every entry below is a design-constant, enumerated) */
+    --hue-min-cost: #d99a5b;   /* policy min_cost  */
+    --hue-max-quality: #9d7bff;/* policy max_quality */
+    --hue-compound: #4fd1c5;   /* policy compound  */
+    --tint-metered: #e8f0ff;   /* solid pulse center = metered truth */
+    --tint-est: transparent;   /* hollow pulse center = labeled estimate */
+    --anomaly-a: #ff5470; --anomaly-b: #59d2ff; /* chromatic fringe */
+    --severed: #46506388;      /* not-connected free end */
+  }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: var(--field); color: var(--ink);
+    font: 13px/1.45 ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; }
+  canvas { position: fixed; inset: 0; }
+  .hud { position: fixed; z-index: 2; }
+  #head { top: 0; left: 0; right: 0; padding: 10px 14px; display: flex; gap: 14px;
+    align-items: baseline; background: linear-gradient(var(--field) 60%, transparent); }
+  #head h1 { font-size: 13px; font-weight: 600; letter-spacing: .04em; }
+  #head .prov { color: var(--ink-dim); font-size: 11px; }
+  #rail { left: 14px; top: 64px; width: 218px; display: flex; flex-direction: column; gap: 10px; }
+  .card { background: #0e121bcc; border: 1px solid var(--hair); border-radius: 6px; padding: 10px; }
+  .card h2 { font-size: 10px; letter-spacing: .12em; color: var(--ink-dim); margin-bottom: 8px; text-transform: uppercase; }
+  button { display: block; width: 100%; text-align: left; background: #131826; color: var(--ink);
+    border: 1px solid var(--hair); border-radius: 4px; padding: 6px 8px; margin-bottom: 6px;
+    font: inherit; cursor: pointer; }
+  button:hover { border-color: #2c3650; }
+  button.active { border-color: #4fd1c5aa; color: #dff6f3; }
+  button:last-child { margin-bottom: 0; }
+  .note { color: var(--ink-dim); font-size: 11px; margin-top: 6px; }
+  input[type=range] { width: 100%; accent-color: #4fd1c5; }
+  .stop { color: var(--ink-dim); font-size: 10.5px; border-top: 1px dashed var(--hair);
+    margin-top: 8px; padding-top: 7px; }
+  #readout { right: 14px; top: 64px; width: 330px; max-height: calc(100vh - 90px);
+    overflow: auto; transition: opacity .25s; }
+  #readout table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #readout td { padding: 2.5px 4px; vertical-align: top; border-top: 1px solid #161c29; }
+  #readout td:first-child { color: var(--ink-dim); white-space: nowrap; }
+  #readout td:last-child { color: var(--ink); word-break: break-word; }
+  #readout .src { color: var(--ink-faint); font-size: 10px; display: block; }
+  #labels { inset: 0; pointer-events: none; }
+  .lbl { position: absolute; transform: translate(-50%, -50%); color: var(--ink);
+    font-size: 11px; text-shadow: 0 1px 4px #000; white-space: nowrap; transition: opacity .2s; }
+  .lbl small { display: block; color: var(--ink-dim); font-size: 10px; text-align: center; }
+  #fps { bottom: 10px; right: 14px; color: var(--ink-faint); font-size: 11px; }
+  #timebar { bottom: 10px; left: 14px; right: 110px; color: var(--ink-dim); font-size: 11px; }
+  #timebar b { color: var(--ink); }
+  .badge { display: inline-block; border: 1px solid #7a6a2f; color: #d9c26a;
+    padding: 0 6px; border-radius: 3px; font-size: 10px; letter-spacing: .08em; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="hud" id="head">
+  <h1>THE DERIVED FORM — motion study</h1>
+  <span class="prov" id="prov"></span>
+</div>
+<div class="hud" id="rail">
+  <div class="card">
+    <h2>Scenario — measured data only</h2>
+    <button id="sc-run" class="active">Trial run (captured)</button>
+    <button id="sc-dial">Dial move (captured)</button>
+    <button id="sc-anom">Anomaly (live ledger sample)</button>
+    <div class="note" id="sc-note"></div>
+  </div>
+  <div class="card">
+    <h2>Zoom — far ⇢ mid</h2>
+    <input id="zoom" type="range" min="0" max="1" step="0.01" value="0" />
+    <div class="note">far &lt; 0.35 · crossfade · mid ≥ 0.55</div>
+    <div class="stop">⛔ zoom ends at MID — schematic &amp; the file arrive with the bench (Step 16).</div>
+  </div>
+  <div class="card">
+    <h2>Display rate</h2>
+    <button id="rate-slow" class="active">40× slowed (inspection)</button>
+    <button id="rate-real">1× measured</button>
+    <div class="note">Same measured timestamps either way — a display rate, never fabricated events.</div>
+  </div>
+  <div class="card">
+    <h2>Treatment preview</h2>
+    <button id="sim-toggle">SIMULATED treatment: off</button>
+    <div class="note">A labeled PREVIEW of the mock-provenance treatment. The captured run reported provenance=live (the fixture's live-labeled frontier — the recorded Step 7 caveat), so this toggle is presentation, not data.</div>
+  </div>
+</div>
+<div class="hud" id="readout"><div class="card">
+  <h2>Pixel → parameter (live audit readout)</h2>
+  <table id="audit"></table>
+</div></div>
+<div class="hud" id="labels"></div>
+<div class="hud" id="fps"></div>
+<div class="hud" id="timebar"></div>
+
+<script src="./step-09-captured-data.js"></script>
+<script>
+'use strict';
+const D = window.CAPTURED, FELT = window.FELT_DIVERGENCE;
+document.getElementById('prov').textContent =
+  `data: step-09-captured-data.json (sha ${window.CAPTURED_SHA}…) · run ${D.provenance.runId} · captured ${D.provenance.captured.slice(0, 10)} · nothing hand-authored`;
+
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const HUES = { min_cost: css('--hue-min-cost'), max_quality: css('--hue-max-quality'), compound: css('--hue-compound') };
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ───────────────────────── deriveFormState (the spec §3 shape, study-local) ─
+// Pure: (harness DTO, memory DTO, run snapshot | null) → FormState.
+// Every field below has a row in the audit readout; the draw layer reads
+// ONLY the returned object.
+function deriveFormState(h, memory, run) {
+  const spec = h.spec;
+  const views = (h.dial && h.dial.brain && h.dial.brain.views) || [];
+  const feas = views.filter((v) => v.feasible);
+  const qs = feas.map((v) => v.quality);
+  const qMin = Math.min(...qs), qMax = Math.max(...qs);
+  const basis = h.sidecar.choices.find((c) => c.slot === 'brain.policy').basis;
+  const current = feas.find((v) => v.strategyHash === basis.strategyHash) || feas[0];
+  const qNorm = qMax > qMin ? (current.quality - qMin) / (qMax - qMin) : 0.5;
+
+  const steps = run ? run.steps : [];
+  const modelSteps = steps.filter((s) => s.kind === 'model');
+  const at = (s) => new Date(s.at).getTime();
+  const gaps = [];
+  for (let i = 1; i < steps.length; i++) gaps.push(at(steps[i]) - at(steps[i - 1]));
+  const meanGap = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : null;
+
+  const estSpent = modelSteps.reduce((a, s) => a + (s.estCostUsd || 0), 0);
+  const meteredNotches = modelSteps
+    .filter((s) => s.meteredCostUsd !== null && s.costLabel === 'metered')
+    .map((s) => ({ frac: 0, usd: s.meteredCostUsd })); // frac assigned cumulatively below
+  let acc = 0;
+  modelSteps.forEach((s) => {
+    acc += s.estCostUsd || 0;
+    const n = meteredNotches[modelSteps.indexOf(s)];
+    if (n) n.frac = Math.min(1, acc / spec.fuel.maxUsdPerRun);
+  });
+
+  return {
+    // core — the brain slot
+    core: {
+      radius: 0.34 + 0.30 * qNorm,                       // dial quality position (normalized)
+      hue: HUES[spec.brain.policy.type] || HUES.compound, // policy type
+      facets: current.strategyType === 'single' ? 0 : 2,  // strategy stages (single = smooth)
+      qualityFloor: spec.brain.policy.qualityFloor,
+      p95Ms: spec.brain.policy.p95Ms ?? null,
+      strategy8: (current.strategyHash || '').slice(0, 8),
+      inclusions: memory.entries.map((e) => e.key),       // memory entries
+      memoryEnabled: spec.memory.enabled,
+      toolsNucleus: spec.brain.toolPolicy !== undefined,  // second nucleus
+    },
+    // membrane — the protections
+    membrane: {
+      laminations: spec.rules.length,                     // one per rule
+      fuelCapUsd: spec.fuel.maxUsdPerRun,
+      hardStop: spec.fuel.hardStop,
+      estFraction: Math.min(1, estSpent / spec.fuel.maxUsdPerRun), // LABELED est
+      estSpentUsd: estSpent,
+      meteredUsd: run ? run.cost.meteredUsd : 0,
+      meteredNotches,                                      // metered truth, discrete
+      pores: spec.checkIns.map((c) => ({ trigger: c.trigger, fraction: c.fraction ?? null })),
+      missionKind: spec.mission.kind,                      // silhouette
+    },
+    // filaments — superpowers; NOT-CONNECTED is structural (4th place)
+    filaments: h.superpowers.map((s) => ({ id: s.id, scopes: s.scopes.length, severed: s.status === 'not-connected' })),
+    // luminosity — telemetry
+    glow: {
+      mode: run ? run.state : 'idle',
+      reason: run ? run.stateReason : null,
+      pendingQuestion: run ? run.pendingQuestion : null,
+      breathPeriodMs: meanGap,                             // MEASURED cadence, never invented
+      simulated: modelSteps.some((s) => s.simulated),
+    },
+    pulses: modelSteps.map((s) => ({
+      atMs: at(s), estUsd: s.estCostUsd, meteredUsd: s.meteredCostUsd,
+      hollow: s.costLabel !== 'metered', slot: s.slot, anomaly: null,
+    })),
+    checkInAt: steps.filter((s) => s.kind === 'check-in').map(at),
+    name: h.name, hash: h.harnessHash.slice(0, 12), goal: spec.mission.goal,
+  };
+}
+
+// ─────────────────────────────────────── timeline (measured, replayed) ─
+// The trial scenario replays the captured snapshots + step timestamps on
+// their shared origin. Display rate scales PLAYBACK ONLY.
+const SNAPS = D.runSnapshots;
+const RUN_LAST = SNAPS[SNAPS.length - 1].run;
+const STEP_T0 = new Date(RUN_LAST.steps[0].at).getTime();
+const RUN_SPAN = new Date(RUN_LAST.steps[RUN_LAST.steps.length - 1].at).getTime() - STEP_T0;
+// snapshot offsets: align snapshot tMs onto the step clock (shared origin)
+const SNAP_EVENTS = SNAPS.map((s) => ({ tMs: s.tMs, run: s.run }));
+const TOTAL_MS = Math.max(RUN_SPAN, SNAP_EVENTS[SNAP_EVENTS.length - 1].tMs) + 400;
+
+let scenario = 'run';
+let rate = REDUCED ? 0 : 1 / 40;       // slowed default; 0 = static (reduced motion)
+let simPreview = false;
+let zoom = 0;
+let playT = 0;                          // measured-ms position on the timeline
+let dialMix = 0;                        // 0=before 1=after (eased on scenario)
+let lastFrame = performance.now();
+let emitted = 0;                        // pulses emitted so far (diff pointer)
+const live = [];                        // in-flight pulse renders (pooled)
+let anomalyBeads = [];
+
+const before = deriveFormState(D.harnessBefore, D.memory, null);
+const after = D.harnessAfter ? deriveFormState(D.harnessAfter, D.memory, null) : before;
+
+function snapAt(t) {
+  let cur = SNAP_EVENTS[0];
+  for (const s of SNAP_EVENTS) if (s.tMs <= t) cur = s;
+  return cur.run;
+}
+function runStateAt(t) {
+  // Truncate the run DTO to what had ARRIVED by t: state from the snapshot,
+  // steps filtered by their measured timestamps. No event before its time.
+  const snap = snapAt(t);
+  const steps = RUN_LAST.steps.filter((s) => new Date(s.at).getTime() - STEP_T0 <= t);
+  return { ...snap, steps, cost: t >= TOTAL_MS - 400 ? RUN_LAST.cost : snap.cost };
+}
+
+// ───────────────────────────────────────────────────────── draw layer ─
+// Consumes FormState ONLY (the spec's draw fence, honored in the study).
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+const ARC_A0 = Math.PI * 0.75, ARC_SWEEP = Math.PI * 1.5; // fuel arc geometry
+function arcPoint(cx, cy, r, frac) {
+  const a = ARC_A0 + ARC_SWEEP * frac;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a), a];
+}
+
+function draw(state, tNow) {
+  ctx.clearRect(0, 0, W, H);
+  const sim = simPreview || state.glow.simulated;
+  const cx = W / 2, cy = H / 2 + 10;
+  const baseR = Math.min(W, H) * 0.235;
+  const g = state.glow;
+
+  // breathing — measured cadence only; stillness when no cadence or terminal
+  const alive = g.mode === 'running';
+  const period = g.breathPeriodMs ? Math.max(700, g.breathPeriodMs * 6) : 1400;
+  const breath = alive && rate !== 0 ? 1 + 0.028 * Math.sin((tNow / period) * 2 * Math.PI) : 1;
+  const dimmed = { 'killed-budget': 0.42, 'killed-operator': 0.45, failed: 0.4, idle: 0.75, pending: 0.6 }[g.mode] ?? 1;
+  const glowLevel = (g.mode === 'awaiting-human' ? 1.15 : 1) * dimmed * (sim ? 0.65 : 1);
+
+  ctx.save();
+  if (sim) ctx.filter = 'saturate(0.35)';
+
+  // field halo
+  const halo = ctx.createRadialGradient(cx, cy, baseR * 0.2, cx, cy, baseR * 2.2);
+  halo.addColorStop(0, `rgba(80,120,160,${0.10 * glowLevel})`);
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+
+  // MEMBRANE — laminations (rules); thin single line when rules = 0 (honest)
+  const lam = Math.max(1, state.membrane.laminations + 1);
+  for (let i = 0; i < lam; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, (baseR + i * 5) * breath, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(120,140,175,${(0.28 - i * 0.03) * glowLevel})`;
+    ctx.lineWidth = i === 0 ? 1.4 : 1;
+    ctx.stroke();
+  }
+
+  // FUEL ARC — est fraction depletes (drawn as consumed dimming), metered notches
+  const fr = (baseR + lam * 5 + 9) * breath;
+  ctx.lineWidth = 3.5;
+  ctx.beginPath(); // remaining (bright)
+  ctx.arc(cx, cy, fr, ARC_A0 + ARC_SWEEP * state.membrane.estFraction, ARC_A0 + ARC_SWEEP);
+  ctx.strokeStyle = `rgba(200,220,255,${0.5 * glowLevel})`; ctx.stroke();
+  ctx.beginPath(); // consumed (est-labeled depletion)
+  ctx.arc(cx, cy, fr, ARC_A0, ARC_A0 + ARC_SWEEP * state.membrane.estFraction);
+  ctx.strokeStyle = `rgba(200,220,255,${0.10 * glowLevel})`; ctx.stroke();
+  for (const n of state.membrane.meteredNotches) { // metered truth, discrete
+    const [nx, ny, na] = arcPoint(cx, cy, fr, n.frac);
+    ctx.beginPath();
+    ctx.moveTo(nx - 5 * Math.cos(na), ny - 5 * Math.sin(na));
+    ctx.lineTo(nx + 5 * Math.cos(na), ny + 5 * Math.sin(na));
+    ctx.strokeStyle = css('--tint-metered'); ctx.lineWidth = 1.6; ctx.stroke();
+  }
+  if (state.membrane.hardStop) { // terminal cap
+    const [hx, hy, ha] = arcPoint(cx, cy, fr, 1);
+    ctx.beginPath();
+    ctx.moveTo(hx - 7 * Math.cos(ha), hy - 7 * Math.sin(ha));
+    ctx.lineTo(hx + 7 * Math.cos(ha), hy + 7 * Math.sin(ha));
+    ctx.strokeStyle = `rgba(255,120,130,${0.8 * glowLevel})`; ctx.lineWidth = 3; ctx.stroke();
+  }
+  // PORES — check-ins
+  for (const p of state.membrane.pores) {
+    if (p.trigger === 'on-budget-fraction') {
+      const [px, py] = arcPoint(cx, cy, fr, p.fraction);
+      const asking = g.mode === 'awaiting-human';
+      ctx.beginPath(); ctx.arc(px, py, asking ? 7 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = asking ? `rgba(140,220,255,${0.95})` : `rgba(140,180,220,${0.55 * glowLevel})`;
+      ctx.fill();
+      if (asking) { ctx.beginPath(); ctx.arc(px, py, 12, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(140,220,255,0.35)'; ctx.stroke(); }
+    }
+  }
+
+  // FILAMENTS — one per superpower; severed = structural gap (4th place)
+  const fil = state.filaments;
+  fil.forEach((f, i) => {
+    const ang = Math.PI * 0.5 + (i - (fil.length - 1) / 2) * 0.5; // fanned below
+    const r0 = baseR * breath;
+    const x0 = cx + r0 * Math.cos(ang), y0 = cy + r0 * Math.sin(ang);
+    const len = baseR * 0.62;
+    if (f.severed) {
+      const cut = 0.45; // gap position along the filament
+      const x1 = cx + (r0 + len * cut) * Math.cos(ang), y1 = cy + (r0 + len * cut) * Math.sin(ang);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+      ctx.strokeStyle = `rgba(150,170,205,${0.5 * glowLevel})`; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x1 + 7 * Math.cos(ang), y1 + 7 * Math.sin(ang), 4, 0, Math.PI * 2); // gap ring
+      ctx.strokeStyle = `rgba(150,170,205,${0.55 * glowLevel})`; ctx.lineWidth = 1.2; ctx.stroke();
+      const x2 = x1 + 14 * Math.cos(ang), y2 = y1 + 14 * Math.sin(ang); // unluminous free end
+      ctx.beginPath(); ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 + len * 0.28 * Math.cos(ang), y2 + len * 0.28 * Math.sin(ang));
+      ctx.strokeStyle = css('--severed'); ctx.lineWidth = 1.6; ctx.stroke();
+      f._tip = [x2 + len * 0.3 * Math.cos(ang), y2 + len * 0.3 * Math.sin(ang)];
+      f._root = [x0, y0];
+    }
+  });
+  // before-external-action pore sits at the filament root junction
+  if (state.membrane.pores.some((p) => p.trigger === 'before-external-action') && fil.length) {
+    const jx = cx, jy = cy + baseR * breath;
+    ctx.beginPath(); ctx.arc(jx, jy, 4.5, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(140,180,220,${0.6 * glowLevel})`; ctx.lineWidth = 1.3; ctx.stroke();
+    state._extPore = [jx, jy];
+  }
+
+  // CORE — radius from dial position, hue from policy, smooth = single
+  const cr = baseR * state.core.radius * breath;
+  const grad = ctx.createRadialGradient(cx - cr * 0.25, cy - cr * 0.3, cr * 0.1, cx, cy, cr);
+  grad.addColorStop(0, state.core.hue);
+  grad.addColorStop(1, 'rgba(10,14,22,0.9)');
+  ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+  ctx.fillStyle = grad; ctx.globalAlpha = 0.92 * glowLevel; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = `rgba(230,240,255,${0.25 * glowLevel})`; ctx.lineWidth = 1; ctx.stroke();
+  // memory inclusions
+  state.core.inclusions.forEach((k, i) => {
+    const a = i * 2.4, rr = cr * 0.5;
+    ctx.beginPath(); ctx.arc(cx + rr * Math.cos(a), cy + rr * Math.sin(a), 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(235,245,255,${0.8 * glowLevel})`; ctx.fill();
+  });
+
+  // PULSES — discrete events only (fed by the diff below)
+  for (const p of live) {
+    const age = (tNow - p.born) / 900;
+    if (age >= 1) continue;
+    const pr = cr + (fr - cr) * age;
+    const px = cx + pr * Math.cos(p.ang), py = cy + pr * Math.sin(p.ang);
+    const amp = 3 + Math.min(9, (p.estUsd || 0) * 1800); // floor-clamped scale (design constant); true $ in readout
+    if (p.anomaly) { // chromatic fringe — never smoothed away
+      ctx.beginPath(); ctx.arc(px - 1.5, py, amp, 0, Math.PI * 2); ctx.strokeStyle = css('--anomaly-a'); ctx.globalAlpha = 0.8 * (1 - age); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px + 1.5, py, amp, 0, Math.PI * 2); ctx.strokeStyle = css('--anomaly-b'); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.beginPath(); ctx.arc(px, py, amp, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(220,235,255,${0.85 * (1 - age)})`; ctx.lineWidth = 1.4; ctx.stroke();
+    if (!p.hollow) { ctx.beginPath(); ctx.arc(px, py, Math.max(1.5, amp * 0.4), 0, Math.PI * 2);
+      ctx.fillStyle = css('--tint-metered'); ctx.globalAlpha = 0.9 * (1 - age); ctx.fill(); ctx.globalAlpha = 1; }
+  }
+  // anomaly beads persist on the membrane
+  for (const b of anomalyBeads) {
+    const [bx, by] = arcPoint(cx, cy, baseR * breath, b.frac);
+    ctx.beginPath(); ctx.arc(bx, by, 3.4, 0, Math.PI * 2);
+    ctx.fillStyle = css('--anomaly-a'); ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
+  }
+
+  // terminal scars
+  if (g.mode === 'failed' || g.mode === 'killed-operator') {
+    ctx.beginPath(); ctx.moveTo(cx - cr * 0.7, cy - cr * 0.7); ctx.lineTo(cx + cr * 0.7, cy + cr * 0.7);
+    ctx.strokeStyle = 'rgba(255,120,130,0.7)'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.restore();
+
+  if (sim) { // SIMULATED badge (house style) — mid zoom text lives in DOM
+    ctx.fillStyle = '#d9c26a'; ctx.font = '10px ui-monospace';
+    ctx.fillText('SIMULATED', cx - 28, cy - baseR - 26);
+  }
+  return { cx, cy, baseR, cr, fr };
+}
+
+// ─────────────────────────────── labels (DOM, anchored, zoom crossfade) ─
+const labelsEl = document.getElementById('labels');
+function labelOpacity() { return Math.max(0, Math.min(1, (zoom - 0.35) / 0.2)); }
+function renderLabels(state, geom) {
+  const o = labelOpacity();
+  labelsEl.style.opacity = o;
+  if (o === 0) { labelsEl.innerHTML = ''; return; }
+  const { cx, cy, baseR, cr, fr } = geom;
+  const L = [];
+  L.push([cx, cy - cr - 16, `core — quality ${state.core.qualityFloor}`, `policy ${Object.keys(HUES).find(k => HUES[k] === state.core.hue)} · strategy ${state.core.strategy8} · tap to move the dial`]);
+  L.push([cx, cy + baseR + 4, `membrane — ${state.membrane.laminations} rule${state.membrane.laminations === 1 ? '' : 's'}`, 'tap to edit rules']);
+  const [fx, fy] = arcPoint(cx, cy, fr + 18, Math.min(0.96, Math.max(0.04, state.membrane.estFraction)));
+  L.push([fx, fy, `fuel — est $${state.membrane.estSpentUsd.toFixed(4)} of $${state.membrane.fuelCapUsd}`, `metered $${state.membrane.meteredUsd.toFixed(4)} (separate, never blended)`]);
+  state.filaments.forEach((f, i) => {
+    if (f._tip) L.push([f._tip[0], f._tip[1] + 14, `${f.id}`, 'declared — connects in a later step']);
+  });
+  const bud = state.membrane.pores.find((p) => p.trigger === 'on-budget-fraction');
+  if (bud) { const [px, py] = arcPoint(cx, cy, fr, bud.fraction); L.push([px, py - 18, `check-in @ ${bud.fraction * 100}% fuel`, state.glow.mode === 'awaiting-human' ? 'asking now — tap to answer' : '']); }
+  if (state._extPore) L.push([state._extPore[0], state._extPore[1] + 16, 'external-action gate', 'pauses before any external act']);
+  labelsEl.innerHTML = L.map(([x, y, t, s]) =>
+    `<div class="lbl" style="left:${x}px;top:${y}px">${t}${s ? `<small>${s}</small>` : ''}</div>`).join('');
+}
+
+// ─────────────────────────────────────────── audit readout (mid zoom) ─
+const auditEl = document.getElementById('audit');
+function renderAudit(state) {
+  document.getElementById('readout').style.opacity = labelOpacity();
+  const rows = [
+    ['core.radius', `${state.core.radius.toFixed(2)} — dial quality position`, 'GET harness · dial.brain.views (normalized)'],
+    ['core.hue', 'policy type', 'spec.brain.policy.type'],
+    ['core.facets', state.core.facets === 0 ? 'smooth (single strategy)' : `${state.core.facets} (stages)`, 'dial view strategyType'],
+    ['core.inclusions', `${state.core.inclusions.length} memory entries`, 'GET /api/lab/memory/:hash'],
+    ['core.toolsNucleus', state.core.toolsNucleus ? 'present' : 'absent (no toolPolicy)', 'spec.brain.toolPolicy'],
+    ['membrane.laminations', `${state.membrane.laminations}`, 'spec.rules.length'],
+    ['membrane.fuelArc.est', `$${state.membrane.estSpentUsd.toFixed(4)} / $${state.membrane.fuelCapUsd} (labeled est)`, 'run steps Σ estCostUsd'],
+    ['membrane.meteredNotches', `${state.membrane.meteredNotches.length} · $${state.membrane.meteredUsd.toFixed(4)} metered`, 'run cost.meteredUsd + per-step join'],
+    ['membrane.hardStop', String(state.membrane.hardStop), 'spec.fuel.hardStop'],
+    ['membrane.pores', state.membrane.pores.map((p) => p.trigger + (p.fraction ? `@${p.fraction}` : '')).join(', ') || 'none', 'spec.checkIns'],
+    ['filaments[].severed', state.filaments.map((f) => `${f.id}:${f.severed ? 'NOT-CONNECTED' : 'connected'}`).join(' '), 'harness superpowers[].status (the 4th place)'],
+    ['glow.mode', state.glow.mode + (state.glow.reason ? ` — ${state.glow.reason}` : ''), 'run state / stateReason (poll)'],
+    ['glow.breathPeriodMs', state.glow.breathPeriodMs ? `${Math.round(state.glow.breathPeriodMs)}ms measured cadence` : '— (no steps yet: still)', 'mean Δ step.at'],
+    ['pulses', `${emitted} emitted = model steps arrived (1:1, never fabricated)`, 'run steps diff'],
+    ['simulated', String(simPreview ? 'PREVIEW' : state.glow.simulated), 'steps[].provenance'],
+    ['identity', `${state.name} · ${state.hash}…`, 'harnessHash (content-addressed)'],
+  ];
+  auditEl.innerHTML = rows.map(([v, val, src]) =>
+    `<tr><td>${v}</td><td>${val}<span class="src">${src}</span></td></tr>`).join('');
+}
+
+// ─────────────────────────────────────────────── scenarios + main loop ─
+const scNote = document.getElementById('sc-note');
+const NOTES = {
+  run: `the captured trial: ${RUN_LAST.steps.length} steps · check-in held · ${RUN_LAST.state}`,
+  dial: `captured dial move: quality ${before.core.qualityFloor} → ${after.core.qualityFloor}, strategy ${before.core.strategy8} → ${after.core.strategy8}, new hash ${D.dialMove ? D.dialMove.harnessHash.slice(0, 12) : '—'}…`,
+  anom: `verbatim from the Step 8 ledger: expected ${FELT.expectedStrategy8}, served ${FELT.servedStrategy8} — $${FELT.costUsd} · ${FELT.latencyMs}ms · ${FELT.provenance}`,
+};
+function setScenario(s) {
+  scenario = s; playT = 0; emitted = 0; live.length = 0; anomalyBeads = []; dialMix = 0;
+  for (const id of ['run', 'dial', 'anom']) document.getElementById('sc-' + id).classList.toggle('active', id === s);
+  scNote.textContent = NOTES[s];
+}
+document.getElementById('sc-run').onclick = () => setScenario('run');
+document.getElementById('sc-dial').onclick = () => setScenario('dial');
+document.getElementById('sc-anom').onclick = () => setScenario('anom');
+document.getElementById('rate-slow').onclick = (e) => { rate = 1 / 40; toggleRate(e.target); };
+document.getElementById('rate-real').onclick = (e) => { rate = 1; toggleRate(e.target); };
+function toggleRate(btn) { for (const b of ['rate-slow', 'rate-real']) document.getElementById(b).classList.toggle('active', document.getElementById(b) === btn); }
+document.getElementById('sim-toggle').onclick = (e) => { simPreview = !simPreview; e.target.textContent = 'SIMULATED treatment: ' + (simPreview ? 'PREVIEW ON' : 'off'); };
+document.getElementById('zoom').oninput = (e) => { zoom = Number(e.target.value); };
+addEventListener('wheel', (e) => { zoom = Math.max(0, Math.min(1, zoom + (e.deltaY > 0 ? -0.05 : 0.05))); document.getElementById('zoom').value = zoom; }, { passive: true });
+setScenario('run');
+
+const fpsEl = document.getElementById('fps'), timeEl = document.getElementById('timebar');
+let frames = 0, fpsT = performance.now(), fps = 60;
+
+function frame(now) {
+  const dt = now - lastFrame; lastFrame = now;
+  frames++; if (now - fpsT > 1000) { fps = frames; frames = 0; fpsT = now; fpsEl.textContent = `${fps} fps${REDUCED ? ' · reduced-motion: static form' : ''}`; }
+
+  let state, run = null;
+  if (scenario === 'run') {
+    if (rate > 0) playT = Math.min(TOTAL_MS, playT + dt * rate);
+    else playT = TOTAL_MS; // reduced motion: final measured state, still
+    run = runStateAt(playT);
+    state = deriveFormState(D.harnessBefore, D.memory, run);
+    // DISCRETE-EVENT DIFF: emit exactly the model steps whose measured time
+    // has arrived — never more (the interpolation honesty rule, §7).
+    while (emitted < state.pulses.length) {
+      const p = state.pulses[emitted];
+      if (p.atMs - STEP_T0 > playT) break;
+      live.push({ born: now, ang: -Math.PI / 2 + (emitted % 7 - 3) * 0.28, estUsd: p.estUsd, hollow: p.hollow, anomaly: p.anomaly });
+      emitted++;
+    }
+    timeEl.innerHTML = `trial timeline <b>${(playT / 1000).toFixed(2)}s</b> of ${(TOTAL_MS / 1000).toFixed(2)}s measured · state <b>${run.state}</b>` +
+      (run.pendingQuestion ? ` · asking: “${run.pendingQuestion}”` : '');
+  } else if (scenario === 'dial') {
+    dialMix = Math.min(1, dialMix + dt / 900); // continuous-ease ≤400ms per property; 900ms total sweep for legibility
+    const e = dialMix < 0.5 ? 2 * dialMix * dialMix : 1 - Math.pow(-2 * dialMix + 2, 2) / 2;
+    state = JSON.parse(JSON.stringify(before));
+    state.core.radius = before.core.radius + (after.core.radius - before.core.radius) * e;
+    state.core.qualityFloor = (before.core.qualityFloor + (after.core.qualityFloor - before.core.qualityFloor) * e).toFixed(3);
+    state.core.strategy8 = e < 0.5 ? before.core.strategy8 : after.core.strategy8; // discrete: flips, never morphs
+    state.core.p95Ms = e < 0.5 ? before.core.p95Ms : after.core.p95Ms;
+    timeEl.innerHTML = `dial move (captured pair) · easing <b>${Math.round(e * 100)}%</b> · both endpoints are real DTOs — the ease is presentation, the endpoints are data`;
+    if (dialMix >= 1) { /* rests at AFTER */ }
+  } else { // anomaly
+    playT = Math.min(2000, playT + dt);
+    state = deriveFormState(D.harnessBefore, D.memory, null);
+    state.glow.mode = 'running'; state.glow.breathPeriodMs = FELT.latencyMs / 6;
+    if (emitted === 0 && playT > 300) {
+      live.push({ born: now, ang: -Math.PI / 2, estUsd: FELT.costUsd, hollow: false, anomaly: true });
+      anomalyBeads.push({ frac: 0.12 }); emitted = 1;
+    }
+    timeEl.innerHTML = `anomaly — a LIVE divergent felt sample, verbatim from the ledger (strategy-mismatch: the detector catching a custody bug). Beads persist; anomalies are never smoothed away.`;
+  }
+
+  const geom = draw(state, now);
+  renderLabels(state, geom);
+  renderAudit(state);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

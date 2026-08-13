@@ -1,0 +1,1113 @@
+{
+ "provenance": {
+  "captured": "2026-08-13T23:42:34.083Z",
+  "how": "verbatim /api/lab/* responses from a mock-provider deployment (fresh db; live-evidenced 2-point summarization frontier arrangement) — the same surface the Step 8 walkthrough proves. NOTHING in this file is hand-authored; the motion study animates ONLY this data plus one verbatim live felt sample recorded in the Step 8 ledger.",
+  "runId": "run-e310cbbe",
+  "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3"
+ },
+ "harnessBefore": {
+  "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+  "name": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+  "clusterId": "summarization",
+  "createdAt": "2026-08-13T23:42:33.215Z",
+  "spec": {
+   "specVersion": 1,
+   "name": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+   "hash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+   "brain": {
+    "policy": {
+     "type": "compound",
+     "qualityFloor": 0.85,
+     "p95Ms": 1050
+    }
+   },
+   "mission": {
+    "kind": "standing",
+    "goal": "Watch my weekly meeting notes and summarize the highlights into a short digest"
+   },
+   "superpowers": [
+    {
+     "id": "calendar",
+     "scopes": []
+    },
+    {
+     "id": "email",
+     "scopes": []
+    }
+   ],
+   "memory": {
+    "enabled": true
+   },
+   "rules": [],
+   "fuel": {
+    "maxUsdPerRun": 0.05,
+    "hardStop": true
+   },
+   "checkIns": [
+    {
+     "trigger": "on-budget-fraction",
+     "fraction": 0.5
+    },
+    {
+     "trigger": "before-external-action"
+    }
+   ]
+  },
+  "sidecar": {
+   "choices": [
+    {
+     "slot": "brain.policy",
+     "basis": {
+      "clusterId": "summarization",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "providerMode": "live",
+      "strategyHash": "d12334d09da28eb84891a15d98d472aed6c580d2f638326b73af0f381ca460e5",
+      "frontierVersion": 2
+     },
+     "decision": {
+      "type": "compound",
+      "p95Ms": 1050,
+      "qualityFloor": 0.85
+     },
+     "partition": "single-only",
+     "alternatives": 2
+    }
+   ],
+   "specHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+   "choicesHash": "6ac6bbf1422130d20d31a73d9c3748f218ec851abe6601853315213a9a1aaf6b"
+  },
+  "superpowers": [
+   {
+    "id": "calendar",
+    "scopes": [],
+    "status": "not-connected"
+   },
+   {
+    "id": "email",
+    "scopes": [],
+    "status": "not-connected"
+   }
+  ],
+  "dial": {
+   "brain": {
+    "ok": true,
+    "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+    "views": [
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 0
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.85,
+       "p95Ms": 1800
+      },
+      "strategyHash": "d12334d09da28eb84891a15d98d472aed6c580d2f638326b73af0f381ca460e5",
+      "strategyType": "single",
+      "quality": 0.85,
+      "costPer1K": 0.012,
+      "latencyP95": 700,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     },
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 1
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.93,
+       "p95Ms": 1800
+      },
+      "strategyHash": "eee2b8f9b18066e8c6ede9d0f89ddc0ba586ce07c63164b65d125d6403f1ed52",
+      "strategyType": "single",
+      "quality": 0.93,
+      "costPer1K": 0.05,
+      "latencyP95": 1200,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     }
+    ]
+   },
+   "tools": {
+    "ok": true,
+    "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+    "views": [
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 0
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.85,
+       "p95Ms": 1800
+      },
+      "strategyHash": "d12334d09da28eb84891a15d98d472aed6c580d2f638326b73af0f381ca460e5",
+      "strategyType": "single",
+      "quality": 0.85,
+      "costPer1K": 0.012,
+      "latencyP95": 700,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     },
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 1
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.93,
+       "p95Ms": 1800
+      },
+      "strategyHash": "eee2b8f9b18066e8c6ede9d0f89ddc0ba586ce07c63164b65d125d6403f1ed52",
+      "strategyType": "single",
+      "quality": 0.93,
+      "costPer1K": 0.05,
+      "latencyP95": 1200,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     }
+    ]
+   }
+  }
+ },
+ "dialMove": {
+  "ok": true,
+  "harnessHash": "8305a2298c750a22cae9b29a44920f37693c1df68445f7967be8f4b6c2cde9c6",
+  "previousHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+  "slot": "brain",
+  "view": {
+   "feasible": true,
+   "position": {
+    "qualityIndex": 1
+   },
+   "policy": {
+    "type": "compound",
+    "qualityFloor": 0.93,
+    "p95Ms": 1800
+   },
+   "strategyHash": "eee2b8f9b18066e8c6ede9d0f89ddc0ba586ce07c63164b65d125d6403f1ed52",
+   "strategyType": "single",
+   "quality": 0.93,
+   "costPer1K": 0.05,
+   "latencyP95": 1200,
+   "providerMode": "live",
+   "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+   "frontierVersion": 2,
+   "latencyBasis": "harness"
+  },
+  "policyRef": "lab-f16224-8305a2298c75-brain"
+ },
+ "harnessAfter": {
+  "harnessHash": "8305a2298c750a22cae9b29a44920f37693c1df68445f7967be8f4b6c2cde9c6",
+  "name": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+  "clusterId": "summarization",
+  "createdAt": "2026-08-13T23:42:34.068Z",
+  "spec": {
+   "specVersion": 1,
+   "name": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+   "hash": "8305a2298c750a22cae9b29a44920f37693c1df68445f7967be8f4b6c2cde9c6",
+   "brain": {
+    "policy": {
+     "type": "compound",
+     "qualityFloor": 0.93,
+     "p95Ms": 1800
+    }
+   },
+   "mission": {
+    "kind": "standing",
+    "goal": "Watch my weekly meeting notes and summarize the highlights into a short digest"
+   },
+   "superpowers": [
+    {
+     "id": "calendar",
+     "scopes": []
+    },
+    {
+     "id": "email",
+     "scopes": []
+    }
+   ],
+   "memory": {
+    "enabled": true
+   },
+   "rules": [],
+   "fuel": {
+    "maxUsdPerRun": 0.05,
+    "hardStop": true
+   },
+   "checkIns": [
+    {
+     "trigger": "on-budget-fraction",
+     "fraction": 0.5
+    },
+    {
+     "trigger": "before-external-action"
+    }
+   ]
+  },
+  "sidecar": {
+   "choices": [
+    {
+     "slot": "brain.policy",
+     "basis": {
+      "clusterId": "summarization",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "providerMode": "live",
+      "strategyHash": "eee2b8f9b18066e8c6ede9d0f89ddc0ba586ce07c63164b65d125d6403f1ed52",
+      "frontierVersion": 2
+     },
+     "decision": {
+      "type": "compound",
+      "p95Ms": 1800,
+      "qualityFloor": 0.93
+     },
+     "partition": "single-only",
+     "alternatives": 2
+    }
+   ],
+   "specHash": "8305a2298c750a22cae9b29a44920f37693c1df68445f7967be8f4b6c2cde9c6",
+   "choicesHash": "208cfda5d32126e8da689a6cc3676248e3b6372f6f2610dbac5f461b18740ce3"
+  },
+  "superpowers": [
+   {
+    "id": "calendar",
+    "scopes": [],
+    "status": "not-connected"
+   },
+   {
+    "id": "email",
+    "scopes": [],
+    "status": "not-connected"
+   }
+  ],
+  "dial": {
+   "brain": {
+    "ok": true,
+    "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+    "views": [
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 0
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.85,
+       "p95Ms": 1800
+      },
+      "strategyHash": "d12334d09da28eb84891a15d98d472aed6c580d2f638326b73af0f381ca460e5",
+      "strategyType": "single",
+      "quality": 0.85,
+      "costPer1K": 0.012,
+      "latencyP95": 700,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     },
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 1
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.93,
+       "p95Ms": 1800
+      },
+      "strategyHash": "eee2b8f9b18066e8c6ede9d0f89ddc0ba586ce07c63164b65d125d6403f1ed52",
+      "strategyType": "single",
+      "quality": 0.93,
+      "costPer1K": 0.05,
+      "latencyP95": 1200,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     }
+    ]
+   },
+   "tools": {
+    "ok": true,
+    "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+    "views": [
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 0
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.85,
+       "p95Ms": 1800
+      },
+      "strategyHash": "d12334d09da28eb84891a15d98d472aed6c580d2f638326b73af0f381ca460e5",
+      "strategyType": "single",
+      "quality": 0.85,
+      "costPer1K": 0.012,
+      "latencyP95": 700,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     },
+     {
+      "feasible": true,
+      "position": {
+       "qualityIndex": 1
+      },
+      "policy": {
+       "type": "compound",
+       "qualityFloor": 0.93,
+       "p95Ms": 1800
+      },
+      "strategyHash": "eee2b8f9b18066e8c6ede9d0f89ddc0ba586ce07c63164b65d125d6403f1ed52",
+      "strategyType": "single",
+      "quality": 0.93,
+      "costPer1K": 0.05,
+      "latencyP95": 1200,
+      "providerMode": "live",
+      "frontierId": "fr-7a0f19a4-b2ae-4a52-a2ae-082f5bb3f050",
+      "frontierVersion": 2,
+      "latencyBasis": "harness"
+     }
+    ]
+   }
+  }
+ },
+ "runSnapshots": [
+  {
+   "tMs": 19,
+   "run": {
+    "runId": "run-e310cbbe",
+    "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+    "harnessName": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+    "state": "running",
+    "stateReason": null,
+    "pendingQuestion": null,
+    "createdAt": "2026-08-13T23:42:33.246Z",
+    "updatedAt": "2026-08-13T23:42:33.256Z",
+    "superpowers": [
+     {
+      "id": "calendar",
+      "scopes": [],
+      "status": "not-connected"
+     },
+     {
+      "id": "email",
+      "scopes": [],
+      "status": "not-connected"
+     }
+    ],
+    "steps": [],
+    "cost": {
+     "meteredUsd": 0,
+     "estPendingUsd": 0
+    }
+   }
+  },
+  {
+   "tMs": 114,
+   "run": {
+    "runId": "run-e310cbbe",
+    "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+    "harnessName": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+    "state": "running",
+    "stateReason": null,
+    "pendingQuestion": null,
+    "createdAt": "2026-08-13T23:42:33.246Z",
+    "updatedAt": "2026-08-13T23:42:33.351Z",
+    "superpowers": [
+     {
+      "id": "calendar",
+      "scopes": [],
+      "status": "not-connected"
+     },
+     {
+      "id": "email",
+      "scopes": [],
+      "status": "not-connected"
+     }
+    ],
+    "steps": [
+     {
+      "seq": 1,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.303Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] analysis consider assume clear result response concise reason analysis list because output direct because valid check table.",
+      "estCostUsd": 0.00107,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 2,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.324Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] simple note query analysis context concise note analysis summary summary reason answer output detail.",
+      "estCostUsd": 0.0013900000000000002,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 3,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.351Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] however consider approach simple assume example data summary answer assume check field response edge record list list consider answer approach example compute valid note correct case consider then.",
+      "estCostUsd": 0.00196,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     }
+    ],
+    "cost": {
+     "meteredUsd": 0,
+     "estPendingUsd": 0
+    }
+   }
+  },
+  {
+   "tMs": 207,
+   "run": {
+    "runId": "run-e310cbbe",
+    "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+    "harnessName": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+    "state": "running",
+    "stateReason": null,
+    "pendingQuestion": null,
+    "createdAt": "2026-08-13T23:42:33.246Z",
+    "updatedAt": "2026-08-13T23:42:33.441Z",
+    "superpowers": [
+     {
+      "id": "calendar",
+      "scopes": [],
+      "status": "not-connected"
+     },
+     {
+      "id": "email",
+      "scopes": [],
+      "status": "not-connected"
+     }
+    ],
+    "steps": [
+     {
+      "seq": 1,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.303Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] analysis consider assume clear result response concise reason analysis list because output direct because valid check table.",
+      "estCostUsd": 0.00107,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 2,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.324Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] simple note query analysis context concise note analysis summary summary reason answer output detail.",
+      "estCostUsd": 0.0013900000000000002,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 3,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.351Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] however consider approach simple assume example data summary answer assume check field response edge record list list consider answer approach example compute valid note correct case consider then.",
+      "estCostUsd": 0.00196,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 4,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.389Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] because approach step therefore given step context query then summary clear therefore answer.",
+      "estCostUsd": 0.0022600000000000003,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 5,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.404Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] reason edge the answer consider direct concise context assume approach note given compute context output compute response table edge clear value analysis example data data because context concise clear.",
+      "estCostUsd": 0.0028399999999999996,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 6,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.418Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] given reason data approach input data query robust detail check the the method data valid case output reason complete detail result therefore.",
+      "estCostUsd": 0.0032700000000000003,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 7,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.441Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] response then result then table list field input robust therefore method first simple response detail step direct field summary detail detail robust valid finally answer context however response.",
+      "estCostUsd": 0.00383,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     }
+    ],
+    "cost": {
+     "meteredUsd": 0,
+     "estPendingUsd": 0
+    }
+   }
+  },
+  {
+   "tMs": 306,
+   "run": {
+    "runId": "run-e310cbbe",
+    "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+    "harnessName": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+    "state": "awaiting-human",
+    "stateReason": null,
+    "pendingQuestion": "Fuel check-in: ~$0.0255 of $0.05 used (51%). Continue?",
+    "createdAt": "2026-08-13T23:42:33.246Z",
+    "updatedAt": "2026-08-13T23:42:33.479Z",
+    "superpowers": [
+     {
+      "id": "calendar",
+      "scopes": [],
+      "status": "not-connected"
+     },
+     {
+      "id": "email",
+      "scopes": [],
+      "status": "not-connected"
+     }
+    ],
+    "steps": [
+     {
+      "seq": 1,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.303Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] analysis consider assume clear result response concise reason analysis list because output direct because valid check table.",
+      "estCostUsd": 0.00107,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 2,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.324Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] simple note query analysis context concise note analysis summary summary reason answer output detail.",
+      "estCostUsd": 0.0013900000000000002,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 3,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.351Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] however consider approach simple assume example data summary answer assume check field response edge record list list consider answer approach example compute valid note correct case consider then.",
+      "estCostUsd": 0.00196,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 4,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.389Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] because approach step therefore given step context query then summary clear therefore answer.",
+      "estCostUsd": 0.0022600000000000003,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 5,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.404Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] reason edge the answer consider direct concise context assume approach note given compute context output compute response table edge clear value analysis example data data because context concise clear.",
+      "estCostUsd": 0.0028399999999999996,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 6,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.418Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] given reason data approach input data query robust detail check the the method data valid case output reason complete detail result therefore.",
+      "estCostUsd": 0.0032700000000000003,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 7,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.441Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] response then result then table list field input robust therefore method first simple response detail step direct field summary detail detail robust valid finally answer context however response.",
+      "estCostUsd": 0.00383,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 8,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.457Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] context first data detail the then assume response compute value consider item list finally reason check.",
+      "estCostUsd": 0.00416,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 9,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.474Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] query table edge however note correct detail the complete field data answer detail result detail field example response table reason valid complete finally edge summary first summary return concise.",
+      "estCostUsd": 0.00473,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 10,
+      "kind": "check-in",
+      "at": "2026-08-13T23:42:33.475Z",
+      "slot": null,
+      "excerpt": "Fuel check-in: ~$0.0255 of $0.05 used (51%). Continue?"
+     }
+    ],
+    "cost": {
+     "meteredUsd": 0,
+     "estPendingUsd": 0
+    }
+   }
+  },
+  {
+   "tMs": 812,
+   "run": {
+    "runId": "run-e310cbbe",
+    "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+    "harnessName": "watch-my-weekly-meeting-notes-and-summarize-the-highlights-i",
+    "state": "killed-budget",
+    "stateReason": "fuel exhausted: est $0.0563 >= maxUsdPerRun $0.05",
+    "pendingQuestion": null,
+    "createdAt": "2026-08-13T23:42:33.246Z",
+    "updatedAt": "2026-08-13T23:42:34.038Z",
+    "superpowers": [
+     {
+      "id": "calendar",
+      "scopes": [],
+      "status": "not-connected"
+     },
+     {
+      "id": "email",
+      "scopes": [],
+      "status": "not-connected"
+     }
+    ],
+    "steps": [
+     {
+      "seq": 1,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.303Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] analysis consider assume clear result response concise reason analysis list because output direct because valid check table.",
+      "estCostUsd": 0.00107,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 2,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.324Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] simple note query analysis context concise note analysis summary summary reason answer output detail.",
+      "estCostUsd": 0.0013900000000000002,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 3,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.351Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] however consider approach simple assume example data summary answer assume check field response edge record list list consider answer approach example compute valid note correct case consider then.",
+      "estCostUsd": 0.00196,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 4,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.389Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] because approach step therefore given step context query then summary clear therefore answer.",
+      "estCostUsd": 0.0022600000000000003,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 5,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.404Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] reason edge the answer consider direct concise context assume approach note given compute context output compute response table edge clear value analysis example data data because context concise clear.",
+      "estCostUsd": 0.0028399999999999996,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 6,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.418Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] given reason data approach input data query robust detail check the the method data valid case output reason complete detail result therefore.",
+      "estCostUsd": 0.0032700000000000003,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 7,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.441Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] response then result then table list field input robust therefore method first simple response detail step direct field summary detail detail robust valid finally answer context however response.",
+      "estCostUsd": 0.00383,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 8,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.457Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] context first data detail the then assume response compute value consider item list finally reason check.",
+      "estCostUsd": 0.00416,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 9,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.474Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] query table edge however note correct detail the complete field data answer detail result detail field example response table reason valid complete finally edge summary first summary return concise.",
+      "estCostUsd": 0.00473,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 10,
+      "kind": "check-in",
+      "at": "2026-08-13T23:42:33.475Z",
+      "slot": null,
+      "excerpt": "Fuel check-in: ~$0.0255 of $0.05 used (51%). Continue?"
+     },
+     {
+      "seq": 11,
+      "kind": "model",
+      "at": "2026-08-13T23:42:33.994Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] list first data finally a table value analysis consider data analysis answer compute detail however.",
+      "estCostUsd": 0.005220000000000001,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 12,
+      "kind": "model",
+      "at": "2026-08-13T23:42:34.007Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] record item table valid method method valid context therefore complete robust concise table summary input consider first correct therefore summary correct answer example.",
+      "estCostUsd": 0.00571,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 13,
+      "kind": "model",
+      "at": "2026-08-13T23:42:34.016Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] example then then note answer record value the reason check output result field because edge because simple record assume robust.",
+      "estCostUsd": 0.00611,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 14,
+      "kind": "model",
+      "at": "2026-08-13T23:42:34.025Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] check however method input a record answer field approach robust table therefore however answer because reason consider value given because note check.",
+      "estCostUsd": 0.006560000000000001,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     },
+     {
+      "seq": 15,
+      "kind": "model",
+      "at": "2026-08-13T23:42:34.035Z",
+      "slot": "brain",
+      "excerpt": "[mock:mock-cheap] case answer consider valid field method concise record input edge case example record field a method query value therefore compute first first return given a finally value summary finally compute edge simple simple first.",
+      "estCostUsd": 0.00718,
+      "meteredCostUsd": 0,
+      "costLabel": "metered",
+      "provenance": "live",
+      "simulated": false
+     }
+    ],
+    "cost": {
+     "meteredUsd": 0,
+     "estPendingUsd": 0
+    }
+   }
+  }
+ ],
+ "report": {
+  "runId": "run-e310cbbe",
+  "outcome": "killed-budget",
+  "outcomeDetail": "fuel exhausted: est $0.0563 >= maxUsdPerRun $0.05",
+  "missionGoal": "Watch my weekly meeting notes and summarize the highlights into a short digest",
+  "summary": "[mock:mock-cheap] case answer consider valid field method concise record input edge case example record field a method query value therefore compute first first return given a finally value summary finally compute edge simple simple first.",
+  "steps": [
+   {
+    "seq": 1,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] analysis consider assume clear result response concise reason analysis list because output direct because valid check table.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00107
+   },
+   {
+    "seq": 2,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] simple note query analysis context concise note analysis summary summary reason answer output detail.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.0013900000000000002
+   },
+   {
+    "seq": 3,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] however consider approach simple assume example data summary answer assume check field response edge record list list consider answer approach",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00196
+   },
+   {
+    "seq": 4,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] because approach step therefore given step context query then summary clear therefore answer.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.0022600000000000003
+   },
+   {
+    "seq": 5,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] reason edge the answer consider direct concise context assume approach note given compute context output compute response table edge clear val",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.0028399999999999996
+   },
+   {
+    "seq": 6,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] given reason data approach input data query robust detail check the the method data valid case output reason complete detail result therefore.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.0032700000000000003
+   },
+   {
+    "seq": 7,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] response then result then table list field input robust therefore method first simple response detail step direct field summary detail detail ",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00383
+   },
+   {
+    "seq": 8,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] context first data detail the then assume response compute value consider item list finally reason check.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00416
+   },
+   {
+    "seq": 9,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] query table edge however note correct detail the complete field data answer detail result detail field example response table reason valid com",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00473
+   },
+   {
+    "seq": 10,
+    "kind": "check-in",
+    "excerpt": "Fuel check-in: ~$0.0255 of $0.05 used (51%). Continue?",
+    "meteredUsd": null,
+    "estimatedUsd": null
+   },
+   {
+    "seq": 11,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] list first data finally a table value analysis consider data analysis answer compute detail however.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.005220000000000001
+   },
+   {
+    "seq": 12,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] record item table valid method method valid context therefore complete robust concise table summary input consider first correct therefore sum",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00571
+   },
+   {
+    "seq": 13,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] example then then note answer record value the reason check output result field because edge because simple record assume robust.",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00611
+   },
+   {
+    "seq": 14,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] check however method input a record answer field approach robust table therefore however answer because reason consider value given because no",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.006560000000000001
+   },
+   {
+    "seq": 15,
+    "kind": "model",
+    "slot": "brain",
+    "excerpt": "[mock:mock-cheap] case answer consider valid field method concise record input edge case example record field a method query value therefore compute first first",
+    "meteredUsd": 0,
+    "estimatedUsd": 0.00718
+   }
+  ],
+  "meteredTotalUsd": 0,
+  "estimatedUnmeteredUsd": 0,
+  "fuelCapUsd": 0.05,
+  "struggles": [
+   {
+    "code": "not-connected-superpowers",
+    "superpowers": [
+     "calendar",
+     "email"
+    ]
+   },
+   {
+    "code": "budget-killed",
+    "detail": "fuel exhausted: est $0.0563 >= maxUsdPerRun $0.05"
+   }
+  ],
+  "suggestedUpgrade": {
+   "reason": "not-connected-superpowers",
+   "text": "Connect calendar, email — this trial ran brain-only; superpowers arrive with connections."
+  },
+  "provenances": [
+   "live"
+  ],
+  "simulated": false
+ },
+ "memory": {
+  "harnessHash": "8803e7d1a67dc1440dc90c9425e1d442ce81589c016cce99842880da62e852f3",
+  "entries": []
+ }
+}
