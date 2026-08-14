@@ -355,7 +355,10 @@ describe('Step 10 — MCP connect leg ($0): severed → healed → gated call �
 
     // A mock HOSTED MCP server — plays the remote wire the client speaks to.
     const mcp = await MockMcpServer.start({
-      tools: [{ name: 'get_me', description: 'who am I', handler: () => ({ login: 'kavon', echo: GRANT_TOKEN }) }],
+      tools: [
+        { name: 'get_me', description: 'who am I', handler: () => ({ login: 'kavon', echo: GRANT_TOKEN }) },
+        { name: 'publish_note', description: 'publish', handler: () => ({ published: true }) },
+      ],
       requireBearer: GRANT_TOKEN,
     });
     try {
@@ -363,7 +366,20 @@ describe('Step 10 — MCP connect leg ($0): severed → healed → gated call �
         connectorId: 'github', displayName: 'GitHub (mock)', transport: 'streamable-http' as const,
         baseUrl: mcp.mcpUrl,
         oauth: { authorizationUrl: `${mcp.url}/a`, tokenUrl: mcp.tokenUrl, clientIdEnv: 'X_ID', clientSecretEnv: 'X_SECRET', scopesOffered: [] },
-        toolScopeMap: { get_me: [] },
+        tools: {
+          // Step 11: authored strings + action classification. get_me is a
+          // READ (no pore); publish_note is an ACT (the pore fires).
+          get_me: {
+            scopes: [], action: 'read' as const,
+            description: 'Identity of the granted account.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+          },
+          publish_note: {
+            scopes: [], action: 'act' as const,
+            description: 'Publish a note. Others will see it.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        },
       };
       const s = taskSpec({
         name: 'mcp connect harness',
@@ -387,18 +403,43 @@ describe('Step 10 — MCP connect leg ($0): severed → healed → gated call �
       const leg1 = await buildMcpLabTools({
         db: h.db, orgId: ORG, runId: 'run-mcp-wt', masterKey: master, spec: s, connectors: [connector],
       });
-      expect(leg1.tools.map((t) => t.name)).toEqual(['github.get_me']);
+      expect(leg1.tools.map((t) => t.name).sort()).toEqual(['github.get_me', 'github.publish_note']);
+      // Step 11: the classification drives the pore, per tool.
+      expect(leg1.tools.find((t) => t.name === 'github.get_me')!.external).toBe(false);
+      expect(leg1.tools.find((t) => t.name === 'github.publish_note')!.external).toBe(true);
+      // Authored descriptions rode; the server's ('who am I') did not.
+      expect(leg1.tools.find((t) => t.name === 'github.get_me')!.description).toBe(
+        'Identity of the granted account.',
+      );
       const { createLabRun } = await import('@potion/db');
+
+      // ── Part A: a READ runs WITHOUT a permission prompt (Step 11 §2). The
+      // mock provider calls the first declared tool; with only the read tool
+      // offered, that is github.get_me — and the run completes, unblocked.
+      await createLabRun(h.db, { id: 'run-mcp-read', orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+      const readOnly = leg1.tools.filter((t) => !t.external);
+      const readRun = await resumeRun({
+        db: h.db, client, orgId: ORG, specText: JSON.stringify(s), runId: 'run-mcp-read',
+        tools: readOnly, legNotes: leg1.legNotes,
+      });
+      expect(readRun.status).toBe('completed'); // no pore for a read
+      const readSteps = await listLabSteps(h.db, 'run-mcp-read', ORG);
+      expect(readSteps.some((x) => x.kind === 'check-in')).toBe(false);
+      expect(mcp.requests.filter((r) => r.method === 'tools/call')).toHaveLength(1);
+
+      // ── Part B: an ACT SUSPENDS at the before-external-action pore.
       await createLabRun(h.db, { id: 'run-mcp-wt', orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+      const actOnly = leg1.tools.filter((t) => t.external);
+      expect(actOnly.map((t) => t.name)).toEqual(['github.publish_note']);
       const first = await resumeRun({
         db: h.db, client, orgId: ORG, specText: JSON.stringify(s), runId: 'run-mcp-wt',
-        tools: leg1.tools, legNotes: leg1.legNotes,
+        tools: actOnly, legNotes: leg1.legNotes,
       });
       await leg1.close();
-      expect(first.status).toBe('awaiting-human'); // the before-external-action pore fired
-      expect(mcp.requests.some((r) => r.method === 'tools/call')).toBe(false);
+      expect(first.status).toBe('awaiting-human'); // the pore fired on the ACT
+      expect(mcp.requests.filter((r) => r.method === 'tools/call')).toHaveLength(1); // still just the read
 
-      // Approve → the GATED call runs exactly once; the result is REDACTED
+      // Approve → the GATED act runs exactly once; the result is REDACTED
       // (the server echoed the bearer) before it reaches any checkpoint.
       await answerLabRun(h.db, 'run-mcp-wt', ORG, 'yes');
       const leg2 = await buildMcpLabTools({
@@ -406,16 +447,21 @@ describe('Step 10 — MCP connect leg ($0): severed → healed → gated call �
       });
       const second = await resumeRun({
         db: h.db, client, orgId: ORG, specText: JSON.stringify(s), runId: 'run-mcp-wt',
-        tools: leg2.tools, legNotes: leg2.legNotes,
+        tools: leg2.tools.filter((t) => t.external), legNotes: leg2.legNotes,
       });
       await leg2.close();
       expect(second.status).toBe('completed');
-      expect(mcp.requests.filter((r) => r.method === 'tools/call')).toHaveLength(1); // one answer, one action
+      expect(mcp.requests.filter((r) => r.method === 'tools/call')).toHaveLength(2); // read + one approved act
 
       const steps = await listLabSteps(h.db, 'run-mcp-wt', ORG);
+      // The bearer echo rides the READ tool's result (get_me returns it), so
+      // the redaction proof lives with that run; token absence is asserted
+      // across BOTH runs — no surface of either carries it.
+      const readDump = JSON.stringify(await listLabSteps(h.db, 'run-mcp-read', ORG));
       const dump = JSON.stringify(steps);
-      expect(dump).not.toContain(GRANT_TOKEN); // the bearer echo died before the checkpoint
-      expect(dump).toContain('[REDACTED:grant]');
+      expect(readDump).not.toContain(GRANT_TOKEN); // died before the checkpoint
+      expect(readDump).toContain('[REDACTED:grant]');
+      expect(dump).not.toContain(GRANT_TOKEN);
 
       // The MCP call itself is NOT model spend: no request_logs row carries
       // an MCP completion id (connector-side cost is the operator's own).

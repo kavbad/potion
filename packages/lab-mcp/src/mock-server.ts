@@ -28,6 +28,10 @@ export interface MockMcpServerOptions {
   requireBearer?: string;
   /** Fail `initialize` with an RPC error (unreachable-degradation tests). */
   failInitialize?: boolean;
+  /** Initialize fine, then fail `tools/list` with THIS server-controlled
+   * error message — the Step 11 review's untrusted-string path (a JSON-RPC
+   * error `message` is attacker text that used to ride into a leg note). */
+  failToolsList?: string;
   /** Frame every response as text/event-stream (SSE tolerance tests). */
   sse?: boolean;
   /** Scripted OAuth token endpoint at POST /token (refresh fixtures). */
@@ -154,6 +158,10 @@ export class MockMcpServer {
         });
         return;
       case 'tools/list':
+        if (this.opts.failToolsList !== undefined) {
+          rpcError(-32000, this.opts.failToolsList);
+          return;
+        }
         reply({
           tools: this.opts.tools.map((t) => ({
             name: t.name,

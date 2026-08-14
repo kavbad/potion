@@ -1,0 +1,292 @@
+{
+  "airtable": {
+    "version": "1.0.0",
+    "contentHash": "b694efc487c9d80aaa968b6febda71acad1dc9882b21815b979e602e6179f8b8",
+    "actions": {
+      "create_record": "act",
+      "get_record": "read",
+      "list_bases": "read",
+      "list_records": "read"
+    }
+  },
+  "asana": {
+    "version": "1.0.0",
+    "contentHash": "41d2976f75d986240cb1913b29f7914e76a9031fb423555e2219df0f441fb2b2",
+    "actions": {
+      "add_comment": "act",
+      "get_task": "read",
+      "list_projects": "read",
+      "list_tasks": "read"
+    }
+  },
+  "canva": {
+    "version": "1.0.0",
+    "contentHash": "a6524fadd762601a6c24b391436aca583e3923ac5d6cf075bbb29c43910942f2",
+    "actions": {
+      "export_design": "act",
+      "get_design": "read",
+      "list_designs": "read",
+      "list_folders": "read"
+    }
+  },
+  "clickup": {
+    "version": "1.0.0",
+    "contentHash": "e32d07acf4c20d4ef81d6e97dcccc7a6d802842e7a67999468ab93470aa8c0a6",
+    "actions": {
+      "create_task": "act",
+      "get_task": "read",
+      "list_spaces": "read",
+      "list_tasks": "read"
+    }
+  },
+  "confluence": {
+    "version": "1.0.0",
+    "contentHash": "8f4e3fe729d6ea32f7779e04423bc8fecd0d1d2b34ed72731ebf86be451e7e84",
+    "actions": {
+      "create_page": "act",
+      "get_page": "read",
+      "list_spaces": "read",
+      "search_pages": "read"
+    }
+  },
+  "discord": {
+    "version": "1.0.0",
+    "contentHash": "1bd58e48d650bf628945078054aec15878a3375f6304fb3dfb01614fcd1e20fa",
+    "actions": {
+      "list_channels": "read",
+      "read_messages": "read",
+      "send_message": "act"
+    }
+  },
+  "dropbox": {
+    "version": "1.0.0",
+    "contentHash": "98243f29cd9b98f56afaed7e58ba6a9e26ddb49eeb230ea541aca5934dd190ee",
+    "actions": {
+      "create_shared_link": "act",
+      "get_file": "read",
+      "list_folder": "read",
+      "search_files": "read"
+    }
+  },
+  "figma": {
+    "version": "1.0.0",
+    "contentHash": "801a198d371388c0d24c424b5acd8445b271be50c011f4c2e26e866d65688a45",
+    "actions": {
+      "get_file": "read",
+      "get_node": "read",
+      "list_comments": "read",
+      "post_comment": "act"
+    }
+  },
+  "github": {
+    "version": "1.0.0",
+    "contentHash": "d18dfbf581a82a4a01e03b553d824317cd7b6106b61ccc2353fd3dd04a37801a",
+    "actions": {
+      "create_issue_comment": "act",
+      "get_file_contents": "read",
+      "get_me": "read",
+      "list_issues": "read",
+      "search_code": "read",
+      "search_repositories": "read"
+    }
+  },
+  "gmail": {
+    "version": "1.0.0",
+    "contentHash": "d7e280da064c45bda100410c67d4a7e0dcc9c7e2d5c3d6557c5542e738fa1e64",
+    "actions": {
+      "get_message": "read",
+      "list_labels": "read",
+      "search_messages": "read",
+      "send_message": "act"
+    }
+  },
+  "google-calendar": {
+    "version": "1.0.0",
+    "contentHash": "bfaf6a663764ac2eca20c70c18222133b44898099a612292078a15888fba2a0b",
+    "actions": {
+      "create_event": "act",
+      "get_event": "read",
+      "list_calendars": "read",
+      "list_events": "read"
+    }
+  },
+  "google-drive": {
+    "version": "1.0.0",
+    "contentHash": "899c14b5051909be0ab7f6c137718654c21377ccb1367cfa4259fd15e9e9e03e",
+    "actions": {
+      "get_file": "read",
+      "list_folder": "read",
+      "search_files": "read",
+      "share_file": "act"
+    }
+  },
+  "hubspot": {
+    "version": "1.0.0",
+    "contentHash": "1007d79ecdc8ef6145ac4bc70d09f2e62aaaa6e1b738fb725f46c13679459ab3",
+    "actions": {
+      "create_note": "act",
+      "get_deal": "read",
+      "list_companies": "read",
+      "search_contacts": "read"
+    }
+  },
+  "intercom": {
+    "version": "1.0.0",
+    "contentHash": "2dbfc97a04c02e92730f1fa54872116219b48b428388965108ca021827246cca",
+    "actions": {
+      "get_contact": "read",
+      "get_conversation": "read",
+      "reply_to_conversation": "act",
+      "search_conversations": "read"
+    }
+  },
+  "jira": {
+    "version": "1.0.0",
+    "contentHash": "1fe178e78281934bcccaf6d8b6282f2a67f7b87b9184d78ccfe486029ee25902",
+    "actions": {
+      "get_issue": "read",
+      "list_sprints": "read",
+      "search_issues": "read",
+      "transition_issue": "act"
+    }
+  },
+  "linear": {
+    "version": "1.0.0",
+    "contentHash": "88bd95909f828c1c8652eb730cab77a321272f18d124cc749b0961cb5a0ae08e",
+    "actions": {
+      "create_comment": "act",
+      "get_issue": "read",
+      "list_issues": "read",
+      "list_projects": "read"
+    }
+  },
+  "monday": {
+    "version": "1.0.0",
+    "contentHash": "728e4e25f51b012ef5112c01baaab8e04b0c0883199c0137f38392a22363302c",
+    "actions": {
+      "create_update": "act",
+      "get_items": "read",
+      "get_updates": "read",
+      "list_boards": "read"
+    }
+  },
+  "notion": {
+    "version": "1.0.0",
+    "contentHash": "9d2e06a60a9e797ac4dbb0b41f004099b2d015c3a60a81f0feb01040e88900bc",
+    "actions": {
+      "append_block": "act",
+      "get_page": "read",
+      "query_database": "read",
+      "search": "read"
+    }
+  },
+  "pagerduty": {
+    "version": "1.0.0",
+    "contentHash": "fd27cefe13ba8baa87f31846a50a950c3040ce687769e841d01c24c7e98a9c11",
+    "actions": {
+      "acknowledge_incident": "act",
+      "get_oncall": "read",
+      "list_incidents": "read",
+      "list_services": "read"
+    }
+  },
+  "paypal": {
+    "version": "1.0.0",
+    "contentHash": "3bc75c426be365f6907e70dcc9e8acc74bdbb185356655d3d1c7a0595d676e1c",
+    "actions": {
+      "get_invoice": "read",
+      "list_transactions": "read",
+      "send_invoice": "act"
+    }
+  },
+  "salesforce": {
+    "version": "1.0.0",
+    "contentHash": "6febca07363a301e411b1940eccd8e002b62811efd96ecac057dd3e56f3cdfb2",
+    "actions": {
+      "get_record": "read",
+      "list_opportunities": "read",
+      "soql_query": "read",
+      "update_record": "act"
+    }
+  },
+  "sentry": {
+    "version": "1.0.0",
+    "contentHash": "0350edc0f4ae8cc22ac8e0f150808e13bf536596c1111993f6a3115a54af248d",
+    "actions": {
+      "get_issue": "read",
+      "list_issues": "read",
+      "list_releases": "read",
+      "resolve_issue": "act"
+    }
+  },
+  "shopify": {
+    "version": "1.0.0",
+    "contentHash": "9d37e51a3f479de72a76b4e2ef4f955423433bc120f6d90227e9718ce1c69135",
+    "actions": {
+      "get_customer": "read",
+      "list_orders": "read",
+      "list_products": "read",
+      "update_inventory": "act"
+    }
+  },
+  "slack": {
+    "version": "1.0.0",
+    "contentHash": "5b9a53540194c89df1b837fbacd7c8a324cf933e1a08d607959a6c07ab48a36c",
+    "actions": {
+      "list_channels": "read",
+      "post_message": "act",
+      "read_messages": "read",
+      "search_messages": "read"
+    }
+  },
+  "square": {
+    "version": "1.0.0",
+    "contentHash": "fea6256fac24e27f2a8fbcac8190de1f6559efe502fe991f80e315aa008a39ea",
+    "actions": {
+      "list_catalog": "read",
+      "list_orders": "read",
+      "list_payments": "read",
+      "refund_payment": "act"
+    }
+  },
+  "stripe": {
+    "version": "1.0.0",
+    "contentHash": "a20f603af901ef5d1498cd4bc0e174fc94595d77b5d6f3c3d10070f3b093bfe3",
+    "actions": {
+      "create_refund": "act",
+      "get_invoice": "read",
+      "list_customers": "read",
+      "list_payment_intents": "read"
+    }
+  },
+  "webflow": {
+    "version": "1.0.0",
+    "contentHash": "b69b6954d5bf29b0e6a1376a3a79e80d6e412aa11fe6d81ed596a92caa3c0aae",
+    "actions": {
+      "get_collection_items": "read",
+      "list_collections": "read",
+      "list_sites": "read",
+      "publish_site": "act"
+    }
+  },
+  "zendesk": {
+    "version": "1.0.0",
+    "contentHash": "1c0a2c4777c332c6a9aa1a0ed2aaaba78c6b71a82cca890ec522093bd53669a4",
+    "actions": {
+      "add_ticket_comment": "act",
+      "get_ticket": "read",
+      "get_user": "read",
+      "search_tickets": "read"
+    }
+  },
+  "zoom": {
+    "version": "1.0.0",
+    "contentHash": "5cc8a87444029450df34a753edc791e78ba15a7c692046c229dde0a5b55249da",
+    "actions": {
+      "get_transcript": "read",
+      "list_meetings": "read",
+      "list_recordings": "read",
+      "schedule_meeting": "act"
+    }
+  }
+}

@@ -313,7 +313,139 @@ renders tiers + badges (SSR data attributes, the Step 9 discipline).
   tokenizer estimate, not the exact serving tokenizer; a small margin is
   built in. Recorded, not silently exact.
 
-## 12. Definition of done (restated)
+## 12. Build-phase deviations (recorded, never silent)
+
+Six changes from the phase-one spec, each adopted deliberately during the
+build; the three operator review additions are §13.
+
+1. **`ConnectorDef.toolScopeMap` renamed to `tools`.** §1 said "enrich
+   `toolScopeMap` to `Record<string, {scopes, action, description}>`". Once
+   the entry carries action + description + parameters, the old name lied
+   about its contents. Renamed to `tools`; same shape otherwise.
+2. **`parameters` added to the connector tool entry.** §1's `SuperpowerTool`
+   listed name/action/scopes/description. Review addition 1 makes the
+   omission load-bearing: a JSON Schema's `description`/`title` fields are
+   prose the model reads exactly like a tool description, so the schema must
+   be AUTHORED too, not passed through from the server.
+3. **The discovery loop's direction flipped.** §2 described filtering the
+   server's `tools/list`. The build iterates the PACKAGE's allowlist and
+   consults the server only for existence, so even the tool NAME that reaches
+   the model is an authored key rather than a server string. Same result set;
+   stronger provenance claim.
+4. **`ConnectPosture` — a THIRD honesty axis the spec did not have.** §5
+   defined the proof tier (what the mini-eval proved). The build found that
+   insufficient: a package can be fixture-proven and still have no endpoint
+   we can name, and pointing it at a guessed URL to look complete is exactly
+   the dishonesty the tiering exists to prevent. `connect` is now a typed
+   union — `ready` / `oauth-unauthored` / `endpoint-unverified` — and
+   `toConnectorDef` returns null for the latter two, so an unverified package
+   is STRUCTURALLY unconnectable (the OAuth start route 404s). Today: 3
+   ready (github, linear, notion), 12 vendor-hosted-endpoint-but-OAuth-
+   unauthored, 14 endpoint-unverified.
+5. **All packages ship `fixture-authored`; `fixture-recorded` has zero
+   members.** §5 anticipated some recorded packages. At $0 we contacted no
+   hosted vendor server, so claiming `recorded` would be false. The recording
+   machinery + stamp + staleness signal are built and exercised end-to-end
+   against the mock server (review addition 3), ready for the first genuine
+   capture. `live-proven` remains empty and is gated on a ledger row.
+6. **29 packages, not 25.** The plan says ~25; the build authored 29
+   format-complete packages and ships all of them rather than deleting honest
+   work to hit a round number. The meta-test asserts `≥ 25` and equality with
+   `CATALOG.length`, so the catalog can grow without a test edit.
+7. **`version` is EXCLUDED from the content hash.** Discovered by a failing
+   test while building review addition 2: if the version were hashed, a
+   version bump alone would move the hash and the gate's second factor would
+   be decorative. The hash pins CONTENT (the F7 lesson: identity is content,
+   never a label); the version is the human declaration. Both must move for a
+   pore removal — a real two-factor check.
+8. **Existing harness spec hashes move** for harnesses whose accounts match a
+   catalog package, because least-privilege default scopes are now non-empty
+   (`gmail` → `["gmail.readonly"]`). Specs are content-addressed, so this is
+   a NEW catalog row, not an edit of an old one — the Step 8/9 invariant
+   holds (a prior run's frozen spec is untouched). The lab-gen golden corpus
+   was regenerated in this same commit; exactly one fixture moved
+   (`tools-external`), and the diff is the scope set.
+
+## 13. Review additions (operator, folded in as build outcomes)
+
+1. **Context provenance proven at the LOOP BOUNDARY, not only in the package
+   layer.** `packages/lab-runtime/src/context-provenance.test.ts` runs the
+   same connector against an HONEST fixture server and a HOSTILE one whose
+   every string is a payload — tool descriptions, schema `title`/
+   `description`, and per-parameter descriptions — then reads the tools back
+   out of the DURABLE CHECKPOINT (what the model actually saw) and asserts
+   the two are BYTE-IDENTICAL. Names, descriptions and parameter schemas all
+   travel the same path and all three are covered. Each catalog package
+   re-proves it in its own mini-eval.
+2. **The classification-diff gate.** `baseline/classification.json` (committed,
+   regenerated only by the deliberate `pnpm --filter @potion/lab-superpowers
+   baseline`) records every package's version, content hash, and per-tool
+   action. Removing a pore — act → read, or deleting an act tool — fails the
+   suite unless the version AND the content hash both moved in the same
+   commit. Non-vacuity is pinned: the suite includes a test that PERFORMS a
+   silent act→read edit and asserts the gate catches it, one that shows the
+   same edit passing WITH a version bump, and one proving a version bump
+   alone cannot launder a hash (deviation 7). Adding a pore is always allowed.
+3. **Recorded fixtures stamp their provenance.** `recordFixture` captures
+   `capturedAt`, `serverVersion` (as the server reported it) and
+   `capturedFrom`; `fixtureAgeDays` is the staleness signal and rides the
+   catalog DTO. `validatePackage` REQUIRES the stamp for any package claiming
+   `fixture-recorded`. Proven end-to-end against the mock server, including
+   drift detection (`reconcileWithRecording` surfaces declared tools the
+   server no longer offers).
+
+## 14. Pre-commit adversarial review — three findings, all fixed
+
+Three lenses (pore/classification, context provenance, honesty gates) over
+the staged diff, each candidate finding verified by three independent
+skeptics prompted to REFUTE. Ten candidates; three survived a ≥2/3 confirm
+vote; all three were real and all three are fixed with pinned regressions.
+Two of them falsified claims this very spec makes — recorded plainly.
+
+1. **[HIGH, 2/3] Server error text reached model context through the leg
+   note — falsifying review addition 1.** A hostile server can answer
+   `tools/list` with a JSON-RPC error whose `message` is an injection
+   payload. `McpTransportError`'s message embeds that text; the session-init
+   catch put it in a leg note, which is checkpointed AND pushed into the
+   conversation. The provenance claim covered `toolDefs` but not the failure
+   path. Worse, leg notes were the ONE model-facing value that never passed
+   the grant-value redactor (it is built after the loop that creates them),
+   so a server echoing its bearer inside an error could write the live token
+   into the run record. **Fixed**: the note carries the TYPED failure kind
+   only (`session init failed (rpc)`), never the server's string — the same
+   refusal already applied to the token endpoint's `error` field — and all
+   leg notes now pass the redactor. Pinned in `context-provenance.test.ts`
+   with a mock-server `failToolsList` option that plants a payload + bearer
+   in the error and asserts neither reaches the note, the checkpoint, or the
+   conversation.
+
+2. **[HIGH, 2/3] The classification gate was unenforceable from the
+   regeneration side — falsifying review addition 2's "both must move".**
+   `buildBaseline` read only the catalog, so an author who removed a pore and
+   then did exactly what the failing test instructed ("regenerate the
+   baseline") rewrote version + hash + actions together and every check
+   passed with the version untouched. The fix-it command WAS the laundering
+   path. **Fixed**: the prior baseline is now an INPUT and `buildBaseline`
+   throws `SilentPoreRemovalError` when a pore removal has no version bump;
+   `scripts/regen-baseline.ts` feeds it the committed file, so the command
+   refuses too. Pinned five ways, including a two-act-tool package so the
+   gate is proven WITHOUT the accidental backstop the reviewer noticed (every
+   package currently having exactly one act tool).
+
+3. **[HIGH, 3/3 unanimous] `usage.preamble` never reached model context.**
+   §7 calls tool descriptions the most underrated lever and states the
+   preamble is "where the package's guidance enters context"; `contextTokens`
+   charged for it and the DTO displayed it. No code path emitted it:
+   `toConnectorDef` dropped `usage` entirely and `systemPrompt` knew nothing
+   about packages. Half of "connector + authored usage" was unwired, and the
+   budget overstated real context cost. **Fixed by wiring, not by deleting**:
+   `ConnectorDef` carries `usagePreamble`, `buildMcpLabTools` returns the
+   preambles of connectors whose tools actually loaded, and `runLeg` threads
+   them into the system prompt under "Your connected superpowers:". Pinned:
+   the preamble appears in the recorded system prompt, and with no guidance
+   the prompt is byte-identical to a brain-only run (no phantom section).
+
+## 15. Definition of done (restated)
 
 The ~25 packages each pass their mini-eval (load, scope-filter, pore-fires
 on act / not on read, authored-description-used, typed failures, usage ≤

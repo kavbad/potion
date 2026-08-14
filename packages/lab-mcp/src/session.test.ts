@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MockMcpServer } from './mock-server.js';
 import { McpSession } from './session.js';
 import { lastSseData, McpTransportError, StreamableHttpTransport } from './transport.js';
-import { grantedTools, toolNameFor, type ConnectorDef } from './registry.js';
+import { actionFor, grantedTools, isExternalAction, toolNameFor, type ConnectorDef } from './registry.js';
 
 const TOOLS = [
   { name: 'get_me', description: 'who am I', handler: () => ({ login: 'kavon' }) },
@@ -95,6 +95,12 @@ describe('McpSession', () => {
 });
 
 describe('scope filtering (structural, before toolDefs)', () => {
+  const tool = (scopes: string[], action: 'read' | 'act'): ConnectorDef['tools'][string] => ({
+    scopes,
+    action,
+    description: 'authored',
+    parameters: { type: 'object' },
+  });
   const connector: ConnectorDef = {
     connectorId: 'testconn',
     displayName: 'Test',
@@ -107,12 +113,16 @@ describe('scope filtering (structural, before toolDefs)', () => {
       clientSecretEnv: 'X_SECRET',
       scopesOffered: ['read', 'write'],
     },
-    toolScopeMap: { read_item: ['read'], write_item: ['write'], list_items: [] },
+    tools: {
+      read_item: tool(['read'], 'read'),
+      write_item: tool(['write'], 'act'),
+      list_items: tool([], 'read'),
+    },
   };
 
   it('a tool outside the granted scopes NEVER enters the granted list', () => {
     const serverTools = [{ name: 'read_item' }, { name: 'write_item' }, { name: 'list_items' }];
-    expect(grantedTools(connector, serverTools, ['read'])).toEqual(['read_item', 'list_items']);
+    expect(grantedTools(connector, serverTools, ['read']).sort()).toEqual(['list_items', 'read_item']);
   });
 
   it('a tool ABSENT from the allowlist is invisible even when the server offers it', () => {
@@ -120,8 +130,22 @@ describe('scope filtering (structural, before toolDefs)', () => {
     expect(grantedTools(connector, serverTools, ['read', 'write'])).toEqual(['read_item']);
   });
 
+  it('a declared tool the server does NOT offer is skipped (no phantom tools)', () => {
+    expect(grantedTools(connector, [{ name: 'read_item' }], ['read', 'write'])).toEqual(['read_item']);
+  });
+
   it('tool names are namespaced by connector', () => {
     expect(toolNameFor('github', 'get_me')).toBe('github.get_me');
+  });
+
+  it('action classification drives the pore; UNDECLARED defaults to act, fail-closed', () => {
+    expect(actionFor(connector, 'read_item')).toBe('read');
+    expect(isExternalAction(connector, 'read_item')).toBe(false);
+    expect(actionFor(connector, 'write_item')).toBe('act');
+    expect(isExternalAction(connector, 'write_item')).toBe(true);
+    // a tool the connector never declared: the pore fires
+    expect(actionFor(connector, 'mystery_tool')).toBe('act');
+    expect(isExternalAction(connector, 'mystery_tool')).toBe(true);
   });
 });
 

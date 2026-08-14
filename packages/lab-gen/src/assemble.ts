@@ -4,6 +4,7 @@
 // spec) is what makes the closure property provable.
 import { canonicalJson, type Policy } from '@potion/core';
 import { harnessSpecHash, SPEC_LIMITS, type HarnessSpec } from '@potion/lab-spec';
+import { getPackage } from '@potion/lab-superpowers';
 import { FUEL_MAX_USD, FUEL_MIN_USD, WORTH_TO_FUEL_RATIO } from './constants.js';
 import type { Extraction } from './extract.js';
 import type { InterviewAnswers } from './interview.js';
@@ -32,9 +33,14 @@ export function sanitizeVerbatim(text: string): string {
 }
 
 export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, policy: Policy): HarnessSpec {
+  // Step 11 §6 — LEAST PRIVILEGE BY DEFAULT: a declared superpower carries
+  // its catalog package's `defaultScopes`, which is the MINIMUM that
+  // package's own mini-eval needs to pass (never the maximum the vendor
+  // offers, and never an act tool's write scope). An account with no
+  // catalog package keeps the empty set — the Step 8 posture, unchanged.
   const superpowers = [...new Set(answers.accounts.map(accountSlug))]
     .slice(0, SPEC_LIMITS.MAX_SUPERPOWERS)
-    .map((id) => ({ id, scopes: [] as string[] }));
+    .map((id) => ({ id, scopes: [...(getPackage(id)?.defaultScopes ?? [])] }));
   const rules = (answers.constraints ?? [])
     .map((r) => sanitizeVerbatim(r).slice(0, SPEC_LIMITS.MAX_RULE_CHARS))
     .filter((r) => r.length > 0)

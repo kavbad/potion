@@ -68,7 +68,15 @@ function connectorFor(server: MockMcpServer): ConnectorDef {
       clientSecretEnv: 'MOCK_CLIENT_SECRET',
       scopesOffered: [],
     },
-    toolScopeMap: { get_me: [], read_item: ['read'], write_item: ['write'], dump_everything: [] },
+    // Step 11: these Step 10 fixtures deliberately classify their tools as
+    // 'act' — the exfiltration/cap/redaction properties they pin were written
+    // against a gated tool, and the pore must keep firing for them.
+    tools: {
+      get_me: { scopes: [], action: 'act', description: 'Authored: identity of the granted account.', parameters: { type: 'object' } },
+      read_item: { scopes: ['read'], action: 'act', description: 'Authored: read one item.', parameters: { type: 'object' } },
+      write_item: { scopes: ['write'], action: 'act', description: 'Authored: write one item.', parameters: { type: 'object' } },
+      dump_everything: { scopes: [], action: 'act', description: 'Authored: dump everything.', parameters: { type: 'object' } },
+    },
   };
 }
 

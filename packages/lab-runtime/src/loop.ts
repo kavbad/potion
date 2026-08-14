@@ -82,6 +82,9 @@ export interface RunLegOptions {
    * stay identical (requestPayload self-containment carries it to replay).
    * Never silent: a superpower that could not serve this leg says so. */
   legNotes?: Array<{ toolName: string; note: unknown }>;
+  /** Step 11 §7: authored per-package usage preambles for the connectors
+   * whose tools loaded this leg (see systemPrompt). */
+  toolGuidance?: readonly string[];
   /** Step 8 per-slot policy pins (the dial's materialized rows): tool-capable
    * calls ride tools ?? brain; tool-free calls (incl. the wrap-up) ride brain. */
   policyRefs?: { brain?: string; tools?: string };
@@ -113,7 +116,15 @@ function mulberry32(seed: number): () => number {
 
 /** System prompt: mission + rules + memory snapshot. Deterministic given the
  * same spec + memory — this text is part of every step's requestPayload. */
-export function systemPrompt(spec: HarnessSpec, memory: Record<string, unknown>): string {
+export function systemPrompt(
+  spec: HarnessSpec,
+  memory: Record<string, unknown>,
+  /** Step 11 §7: AUTHORED capability guidance from the catalog packages
+   * whose tools actually loaded this leg. Trusted, curated text — never a
+   * server string (the provenance rule). Empty when no superpower loaded,
+   * so a brain-only run's prompt is byte-identical to before. */
+  toolGuidance: readonly string[] = [],
+): string {
   const mission =
     spec.mission.kind === 'task'
       ? `Mission (task): ${spec.mission.goal}\nDone when: ${spec.mission.doneDefinition}`
@@ -123,7 +134,9 @@ export function systemPrompt(spec: HarnessSpec, memory: Record<string, unknown>)
     Object.keys(memory).length > 0
       ? `\nMemory:\n${JSON.stringify(memory, Object.keys(memory).sort())}`
       : '';
-  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}\nWhen the mission is complete, answer normally with no tool calls.`;
+  const guidance =
+    toolGuidance.length > 0 ? `\nYour connected superpowers:\n${toolGuidance.map((g) => `- ${g}`).join('\n')}` : '';
+  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}\nWhen the mission is complete, answer normally with no tool calls.`;
 }
 
 /** Rebuild the conversation from checkpointed steps — replay-grade: the
@@ -181,7 +194,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     let messages: ChatMessage[];
     if (priorSteps.length === 0) {
       messages = [
-        { role: 'system', content: systemPrompt(opts.spec, memory) },
+        { role: 'system', content: systemPrompt(opts.spec, memory, opts.toolGuidance ?? []) },
         { role: 'user', content: 'Begin the mission.' },
       ];
     } else {

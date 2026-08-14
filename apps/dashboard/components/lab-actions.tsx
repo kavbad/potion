@@ -376,12 +376,34 @@ export function MemoryEntryEditor({
 interface ConnectorDto {
   connectorId: string;
   displayName: string;
+  category: string;
+  version: string;
+  /** Step 11 honest tiering: the PROOF tier and the CONNECT posture are
+   * different claims, so the catalog shows both. */
+  tier: 'fixture-authored' | 'fixture-recorded' | 'live-proven';
+  connectStatus: 'ready' | 'endpoint-unverified' | 'oauth-unauthored';
+  connectNote: string | null;
+  fixtureAgeDays: number | null;
   scopesOffered: string[];
-  tools: string[];
+  defaultScopes: string[];
+  toolCount: { read: number; act: number };
+  tools: Array<{ name: string; action: 'read' | 'act' }>;
+  contextTokens: number;
   configured: boolean;
   status: 'not-connected' | 'connected' | 'expired' | 'revoked';
   grant: { scopesGranted: string[]; grantedBy: string; revokedAt: string | null } | null;
 }
+
+const TIER_LABEL: Record<ConnectorDto['tier'], string> = {
+  'fixture-authored': 'fixture-authored',
+  'fixture-recorded': 'fixture-recorded',
+  'live-proven': 'LIVE-PROVEN',
+};
+const TIER_BG: Record<ConnectorDto['tier'], string> = {
+  'fixture-authored': '#e5e7eb',
+  'fixture-recorded': '#dbeafe',
+  'live-proven': '#dcfce7',
+};
 
 const STATUS_BG: Record<ConnectorDto['status'], string> = {
   'not-connected': '#fee2e2',
@@ -445,15 +467,23 @@ export function ConnectorPanel() {
         {connectors.map((c) => (
           <li key={c.connectorId} data-testid={`connector-${c.connectorId}`} data-status={c.status}>
             {c.displayName}
+            {/* Step 10 grant badge — the filament state */}
             <span style={{ ...badge, background: STATUS_BG[c.status] }}>{c.status}</span>
+            {/* Step 11 proof tier — a DIFFERENT claim, never conflated */}
+            <span style={{ ...badge, background: TIER_BG[c.tier] }} data-testid={`tier-${c.connectorId}`}>
+              {TIER_LABEL[c.tier]}
+              {c.fixtureAgeDays === null ? '' : ` · ${c.fixtureAgeDays}d old`}
+            </span>
             <span style={{ fontSize: 11, color: '#6b7688', marginLeft: 6 }}>
-              {c.tools.length} read tools{c.scopesOffered.length === 0 ? ' · zero-scope grant' : ''}
+              {c.toolCount.read} read / {c.toolCount.act} act
+              {c.defaultScopes.length === 0 ? ' · zero-scope default' : ` · default ${c.defaultScopes.length} scope(s)`}
+              {' · ~'}{c.contextTokens} ctx tokens
             </span>
             {c.status === 'connected' ? (
               <button onClick={() => void revoke(c.connectorId)} disabled={busy} style={{ marginLeft: 8 }}>
                 Revoke
               </button>
-            ) : (
+            ) : c.connectStatus === 'ready' ? (
               <button
                 onClick={() => void connect(c.connectorId)}
                 disabled={busy || !c.configured}
@@ -462,6 +492,15 @@ export function ConnectorPanel() {
               >
                 {c.status === 'not-connected' ? 'Connect' : 'Reconnect'}
               </button>
+            ) : (
+              // Honest, not broken: a package we cannot reach live says why.
+              <span
+                style={{ fontSize: 11, color: '#92400e', marginLeft: 8 }}
+                title={c.connectNote ?? ''}
+                data-testid={`unconnectable-${c.connectorId}`}
+              >
+                packaged &amp; fixture-proven · not connectable ({c.connectStatus})
+              </span>
             )}
           </li>
         ))}

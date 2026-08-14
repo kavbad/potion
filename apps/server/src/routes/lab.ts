@@ -97,7 +97,15 @@ import {
   markLabGrantStatus,
   upsertLabGrant,
 } from '@potion/db';
-import { CONNECTORS, getConnector, withEndpointOverrides, type ConnectorDef } from '@potion/lab-mcp';
+import { withEndpointOverrides, type ConnectorDef } from '@potion/lab-mcp';
+import {
+  CATALOG,
+  contextTokens,
+  fixtureAgeDays,
+  getPackage,
+  packageContentHash,
+  toConnectorDef,
+} from '@potion/lab-superpowers';
 import {
   CONNECTOR_STATE_COOKIE,
   CONNECTOR_STATE_TTL_MS,
@@ -984,18 +992,39 @@ export function registerLabRoutes(
   // Token material is STRUCTURALLY absent: listLabGrants' SELECT excludes
   // the envelope columns, so no field exists here to leak (enforcement 1;
   // the inventory-driven absence sweep re-proves it over the wire).
+  // Step 11: the CATALOG is the surface — every package, with its honest
+  // tier, its connect posture, its read/act split and least-privilege
+  // defaults, alongside the Step 10 grant badge. A package that cannot
+  // reach a live wire says so; it is never shown as merely unconfigured.
   app.get('/api/lab/connectors', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     const grants = await listLabGrants(db, org.orgId);
     return reply.send({
-      connectors: CONNECTORS.map((raw) => withEndpointOverrides(raw)).map((c) => {
-        const grant = grants.find((g) => g.connectorId === c.connectorId) ?? null;
+      connectors: CATALOG.map((pkg) => {
+        const grant = grants.find((g) => g.connectorId === pkg.id) ?? null;
+        const def = toConnectorDef(pkg);
+        const withOverrides = def === null ? null : withEndpointOverrides(def);
+        const readTools = pkg.tools.filter((t) => t.action === 'read');
+        const actTools = pkg.tools.filter((t) => t.action === 'act');
         return {
-          connectorId: c.connectorId,
-          displayName: c.displayName,
-          scopesOffered: c.oauth.scopesOffered,
-          tools: Object.keys(c.toolScopeMap).sort(),
-          configured: connectorEnv(c) !== null,
+          connectorId: pkg.id,
+          displayName: pkg.displayName,
+          category: pkg.category,
+          version: pkg.version,
+          contentHash: packageContentHash(pkg),
+          // Honest tiering (§5) — the proof tier and the connect posture are
+          // DIFFERENT claims and both are shown.
+          tier: pkg.proof,
+          connectStatus: pkg.connect.status,
+          connectNote: pkg.connect.status === 'ready' ? null : pkg.connect.note,
+          fixtureAgeDays: pkg.fixtureStamp === undefined ? null : fixtureAgeDays(pkg.fixtureStamp),
+          scopesOffered: withOverrides?.oauth.scopesOffered ?? [],
+          defaultScopes: pkg.defaultScopes,
+          toolCount: { read: readTools.length, act: actTools.length },
+          tools: pkg.tools.map((t) => ({ name: t.name, action: t.action })).sort((a, b) => (a.name < b.name ? -1 : 1)),
+          contextTokens: contextTokens(pkg),
+          // connectable ⇔ the package compiles AND its client env is set
+          configured: withOverrides !== null && connectorEnv(withOverrides) !== null,
           status: grantConnectionStatus(grant),
           grant:
             grant === null
@@ -1021,7 +1050,11 @@ export function registerLabRoutes(
       return reply.code(403).send(forbidden(org.role, 'connect superpowers'));
     }
     const { id } = req.params as { id: string };
-    const raw = CONNECTOR_ID_RE.test(id) ? getConnector(id) : null;
+    // Step 11: resolve the catalog PACKAGE, then compile it. A package
+    // that is not `ready` (unverified endpoint / unauthored OAuth) yields
+    // null and the route 404s — unconnectable is structural, not a note.
+    const pkgFound = CONNECTOR_ID_RE.test(id) ? getPackage(id) : null;
+    const raw = pkgFound === null ? null : toConnectorDef(pkgFound);
     const connector = raw === null ? null : withEndpointOverrides(raw);
     if (connector === null) return reply.code(404).send(notFound);
     const env = connectorEnv(connector);
@@ -1058,7 +1091,11 @@ export function registerLabRoutes(
       return reply.code(403).send(forbidden(org.role, 'finish connecting superpowers'));
     }
     const { id } = req.params as { id: string };
-    const raw = CONNECTOR_ID_RE.test(id) ? getConnector(id) : null;
+    // Step 11: resolve the catalog PACKAGE, then compile it. A package
+    // that is not `ready` (unverified endpoint / unauthored OAuth) yields
+    // null and the route 404s — unconnectable is structural, not a note.
+    const pkgFound = CONNECTOR_ID_RE.test(id) ? getPackage(id) : null;
+    const raw = pkgFound === null ? null : toConnectorDef(pkgFound);
     const connector = raw === null ? null : withEndpointOverrides(raw);
     if (connector === null) return reply.code(404).send(notFound);
     const env = connectorEnv(connector);

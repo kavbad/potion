@@ -24,6 +24,8 @@ export interface StartRunOptions {
   tools?: LabTool[];
   /** Step 10: typed leg-start superpower records, threaded to the loop. */
   legNotes?: Array<{ toolName: string; note: unknown }>;
+  /** Step 11: authored package guidance for the loaded connectors. */
+  toolGuidance?: readonly string[];
   runId?: string;
   maxStepsPerLeg?: number;
   /** Step 8 per-slot policy pins, threaded to the loop. */
@@ -76,6 +78,7 @@ async function executeLeg(
     harnessHash: hash,
     ...(opts.tools !== undefined ? { tools: opts.tools } : {}),
     ...(opts.legNotes !== undefined ? { legNotes: opts.legNotes } : {}),
+    ...(opts.toolGuidance !== undefined ? { toolGuidance: opts.toolGuidance } : {}),
     ...(opts.maxStepsPerLeg !== undefined ? { maxStepsPerLeg: opts.maxStepsPerLeg } : {}),
     ...(opts.policyRefs !== undefined ? { policyRefs: opts.policyRefs } : {}),
   });

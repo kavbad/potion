@@ -40,7 +40,13 @@ function connectorFor(server: MockMcpServer, over: Partial<ConnectorDef> = {}): 
       clientSecretEnv: 'MOCK_CLIENT_SECRET',
       scopesOffered: ['read'],
     },
-    toolScopeMap: { get_me: [], read_item: ['read'], write_item: ['write'] },
+    // Step 11: classified 'act' so the Step 10 pore/cap properties these
+    // tests pin keep their gated semantics.
+    tools: {
+      get_me: { scopes: [], action: 'act', description: 'Authored: identity.', parameters: { type: 'object' } },
+      read_item: { scopes: ['read'], action: 'act', description: 'Authored: read item.', parameters: { type: 'object' } },
+      write_item: { scopes: ['write'], action: 'act', description: 'Authored: write item.', parameters: { type: 'object' } },
+    },
     ...over,
   };
 }

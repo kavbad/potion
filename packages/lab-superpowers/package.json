@@ -1,0 +1,33 @@
+{
+  "name": "@potion/lab-superpowers",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "baseline": "tsx scripts/regen-baseline.ts"
+  },
+  "dependencies": {
+    "@potion/core": "workspace:*",
+    "@potion/lab-mcp": "workspace:*"
+  },
+  "devDependencies": {
+    "@potion/db": "workspace:*",
+    "@potion/lab-runtime": "workspace:*",
+    "@potion/lab-spec": "workspace:*",
+    "@potion/custody": "workspace:*",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

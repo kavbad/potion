@@ -30,11 +30,12 @@ import { openGrantToken, sealRefreshedToken, type OpenGrant } from '@potion/cust
 import {
   attributedEstUsdForConnector,
   checkToolCaps,
-  CONNECTORS,
   DEFAULT_TOOL_CAPS,
   grantedTools,
   grantValueRedactor,
+  isExternalAction,
   McpSession,
+  McpTransportError,
   StreamableHttpTransport,
   toolNameFor,
   truncateResult,
@@ -82,6 +83,12 @@ export interface McpLegSetupOptions {
 
 export interface McpLegSetup {
   tools: LabTool[];
+  /** Step 11 §7 (review finding): the AUTHORED usage preambles of the
+   * connectors whose tools actually loaded — the "usage instructions" half
+   * of the package format, threaded into the system prompt. Without this
+   * the preamble was charged against the token budget and shown in the DTO
+   * while reaching nothing. */
+  guidance: string[];
   /** Typed leg-start records: recorded as tool steps AND shown to the
    * model, so a dead superpower is never silently absent. */
   legNotes: McpLegNote[];
@@ -152,10 +159,11 @@ async function refreshAccessToken(
 
 export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLegSetup> {
   const env = opts.env ?? process.env;
-  const connectors = (opts.connectors ?? CONNECTORS).map((c) => withEndpointOverrides(c, env));
+  const connectors = (opts.connectors ?? []).map((c) => withEndpointOverrides(c, env));
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? (() => new Date());
   const tools: LabTool[] = [];
+  const guidance: string[] = [];
   const legNotes: McpLegNote[] = [];
   const sessions: McpSession[] = [];
   const heldSecrets: Array<string | null> = [];
@@ -224,33 +232,53 @@ export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLeg
       });
       session = await McpSession.open(transport);
     } catch (e) {
-      note(
-        connector.connectorId,
-        'unreachable',
-        `session init failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      // Step 11 review finding: the thrown message EMBEDS server-controlled
+      // text (a JSON-RPC error's `message` — transport.ts), and a leg note
+      // lands in both the checkpoint and the model's conversation. So the
+      // note carries the TYPED failure kind only, never the server's string
+      // — the same refusal already applied to the token endpoint's `error`
+      // field above. The full error still surfaces to operators through the
+      // job/worker log; it just never becomes model context.
+      const kind = e instanceof McpTransportError ? e.kind : 'error';
+      note(connector.connectorId, 'unreachable', `session init failed (${kind})`);
       continue;
     }
     sessions.push(session);
     heldSecrets.push(accessToken, grant.refreshToken);
 
     // ---- discovery ∩ allowlist ∩ granted scopes ----
-    const allowed = new Set(grantedTools(connector, session.tools, grant.scopesGranted));
+    //
+    // Step 11 (review addition 1): the iteration runs over the CONNECTOR's
+    // authored allowlist, and the server's tools/list is consulted only for
+    // EXISTENCE (grantedTools intersects the two). Consequently NO
+    // server-supplied string reaches the model — not the tool name, not the
+    // description, not the parameter schema (whose `description` fields
+    // travel the same path into context). The server's own strings are
+    // recorded as DATA in the session and never forwarded.
+    //
+    // Step 11 §2: `external` is now the tool's ACTION CLASSIFICATION —
+    // 'act' fires the before-external-action pore, 'read' does not; a tool
+    // the connector never declared is unclassified and defaults to 'act',
+    // fail-closed (isExternalAction).
+    const allowed = grantedTools(connector, session.tools, grant.scopesGranted);
     const caps = capsFor(superpower);
-    for (const mcpTool of session.tools) {
-      if (!allowed.has(mcpTool.name)) continue; // invisible, not refused
-      const labName = toolNameFor(connector.connectorId, mcpTool.name);
+    if (allowed.length > 0 && connector.usagePreamble !== undefined) {
+      guidance.push(connector.usagePreamble);
+    }
+    for (const mcpToolName of allowed) {
+      const authored = connector.tools[mcpToolName]!;
+      const labName = toolNameFor(connector.connectorId, mcpToolName);
       tools.push({
         name: labName,
-        description: mcpTool.description,
-        parameters: mcpTool.inputSchema,
-        external: true, // v1: EVERY MCP tool gates on the pore (relaxation is Step 11 posture)
+        description: authored.description,
+        parameters: authored.parameters,
+        external: isExternalAction(connector, mcpToolName),
         run: makeToolRun({
           db: opts.db,
           orgId: opts.orgId,
           runId: opts.runId,
           connectorId: connector.connectorId,
-          mcpToolName: mcpTool.name,
+          mcpToolName,
           labName,
           session,
           caps,
@@ -271,7 +299,12 @@ export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLeg
 
   return {
     tools,
-    legNotes,
+    guidance,
+    // Step 11 review finding: leg notes were the ONE model-facing value that
+    // never passed the redactor (it is built after this loop). They do now —
+    // a connector that echoes its bearer inside a failure path cannot write
+    // the live token into the run record or the conversation.
+    legNotes: legNotes.map((n) => ({ toolName: n.toolName, note: redactor(n.note) })),
     close: async () => {
       await Promise.all(sessions.map((s) => s.close().catch(() => {})));
     },

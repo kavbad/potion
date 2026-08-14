@@ -138,6 +138,7 @@ import {
 import { buildMcpLabTools, resumeRun, ServingClient, type LegOutcome, type McpLegSetup } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
+import { connectableConnectors } from '@potion/lab-superpowers';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -3629,14 +3630,17 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
         spec.superpowers.length > 0 ? await masterKeyProvider.getMasterKey() : null;
       const mcpLeg = async (): Promise<McpLegSetup> =>
         masterKey === null
-          ? { tools: [], legNotes: [], close: async () => {} }
+          ? { tools: [], guidance: [], legNotes: [], close: async () => {} }
           : buildMcpLabTools({
               db: ctx.db,
               orgId: payload.orgId,
               runId: payload.runId,
               masterKey,
               spec,
-              ...(deps.connectors !== undefined ? { connectors: deps.connectors } : {}),
+              // Step 11: the CATALOG is the connector source. Only packages
+              // that are `ready` (endpoint + OAuth authored) compile to a
+              // ConnectorDef, so an unverified package cannot be reached.
+              connectors: deps.connectors ?? connectableConnectors(),
               ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
             });
 
@@ -3646,7 +3650,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
         outcome = await resumeRun({
           db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId,
           ...(payload.answer !== undefined ? { answer: payload.answer } : {}),
-          policyRefs, tools: leg.tools, legNotes: leg.legNotes,
+          policyRefs, tools: leg.tools, legNotes: leg.legNotes, toolGuidance: leg.guidance,
         });
       } finally {
         await leg.close();
@@ -3656,7 +3660,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
         try {
           outcome = await resumeRun({
             db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId, policyRefs,
-            tools: leg.tools, legNotes: leg.legNotes,
+            tools: leg.tools, legNotes: leg.legNotes, toolGuidance: leg.guidance,
           });
         } finally {
           await leg.close();
@@ -3692,8 +3696,7 @@ export function createLabGrantRevokeHandler(
   deps: LabGrantRevokeDeps = {},
 ): WorkerHandler<'lab:grant-revoke'> {
   return async (payload, ctx): Promise<{ provider: 'revoked' | 'skipped' | 'failed'; detail: string }> => {
-    const { CONNECTORS } = await import('@potion/lab-mcp');
-    const connectors = deps.connectors ?? CONNECTORS;
+    const connectors = deps.connectors ?? connectableConnectors();
     const connector = connectors.find((c) => c.connectorId === payload.connectorId);
     if (connector?.revocationUrl === undefined) {
       return { provider: 'skipped', detail: 'no provider revocation endpoint for this connector' };

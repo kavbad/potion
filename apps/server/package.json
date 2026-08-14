@@ -46,6 +46,7 @@
     "@potion/lab-mcp": "workspace:*",
     "@potion/lab-runtime": "workspace:*",
     "@potion/lab-spec": "workspace:*",
+    "@potion/lab-superpowers": "workspace:*",
     "@potion/observability": "workspace:*",
     "@potion/pareto": "workspace:*",
     "@potion/providers": "workspace:*",

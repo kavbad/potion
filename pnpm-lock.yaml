@@ -149,6 +149,9 @@ importers:
       '@potion/lab-spec':
         specifier: workspace:*
         version: link:../../packages/lab-spec
+      '@potion/lab-superpowers':
+        specifier: workspace:*
+        version: link:../../packages/lab-superpowers
       '@potion/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -370,6 +373,9 @@ importers:
       '@potion/lab-spec':
         specifier: workspace:*
         version: link:../lab-spec
+      '@potion/lab-superpowers':
+        specifier: workspace:*
+        version: link:../lab-superpowers
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -448,6 +454,40 @@ importers:
       ajv-formats:
         specifier: ^3.0.1
         version: 3.0.1(ajv@8.20.0)
+
+  packages/lab-superpowers:
+    dependencies:
+      '@potion/core':
+        specifier: workspace:*
+        version: link:../core
+      '@potion/lab-mcp':
+        specifier: workspace:*
+        version: link:../lab-mcp
+    devDependencies:
+      '@potion/custody':
+        specifier: workspace:*
+        version: link:../custody
+      '@potion/db':
+        specifier: workspace:*
+        version: link:../db
+      '@potion/lab-runtime':
+        specifier: workspace:*
+        version: link:../lab-runtime
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:../lab-spec
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.16.2
+        version: 4.23.5
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(@types/node@20.19.43)
 
   packages/observability:
     dependencies:
@@ -626,6 +666,9 @@ importers:
       '@potion/lab-spec':
         specifier: workspace:*
         version: link:../lab-spec
+      '@potion/lab-superpowers':
+        specifier: workspace:*
+        version: link:../lab-superpowers
       '@potion/pareto':
         specifier: workspace:*
         version: link:../pareto
