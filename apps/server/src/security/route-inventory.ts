@@ -150,6 +150,9 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/lab/memory/:hash', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'PUT', path: '/api/lab/memory/:hash/:key', surface: 'api', mutating: true, guard: 'member', probeUrl: `/api/lab/memory/${'0'.repeat(64)}/probekey`, probeBody: { text: 'probe' }, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'DELETE', path: '/api/lab/memory/:hash/:key', surface: 'api', mutating: true, guard: 'admin', probeUrl: `/api/lab/memory/${'0'.repeat(64)}/probekey`, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  // ---- Step 9 (the derived form) additive routes ----
+  { method: 'GET', path: '/api/lab/harnesses/:hash/runs', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/harnesses/:hash/edit', surface: 'api', mutating: true, guard: 'member', probeUrl: `/api/lab/harnesses/${'0'.repeat(64)}/edit`, probeBody: { ops: [{ op: 'add-rule', rule: 'probe rule' }] }, notes: 'plain-language spec patch → NEW content-addressed catalog row (dial-motion precedent)', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
 
   // ---- /api public exemptions (hook-level carve-outs) ----
   { method: 'GET', path: '/api/public/share/:token/frontier', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "the TOKEN is the credential; unknown/revoked tokens 404 uniformly (share.test.ts)" } },

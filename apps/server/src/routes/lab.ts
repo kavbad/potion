@@ -43,6 +43,7 @@ import {
   getPolicyById,
   listLabHarnesses,
   listLabMemoryEntries,
+  listLabRunsForHarness,
   listLabSteps,
   revokeApiKey,
   setLabMemoryKey,
@@ -50,8 +51,16 @@ import {
   answerLabRun,
   killLabRun,
 } from '@potion/db';
+import { canonicalJson } from '@potion/core';
 import { loadCurrentFrontier } from '@potion/pareto';
-import { generateSpec, type ChoicesSidecar, type InterviewAnswers, type TaxonomyCluster } from '@potion/lab-gen';
+import {
+  fuelFromWorth,
+  generateSpec,
+  type ChoicesSidecar,
+  type InterviewAnswers,
+  type TaxonomyCluster,
+} from '@potion/lab-gen';
+import { harnessSpecHash } from '@potion/lab-spec';
 import {
   applyDialPosition,
   dialViews,
@@ -607,6 +616,10 @@ export function registerLabRoutes(
               costLabel: meteredUsd !== null ? ('metered' as const) : ('est.' as const),
               provenance,
               simulated: provenance !== 'live',
+              // Step 9: typed anomaly flags — parsed here ONCE so the form's
+              // anomaly encoding reads a boolean, never a trace string.
+              fallback: /(?:^|;)fallback=1/.test(p.frontierTrace ?? ''),
+              latencyViolated: /latency_violated=1/.test(p.frontierTrace ?? ''),
             }
           : {}),
       });
@@ -757,5 +770,148 @@ export function registerLabRoutes(
     const existed = await deleteLabMemoryKey(db, org.orgId, row.harnessHash, key);
     if (!existed) return reply.code(404).send(notFound);
     return reply.send({ key, deleted: true });
+  });
+
+  // ---- GET /api/lab/harnesses/:hash/runs (viewer) — the harness's life ----
+  app.get('/api/lab/harnesses/:hash/runs', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    const runs = await listLabRunsForHarness(db, org.orgId, row.harnessHash);
+    return reply.send({
+      harnessHash: row.harnessHash,
+      runs: runs.map((r) => ({
+        runId: r.id,
+        state: r.state,
+        stateReason: r.stateReason,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      })),
+    });
+  });
+
+  // ---- POST /api/lab/harnesses/:hash/edit (member) — plain-language patch ----
+  // The dial-motion precedent applied to the REST of the spec: a typed patch
+  // produces a NEW content-addressed catalog row with carried sidecar
+  // provenance rebound to the new hash; run-frozen specs are untouched (the
+  // Step 8 catalog-invariance pin guards this from the other side). This is
+  // the route the form's mid-zoom edit panels save through — live re-render
+  // is a refetch of the NEW hash, never a client-side shortcut.
+  const EDIT_OP = z.discriminatedUnion('op', [
+    z.object({ op: z.literal('add-rule'), rule: z.string().min(1).max(500) }).strict(),
+    z.object({ op: z.literal('remove-rule'), index: z.number().int().min(0) }).strict(),
+    z.object({ op: z.literal('set-worth'), worthUsd: z.number().positive().max(10_000) }).strict(),
+    z.object({ op: z.literal('set-checkin-fraction'), fraction: z.number().gt(0).max(1) }).strict(),
+    z.object({ op: z.literal('declare-superpower'), id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$/) }).strict(),
+    z.object({ op: z.literal('undeclare-superpower'), id: z.string().min(1).max(60) }).strict(),
+  ]);
+  app.post('/api/lab/harnesses/:hash/edit', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'member')) {
+      return reply.code(403).send(memberForbidden(org.role, 'edit harnesses'));
+    }
+    const body = z.object({ ops: z.array(EDIT_OP).min(1).max(10) }).safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_body',
+        message: body.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+      });
+    }
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    const parsed = parseHarnessSpecText(row.specText);
+    if (!parsed.ok) return reply.code(409).send({ ok: false, gap: { code: 'spec-invalid' } });
+
+    // Apply the patch to a copy of the spec — every op is total or a 400.
+    const spec: HarnessSpec = JSON.parse(JSON.stringify(parsed.spec));
+    delete (spec as { hash?: string }).hash;
+    for (const op of body.data.ops) {
+      if (op.op === 'add-rule') {
+        // The generation-time convention, mirrored (review finding):
+        // control characters collapse to spaces before the closure gate,
+        // so a pasted tab/newline never 409s as an internal-looking
+        // closure violation; genuinely secret-shaped rules still refuse
+        // with the parse gate's own typed issue codes.
+        // eslint-disable-next-line no-control-regex
+        const rule = op.rule.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+        if (rule.length === 0) {
+          return reply.code(400).send({ error: 'invalid_body', message: 'rule is empty after sanitation' });
+        }
+        spec.rules = [...spec.rules, rule];
+      } else if (op.op === 'remove-rule') {
+        if (op.index >= spec.rules.length) {
+          return reply.code(400).send({ error: 'invalid_body', message: `remove-rule index ${op.index} is out of range (${spec.rules.length} rules)` });
+        }
+        spec.rules = spec.rules.filter((_r, i) => i !== op.index);
+      } else if (op.op === 'set-worth') {
+        // Fuel re-derives through the SAME labeled convention generation
+        // uses — the dial-honesty rule for money: no fuel number without
+        // the worth answer underneath it.
+        spec.fuel = { ...spec.fuel, maxUsdPerRun: fuelFromWorth(op.worthUsd) };
+        if (spec.mission.kind === 'task') {
+          spec.mission = { ...spec.mission, worthPerRunUsd: op.worthUsd };
+        }
+      } else if (op.op === 'set-checkin-fraction') {
+        const idx = spec.checkIns.findIndex((c) => c.trigger === 'on-budget-fraction');
+        if (idx === -1) {
+          spec.checkIns = [{ trigger: 'on-budget-fraction', fraction: op.fraction }, ...spec.checkIns];
+        } else {
+          spec.checkIns = spec.checkIns.map((c, i) => (i === idx ? { trigger: 'on-budget-fraction' as const, fraction: op.fraction } : c));
+        }
+      } else if (op.op === 'declare-superpower') {
+        if (!spec.superpowers.some((s) => s.id === op.id)) {
+          spec.superpowers = [...spec.superpowers, { id: op.id, scopes: [] }];
+          // The generation-time protective default, mirrored: a tool-bearing
+          // spec carries the external-action gate.
+          if (!spec.checkIns.some((c) => c.trigger === 'before-external-action')) {
+            spec.checkIns = [...spec.checkIns, { trigger: 'before-external-action' }];
+          }
+        }
+      } else {
+        spec.superpowers = spec.superpowers.filter((s) => s.id !== op.id);
+        // Protections are never silently removed: check-ins stay as-is.
+      }
+    }
+
+    // Closure gate (the motion.ts pattern): the row we emit is the row
+    // lab-spec accepts, or the edit is refused — never a broken catalog row.
+    const hash = harnessSpecHash(spec);
+    const specText = canonicalJson({ ...spec, hash });
+    const reparsed = parseHarnessSpecText(specText);
+    if (!reparsed.ok) {
+      return reply.code(409).send({
+        ok: false,
+        gap: { code: 'edit-closure-violation', detail: reparsed.issues.map((i) => i.code).join(',') },
+      });
+    }
+    if (hash === row.harnessHash) {
+      // A no-op patch is answered honestly, not written.
+      return reply.send({ ok: true, harnessHash: hash, unchanged: true });
+    }
+    // Hash CONVERGENCE (review finding): if the edited spec's content hash
+    // already exists as ANOTHER catalog row, that row IS the result —
+    // nothing is written, so the existing row's provenance and cluster
+    // routing are never overwritten by a convergent edit.
+    const existing = await getLabHarness(db, org.orgId, hash);
+    if (existing !== null) {
+      return reply.send({ ok: true, harnessHash: hash, previousHash: row.harnessHash, unchanged: false, converged: true });
+    }
+    // Carried provenance, rebound to the new content hash (the dial-motion
+    // sidecar discipline).
+    const prior = row.sidecar as ChoicesSidecar;
+    const sidecar: ChoicesSidecar = {
+      specHash: hash,
+      choicesHash: sha256(canonicalJson(prior.choices)),
+      choices: prior.choices,
+    };
+    await upsertLabHarness(db, {
+      orgId: org.orgId,
+      harnessHash: hash,
+      name: spec.name,
+      specText,
+      sidecar,
+      clusterId: row.clusterId,
+    });
+    return reply.send({ ok: true, harnessHash: hash, previousHash: row.harnessHash, unchanged: false });
   });
 }

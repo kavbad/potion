@@ -73,6 +73,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@potion/lab-form':
+        specifier: workspace:*
+        version: link:../../packages/lab-form
       next:
         specifier: 15.5.22
         version: 15.5.22(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -324,6 +327,12 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
+
+  packages/lab-form:
+    dependencies:
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:../lab-spec
 
   packages/lab-gen:
     dependencies:

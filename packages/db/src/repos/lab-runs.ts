@@ -9,7 +9,7 @@
 // expires and someone reclaims, the old winner's late writes are REJECTED,
 // not merged (review addition 1 — a dead winner must not hold the claim
 // forever, and a zombie winner must not corrupt the run it lost).
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   labHarnessMemory,
@@ -409,4 +409,27 @@ export async function deleteLabMemoryKey(
     )
     .returning({ key: labHarnessMemory.key });
   return gone.length > 0;
+}
+
+/** Step 9 additive read: the harness's recent life — which run the form
+ * page animates, and run-history density at mid zoom. Org-scoped like
+ * every lab read; newest first. */
+export async function listLabRunsForHarness(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+  limit = 20,
+): Promise<Array<{ id: string; state: LabRunState; stateReason: string | null; createdAt: Date; updatedAt: Date }>> {
+  return db
+    .select({
+      id: labRuns.id,
+      state: labRuns.state,
+      stateReason: labRuns.stateReason,
+      createdAt: labRuns.createdAt,
+      updatedAt: labRuns.updatedAt,
+    })
+    .from(labRuns)
+    .where(and(eq(labRuns.orgId, orgId), eq(labRuns.harnessHash, harnessHash)))
+    .orderBy(desc(labRuns.createdAt))
+    .limit(limit);
 }

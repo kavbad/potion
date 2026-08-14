@@ -196,7 +196,9 @@ async function main(): Promise<void> {
         answers: {
           goal: 'Watch my weekly meeting notes and summarize the highlights into a short digest',
           kind: 'standing',
-          accounts: [],
+          // Two declared accounts → two SEVERED filaments (the 4th posture
+          // place) — the trial still runs brain-only, honestly.
+          accounts: ['calendar', 'email'],
           worthUsd: 0.05,
         },
       }),
@@ -217,15 +219,19 @@ async function main(): Promise<void> {
     return `harness ${harnessHash.slice(0, 12)}… on cluster ${body.clusterId}`;
   });
 
-  await step('read the generated summary (harness page)', async () => {
+  await step('read the harness — THE FORM is the page (Step 9: no template UI)', async () => {
     const res = await dashFetch(`/lab/harness/${harnessHash}`);
     const html = await res.text();
     assert(res.ok, `harness page ${res.status}`);
-    // SSR inserts <!-- --> markers around interpolations — assert on
-    // static text nodes and the goal (a single interpolation).
-    assert(html.includes('Mission ('), 'mission summary missing');
-    assert(html.includes('summarize the highlights into a short digest'), 'goal not on the page');
-    assert(html.includes('Fuel:'), 'fuel line missing');
+    // The derived form is the primary surface; its SSR data attributes are
+    // derived from the same DTOs the canvas draws (the walkthrough's proof
+    // surface). Two declared superpowers → two severed filaments; standing
+    // mission; zero rules → zero laminations, honestly.
+    assert(html.includes('data-testid="lab-form"'), 'the derived form is not the page');
+    assert(html.includes(`data-harness-hash="${harnessHash}"`), 'form not derived from THIS harness');
+    assert(html.includes('data-mission-kind="standing"'), 'silhouette parameter missing');
+    assert(html.includes('data-severed="2"'), 'severed filament count wrong');
+    assert(html.includes('data-laminations="0"'), 'lamination count wrong (expected 0 rules)');
   });
 
   let runId = '';
@@ -306,6 +312,28 @@ async function main(): Promise<void> {
     assert(rep.ok && body.suggestedUpgrade, 'no suggested upgrade in the report');
     clockStop = Date.now();
     return `upgrade[${body.suggestedUpgrade!.reason}], metered $${body.meteredTotalUsd?.toFixed(4)}, est-pending $${body.estimatedUnmeteredUsd?.toFixed(4)}`;
+  });
+
+  // ---- Step 9 leg: live re-render through the REAL edit path ----
+  await step('Step 9: /edit lands a NEW content hash; the form re-derives from it', async () => {
+    const res = await dashFetch(`/api/lab/harnesses/${harnessHash}/edit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ops: [{ op: 'add-rule', rule: 'never invent numbers' }] }),
+    });
+    const body = (await res.json()) as { ok?: boolean; harnessHash?: string; unchanged?: boolean };
+    assert(res.ok && body.ok === true && body.unchanged === false && body.harnessHash, `edit failed (${res.status})`);
+    assert(body.harnessHash !== harnessHash, 'edit did not move the content hash');
+    const page = await dashFetch(`/lab/harness/${body.harnessHash}`);
+    const html = await page.text();
+    assert(page.ok, `edited harness page ${page.status}`);
+    // The form derived from the EDITED spec: one rule → one lamination.
+    assert(html.includes(`data-harness-hash="${body.harnessHash}"`), 'form not on the new hash');
+    assert(html.includes('data-laminations="1"'), 'the added rule did not reach the membrane');
+    // And the PRIOR page still renders its own frozen identity.
+    const prior = await dashFetch(`/lab/harness/${harnessHash}`);
+    assert((await prior.text()).includes('data-laminations="0"'), 'the prior row moved — catalog invariance broken');
+    return `edit: ${harnessHash.slice(0, 8)}… → ${body.harnessHash.slice(0, 8)}… (laminations 0→1, both pages truthful)`;
   });
 
   await step('THE CLOCK: interview submit → report rendered < 600s', async () => {

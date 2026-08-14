@@ -675,3 +675,66 @@ path recorded), per-invocation catalog clusterHint reads, latest-sidecar
 catalog semantics on revisited dial positions, and lease-expiry-plus-kill
 as the stranded-run recovery. Post-fix: lab-runtime 37/37, workers
 147/147, server 530/530, walkthrough 3.2s/600s — all green.
+
+## Step 9 — The derived form [design gate] (2026-08-13)
+
+**Design gate:** phase one produced the spec + a motion study animating
+ONLY captured API data; verdict **APPROVED WITH CHANGES** (provenance
+recorded verbatim in the spec: delegated review adopted by the operator on
+paste) — the grammar passed as shown, four binding changes + three
+standing additions folded into the build. The study is frozen as the
+artifact the verdict was rendered on; the changes live in the product
+renderer, enumerable through the audit. **The operator's sign-off (the
+gate verdict) is recorded in the ledger as this step's exit.**
+
+**What was proven:**
+
+- **`@potion/lab-form`** — `deriveFormState` (one pure derivation:
+  config + memory + run + poll-age → a CLOSED FormState), the
+  pixel-to-parameter audit as a typed table with the THREE-DIRECTION
+  machine check IN CI (every FormState leaf ↔ exactly one audit row;
+  every source is a fixture-executed accessor; the draw layer is
+  import-fenced to FormState + THEME — unmapped decoration fails the
+  suite by name), the enumerated taste surface (every THEME constant
+  audited; the pulse-amp clamp carries its WORTH_TO_FUEL re-derivation
+  note in source, pinned by test), diff-only discrete events (identical
+  polls emit nothing — tested), typed staleness from the poll clock
+  (live/stale/disconnected/static-config — a motionless form is never
+  ambiguous with a dead view), a ratcheting visible degrade controller,
+  and the draw-op budget enforced at the TRUE spec maxima (100 rules /
+  50 superpowers via the recorded aggregation rule). 21/21.
+- **The four approved changes**: signature tint propagated (reserved
+  tints provably never policy-derived — they are THEME constants the
+  audit marks RESERVED), far-zoom presence + breath gain as audited
+  presentation constants, severance thickened in GEOMETRY (dead segment
+  wider than live filaments, blunt forked terminus — shape-legible in
+  monochrome), and missionKind DRAWN (task = bilateral ellipse with a
+  head end, standing = radial; the silhouette branch is tested — no
+  phantom parameters).
+- **Server**: `POST /api/lab/harnesses/:hash/edit` (typed plain-language
+  patch → NEW content-addressed catalog row, carried sidecar rebound,
+  closure-gated, no-op honest; fuel re-derives through fuelFromWorth;
+  declaring a superpower mirrors the generation-time external-action
+  gate), `GET :hash/runs`, and typed fallback/latencyViolated flags on
+  the run DTO. Inventory rows classified; key-role-split + tenancy sweep
+  + lab-edit tests green (140/140 on the touched suites); classification
+  artifact regenerated (99 routes).
+- **The form is the page**: /lab/harness/[hash] and /lab/run/[id] render
+  the derived form as the PRIMARY surface (no template UI remains as
+  primary; plain-language panels at mid zoom carry the old tables'
+  content through the real routes). SSR data attributes derive from the
+  same DTOs the canvas draws — the walkthrough's proof surface.
+- **Walkthrough** (in verify): the Step 9 leg proves live re-render
+  through the REAL edit path — /edit lands a new content hash,
+  laminations 0→1 on the new page, the PRIOR page still renders 0 (the
+  catalog-invariance discipline visible in pixels); severed=2 from the
+  declared accounts; the clock still reads 3.2s of 600s at $0; the
+  report's single upgrade correctly prefers "connect calendar, email" on
+  the tool-declaring scenario.
+
+**Residual risks:** canvas is not screen-readable — the DOM overlay at
+mid zoom (labels, panels, the live audit readout) is the recorded
+accessibility surface; run-page narration text now lives in the report
+and panels rather than a primary timeline; the felt-sample anomaly beads
+await a 0036↔harness link (recorded spec deviation); per-edit catalog
+rows ride the same retention story as dial moves.

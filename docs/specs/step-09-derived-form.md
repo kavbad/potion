@@ -412,3 +412,114 @@ primary surface; live re-render on config change proven through the real
 edit paths walkthrough-style; far/mid zoom with the Step 16 stop; the
 interpolation honesty tests green; verify unfiltered; **and the operator's
 taste review passes — sign-off is part of this exit, not a courtesy.**
+
+## Phase two approval (2026-08-13) — binding review outcomes
+
+**Design gate verdict: APPROVED WITH CHANGES** — provenance recorded
+verbatim: the verdict was delegated to Claude by the operator, rendered on
+full source review of the motion study, and adopted by the operator on
+paste. The grammar passes as shown. Binding changes for phase two,
+alongside the three standing additions:
+
+1. **Signature tint**: the policy hue propagates as the organism's
+   signature tint through membrane laminations, pulse strokes, and the
+   fuel arc — data-driven color, audit-mapped. The reserved tints
+   (anomaly fringe, severed, metered truth) stay reserved and never
+   derive from policy.
+2. **Far-zoom presence**: zoom-dependent base radius — larger at far,
+   current size at mid — plus modestly stronger breathing at far; both
+   declared as presentation constants in the audit.
+3. **Severance reads by shape alone** at far zoom on a real viewport; if
+   it does not, thicken the dead segment's GEOMETRY, never its color.
+4. **No phantom parameters**: `missionKind` was derived but never drawn
+   or audited in the study — the standing-vs-task silhouette is DRAWN in
+   the build (task = bilateral with a head end; standing = radial), or
+   the field is struck. Nothing derived survives to build unrendered and
+   unaudited.
+
+**Standing additions (operator, pre-verdict):**
+
+A. **Staleness is typed**: a visual state driven by last-poll age
+   ('live' | 'stale' | 'disconnected', thresholds as theme constants), so
+   a motionless form is never ambiguous between "working, nothing new"
+   and "the view is dead". Audit-mapped to the poll clock.
+B. **The pulse-amplitude floor clamp carries a re-derivation note** in
+   the WORTH_TO_FUEL convention: once live per-step costs exist, re-fit
+   the amplitude mapping from observed distributions and retire the
+   clamp. The note lives on the constant itself.
+C. **The audit's three-direction check and the import fence run in CI**
+   via the unfiltered verify — the gate that fails unmapped decoration is
+   a suite failure, not a review courtesy.
+
+**Also recorded at the gate:** the operator's felt-samples reading is NOT
+yet rendered — it is deliberately NOT recorded as Step 8 evidence here or
+anywhere; it follows separately and appends to the ledger when it lands.
+The Step 5 reconciliation is COUNTERSIGNED with decomposition (ledger row
+added this date).
+
+**Build deviation (recorded): aggregation above legibility caps.** The
+spec's op budget assumed small entity counts; the real caps are
+MAX_RULES=100 and MAX_SUPERPOWERS=50. Rendering those individually would
+break both the budget and legibility, so the draw layer aggregates:
+laminations render individually up to 8 then band into one annulus whose
+thickness continues to scale with the count; filaments render individually
+up to 12 then bundle into trunks with a count-driven girth (count glyph at
+mid zoom). The encoding stays data-driven either way (the audit maps
+thickness/girth ← the count); only the per-entity stroke is capped. The op
+budget holds under the true maxima and the budget test drives the true
+maxima.
+
+**Build note (recorded): the motion study is frozen as reviewed.** The
+four approved changes are implemented in the PRODUCT renderer
+(`packages/lab-form`), not retro-edited into the study — the study remains
+the exact artifact the verdict was rendered on. The differences between
+study and product are enumerable through the audit (signature-tint rows,
+presence constants, severed geometry constants, the drawn silhouette).
+
+## Pre-commit adversarial review (2026-08-13, standing practice)
+
+Three-dimension finder pass (visual honesty, edit/catalog safety, the
+client loop), 12 claims; four verified adversarially before the verifier
+pool hit its credit ceiling, the remaining verdicts completed by the
+operator's agent in the main loop (the Step 8 precedent, same
+read-the-code standard). **All twelve findings held; all fixed:**
+
+1. A TERMINAL run aged into a false "VIEW DISCONNECTED" — fixed with the
+   typed `settled` staleness arm (final data on a live view; no clock),
+   pinned at every poll age.
+2. Degrade fps sampling was starved by the render effect's deps resetting
+   the 1s window every poll — fixed with ONE persistent rAF loop reading
+   state/zoom through refs.
+3. `history.replaceState` destroyed the /lab/run URL on any edit — URL
+   rewriting is now harness-surface-only and only on a real hash move.
+4. Editing while a live run was attached blended the NEW spec into the
+   frozen run's derivation (the fuel arc rescaled against the wrong cap)
+   — a live run now keeps its frozen harness; edits surface as "saved as
+   a new spec" with a link, honoring catalog invariance in the VIEW too.
+5. The draw layer fell back to an INVENTED 1400ms breathing rhythm with
+   no measured cadence — removed; `breathScale` is exported and pinned
+   (no cadence → still at every clock value).
+6. `tintMetered` doubled as tools-slot identity; the SIMULATED badge,
+   asking halo, and failure scar were hardcoded outside THEME; the scar
+   wore the hard-stop tint — four new RESERVED constants, all audited.
+7. Mount replayed a finished run's whole history as a pulse burst —
+   the first derivation now seeds the diff baseline without emitting
+   (opening a page is not events arriving).
+8. The est→metered retint test was vacuous against the all-metered
+   fixture — now forces a hollow baseline and asserts unconditionally.
+9. An accepted trial that never successfully polled read as a calm
+   config view — the staleness clock now keys on the poll TARGET, so it
+   ages into 'disconnected' honestly (pinned).
+10. `core.facets` fabricated a stage count of 2 — now a binary seam (the
+    DTO carries no stage count; the pixel asserts none).
+11. A hash-CONVERGENT /edit overwrote a different existing row's
+    provenance and cluster routing — convergence now writes nothing (the
+    existing row IS the result, answered `converged: true`).
+12. add-rule fed raw control characters past zod into an internal-looking
+    closure 409 — rules now get the generation-time sanitation; the
+    startTrial poll race is epoch-guarded; a spec-null catalog row renders
+    a degraded notice instead of crashing the page.
+
+Post-fix: lab-form 22/22, lab-edit + posture green, both builds clean,
+lint 0 errors, and the full walkthrough green with the Step 9 leg (clock
+still 3.2s of 600s at $0).
