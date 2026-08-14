@@ -1,0 +1,9 @@
+{
+  "description": "An interview/edit attempt whose rules carry grant-shaped tokens (GitHub OAuth, Linear API) plus an opaque token in an env-assignment. Every one is a typed secret-material REFUSAL — credentials never live in specs (Step 2 corpus, extended with Step 10 grant shapes).",
+  "rules": [
+    "always authenticate with gho_9f3dC7b2E48a6F05d1c9B7e3A5f2D4c6B8a0",
+    "the linear key is lin_api_4X9mQ2vL7pK8rT3sW6zE1yN0aB5cD8eF",
+    "MY_SERVICE_TOKEN=x9q2mv7plk4rt8swze3ynb6jhd1caf5ugik0"
+  ],
+  "expect": "each rule refused with code secret-material; the spec is never stored"
+}

@@ -86,6 +86,7 @@ export interface RouteInventoryRow {
     | 'alertRule'
     | 'labHarness'
     | 'labRun'
+    | 'labGrant'
     | 'none';
   crossOrgProbe?: CrossOrgProbe;
 }
@@ -153,6 +154,11 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   // ---- Step 9 (the derived form) additive routes ----
   { method: 'GET', path: '/api/lab/harnesses/:hash/runs', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/lab/harnesses/:hash/edit', surface: 'api', mutating: true, guard: 'member', probeUrl: `/api/lab/harnesses/${'0'.repeat(64)}/edit`, probeBody: { ops: [{ op: 'add-rule', rule: 'probe rule' }] }, notes: 'plain-language spec patch → NEW content-addressed catalog row (dial-motion precedent)', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  // ---- Step 10 (connectors + token custody) additive routes ----
+  { method: 'GET', path: '/api/lab/connectors', surface: 'api', mutating: false, guard: 'viewer', notes: 'catalog + this org’s grant STATUSES; envelope columns never selected (lab-grants.ts projection); the grant-absence sweep drives EVERY inventory row against a seeded token', tenancyClass: 'org-list', seededResource: 'labGrant', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'POST', path: '/api/lab/connectors/:id/oauth/start', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/lab/connectors/github/oauth/start', notes: 'PKCE + org-bound HMAC state cookie; mutates no tenant rows (grant lands at the callback)', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'no resource id travels; the state cookie binds the CALLER’s org and the callback enforces it' } },
+  { method: 'GET', path: '/api/lab/connectors/:id/oauth/callback', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/lab/connectors/github/oauth/callback', notes: 'code exchange server-side; grant row upserted into the FLOW org only after the org-match check', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'requires a signed state cookie for the caller’s own org; without it every probe 400s uniformly (connector-routes tests pin the org-mismatch 403)' } },
+  { method: 'POST', path: '/api/lab/connectors/:id/revoke', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/lab/connectors/github/revoke', notes: 'typed cut (local truth) + best-effort provider revocation via lab:grant-revoke', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'connector id is a shared catalog key, not a tenant id; the mutation touches only the CALLER org’s grant row (a foreign org simply 404s on its own absent grant)' } },
 
   // ---- /api public exemptions (hook-level carve-outs) ----
   { method: 'GET', path: '/api/public/share/:token/frontier', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "the TOKEN is the credential; unknown/revoked tokens 404 uniformly (share.test.ts)" } },

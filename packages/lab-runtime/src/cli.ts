@@ -22,6 +22,8 @@ export interface StartRunOptions {
   orgId: string;
   specText: string;
   tools?: LabTool[];
+  /** Step 10: typed leg-start superpower records, threaded to the loop. */
+  legNotes?: Array<{ toolName: string; note: unknown }>;
   runId?: string;
   maxStepsPerLeg?: number;
   /** Step 8 per-slot policy pins, threaded to the loop. */
@@ -73,6 +75,7 @@ async function executeLeg(
     spec,
     harnessHash: hash,
     ...(opts.tools !== undefined ? { tools: opts.tools } : {}),
+    ...(opts.legNotes !== undefined ? { legNotes: opts.legNotes } : {}),
     ...(opts.maxStepsPerLeg !== undefined ? { maxStepsPerLeg: opts.maxStepsPerLeg } : {}),
     ...(opts.policyRefs !== undefined ? { policyRefs: opts.policyRefs } : {}),
   });

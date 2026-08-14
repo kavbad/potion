@@ -18,16 +18,18 @@
   "dependencies": {
     "@potion/artifacts": "workspace:*",
     "@potion/core": "workspace:*",
+    "@potion/custody": "workspace:*",
     "@potion/db": "workspace:*",
     "@potion/harness": "workspace:*",
+    "@potion/lab-dial": "workspace:*",
+    "@potion/lab-mcp": "workspace:*",
+    "@potion/lab-runtime": "workspace:*",
+    "@potion/lab-spec": "workspace:*",
     "@potion/pareto": "workspace:*",
     "@potion/providers": "workspace:*",
     "@potion/queue": "workspace:*",
     "@potion/researcher": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "@potion/lab-dial": "workspace:*",
-    "@potion/lab-runtime": "workspace:*",
-    "@potion/lab-spec": "workspace:*"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

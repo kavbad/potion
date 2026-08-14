@@ -27,7 +27,7 @@ import {
   openEnvelope,
   rewrapEnvelope,
   sealEnvelope,
-} from '../src/custody/index.js';
+} from './index.js';
 
 const MASTER_A = randomBytes(32).toString('hex');
 const MASTER_B = randomBytes(32).toString('hex');

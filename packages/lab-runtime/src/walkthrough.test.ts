@@ -339,3 +339,105 @@ describe('Step 8 — the toolPolicy activation leg', () => {
     expect([...toolsStrats][0]).not.toBe([...brainStrats][0]);
   }, 120_000);
 });
+
+describe('Step 10 — MCP connect leg ($0): severed → healed → gated call → caps → revoked', () => {
+  it('a real fixture grant + mock MCP server drives a GATED external tool call end-to-end, all at $0, with the filament states visible', async () => {
+    const { sealEnvelope } = await import('@potion/custody');
+    const sealFor = (m: Buffer, v: string): string => sealEnvelope(m, v);
+    const { MockMcpServer } = await import('@potion/lab-mcp/mock-server');
+    const { buildMcpLabTools } = await import('./mcp-tools.js');
+    const { upsertLabGrant, getLabGrant, grantConnectionStatus, markLabGrantStatus, answerLabRun } =
+      await import('@potion/db');
+
+    const MASTER = '11'.repeat(32);
+    const master = Buffer.from(MASTER, 'hex');
+    const GRANT_TOKEN = 'gho_walkthroughMCP4X9mQ2vL7pK8rT3sW6zE1';
+
+    // A mock HOSTED MCP server — plays the remote wire the client speaks to.
+    const mcp = await MockMcpServer.start({
+      tools: [{ name: 'get_me', description: 'who am I', handler: () => ({ login: 'kavon', echo: GRANT_TOKEN }) }],
+      requireBearer: GRANT_TOKEN,
+    });
+    try {
+      const connector = {
+        connectorId: 'github', displayName: 'GitHub (mock)', transport: 'streamable-http' as const,
+        baseUrl: mcp.mcpUrl,
+        oauth: { authorizationUrl: `${mcp.url}/a`, tokenUrl: mcp.tokenUrl, clientIdEnv: 'X_ID', clientSecretEnv: 'X_SECRET', scopesOffered: [] },
+        toolScopeMap: { get_me: [] },
+      };
+      const s = taskSpec({
+        name: 'mcp connect harness',
+        superpowers: [{ id: 'github', scopes: [] }],
+        checkIns: [{ trigger: 'before-external-action' }],
+      });
+      const hash = harnessSpecHash(s);
+
+      // SEVERED: no grant yet — the DTO-derived form reads not-connected.
+      expect(grantConnectionStatus(await getLabGrant(h.db, ORG, 'github'))).toBe('not-connected');
+
+      // HEALED: the grant lands (as the OAuth callback would seal it).
+      await upsertLabGrant(h.db, {
+        id: 'grant-wt', orgId: ORG, connectorId: 'github', superpowerId: 'github',
+        scopesGranted: [], tokenEnvelope: sealFor(master, GRANT_TOKEN), grantedBy: 'usr_wt',
+      });
+      expect(grantConnectionStatus(await getLabGrant(h.db, ORG, 'github'))).toBe('connected');
+
+      // The run: MCP tools built from the grant; the model (real route, mock
+      // provider) emits the tool call → the pore SUSPENDS before it fires.
+      const leg1 = await buildMcpLabTools({
+        db: h.db, orgId: ORG, runId: 'run-mcp-wt', masterKey: master, spec: s, connectors: [connector],
+      });
+      expect(leg1.tools.map((t) => t.name)).toEqual(['github.get_me']);
+      const { createLabRun } = await import('@potion/db');
+      await createLabRun(h.db, { id: 'run-mcp-wt', orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+      const first = await resumeRun({
+        db: h.db, client, orgId: ORG, specText: JSON.stringify(s), runId: 'run-mcp-wt',
+        tools: leg1.tools, legNotes: leg1.legNotes,
+      });
+      await leg1.close();
+      expect(first.status).toBe('awaiting-human'); // the before-external-action pore fired
+      expect(mcp.requests.some((r) => r.method === 'tools/call')).toBe(false);
+
+      // Approve → the GATED call runs exactly once; the result is REDACTED
+      // (the server echoed the bearer) before it reaches any checkpoint.
+      await answerLabRun(h.db, 'run-mcp-wt', ORG, 'yes');
+      const leg2 = await buildMcpLabTools({
+        db: h.db, orgId: ORG, runId: 'run-mcp-wt', masterKey: master, spec: s, connectors: [connector],
+      });
+      const second = await resumeRun({
+        db: h.db, client, orgId: ORG, specText: JSON.stringify(s), runId: 'run-mcp-wt',
+        tools: leg2.tools, legNotes: leg2.legNotes,
+      });
+      await leg2.close();
+      expect(second.status).toBe('completed');
+      expect(mcp.requests.filter((r) => r.method === 'tools/call')).toHaveLength(1); // one answer, one action
+
+      const steps = await listLabSteps(h.db, 'run-mcp-wt', ORG);
+      const dump = JSON.stringify(steps);
+      expect(dump).not.toContain(GRANT_TOKEN); // the bearer echo died before the checkpoint
+      expect(dump).toContain('[REDACTED:grant]');
+
+      // The MCP call itself is NOT model spend: no request_logs row carries
+      // an MCP completion id (connector-side cost is the operator's own).
+      // The model steps DID meter (the real route), proving $0-here ≠ unmetered.
+      const modelIds = steps.filter((x) => x.kind === 'model').map((x) => (x.payload as StepPayload).completionId!);
+      const logs = await h.db.select().from(requestLogs).where(inArray(requestLogs.completionId, modelIds));
+      expect(logs.length).toBe(modelIds.length);
+
+      // REVOKED: the operator cuts the grant; the derivation the form reads
+      // (grantConnectionStatus, the ONE derivation) returns 'revoked', and a
+      // fresh leg offers no tools (the filament is severed with a cut bar —
+      // the draw path proven separately in lab-form form.test.ts).
+      await markLabGrantStatus(h.db, ORG, 'github', 'revoked');
+      expect(grantConnectionStatus(await getLabGrant(h.db, ORG, 'github'))).toBe('revoked');
+      const leg3 = await buildMcpLabTools({
+        db: h.db, orgId: ORG, runId: 'run-mcp-wt', masterKey: master, spec: s, connectors: [connector],
+      });
+      expect(leg3.tools).toEqual([]);
+      expect(leg3.legNotes[0]!.note.superpowerUnavailable.status).toBe('revoked');
+      await leg3.close();
+    } finally {
+      await mcp.close();
+    }
+  }, 120_000);
+});

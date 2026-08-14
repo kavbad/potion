@@ -9,7 +9,7 @@
 // expires and someone reclaims, the old winner's late writes are REJECTED,
 // not merged (review addition 1 — a dead winner must not hold the claim
 // forever, and a zombie winner must not corrupt the run it lost).
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   labHarnessMemory,
@@ -340,6 +340,21 @@ export async function listLabSteps(
     .from(labRunSteps)
     .where(and(eq(labRunSteps.runId, runId), eq(labRunSteps.orgId, orgId)))
     .orderBy(labRunSteps.seq);
+}
+
+/** Step 10 daily-cap rollup: every step payload the org wrote since
+ * `since` (grant-scope attributed-spend metering across runs). kind +
+ * payload only — the meter functions in @potion/lab-mcp consume this
+ * shape directly. */
+export async function listLabStepPayloadsForOrgSince(
+  db: PotionDb,
+  orgId: string,
+  since: Date,
+): Promise<Array<{ kind: string; payload: unknown }>> {
+  return db
+    .select({ kind: labRunSteps.kind, payload: labRunSteps.payload })
+    .from(labRunSteps)
+    .where(and(eq(labRunSteps.orgId, orgId), gte(labRunSteps.createdAt, since)));
 }
 
 /** The whole memory of one (org, harness). There is deliberately NO

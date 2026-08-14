@@ -40,6 +40,14 @@ export const THEME = {
   severedDeadSegmentWidthPx: 3.6,
   severedGapRingRadiusPx: 4.5,
   severedGapPx: 14,
+  /** Step 10: EXPIRED — the structure remains, the current is broken. The
+   * filament stays continuous but dims to this alpha, with a HOLLOW ring
+   * at the old gap site (shape, not color: the ring is the mark). */
+  expiredDimAlpha: 0.3,
+  expiredHollowRingRadiusPx: 4,
+  /** Step 10: REVOKED — severed again PLUS a cut bar at the root; a
+   * deliberate disconnection reads differently from never-connected. */
+  revokedCutBarHalfPx: 6,
 
   // ---- presence (review change 2: presentation constants, audited) ----
   /** Base radius multiplier at far zoom (eases to 1.0 by mid). */

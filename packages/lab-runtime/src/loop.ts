@@ -76,6 +76,12 @@ export interface RunLegOptions {
   spec: HarnessSpec;
   harnessHash: string;
   tools?: LabTool[];
+  /** Step 10: typed leg-start records from MCP setup (expired / revoked /
+   * unreachable superpowers). Each is checkpointed as a tool step AND
+   * pushed into the conversation, so the record and what the model saw
+   * stay identical (requestPayload self-containment carries it to replay).
+   * Never silent: a superpower that could not serve this leg says so. */
+  legNotes?: Array<{ toolName: string; note: unknown }>;
   /** Step 8 per-slot policy pins (the dial's materialized rows): tool-capable
    * calls ride tools ?? brain; tool-free calls (incl. the wrap-up) ride brain. */
   policyRefs?: { brain?: string; tools?: string };
@@ -229,6 +235,21 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       legStamp = null;
       return stamp;
     };
+
+    // ---- Step 10 leg notes: typed superpower states, recorded + shown ----
+    for (const legNote of opts.legNotes ?? []) {
+      seq += 1;
+      await appendLabStep(opts.db, {
+        runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'tool',
+        payload: buildStepPayload({
+          ...takeLegStamp(),
+          kind: 'tool', toolName: legNote.toolName, toolOutput: legNote.note,
+          clockMs: clock.now(), rngSample: rng(),
+        }),
+        harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
+      });
+      messages.push(toolResultMessage(legNote.toolName, legNote.note));
+    }
 
     let stepsThisLeg = 0;
     while (stepsThisLeg < maxSteps) {

@@ -33,7 +33,13 @@ export interface HarnessDto {
       basis: { clusterId: string; frontierId: string; strategyHash: string; providerMode: string };
     }>;
   };
-  superpowers: Array<{ id: string; scopes: string[]; status: 'not-connected' }>;
+  superpowers: Array<{
+    id: string;
+    scopes: string[];
+    /** Step 10: derived server-side from the grants table via the ONE
+     * derivation (grantConnectionStatus) — never a UI guess. */
+    status: 'not-connected' | 'connected' | 'expired' | 'revoked';
+  }>;
   dial: {
     brain: { ok: boolean; frontierId?: string; views?: DialViewDto[]; gap?: unknown };
     tools?: { ok: boolean; frontierId?: string; views?: DialViewDto[]; gap?: unknown };
@@ -77,7 +83,7 @@ export interface RunDto {
   pendingQuestion: string | null;
   createdAt: string;
   updatedAt: string;
-  superpowers: Array<{ id: string; status: 'not-connected' }>;
+  superpowers: Array<{ id: string; status: 'not-connected' | 'connected' | 'expired' | 'revoked' }>;
   steps: RunStepDto[];
   cost: { meteredUsd: number; estPendingUsd: number };
 }

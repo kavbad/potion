@@ -37,7 +37,7 @@ describe('deriveFormState — golden derivation from the design-gate capture', (
     expect(s.membrane.missionKind).toBe('standing');
     expect(s.membrane.laminations).toBe(0); // zero rules → thin membrane, honestly
     expect(s.filaments).toHaveLength(2);
-    expect(s.filaments.every((f) => f.severed)).toBe(true); // the 4th posture place
+    expect(s.filaments.every((f) => f.connection === 'not-connected')).toBe(true); // the 4th posture place
     expect(s.core.facets).toBe(0); // single strategy → smooth orb
     expect(s.core.toolsNucleus).toBe(false);
     expect(s.signatureTint).toBe(THEME.huePolicyCompound); // policy type compound
@@ -68,6 +68,41 @@ describe('deriveFormState — golden derivation from the design-gate capture', (
     const ops = countOps((ctx, view) => draw(ctx, t, view));
     expect(ops.ellipse).toBeGreaterThan(0); // bilateral silhouette drawn
     expect(ops.headMark).toBe(true); // the head end exists for tasks only
+  });
+
+  it('Step 10: the four connection states derive per filament; the RUN status wins while attached (cut-bar reachable from the run page)', () => {
+    const h: HarnessDto = JSON.parse(JSON.stringify(H));
+    h.superpowers = [
+      { id: 'github', scopes: ['read'], status: 'connected' },
+      { id: 'linear', scopes: [], status: 'expired' },
+      { id: 'slack', scopes: [], status: 'revoked' },
+      { id: 'email', scopes: [], status: 'not-connected' },
+    ];
+    const s = deriveFormState(h, M, null, null);
+    expect(s.filaments.map((f) => f.connection)).toEqual([
+      'connected',
+      'expired',
+      'revoked',
+      'not-connected',
+    ]);
+    // Mid-run revocation: the run poll's superpower status OVERRIDES the
+    // harness snapshot — the cut bar appears on the run page, not only
+    // after a harness reload.
+    const run = JSON.parse(JSON.stringify(FINAL)) as RunDto;
+    run.superpowers = [{ id: 'github', status: 'revoked' }];
+    const withRun = deriveFormState(h, M, run, 100);
+    expect(withRun.filaments[0]!.connection).toBe('revoked');
+    expect(withRun.filaments[1]!.connection).toBe('expired'); // no run row → harness status stands
+  });
+
+  it('Step 10: revoked draws MORE geometry than not-connected (the cut bar exists by shape)', () => {
+    const mk = (status: 'not-connected' | 'revoked'): number => {
+      const h: HarnessDto = JSON.parse(JSON.stringify(H));
+      h.superpowers = [{ id: 'x', scopes: [], status }];
+      const s = deriveFormState(h, M, null, null);
+      return countOps((ctx, view) => draw(ctx, s, view)).total;
+    };
+    expect(mk('revoked')).toBeGreaterThan(mk('not-connected'));
   });
 
   it('staleness ladder (review addition 1 + settled): live → stale → disconnected; terminal = SETTLED, never aging', () => {
@@ -178,8 +213,10 @@ describe('draw-op budget at the TRUE spec maxima', () => {
   it('far ≤ opBudgetFar, mid ≤ opBudgetMid, with MAX rules/superpowers/pulses', () => {
     const max: HarnessDto = JSON.parse(JSON.stringify(H));
     max.spec!.rules = Array.from({ length: SPEC_LIMITS.MAX_RULES }, (_v, i) => `rule ${i}`);
+    // 'revoked' is the COSTLIEST filament shape (severed + cut bar) — the
+    // budget is enforced at the true maximum, not a friendly average.
     max.superpowers = Array.from({ length: SPEC_LIMITS.MAX_SUPERPOWERS }, (_v, i) => ({
-      id: `sp${i}`, scopes: [], status: 'not-connected' as const,
+      id: `sp${i}`, scopes: [], status: 'revoked' as const,
     }));
     max.spec!.superpowers = max.superpowers.map((s) => ({ id: s.id, scopes: [] })) as never;
     const state = deriveFormState(max, M, FINAL, 100);

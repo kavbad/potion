@@ -17,7 +17,9 @@
   },
   "dependencies": {
     "@potion/core": "workspace:*",
+    "@potion/custody": "workspace:*",
     "@potion/db": "workspace:*",
+    "@potion/lab-mcp": "workspace:*",
     "@potion/lab-spec": "workspace:*"
   },
   "devDependencies": {

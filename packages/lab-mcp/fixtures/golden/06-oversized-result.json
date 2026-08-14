@@ -1,0 +1,6 @@
+{
+  "description": "A 1 MB result. Per-call: truncated to 64 KB with the TYPED marker {truncated, bytes, originalBytes} — never silent. Cumulative: four truncated results reach the 256 KB per-(run,tool) ceiling and the next call is a typed {capExceeded: 'result-bytes'} refusal — the cap kills the TOOL for the run, never the run.",
+  "toolName": "dump_everything",
+  "resultSizeBytes": 1048576,
+  "expect": "truncation marker per call; typed capExceeded after the cumulative ceiling; struggle tool-cap-exceeded in the report"
+}

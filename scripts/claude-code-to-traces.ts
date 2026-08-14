@@ -47,6 +47,12 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp; replacement: string }> 
   { name: 'openai-project-key', re: /sk-proj-[A-Za-z0-9_-]{16,}/g, replacement: '<secret:openai>' },
   { name: 'generic-sk-key', re: /\bsk-[A-Za-z0-9_-]{20,}/g, replacement: '<secret:sk>' },
   { name: 'potion-api-key', re: /\bpk_[A-Za-z0-9_]{4,}/g, replacement: '<secret:potion-key>' },
+  // Step 10 grant-shaped credentials — keep in sync with the REJECTING copy
+  // in packages/lab-spec/src/security.ts (that file's header explains the
+  // deliberate duplication; the lab-spec corpus pins both directions).
+  { name: 'github-token', re: /\bgh[opsur]_[A-Za-z0-9]{16,}/g, replacement: '<secret:github>' },
+  { name: 'github-fine-grained-pat', re: /\bgithub_pat_[A-Za-z0-9_]{20,}/g, replacement: '<secret:github-pat>' },
+  { name: 'linear-key', re: /\blin_(?:api|oauth)_[A-Za-z0-9]{16,}/g, replacement: '<secret:linear>' },
   {
     name: 'bearer-token',
     re: /\b(Bearer|bearer)\s+[A-Za-z0-9._~+/-]{8,}=*/g,

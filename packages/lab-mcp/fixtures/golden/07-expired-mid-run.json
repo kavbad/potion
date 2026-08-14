@@ -1,0 +1,5 @@
+{
+  "description": "The refresh-failure fixture: the token is past expiry, the connector's token endpoint refuses the refresh. The grant is marked 'expired' (typed, durable), the leg records a typed superpowerUnavailable note (recorded AND shown — never a silent skip), the report carries the superpower-expired struggle, and the DTO reads 'expired' — the healed-to-hollow filament state.",
+  "refreshResponse": { "status": 400, "body": { "error": "invalid_grant" } },
+  "expect": "grant status expired; typed leg note; struggle row; DTO hollow state"
+}

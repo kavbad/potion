@@ -1,0 +1,7 @@
+{
+  "description": "tools/list returns a tool outside scopes_granted (write_item needs 'write'; only 'read' was granted) AND a tool absent from the allowlist entirely (rm_rf_everything). Both are filtered BEFORE toolDefs — the model cannot call what it cannot see; an unlisted tool is invisible even when the server offers it.",
+  "serverTools": ["read_item", "write_item", "rm_rf_everything"],
+  "toolScopeMap": { "read_item": ["read"], "write_item": ["write"] },
+  "scopesGranted": ["read"],
+  "expect": "only read_item becomes a LabTool"
+}

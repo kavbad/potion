@@ -341,3 +341,39 @@ Exfiltration attempts via spec, report, and narration fail BY TEST (the
 report); per-tool caps trip LIVE under the §6 operator-ledgered budget
 with the grant revoked and recorded after; the healed/expired/revoked
 filament states render from real grant rows; verify unfiltered.
+
+## 12. Build-phase deviations (recorded, never silent)
+
+Two changes from the phase-one spec, both adopted from the pre-commit
+adversarial review (three lenses × three-skeptic verification; two findings
+survived a ≥2/3 confirm vote and were fixed with pinned regressions):
+
+1. **Redactor covers hex too (§1).** The phase-one spec listed the scrubbed
+   forms as "raw, base64, URL-encoded." The review found a hosted server
+   that HEX-encodes the bearer it received evaded the set (base64url was
+   covered, hex was not — same tier, an oversight). `encodedForms` now
+   includes hex (lower + upper). The redactor's remit is restated precisely:
+   the STANDARD whole-token encodings a real echo uses; arbitrary/layered
+   transforms (gzip+base64, custom encodings) and sub-12-char shards split
+   ACROSS results remain the NAMED Step 12 target (§3 deferral table).
+   Pinned: `redactor.test.ts` (hex both cases) + golden fixture 02.
+
+2. **The DOLLAR caps meter at GRANT scope, not per-tool (§4).** The §4 table
+   defaulted `attributedEstUsd` to `superpower.maxSpendUsdPerRun` while
+   scoping the meter "per (run, toolName)" — internally inconsistent with the
+   same section's statement that `maxSpendUsdPerDay` is "enforced at grant
+   scope." Metering the operator's per-connection dollar budget per-tool made
+   the effective ceiling N× (the tool count) — fail-OPEN for the spend
+   dimension, the one that must fail closed. Fixed: `checkToolCaps` now takes
+   caller-supplied GRANT-scoped run and day figures
+   (`attributedEstUsdForConnector`, summed once per emitting step across the
+   connector's tools); `callCount` and `resultBytes` stay per-tool as the §4
+   table specifies. Pinned: `caps.test.ts` (two tools share one budget; the
+   old per-tool figure would not have tripped).
+
+Two further review findings were REFUTED (1/3 confirm) but cheaply hardened
+anyway, this being the outward-facing security step: the token-refresh
+failure path no longer echoes the provider's raw `error` field into a leg
+note (a compromised token endpoint controls that string), and
+`buildMcpLabTools` now closes already-opened sessions if a later connector's
+setup throws (no leaked HTTP session on the error path).

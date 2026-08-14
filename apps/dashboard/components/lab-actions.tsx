@@ -366,3 +366,106 @@ export function MemoryEntryEditor({
     </span>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Connector panel (Step 10) — the filament's control surface: catalog +
+// grant STATUSES only (token material structurally absent from the API),
+// Connect starts the PKCE flow (admin), Revoke is the typed cut.
+// ---------------------------------------------------------------------------
+
+interface ConnectorDto {
+  connectorId: string;
+  displayName: string;
+  scopesOffered: string[];
+  tools: string[];
+  configured: boolean;
+  status: 'not-connected' | 'connected' | 'expired' | 'revoked';
+  grant: { scopesGranted: string[]; grantedBy: string; revokedAt: string | null } | null;
+}
+
+const STATUS_BG: Record<ConnectorDto['status'], string> = {
+  'not-connected': '#fee2e2',
+  connected: '#dcfce7',
+  expired: '#fef3c7',
+  revoked: '#e5e7eb',
+};
+
+export function ConnectorPanel() {
+  const [connectors, setConnectors] = useState<ConnectorDto[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetch('/api/lab/connectors');
+    if (res.ok) setConnectors(((await res.json()) as { connectors: ConnectorDto[] }).connectors);
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const connect = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      setNote(null);
+      try {
+        const res = await fetch(`/api/lab/connectors/${id}/oauth/start`, { method: 'POST' });
+        const body = (await res.json()) as { authorizationUrl?: string; error?: { message?: string } };
+        if (res.ok && body.authorizationUrl) {
+          window.location.href = body.authorizationUrl; // the operator approves BY HAND
+        } else {
+          setNote(body.error?.message ?? `connect failed (${res.status})`);
+        }
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
+
+  const revoke = useCallback(
+    async (id: string) => {
+      if (!window.confirm(`Revoke the ${id} grant? The filament shows the cut immediately.`)) return;
+      setBusy(true);
+      try {
+        await fetch(`/api/lab/connectors/${id}/revoke`, { method: 'POST' });
+        await load();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [load],
+  );
+
+  if (connectors === null) return null;
+  return (
+    <div style={box} data-testid="connector-panel">
+      <strong>Superpower connections</strong>
+      {note ? <div style={{ color: '#b91c1c', fontSize: 12 }}>{note}</div> : null}
+      <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+        {connectors.map((c) => (
+          <li key={c.connectorId} data-testid={`connector-${c.connectorId}`} data-status={c.status}>
+            {c.displayName}
+            <span style={{ ...badge, background: STATUS_BG[c.status] }}>{c.status}</span>
+            <span style={{ fontSize: 11, color: '#6b7688', marginLeft: 6 }}>
+              {c.tools.length} read tools{c.scopesOffered.length === 0 ? ' · zero-scope grant' : ''}
+            </span>
+            {c.status === 'connected' ? (
+              <button onClick={() => void revoke(c.connectorId)} disabled={busy} style={{ marginLeft: 8 }}>
+                Revoke
+              </button>
+            ) : (
+              <button
+                onClick={() => void connect(c.connectorId)}
+                disabled={busy || !c.configured}
+                title={c.configured ? '' : 'set the connector client id/secret env vars'}
+                style={{ marginLeft: 8 }}
+              >
+                {c.status === 'not-connected' ? 'Connect' : 'Reconnect'}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

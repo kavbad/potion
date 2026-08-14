@@ -1,11 +1,8 @@
 // Custody module (M2 Wave 2, ROADMAP #15/#16): real BYOK key custody.
-//   envelope.ts — AES-256-GCM envelope encryption (per-key data key wrapped
-//                 by the master key; tamper-evident via GCM auth tags).
-//   master.ts   — MasterKeyProvider seam: env (POTION_MASTER_KEY) now,
-//                 cloud KMS TODO; dev-file/ephemeral fallbacks with loud
-//                 warnings.
-//   service.ts  — the audited crypto boundary: encrypt/decrypt/rotate with
-//                 custody_audit writes on every sensitive operation.
-export * from './envelope.js';
-export * from './master.js';
-export * from './service.js';
+//
+// Step 10: the implementation moved VERBATIM to packages/custody so the
+// WORKER — where the MCP client opens superpower grants — can use the same
+// envelope without a token-bearing API existing. This re-export keeps every
+// server import path working unchanged; the BYOK suite moved with the code
+// and passes unchanged (the relocation is additive by test, not by intent).
+export * from '@potion/custody';

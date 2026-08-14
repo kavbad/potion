@@ -135,7 +135,9 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { resumeRun, ServingClient } from '@potion/lab-runtime';
+import { buildMcpLabTools, resumeRun, ServingClient, type LegOutcome, type McpLegSetup } from '@potion/lab-runtime';
+import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
+import type { ConnectorDef } from '@potion/lab-mcp';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -3517,9 +3519,15 @@ const LAB_RUN_TERMINAL_STATES = new Set(['completed', 'failed', 'killed-budget',
 
 /** Test seam: how the handler builds its serving client. The default is a
  * real ServingClient over POTION_SERVING_URL; custody tests inject a
- * scripted double so every terminal state is drivable at $0. */
+ * scripted double so every terminal state is drivable at $0. Step 10 adds
+ * the MCP seams: the master key (grants open in THIS process — the custody
+ * perimeter now spans server + worker, same env-var discipline) and a
+ * connector-registry override so tests point at the mock hosted server. */
 export interface LabRunHandlerDeps {
   clientFactory?: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
+  masterKeyProvider?: MasterKeyProvider;
+  connectors?: readonly ConnectorDef[];
+  mcpFetch?: typeof fetch;
 }
 
 export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run'> {
@@ -3602,15 +3610,57 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
         ...(catalog !== null && catalog.clusterId !== null ? { clusterHint: catalog.clusterId } : {}),
       });
       const policyRefs = { brain: brainRow.name, ...(toolsRow !== undefined ? { tools: toolsRow.name } : {}) };
-      let outcome = await resumeRun({
-        db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId,
-        ...(payload.answer !== undefined ? { answer: payload.answer } : {}),
-        policyRefs,
-      });
-      while (outcome.status === 'leg-cap') {
+
+      // ---- Step 10: MCP superpowers — session per LEG, tools from grants.
+      // The master key opens grants in this process via @potion/custody;
+      // no token-bearing API exists. Sessions close after every leg and
+      // re-initialize on the next (runs are durable, connections are not).
+      // Same resolution as the server (env → dev-file beside the PGlite
+      // dir → ephemeral), so seal (OAuth callback) and open (here) agree
+      // on the master in every environment.
+      const dbUrl = process.env.DATABASE_URL;
+      const persistDir =
+        dbUrl !== undefined && dbUrl.startsWith('pglite://') && dbUrl.slice('pglite://'.length) !== ''
+          ? dbUrl.slice('pglite://'.length)
+          : null;
+      const masterKeyProvider =
+        deps.masterKeyProvider ?? createMasterKeyProvider({ env: process.env, persistDir });
+      const masterKey =
+        spec.superpowers.length > 0 ? await masterKeyProvider.getMasterKey() : null;
+      const mcpLeg = async (): Promise<McpLegSetup> =>
+        masterKey === null
+          ? { tools: [], legNotes: [], close: async () => {} }
+          : buildMcpLabTools({
+              db: ctx.db,
+              orgId: payload.orgId,
+              runId: payload.runId,
+              masterKey,
+              spec,
+              ...(deps.connectors !== undefined ? { connectors: deps.connectors } : {}),
+              ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
+            });
+
+      let leg = await mcpLeg();
+      let outcome: LegOutcome;
+      try {
         outcome = await resumeRun({
-          db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId, policyRefs,
+          db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId,
+          ...(payload.answer !== undefined ? { answer: payload.answer } : {}),
+          policyRefs, tools: leg.tools, legNotes: leg.legNotes,
         });
+      } finally {
+        await leg.close();
+      }
+      while (outcome.status === 'leg-cap') {
+        leg = await mcpLeg();
+        try {
+          outcome = await resumeRun({
+            db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId, policyRefs,
+            tools: leg.tools, legNotes: leg.legNotes,
+          });
+        } finally {
+          await leg.close();
+        }
       }
       return { state: outcome.status };
     } finally {
@@ -3621,6 +3671,74 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
 }
 
 export const labRunHandler: WorkerHandler<'lab:run'> = createLabRunHandler();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lab Step 10 — lab:grant-revoke: BEST-EFFORT provider-side revocation.
+// The /revoke route already marked the grant 'revoked' (local truth,
+// immediate; the filament shows the cut regardless of what happens here).
+// This job opens the already-revoked row — the one legitimate read of a
+// dead grant — purely to kill the token upstream. Every outcome is a
+// recorded result; nothing here can un-revoke or throw the queue into a
+// retry storm over a provider that is down.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LabGrantRevokeDeps {
+  masterKeyProvider?: MasterKeyProvider;
+  connectors?: readonly ConnectorDef[];
+  fetchImpl?: typeof fetch;
+}
+
+export function createLabGrantRevokeHandler(
+  deps: LabGrantRevokeDeps = {},
+): WorkerHandler<'lab:grant-revoke'> {
+  return async (payload, ctx): Promise<{ provider: 'revoked' | 'skipped' | 'failed'; detail: string }> => {
+    const { CONNECTORS } = await import('@potion/lab-mcp');
+    const connectors = deps.connectors ?? CONNECTORS;
+    const connector = connectors.find((c) => c.connectorId === payload.connectorId);
+    if (connector?.revocationUrl === undefined) {
+      return { provider: 'skipped', detail: 'no provider revocation endpoint for this connector' };
+    }
+    const clientId = process.env[connector.oauth.clientIdEnv];
+    const clientSecret = process.env[connector.oauth.clientSecretEnv];
+    if (clientId === undefined || clientSecret === undefined) {
+      return { provider: 'skipped', detail: 'connector client credentials not configured' };
+    }
+    const dbUrl = process.env.DATABASE_URL;
+    const persistDir =
+      dbUrl !== undefined && dbUrl.startsWith('pglite://') && dbUrl.slice('pglite://'.length) !== ''
+        ? dbUrl.slice('pglite://'.length)
+        : null;
+    const provider =
+      deps.masterKeyProvider ?? createMasterKeyProvider({ env: process.env, persistDir });
+    const grant = await openGrantToken(
+      ctx.db,
+      await provider.getMasterKey(),
+      payload.orgId,
+      payload.connectorId,
+    );
+    if (grant === null) return { provider: 'skipped', detail: 'no grant row' };
+    try {
+      const fetchImpl = deps.fetchImpl ?? fetch;
+      const res = await fetchImpl(connector.revocationUrl.replace('{clientId}', clientId), {
+        method: 'DELETE',
+        headers: {
+          authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+          accept: 'application/vnd.github+json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ access_token: grant.accessToken }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      return res.ok || res.status === 404
+        ? { provider: 'revoked', detail: `provider returned ${res.status}` }
+        : { provider: 'failed', detail: `provider returned HTTP ${res.status}` };
+    } catch (e) {
+      return { provider: 'failed', detail: e instanceof Error ? e.message : String(e) };
+    }
+  };
+}
+
+export const labGrantRevokeHandler: WorkerHandler<'lab:grant-revoke'> = createLabGrantRevokeHandler();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
@@ -4749,6 +4867,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'frontier:live-sweep': frontierLiveSweepHandler,
   'frontier:platform-sweep': frontierPlatformSweepHandler,
   'lab:run': labRunHandler,
+  'lab:grant-revoke': labGrantRevokeHandler,
   // ---- G2.7 operator org deletion ----
   'org:delete': orgDeleteHandler,
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----

@@ -299,7 +299,9 @@ export function LabFormView({
       data-testid="lab-form"
       data-harness-hash={harness.harnessHash}
       data-mission-kind={state.membrane.missionKind}
-      data-severed={state.filaments.filter((f) => f.severed).length}
+      data-severed={state.filaments.filter((f) => f.connection === 'not-connected' || f.connection === 'revoked').length}
+      data-connected={state.filaments.filter((f) => f.connection === 'connected').length}
+      data-revoked={state.filaments.filter((f) => f.connection === 'revoked').length}
       data-tint={state.signatureTint}
       data-run-state={state.glow.mode}
       data-laminations={state.membrane.laminations}

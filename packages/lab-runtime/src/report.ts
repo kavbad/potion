@@ -5,7 +5,14 @@
 // no model-generated advice in v1 (a model may PHRASE upgrades in a later
 // step, never choose them).
 import { and, eq, inArray } from 'drizzle-orm';
-import { getLabRun, listLabSteps, requestLogs, type PotionDb } from '@potion/db';
+import {
+  getLabRun,
+  grantConnectionStatus,
+  listLabGrants,
+  listLabSteps,
+  requestLogs,
+  type PotionDb,
+} from '@potion/db';
 import type { StepPayload } from './checkpoint.js';
 
 export type StruggleEvidence =
@@ -13,6 +20,10 @@ export type StruggleEvidence =
   | { code: 'run-failed'; detail: string }
   | { code: 'awaiting-human-wait'; question: string }
   | { code: 'not-connected-superpowers'; superpowers: string[] }
+  | { code: 'superpower-expired'; superpowers: string[] }
+  | { code: 'superpower-revoked'; superpowers: string[] }
+  | { code: 'superpower-unreachable'; superpowers: string[] }
+  | { code: 'tool-cap-exceeded'; tools: string[] }
   | { code: 'serving-fallback-served'; steps: number }
   | { code: 'latency-violated'; steps: number }
   | { code: 'spec-drift-refused'; detail: string };
@@ -60,8 +71,36 @@ const UPGRADE_LADDER: Array<{
         : '',
   },
   {
+    code: 'superpower-revoked',
+    text: (e) =>
+      e.code === 'superpower-revoked'
+        ? `Reconnect ${e.superpowers.join(', ')} — the grant was deliberately revoked; the run went on without it.`
+        : '',
+  },
+  {
+    code: 'superpower-expired',
+    text: (e) =>
+      e.code === 'superpower-expired'
+        ? `Reconnect ${e.superpowers.join(', ')} — the grant expired; the filament is hollow until a fresh OAuth grant heals it.`
+        : '',
+  },
+  {
+    code: 'superpower-unreachable',
+    text: (e) =>
+      e.code === 'superpower-unreachable'
+        ? `Retry later — ${e.superpowers.join(', ')} could not be reached this run; the connection itself is intact.`
+        : '',
+  },
+  {
     code: 'budget-killed',
     text: () => 'Raise the worth-per-run answer (fuel derives from it) — this run hit its hard stop.',
+  },
+  {
+    code: 'tool-cap-exceeded',
+    text: (e) =>
+      e.code === 'tool-cap-exceeded'
+        ? `Raise the per-tool cap for ${e.tools.join(', ')} — the tool hit its ceiling and the run finished without it.`
+        : '',
   },
   {
     code: 'latency-violated',
@@ -129,12 +168,52 @@ export async function buildRunReport(
   const struggles: StruggleEvidence[] = [];
   const spec = run.spec as { superpowers?: Array<{ id: string }>; fuel?: { maxUsdPerRun?: number }; mission?: { goal?: string } };
   if ((spec.superpowers ?? []).length > 0) {
-    // Pre-MCP: declared superpowers cannot execute — the trial ran
-    // brain-only. Typed, visible, never silent (the tool posture).
-    struggles.push({
-      code: 'not-connected-superpowers',
-      superpowers: (spec.superpowers ?? []).map((s) => s.id),
-    });
+    // Step 10: connection state comes from the grants table (durable rows),
+    // so the struggle names WHICH posture each superpower is actually in —
+    // never the blanket pre-MCP "nothing connects". Typed, never silent.
+    const grants = await listLabGrants(db, orgId);
+    const byState: Record<'not-connected' | 'expired' | 'revoked', string[]> = {
+      'not-connected': [],
+      expired: [],
+      revoked: [],
+    };
+    for (const s of spec.superpowers ?? []) {
+      const grant = grants.find((g) => g.connectorId === s.id) ?? null;
+      const state = grantConnectionStatus(grant);
+      if (state !== 'connected') byState[state].push(s.id);
+    }
+    if (byState['not-connected'].length > 0) {
+      struggles.push({ code: 'not-connected-superpowers', superpowers: byState['not-connected'] });
+    }
+    if (byState.expired.length > 0) {
+      struggles.push({ code: 'superpower-expired', superpowers: byState.expired });
+    }
+    if (byState.revoked.length > 0) {
+      struggles.push({ code: 'superpower-revoked', superpowers: byState.revoked });
+    }
+  }
+  // Typed tool-step evidence (leg notes + per-call refusals are ordinary
+  // recorded steps — the report reads the record, never a side channel).
+  const unreachable = new Set<string>();
+  const cappedTools = new Set<string>();
+  for (const { kind, p } of payloads) {
+    if (kind !== 'tool') continue;
+    const out = p.toolOutput as
+      | { superpowerUnavailable?: { connectorId: string; status: string }; capExceeded?: string; toolName?: string }
+      | null
+      | undefined;
+    if (out?.superpowerUnavailable?.status === 'unreachable') {
+      unreachable.add(out.superpowerUnavailable.connectorId);
+    }
+    if (typeof out?.capExceeded === 'string' && typeof out.toolName === 'string') {
+      cappedTools.add(out.toolName);
+    }
+  }
+  if (unreachable.size > 0) {
+    struggles.push({ code: 'superpower-unreachable', superpowers: [...unreachable].sort() });
+  }
+  if (cappedTools.size > 0) {
+    struggles.push({ code: 'tool-cap-exceeded', tools: [...cappedTools].sort() });
   }
   if (run.state === 'killed-budget') {
     struggles.push({ code: 'budget-killed', detail: run.stateReason ?? 'hard stop' });

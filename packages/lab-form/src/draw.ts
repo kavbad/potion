@@ -236,7 +236,7 @@ export function draw(ctx: Canvas2DLike, state: FormState, view: DrawView): DrawG
     const x0 = cx + r0x * Math.cos(ang);
     const y0 = cy + r0y * Math.sin(ang);
     const len = baseR * 0.62;
-    if (f.severed) {
+    if (f.connection === 'not-connected' || f.connection === 'revoked') {
       const cut = 0.45;
       const x1 = x0 + len * cut * Math.cos(ang);
       const y1 = y0 + len * cut * Math.sin(ang);
@@ -272,8 +272,41 @@ export function draw(ctx: Canvas2DLike, state: FormState, view: DrawView): DrawG
       ctx.strokeStyle = THEME.tintSevered;
       ctx.lineWidth = THEME.severedDeadSegmentWidthPx;
       ctx.stroke();
+      if (f.connection === 'revoked') {
+        // Step 10: the CUT BAR at the root — a deliberate disconnection
+        // reads differently from never-connected, by shape alone.
+        ctx.beginPath();
+        ctx.moveTo(x0 - THEME.revokedCutBarHalfPx * Math.cos(perp), y0 - THEME.revokedCutBarHalfPx * Math.sin(perp));
+        ctx.lineTo(x0 + THEME.revokedCutBarHalfPx * Math.cos(perp), y0 + THEME.revokedCutBarHalfPx * Math.sin(perp));
+        ctx.strokeStyle = THEME.tintSevered;
+        ctx.lineWidth = THEME.severedDeadSegmentWidthPx;
+        ctx.stroke();
+      }
       anchors[`filament:${f.id}`] = [x3, y3 + 14];
+    } else if (f.connection === 'expired') {
+      // Step 10: the structure remains, the current is broken — continuous
+      // geometry, dimmed, with a HOLLOW ring at the old gap site.
+      const x1 = x0 + len * Math.cos(ang);
+      const y1 = y0 + len * Math.sin(ang);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.strokeStyle = tint;
+      ctx.globalAlpha = THEME.expiredDimAlpha * glowLevel;
+      ctx.lineWidth = THEME.filamentLiveWidthPx;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      const gx = x0 + len * 0.45 * Math.cos(ang);
+      const gy = y0 + len * 0.45 * Math.sin(ang);
+      ctx.beginPath();
+      ctx.arc(gx, gy, THEME.expiredHollowRingRadiusPx, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(150,170,205,${0.6 * glowLevel})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      anchors[`filament:${f.id}`] = [x1, y1 + 14];
     } else {
+      // HEALED (Step 10): continuous, signature-tinted; pulses traverse it
+      // on this tool's calls (the Step 9 pulse machinery unchanged).
       const x1 = x0 + len * Math.cos(ang);
       const y1 = y0 + len * Math.sin(ang);
       ctx.beginPath();

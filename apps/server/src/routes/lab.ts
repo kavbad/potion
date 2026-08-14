@@ -18,6 +18,17 @@
 //   PUT    /api/lab/memory/:hash/:key    member — edit an entry
 //   DELETE /api/lab/memory/:hash/:key    admin  — delete an entry (permanent)
 //
+// Step 10 — connectors + token custody (docs/specs/step-10-mcp-custody.md):
+//   GET    /api/lab/connectors                     viewer — catalog + grant STATUSES
+//                                                  (token material structurally absent:
+//                                                  the repo never selects envelopes)
+//   POST   /api/lab/connectors/:id/oauth/start     admin  — PKCE + org-bound HMAC state
+//   GET    /api/lab/connectors/:id/oauth/callback  admin  — code exchange server-side;
+//                                                  seal + store; token plaintext exists
+//                                                  ONLY in that handler's stack frame
+//   POST   /api/lab/connectors/:id/revoke          admin  — typed cut + best-effort
+//                                                  provider revocation (worker job)
+//
 // Tenancy: every read/write is org-scoped through the session org; cross-org
 // ids get the SAME 404 as nonexistent ones (no existence oracle). Mock/live
 // separation: run, felt, and report surfaces carry the provenance the trace
@@ -79,8 +90,26 @@ import {
 } from '@potion/lab-dial';
 import { parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
 import { ServingClient, buildRunReport, type StepPayload } from '@potion/lab-runtime';
+import {
+  getLabGrant,
+  grantConnectionStatus,
+  listLabGrants,
+  markLabGrantStatus,
+  upsertLabGrant,
+} from '@potion/db';
+import { CONNECTORS, getConnector, withEndpointOverrides, type ConnectorDef } from '@potion/lab-mcp';
+import {
+  CONNECTOR_STATE_COOKIE,
+  CONNECTOR_STATE_TTL_MS,
+  ConnectorOauthError,
+  decodeConnectorState,
+  encodeConnectorState,
+  newConnectorFlowState,
+  pkceChallengeS256,
+} from '../connector-oauth.js';
 import type { PotionQueue } from '@potion/queue';
-import { openAiError, roleAtLeast } from '../auth.js';
+import { openAiError, parseCookies, roleAtLeast } from '../auth.js';
+import { actorOf } from './keys.js';
 import type { PotionContext } from '../context.js';
 
 export interface LabRoutesOptions {
@@ -130,13 +159,9 @@ function traceProvenance(trace: string | undefined): string {
   return m?.[1] !== undefined && m[1] !== '' ? m[1] : 'unknown';
 }
 
-/** Pre-MCP tool posture (spec: typed in the DTO, not a UI string): every
- * declared superpower is 'not-connected' until Step 10 wires execution.
- * Never faked, never silent — the badge rides the data, pages just render. */
-function superpowerPosture(spec: HarnessSpec | null): Array<{ id: string; scopes: string[]; status: 'not-connected' }> {
-  if (spec === null) return [];
-  return spec.superpowers.map((s) => ({ id: s.id, scopes: s.scopes, status: 'not-connected' as const }));
-}
+/** Superpower connection status union — the four typed places a filament
+ * can be (Step 9's structural severance + Step 10's healed/hollow/cut). */
+export type SuperpowerStatus = 'not-connected' | 'connected' | 'expired' | 'revoked';
 
 export function registerLabRoutes(
   app: FastifyInstance,
@@ -209,6 +234,22 @@ export function registerLabRoutes(
     } finally {
       await revokeApiKey(db, orgId, keyId, new Date()).catch(() => {});
     }
+  }
+
+  /** Step 10: the four-state posture derived from the grants table via the
+   * ONE derivation (grantConnectionStatus). Token material cannot appear
+   * here — the repo's projection excludes the envelope columns entirely. */
+  async function superpowerPosture(
+    orgId: string,
+    spec: HarnessSpec | null,
+  ): Promise<Array<{ id: string; scopes: string[]; status: SuperpowerStatus }>> {
+    if (spec === null || spec.superpowers.length === 0) return [];
+    const grants = await listLabGrants(db, orgId);
+    return spec.superpowers.map((s) => ({
+      id: s.id,
+      scopes: s.scopes,
+      status: grantConnectionStatus(grants.find((g) => g.connectorId === s.id) ?? null),
+    }));
   }
 
   /** Catalog row for THIS org or the uniform 404 (foreign = unknown). */
@@ -334,7 +375,7 @@ export function registerLabRoutes(
       createdAt: row.createdAt,
       spec,
       sidecar: row.sidecar,
-      superpowers: superpowerPosture(spec),
+      superpowers: await superpowerPosture(org.orgId, spec),
       dial: {
         brain: await dialFor('brain'),
         ...(toolBearing ? { tools: await dialFor('tools') } : {}),
@@ -633,7 +674,7 @@ export function registerLabRoutes(
       pendingQuestion: run.pendingQuestion,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
-      superpowers: superpowerPosture(run.spec as HarnessSpec),
+      superpowers: await superpowerPosture(org.orgId, run.spec as HarnessSpec),
       steps: stepDtos,
       cost: {
         meteredUsd: meteredTotal,
@@ -913,5 +954,213 @@ export function registerLabRoutes(
       clusterId: row.clusterId,
     });
     return reply.send({ ok: true, harnessHash: hash, previousHash: row.harnessHash, unchanged: false });
+  });
+
+  // ═══ Step 10 — connectors + token custody ═════════════════════════════════
+
+  const CONNECTOR_ID_RE = /^[a-z0-9-]{1,64}$/;
+  const connectorNotConfigured = (id: string) =>
+    openAiError(
+      `connector '${id}' has no client credentials configured — set its client id/secret env vars`,
+      'invalid_request_error',
+      'connector_not_configured',
+    );
+
+  function connectorEnv(c: ConnectorDef): { clientId: string; clientSecret: string } | null {
+    const clientId = process.env[c.oauth.clientIdEnv];
+    const clientSecret = process.env[c.oauth.clientSecretEnv];
+    if (clientId === undefined || clientId === '' || clientSecret === undefined || clientSecret === '') {
+      return null;
+    }
+    return { clientId, clientSecret };
+  }
+
+  function callbackUrlFor(req: FastifyRequest, connectorId: string): string {
+    const base = process.env.POTION_PUBLIC_URL ?? `http://${req.headers.host ?? 'localhost'}`;
+    return `${base}/api/lab/connectors/${connectorId}/oauth/callback`;
+  }
+
+  // ---- GET /api/lab/connectors (viewer) — catalog + grant statuses ----
+  // Token material is STRUCTURALLY absent: listLabGrants' SELECT excludes
+  // the envelope columns, so no field exists here to leak (enforcement 1;
+  // the inventory-driven absence sweep re-proves it over the wire).
+  app.get('/api/lab/connectors', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const grants = await listLabGrants(db, org.orgId);
+    return reply.send({
+      connectors: CONNECTORS.map((raw) => withEndpointOverrides(raw)).map((c) => {
+        const grant = grants.find((g) => g.connectorId === c.connectorId) ?? null;
+        return {
+          connectorId: c.connectorId,
+          displayName: c.displayName,
+          scopesOffered: c.oauth.scopesOffered,
+          tools: Object.keys(c.toolScopeMap).sort(),
+          configured: connectorEnv(c) !== null,
+          status: grantConnectionStatus(grant),
+          grant:
+            grant === null
+              ? null
+              : {
+                  scopesGranted: grant.scopesGranted,
+                  tokenExpiresAt: grant.tokenExpiresAt,
+                  grantedBy: grant.grantedBy,
+                  createdAt: grant.createdAt,
+                  revokedAt: grant.revokedAt,
+                },
+        };
+      }),
+    });
+  });
+
+  // ---- POST /api/lab/connectors/:id/oauth/start (admin) ----
+  // Granting a third-party credential is an admin act. PKCE S256 + an
+  // ORG-BOUND signed state cookie (the tenancy anchor for the callback).
+  app.post('/api/lab/connectors/:id/oauth/start', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'connect superpowers'));
+    }
+    const { id } = req.params as { id: string };
+    const raw = CONNECTOR_ID_RE.test(id) ? getConnector(id) : null;
+    const connector = raw === null ? null : withEndpointOverrides(raw);
+    if (connector === null) return reply.code(404).send(notFound);
+    const env = connectorEnv(connector);
+    if (env === null) return reply.code(400).send(connectorNotConfigured(id));
+    const flow = newConnectorFlowState(org.orgId, connector.connectorId);
+    reply.header(
+      'set-cookie',
+      `${CONNECTOR_STATE_COOKIE}=${encodeConnectorState(flow, env.clientSecret)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(CONNECTOR_STATE_TTL_MS / 1000)}`,
+    );
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: env.clientId,
+      redirect_uri: callbackUrlFor(req, connector.connectorId),
+      state: flow.state,
+      code_challenge: pkceChallengeS256(flow.verifier),
+      code_challenge_method: 'S256',
+      ...(connector.oauth.scopesOffered.length > 0
+        ? { scope: connector.oauth.scopesOffered.join(' ') }
+        : {}),
+    });
+    return reply.send({
+      authorizationUrl: `${connector.oauth.authorizationUrl}?${params.toString()}`,
+    });
+  });
+
+  // ---- GET /api/lab/connectors/:id/oauth/callback (admin session) ----
+  // The access token exists in plaintext ONLY inside this handler's stack
+  // frame: exchanged server-side, sealed with the platform master key,
+  // stored as an envelope. Never logged, never in a redirect URL, never in
+  // a response body — the absence sweep asserts it over the wire.
+  app.get('/api/lab/connectors/:id/oauth/callback', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'finish connecting superpowers'));
+    }
+    const { id } = req.params as { id: string };
+    const raw = CONNECTOR_ID_RE.test(id) ? getConnector(id) : null;
+    const connector = raw === null ? null : withEndpointOverrides(raw);
+    if (connector === null) return reply.code(404).send(notFound);
+    const env = connectorEnv(connector);
+    if (env === null) return reply.code(400).send(connectorNotConfigured(id));
+    const clearFlowCookie = () =>
+      reply.header('set-cookie', `${CONNECTOR_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+    try {
+      const query = req.query as { code?: string; state?: string };
+      const cookies = parseCookies(req.headers.cookie);
+      const flow = decodeConnectorState(cookies[CONNECTOR_STATE_COOKIE], env.clientSecret);
+      if (!query.state || query.state !== flow.state) {
+        throw new ConnectorOauthError('connector state mismatch — restart the connect', 400);
+      }
+      if (flow.connectorId !== connector.connectorId) {
+        throw new ConnectorOauthError('connector flow is for a different connector', 400);
+      }
+      // The TENANCY ANCHOR: the flow was started for exactly one org, and
+      // only a live admin session of that org may complete it.
+      if (flow.orgId !== org.orgId) {
+        throw new ConnectorOauthError('connector flow belongs to a different org', 403);
+      }
+      if (!query.code) throw new ConnectorOauthError('missing authorization code', 400);
+
+      const tokenRes = await fetch(connector.oauth.tokenUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: query.code,
+          client_id: env.clientId,
+          client_secret: env.clientSecret,
+          redirect_uri: callbackUrlFor(req, connector.connectorId),
+          code_verifier: flow.verifier,
+        }).toString(),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!tokenRes.ok) {
+        throw new ConnectorOauthError(`token exchange failed (HTTP ${tokenRes.status})`, 502);
+      }
+      const token = (await tokenRes.json()) as {
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+        scope?: string;
+        error?: string;
+      };
+      if (typeof token.access_token !== 'string' || token.access_token === '') {
+        throw new ConnectorOauthError(`token exchange refused: ${token.error ?? 'no access_token'}`, 502);
+      }
+      const scopesGranted =
+        typeof token.scope === 'string' && token.scope !== ''
+          ? token.scope.split(/[,\s]+/).filter((s) => s !== '')
+          : connector.oauth.scopesOffered;
+      await upsertLabGrant(db, {
+        id: `grant-${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+        orgId: org.orgId,
+        connectorId: connector.connectorId,
+        superpowerId: connector.connectorId,
+        scopesGranted,
+        tokenEnvelope: await ctx.custody.encryptKey(token.access_token),
+        refreshEnvelope:
+          typeof token.refresh_token === 'string' && token.refresh_token !== ''
+            ? await ctx.custody.encryptKey(token.refresh_token)
+            : null,
+        tokenExpiresAt:
+          typeof token.expires_in === 'number'
+            ? new Date(Date.now() + token.expires_in * 1000)
+            : null,
+        grantedBy: actorOf(req),
+      });
+      clearFlowCookie();
+      const dash = process.env.POTION_DASHBOARD_URL;
+      if (dash !== undefined && dash !== '') {
+        return reply.redirect(`${dash}/lab`, 302);
+      }
+      return reply
+        .type('text/html')
+        .send('<p>Connected. The filament is healed — return to the Lab.</p>');
+    } catch (e) {
+      clearFlowCookie();
+      if (e instanceof ConnectorOauthError) {
+        return reply.code(e.statusCode).send(openAiError(e.message, 'invalid_request_error', 'connector_oauth'));
+      }
+      throw e;
+    }
+  });
+
+  // ---- POST /api/lab/connectors/:id/revoke (admin) ----
+  // Local truth first (typed cut, immediate — the filament shows it), then
+  // best-effort provider-side revocation via the worker (the only other
+  // legitimate open of a grant, and it opens an already-dead one).
+  app.post('/api/lab/connectors/:id/revoke', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'revoke superpower grants'));
+    }
+    const { id } = req.params as { id: string };
+    if (!CONNECTOR_ID_RE.test(id)) return reply.code(404).send(notFound);
+    const grant = await getLabGrant(db, org.orgId, id);
+    if (grant === null) return reply.code(404).send(notFound);
+    const cut = await markLabGrantStatus(db, org.orgId, id, 'revoked');
+    const jobId = await opts.queue.enqueue('lab:grant-revoke', { orgId: org.orgId, connectorId: id });
+    return reply.send({ connectorId: id, status: 'revoked', already: !cut, providerRevocationJobId: jobId });
   });
 }

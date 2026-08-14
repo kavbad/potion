@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto';
 import {
   insertCustodyAudit,
   listCustodiedProviderKeys,
+  listGrantEnvelopesAllOrgs,
+  rewrapGrantEnvelopes,
   rewrapProviderKey,
   type CustodyAction,
   type PotionDb,
@@ -122,9 +124,22 @@ export class CustodyService {
         keyVersion: row.keyVersion,
       });
     }
+    // Step 10: superpower grants are custodied rows too — rotation that
+    // skipped them would strand every connector under the new master.
+    const grants = await listGrantEnvelopesAllOrgs(this.db);
+    for (const g of grants) {
+      await rewrapGrantEnvelopes(
+        this.db,
+        g.id,
+        rewrapEnvelope(oldMaster, newMaster, g.tokenEnvelope),
+        g.refreshEnvelope === null ? null : rewrapEnvelope(oldMaster, newMaster, g.refreshEnvelope),
+      );
+      rewrapped += 1;
+      await this.record(g.orgId, actor, 'rotate', null, { kind: 'master-rewrap-grant', grantId: g.id });
+    }
     // Summary row per org is overkill; one platform row on the first affected
     // org (or the default org when the sweep was empty) records the event.
-    const orgId = rows[0]?.orgId ?? 'org_demo';
+    const orgId = rows[0]?.orgId ?? grants[0]?.orgId ?? 'org_demo';
     await this.record(orgId, actor, 'rotate', null, {
       kind: 'master',
       rewrapped,

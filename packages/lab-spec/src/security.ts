@@ -30,6 +30,15 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'generic-sk-key', re: /\bsk-[A-Za-z0-9_-]{20,}/ },
   { name: 'potion-api-key', re: /\bpk_[A-Za-z0-9_]{4,}/ },
   { name: 'bearer-token', re: /\b[Bb]earer\s+[A-Za-z0-9._~+/-]{8,}=*/ },
+  // Step 10 (grant-shaped credentials — the connector era's key shapes):
+  // gho_/ghp_/ghu_/ghs_/ghr_ (GitHub OAuth/PAT/refresh), github_pat_
+  // (fine-grained), lin_api_/lin_oauth_ (Linear). All literal-prefix
+  // anchored (the F21 rule). Known GRANT VALUES are additionally scrubbed
+  // by the runtime redactor BEFORE this gate ever sees a tool result —
+  // these patterns are the fail-closed backstop for shapes we can name.
+  { name: 'github-token', re: /\bgh[opsur]_[A-Za-z0-9]{16,}/ },
+  { name: 'github-fine-grained-pat', re: /\bgithub_pat_[A-Za-z0-9_]{20,}/ },
+  { name: 'linear-key', re: /\blin_(?:api|oauth)_[A-Za-z0-9]{16,}/ },
   // KEY=value assignments catch a credential even when the value itself
   // matches no known key shape.
   { name: 'env-assignment', re: /\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*\S{8,}/ },

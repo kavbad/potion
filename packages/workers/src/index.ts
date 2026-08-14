@@ -151,6 +151,10 @@ export {
   labRunHandler,
   createLabRunHandler,
   type LabRunHandlerDeps,
+  // ---- Lab Step 10 grant revocation (best-effort provider-side) ----
+  labGrantRevokeHandler,
+  createLabGrantRevokeHandler,
+  type LabGrantRevokeDeps,
   rubricTemplateFor,
   validateGeneratedRubric,
   buildRubricGenerationMessages,

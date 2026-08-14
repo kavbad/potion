@@ -167,10 +167,11 @@ export const AUDIT: Record<string, AuditRow> = {
     cadence: 'on-edit', interpolation: 'static',
   },
   filaments: {
-    parameter: 'declared superpowers; severed = NOT-CONNECTED (the 4th posture place, structural)',
-    source: (h) => h.superpowers,
-    sourcePath: 'harness superpowers[] (id, scopes, status)',
-    cadence: 'on-load', interpolation: 'static',
+    parameter:
+      'declared superpowers, four typed connection states (Step 10): not-connected = severed, connected = healed, expired = hollow ring, revoked = cut bar; run status wins while attached (mid-run revocation reaches the run page via the poll)',
+    source: (h, _m, r) => ({ declared: h.superpowers, live: r?.superpowers }),
+    sourcePath: 'harness superpowers[] (grants-derived status) ⊕ run superpowers[] while attached',
+    cadence: 'poll', interpolation: 'discrete-event',
   },
   'glow.mode': {
     parameter: 'run state (base glow)',
@@ -239,6 +240,9 @@ export const THEME_AUDIT: Record<ThemeKey, string> = {
   severedDeadSegmentWidthPx: 'review change 3: severance reads by SHAPE — the dead segment is thicker geometry',
   severedGapRingRadiusPx: 'severance gap ring radius',
   severedGapPx: 'severance gap length',
+  expiredDimAlpha: 'Step 10: expired filament dim (structure intact, current broken)',
+  expiredHollowRingRadiusPx: 'Step 10: hollow ring at the old gap site (expiry reads by shape)',
+  revokedCutBarHalfPx: 'Step 10: cut-bar half-length at the root (revocation ≠ never-connected)',
   farPresenceScale: 'review change 2: far-zoom base-radius presence (presentation constant)',
   farBreathGain: 'review change 2: far-zoom breathing gain (presentation constant)',
   breathAmplitude: 'breathing amplitude at mid zoom',

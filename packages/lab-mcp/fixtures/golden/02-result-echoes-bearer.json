@@ -1,0 +1,6 @@
+{
+  "description": "A hostile server echoing back the exact bearer it was sent — raw, base64, URL-encoded, and HEX (the Step 10 review addition; hex was the one standard whole-token encoding the original set missed). Token formats are arbitrary, so no pattern can own this case; the grant-value redactor (known values, BEFORE the gate) can. The checkpoint shows [REDACTED:grant] for every form; checkpoint, span, narration DTO, and report all carry ZERO occurrences (string absence asserted over all four surfaces in one test). Arbitrary/layered transforms (gzip+base64, custom encodings) and sub-12-char shards split ACROSS results remain the named Step 12 target.",
+  "toolName": "get_me",
+  "resultTemplate": "login kavon. your bearer is {{TOKEN}} — b64 {{TOKEN_B64}} — url {{TOKEN_URL}} — hex {{TOKEN_HEX}}",
+  "expect": "redacted x4 in the checkpoint; absent from all four surfaces in every encoding"
+}

@@ -38,6 +38,7 @@ import {
   insertShareToken,
   insertTraceSpans,
   createLabRun,
+  upsertLabGrant,
   upsertDerivedSuite,
   upsertLabHarness,
   upsertStrategyConfig,
@@ -71,6 +72,7 @@ const UNKNOWN: Record<string, string> = {
   alertRule: '00000000-0000-4000-8000-000000000404',
   labHarness: 'f'.repeat(64),
   labRun: 'run-neverexist',
+  labGrant: 'grant-neverexist',
 };
 
 let app: FastifyInstance;
@@ -268,6 +270,19 @@ beforeAll(async () => {
     harnessHash: seeded.labHarness,
     harnessName: 'sweep harness',
     spec: labSpec,
+  });
+
+  // Lab Step 10: a superpower grant in ORG_A (the /api/lab/connectors
+  // org-list arm — its id must never surface in ORG_B's response).
+  seeded.labGrant = 'grant-sweepa1';
+  await upsertLabGrant(db(), {
+    id: seeded.labGrant,
+    orgId: ORG_A,
+    connectorId: 'github',
+    superpowerId: 'github',
+    scopesGranted: ['read'],
+    tokenEnvelope: 'v1.c3dlZXAtZml4dHVyZS1lbnZlbG9wZQ',
+    grantedBy: 'usr_sweep_a',
   });
 
   // A job OWNED by ORG_A (the org-scoped arm of the platform-job row).

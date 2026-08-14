@@ -19,3 +19,12 @@ export {
 } from './replay.js';
 export { startRun, resumeRun } from './cli.js';
 export { buildRunReport, type RunReportV1, type StepCostRow, type StruggleEvidence } from './report.js';
+export {
+  buildMcpLabTools,
+  TOKEN_REFRESH_WINDOW_MS,
+  type McpLegNote,
+  type McpLegSetup,
+  type McpLegSetupOptions,
+  type SuperpowerUnavailable,
+  type ToolCallError,
+} from './mcp-tools.js';

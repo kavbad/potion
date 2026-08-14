@@ -125,6 +125,9 @@ importers:
       '@potion/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@potion/custody':
+        specifier: workspace:*
+        version: link:../../packages/custody
       '@potion/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -137,6 +140,9 @@ importers:
       '@potion/lab-gen':
         specifier: workspace:*
         version: link:../../packages/lab-gen
+      '@potion/lab-mcp':
+        specifier: workspace:*
+        version: link:../../packages/lab-mcp
       '@potion/lab-runtime':
         specifier: workspace:*
         version: link:../../packages/lab-runtime
@@ -231,6 +237,25 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(@types/node@20.19.43)
+
+  packages/custody:
+    dependencies:
+      '@potion/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@potion/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.43
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
@@ -362,14 +387,32 @@ importers:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
 
+  packages/lab-mcp:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(@types/node@20.19.43)
+
   packages/lab-runtime:
     dependencies:
       '@potion/core':
         specifier: workspace:*
         version: link:../core
+      '@potion/custody':
+        specifier: workspace:*
+        version: link:../custody
       '@potion/db':
         specifier: workspace:*
         version: link:../db
+      '@potion/lab-mcp':
+        specifier: workspace:*
+        version: link:../lab-mcp
       '@potion/lab-spec':
         specifier: workspace:*
         version: link:../lab-spec
@@ -562,6 +605,9 @@ importers:
       '@potion/core':
         specifier: workspace:*
         version: link:../core
+      '@potion/custody':
+        specifier: workspace:*
+        version: link:../custody
       '@potion/db':
         specifier: workspace:*
         version: link:../db
@@ -571,6 +617,9 @@ importers:
       '@potion/lab-dial':
         specifier: workspace:*
         version: link:../lab-dial
+      '@potion/lab-mcp':
+        specifier: workspace:*
+        version: link:../lab-mcp
       '@potion/lab-runtime':
         specifier: workspace:*
         version: link:../lab-runtime

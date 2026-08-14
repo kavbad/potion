@@ -47,6 +47,7 @@ import {
   qualitySamples,
   labFeltSamples,
   labHarnesses,
+  labSuperpowerGrants,
   labHarnessMemory,
   labRuns,
   labRunSteps,
@@ -246,6 +247,9 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count('lab_felt_samples', db.delete(labFeltSamples).where(eq(labFeltSamples.orgId, orgId)).returning({ x: labFeltSamples.probeHash }));
   // Lab Step 8 (0037): harness catalog.
   await count('lab_harnesses', db.delete(labHarnesses).where(eq(labHarnesses.orgId, orgId)).returning({ x: labHarnesses.harnessHash }));
+  // Lab Step 10 (0038): superpower grants — sealed OAuth envelopes; the
+  // most credential-sensitive lab rows. Cascade-covered at birth.
+  await count('lab_superpower_grants', db.delete(labSuperpowerGrants).where(eq(labSuperpowerGrants.orgId, orgId)).returning({ x: labSuperpowerGrants.id }));
   deleted.trace_spans = await chunkedDeleteByOrg(db, traceSpans, orgId);
 
   // ---- 4. Free-order bulk ----

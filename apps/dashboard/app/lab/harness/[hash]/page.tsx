@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
 import { LabFormView } from '@/components/lab-form-view';
+import { ConnectorPanel } from '@/components/lab-actions';
 import type { HarnessDto, MemoryDto } from '@potion/lab-form';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,8 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
           surface="harness"
         />
       )}
+      {/* Step 10: the filament's control surface — connect heals, revoke cuts. */}
+      {harness.spec !== null && harness.spec.superpowers.length > 0 ? <ConnectorPanel /> : null}
     </main>
   );
 }

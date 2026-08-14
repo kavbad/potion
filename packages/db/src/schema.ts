@@ -1366,6 +1366,35 @@ export const labHarnesses = pgTable(
 
 export type LabHarnessRow = typeof labHarnesses.$inferSelect;
 
+/** Lab Step 10: superpower grants (0038) — the first REVERSIBLE secret
+ * store. token_envelope / refresh_envelope are @potion/custody envelopes
+ * (never plaintext); the route-facing repo (repos/lab-grants.ts) NEVER
+ * selects them, and the only decrypt path (openGrantToken) is fenced to
+ * the worker. Org-scoped, cascade-covered at birth (F5 meta-test). */
+export const labSuperpowerGrants = pgTable(
+  'lab_superpower_grants',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    connectorId: text('connector_id').notNull(),
+    superpowerId: text('superpower_id').notNull(),
+    scopesGranted: jsonb('scopes_granted').$type<string[]>().notNull(),
+    tokenEnvelope: text('token_envelope').notNull(),
+    refreshEnvelope: text('refresh_envelope'),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    status: text('status').$type<'active' | 'expired' | 'revoked'>().notNull(),
+    grantedBy: text('granted_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('lab_superpower_grants_org_connector').on(t.orgId, t.connectorId)],
+);
+
+export type LabSuperpowerGrantRow = typeof labSuperpowerGrants.$inferSelect;
+
 export type LabRunRow = typeof labRuns.$inferSelect;
 export type LabRunStepRow = typeof labRunSteps.$inferSelect;
 export type LabRunState = LabRunRow['state'];

@@ -27,6 +27,8 @@ export type JobKind =
   | 'frontier:platform-sweep'
   // ---- Lab Step 8: trial-run executor (legs until terminal/awaiting) ----
   | 'lab:run'
+  // ---- Lab Step 10: best-effort provider-side grant revocation ----
+  | 'lab:grant-revoke'
   // ---- G2.7 operator org deletion ----
   | 'org:delete'
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
@@ -51,6 +53,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'frontier:live-sweep',
   'frontier:platform-sweep',
   'lab:run',
+  'lab:grant-revoke',
   'org:delete',
   'guarantee:suite-verify',
   'suite:certify',
@@ -122,6 +125,7 @@ export interface JobPayloads {
   'frontier:live-sweep': FrontierLiveSweepPayload;
   'frontier:platform-sweep': FrontierPlatformSweepPayload;
   'lab:run': LabRunJobPayload;
+  'lab:grant-revoke': LabGrantRevokePayload;
   'org:delete': OrgDeletePayload;
   'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
   'suite:certify': SuiteCertifyPayload;
@@ -358,6 +362,19 @@ export interface LabRunJobPayload {
   runId: string;
   /** Present on answer-resume enqueues. */
   answer?: string;
+}
+
+/**
+ * Lab Step 10: after the /revoke route marks a grant 'revoked' (the local
+ * source of truth, immediate), this job makes the BEST-EFFORT provider-side
+ * revocation call — the only place outside lab:run that opens a grant, and
+ * it opens a row already typed 'revoked' purely to kill the token upstream.
+ * Failure is recorded in the job result, never retried into a storm, and
+ * never un-revokes anything.
+ */
+export interface LabGrantRevokePayload {
+  orgId: string;
+  connectorId: string;
 }
 
 export interface FrontierPlatformSweepPayload {

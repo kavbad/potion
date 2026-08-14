@@ -64,8 +64,15 @@ export interface FormState {
   filaments: Array<{
     id: string;
     scopes: number;
-    /** The 4th place the pre-MCP posture surfaces — STRUCTURAL severance. */
-    severed: boolean;
+    /** Step 10: the four typed connection states, each with its own SHAPE
+     * (severance/healing is structural, never a dimming):
+     *   not-connected — severed: gap ring + thicker dead segment (Step 9)
+     *   connected     — HEALED: continuous, signature-tinted, pulses cross
+     *   expired       — structure intact, current broken: hollow ring, dim
+     *   revoked       — severed again PLUS a cut bar at the root
+     * When a run is attached, the RUN DTO's status wins (mid-run
+     * revocation reaches the run page through the ordinary poll). */
+    connection: 'not-connected' | 'connected' | 'expired' | 'revoked';
   }>;
   glow: {
     mode: RunDto['state'] | 'idle';
@@ -202,7 +209,7 @@ export function deriveFormState(
     filaments: harness.superpowers.map((s) => ({
       id: s.id,
       scopes: s.scopes.length,
-      severed: s.status === 'not-connected',
+      connection: run?.superpowers.find((r) => r.id === s.id)?.status ?? s.status,
     })),
     glow: {
       mode: run?.state ?? 'idle',
