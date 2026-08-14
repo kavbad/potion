@@ -377,3 +377,41 @@ failure path no longer echoes the provider's raw `error` field into a leg
 note (a compromised token endpoint controls that string), and
 `buildMcpLabTools` now closes already-opened sessions if a later connector's
 setup throws (no leaked HTTP session on the error path).
+
+## 13. The live leg — bound to Step 12, not left pending (operator ruling)
+
+The step's DoD names one item not provable at $0: *per-tool caps tripping
+LIVE under the operator-ledgered budget*. Unlike the Step 8 felt leg (an
+API key in the environment, which the script could consume), the Step 10
+live leg needs a REAL third-party OAuth **consent** — the operator signing
+in to GitHub and clicking Authorize in a browser. Claude cannot perform
+that (authenticating is prohibited; it also physically needs the operator's
+browser and account). §10's approved pushback already named the live OAuth
+as inherently hands-on.
+
+The operator accepted the build as Step 10's completion and **bound the
+live leg to Step 12's DoD** — the toolPolicy-precedent discipline: a
+deferral with a NAMED OWNER and a VERIFIABLE EXIT, never a vague "later."
+Binding means Step 12 must, as part of its own done-when:
+
+1. **Run the hands-on live leg once** against the real grant flow —
+   `scripts/step10-live-mcp.ts` unchanged: GitHub read-only, minimum
+   grant, `GRANT_RISK_ACCEPTED=2026-08-13` + `KEY_RISK_ACCEPTED`, caps
+   $1 fuel / 5 tool calls fail-closed; the before-external-action pore
+   fires before the first real call; one approval authorizes exactly one
+   call; the result flows back redacted-and-gated; the call cap trips when
+   driven past 5; the grant is revoked and the before/after rows ledgered.
+2. **Point the adversarial pass at the REAL grant flow** — not only the
+   mock: the token-exfiltration corpus, the tenancy of the OAuth callback,
+   and the custody perimeter re-audited against a live grant in the store.
+3. **Pre-write the operator's setup in the Step 12 spec** so the sitting
+   happens ONCE with everything ready: the exact read-only GitHub OAuth
+   app instructions — the callback URL (`http://localhost:<port>/api/lab/
+   connectors/github/oauth/callback`, the port the script prints), the
+   scope set (read-only / zero-scope, the minimum the handshake allows),
+   and the master-key generation one-liner (`openssl rand -hex 32` →
+   `POTION_MASTER_KEY`) plus the peers-unset invocation.
+
+Until Step 12 discharges this, the live leg is the single carried item —
+explicit, owned, and exit-checkable — and the $0 build is otherwise
+complete and green.
