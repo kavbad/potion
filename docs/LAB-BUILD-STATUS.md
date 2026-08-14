@@ -16,7 +16,7 @@ phase) lives in the plan; this file is the record of what actually happened.
 | 6 | Intent → spec generation | 2026-08-12 | `13c7665` | **complete** |
 | 7 | The dial | 2026-08-13 | `4932e55` | **complete** |
 | 8 | The novice loop, ugly | 2026-08-13 | cfa7dda | **complete** — [step-08-novice-loop.md](specs/step-08-novice-loop.md); ten-minute clock 3.2s/$0, custody + catalog + activation + posture proven by test, live felt leg $0.0418 under KEY_RISK_ACCEPTED=2026-08-13 (operator countersign pending) |
-| 9 | The derived form [design gate] | 2026-08-13 | — | **spec ready** — [step-09-derived-form.md](specs/step-09-derived-form.md) + motion study [step-09-motion-study.html](design/step-09-motion-study.html) (open from the repo; animates ONLY captured data), awaiting build approval + taste review |
+| 9 | The derived form [design gate] | 2026-08-13 | 22df242 | **complete** — gate APPROVED WITH CHANGES (sign-off in the ledger = the exit); audit machine-checked in CI, no template UI as primary, live re-render via /edit proven, 12 review findings fixed with pins; clock 3.2s/$0 |
 | 10 | MCP client and token custody | — | — | not started |
 | 11 | Superpower packaging and catalog | — | — | not started |
 | 12 | Adversarial pass on the Lab surface | — | — | not started |
