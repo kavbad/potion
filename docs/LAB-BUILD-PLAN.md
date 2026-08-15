@@ -2,7 +2,7 @@
 
 This plan covers one thing: building the Potion Lab product on Potion, end to end. No go-to-market, no partner motions — those belong to the operator, outside this document. **Start condition is operator-declared**: when this plan begins is the operator's standing call; nothing in the plan changes either way.
 
-Everything through Step 12 runs locally, the same way the entire guarantee product was built — the first step that requires a provisioned server is Step 13.
+Everything through Step 12 runs locally, the same way the entire guarantee product was built — the first step that requires a provisioned server is Step 13a (deploy). Step 13 was split into **13a — Deploy the stack** and **13b — Gate C flip**; they execute at different points in the ladder (see the note above Step 13a).
 
 ## Binding protocol for every session
 
@@ -64,9 +64,11 @@ Done when: 25 superpowers pass their mini-evals, an injection test corpus fails 
 Work: swarm-style pass — spec parsing, the MCP boundary, token custody, spend paths, tenancy and authz of every new Lab route against the inventory lenses. Budget for findings; the pass is judged by what it catches.
 Done when: findings are filed with severities, all criticals fixed and pinned by tests, and the Lab's route inventory is complete and classified.
 
-**Step 13 — Deploy and the Gate C flip.**
-Work: production deployment (rides the existing Gate A work if done; includes it if not — Neon, host, container/TLS, real Redis); payments and credits for fuel; abuse controls; guided onboarding; then the deliberate flip — explicit `POTION_SELF_SERVE=1`, never an inherited default.
-Done when: strangers can sign up, fund fuel, and the novice loop holds on people who've never seen the product: under ten minutes, no documentation.
+**Step 13 was split (2026-08-15, operator) into 13a and 13b.** The deploy half (13a) is a hard prerequisite of Steps 14 and 15 — a standing harness on a schedule (14) and a real non-engineer reaching a URL (15) both need a running server — so it moves up. The Gate C half (13b) opens the doors to paying strangers, and nothing before Step 15 requires a stranger's payment, so it moves down to just before Step 17. **Execution order: 13a → 14 → 15 → 16 → 13b → 17.** The entries below sit in execution order so top-to-bottom reads as the sequence.
+
+**Step 13a — Deploy the stack.**
+Work: production deployment on real infrastructure — provisioned Postgres (pgvector, ≥PG15), a host/compute layer, the container/TLS layer, real Redis for the queue, secrets, migrations applied on the F12 ledger; the seven unexecuted container/TLS rehearsal items (`docs/REHEARSAL-COVERAGE.md`) run for real on the host; the org-budget mid-run kill (the named Step 3 item) re-proven on live pricing under an operator spend cap; a deployment status doc. Auth stays on (`NODE_ENV=production`, dev-auth bypass off); `POTION_SELF_SERVE` stays unset. No payments, no self-serve, no abuse controls — those are 13b.
+Done when: the operator can reach the Lab at a real URL over TLS, `/readyz` is green on the domain, and a harness runs end to end through the deployed path (operator-onboarded org, not localhost).
 
 **Step 14 — Deployment surfaces for harnesses.**
 Work: harness identity; endpoint and cron triggers, then Slack and email; standing harnesses heartbeat-shaped (bounded scheduled runs) before always-on; per-harness P&L via the one invoice-dimension touchpoint, parallel rollup, `usage_daily` row identity untouched.
@@ -79,6 +81,10 @@ Done when: the recording exists and the person succeeded unassisted.
 **Step 16 — Pro instruments.**
 Work: the bench — replay any run, inspect the exact per-step context the model saw, fork from any step and re-run; the proving ground — promote any run to a golden pair, derived suites, replay-on-change with confidence intervals, champion/challenger as a Lab-side pattern over existing suite and verdict machinery (touchpoint 3); close zoom — full slot panels, two-way spec sync, bring-your-own-editor.
 Done when: a change to a harness is proven better or worse before it lands, on the product's own instruments.
+
+**Step 13b — Gate C flip.** *(Executes here — after Step 16, before Step 17.)*
+Work: the Gate C prerequisites carried verbatim from the original Step 13, none dropped in the split — **payments and credits for fuel**; **abuse controls**; **guided onboarding** (the self-serve counterpart to operator onboarding); then the deliberate flip — **explicit `POTION_SELF_SERVE=1`, never an inherited default** (the standing decision in `docs/LAB-ROADMAP.md`); and the **novice loop measured on strangers**. Rides the deployed stack from 13a; the standing decision that Gate C flips only on an explicit flag is unchanged.
+Done when: strangers can sign up, fund fuel, and the novice loop holds on people who've never seen the product — under ten minutes, no documentation.
 
 **Step 17 — The command layer.**
 Work: org-wide harness catalog; policies and budgets inherited from org configuration; pre-approved superpower library; audit trails; internal certification — the guarantee machinery pointed inward, with the promotion path from personal harness to department-blessed tool.
