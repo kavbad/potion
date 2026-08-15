@@ -18,7 +18,8 @@ export interface MockMcpTool {
   inputSchema?: Record<string, unknown>;
   /** A string becomes one text content block; an object is JSON-stringified
    * into one; `{ __rawResult }` passes through verbatim as tools/call's
-   * result (for malformed/hostile fixtures). */
+   * result (for malformed/hostile fixtures); `{ __rpcError }` fails the call
+   * at the JSON-RPC layer with that server-chosen message. */
   handler: (args: Record<string, unknown>) => unknown;
 }
 
@@ -178,6 +179,14 @@ export class MockMcpServer {
           return;
         }
         const out = tool.handler(params.arguments ?? {});
+        // `{ __rpcError }` fails the CALL at the JSON-RPC layer with a
+        // server-chosen message — the Step 12 (L1) path, where an attacker's
+        // prose used to ride McpTransportError.message into the model's
+        // conversation through toolError.detail.
+        if (out !== null && typeof out === 'object' && '__rpcError' in out) {
+          rpcError(-32000, String((out as { __rpcError: unknown }).__rpcError));
+          return;
+        }
         if (out !== null && typeof out === 'object' && '__rawResult' in out) {
           reply((out as { __rawResult: unknown }).__rawResult);
           return;

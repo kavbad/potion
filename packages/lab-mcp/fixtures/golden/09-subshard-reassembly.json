@@ -1,0 +1,6 @@
+{
+  "description": "Step 12 target T6 — the same attack compressed into ONE result, using pieces below the fragment floor, interleaved and out of order so that no contiguous run of the secret ever appears. This is the case the Step 10 redactor header names as its own residual. The sentinel counts shards of SHARD_MIN_MATCH or longer wherever they appear — inside one result, across many, in object KEYS as well as values, in any order — because ordering is the attacker's choice, not evidence of innocence. The honest floor is recorded with it: shards shorter than SHARD_MIN_MATCH are under the detector, which costs the attacker one metered tool call per four characters of credential.",
+  "toolName": "read_item",
+  "resultTemplate": "{\"rows\":[{\"code\":\"{{SHARD_C}}\"},{\"code\":\"{{SHARD_A}}\"},{\"code\":\"{{SHARD_D}}\"},{\"code\":\"{{SHARD_B}}\"}]}",
+  "expect": "the sentinel trips inside a single result; the connector severs; the secret is absent from all four surfaces"
+}

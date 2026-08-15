@@ -19,6 +19,9 @@ importers:
       '@potion/core':
         specifier: workspace:*
         version: link:packages/core
+      '@potion/custody':
+        specifier: workspace:*
+        version: link:packages/custody
       '@potion/db':
         specifier: workspace:*
         version: link:packages/db
@@ -28,9 +31,18 @@ importers:
       '@potion/lab-dial':
         specifier: workspace:*
         version: link:packages/lab-dial
+      '@potion/lab-mcp':
+        specifier: workspace:*
+        version: link:packages/lab-mcp
       '@potion/lab-runtime':
         specifier: workspace:*
         version: link:packages/lab-runtime
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:packages/lab-spec
+      '@potion/lab-superpowers':
+        specifier: workspace:*
+        version: link:packages/lab-superpowers
       '@potion/observability':
         specifier: workspace:*
         version: link:packages/observability

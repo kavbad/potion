@@ -73,6 +73,19 @@ export interface SuperpowerPackage {
   };
   /** Least-privilege: the MINIMUM scope set the mini-eval needs (§6). */
   defaultScopes: string[];
+  /**
+   * Step 12 (T8): tools whose ACT is funded by the DEFAULT grant because
+   * the vendor publishes no narrower scope — keyed by tool name, valued by
+   * the reason. Declaring one is not a waiver: it is the honest record of a
+   * least-privilege LIMIT the vendor imposes, and the least-privilege test
+   * demands the reason rather than accepting silence.
+   *
+   * The invariant used to pass for Salesforce only because `update_record`
+   * asked for `api_write`, a scope Salesforce does not have — a test
+   * satisfied by a fiction. That is why the escape hatch is typed, per
+   * tool, and surfaced rather than commented.
+   */
+  scopeLimits?: Record<string, string>;
   proof: ProofTier;
   /** REQUIRED when proof === 'fixture-recorded' (meta-tested). */
   fixtureStamp?: FixtureStamp;
@@ -149,6 +162,7 @@ export interface PackageIssue {
     | 'budget-too-high'
     | 'default-scope-not-least-privilege'
     | 'act-tool-scope-in-default'
+    | 'funded-act-without-limit'
     | 'missing-fixture-stamp'
     | 'unearned-live-proven'
     | 'no-injection-payloads'
@@ -210,6 +224,23 @@ export function validatePackage(
     }
     if (readOnlyActScopes.has(s) && !readScopes.has(s)) {
       issues.push({ code: 'act-tool-scope-in-default', detail: `default scope '${s}' funds an act tool` });
+    }
+  }
+  // Step 12 (T8): the check above only fires when the scope is act-ONLY, so
+  // it was blind to the common case — an act sharing a scope the reads
+  // already need. That is exactly when the default grant silently funds an
+  // act, and it is what the mini-eval's least-privilege test now demands a
+  // written vendor reason for. The validator says the same thing, so the
+  // two instruments cannot drift apart.
+  const granted = new Set(pkg.defaultScopes);
+  for (const t of pkg.tools) {
+    if (t.action !== 'act' || t.requiredScopes.length === 0) continue;
+    if (!t.requiredScopes.every((s) => granted.has(s))) continue;
+    if ((pkg.scopeLimits?.[t.name] ?? '').length < 30) {
+      issues.push({
+        code: 'funded-act-without-limit',
+        detail: `act tool '${t.name}' is funded by the default grant with no scopeLimits reason`,
+      });
     }
   }
   if (pkg.proof === 'fixture-recorded' && pkg.fixtureStamp === undefined) {

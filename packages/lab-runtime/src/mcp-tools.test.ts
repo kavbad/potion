@@ -251,15 +251,17 @@ describe('caps + redaction through a full leg', () => {
     await answerLabRun(h.db, 'run-mcp', ORG_A, 'yes, proceed');
     const leg2 = await runLeg({
       db: h.db,
+      // Step 12: the resumed leg replays the APPROVED call from the record
+      // rather than asking the model to re-propose it, so these are the
+      // model's words after seeing the result — not another tool call.
       client: scripted([
-        ok({ text: '', finishReason: 'tool_calls', toolCalls: [call] }),
         ok({ text: 'read it, done.' }),
         ok({ text: 'wrap-up.' }),
       ]),
       runId: 'run-mcp', orgId: ORG_A, spec: s, harnessHash: hash, tools: leg.tools,
     });
     expect(leg2.status).toBe('completed');
-    expect(server.requests.filter((r) => r.method === 'tools/call')).toHaveLength(1); // one answer, one action
+    expect(server.requests.filter((r) => r.method === 'tools/call')).toHaveLength(1); // one answer, THAT one action
 
     // The checkpointed tool step carries [REDACTED:grant] — never the token.
     const steps = await listLabSteps(h.db, 'run-mcp', ORG_A);

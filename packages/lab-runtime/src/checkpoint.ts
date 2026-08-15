@@ -33,9 +33,27 @@ export interface StepPayload {
   /** Fresh-run leg start only: the memory snapshot AS SEEN when the system
    * prompt was built — what makes the record self-contained (Step 4). */
   memoryReads?: Record<string, unknown>;
+  /**
+   * Step 12 finding L8: the AUTHORED capability guidance that went into the
+   * system prompt for this leg. Without it the record is not self-contained
+   * for any run that loaded a superpower — replay re-derived the prompt
+   * with no guidance and reported drift on a run that had not drifted, so
+   * the self-containment theorem was false exactly where superpowers are.
+   * Stamped beside memoryReads, on the same first-step-of-a-leg rule.
+   */
+  toolGuidance?: string[];
   // check-in steps
   checkInTrigger?: 'before-external-action' | 'on-budget-fraction' | 'cron';
   checkInQuestion?: string;
+  /**
+   * Step 12 finding L2 (CRITICAL) — the IDENTITY of the action the human
+   * was shown. Before this, an answer authorized "the next external action"
+   * rather than THE action on screen: approve `publish({body:'first'})`,
+   * and on resume the model could emit `publish({body:'anything else'})`
+   * and it ran ungated. The pore fired for one action and a different one
+   * went out. The approval is now bound to this fingerprint.
+   */
+  checkInAction?: { toolName: string; argsHash: string; arguments: string };
   checkInAnswer?: string;
   // nondeterminism taps, recorded so Step 4 replay can pin them
   clockMs: number;

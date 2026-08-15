@@ -450,8 +450,14 @@ describe('Step 10 — MCP connect leg ($0): severed → healed → gated call �
         tools: leg2.tools.filter((t) => t.external), legNotes: leg2.legNotes,
       });
       await leg2.close();
-      expect(second.status).toBe('completed');
+      // Step 12 (L2): the approved call is replayed from the record, byte
+      // for byte — the model is never asked to re-propose it. That matters
+      // here because this run uses the REAL serving route with the mock
+      // provider, whose arguments carry an echo of the last message and a
+      // fresh seed: the re-proposed call would NEVER have matched what the
+      // operator read. What ran is exactly what was approved.
       expect(mcp.requests.filter((r) => r.method === 'tools/call')).toHaveLength(2); // read + one approved act
+      expect(second.status).toBe('completed');
 
       const steps = await listLabSteps(h.db, 'run-mcp-wt', ORG);
       // The bearer echo rides the READ tool's result (get_me returns it), so

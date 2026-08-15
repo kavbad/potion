@@ -41,7 +41,14 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'linear-key', re: /\blin_(?:api|oauth)_[A-Za-z0-9]{16,}/ },
   // KEY=value assignments catch a credential even when the value itself
   // matches no known key shape.
-  { name: 'env-assignment', re: /\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*\S{8,}/ },
+  // Step 12 (pass 3, confirmed 2/2): this list and the converter's copy in
+  // scripts/claude-code-to-traces.ts had DRIFTED — the converter learned
+  // PASSWD and CREDENTIALS from a real corpus and this copy never did, so
+  // `AWS_CREDENTIALS=AKIA…` and `DB_PASSWD=…` were scrubbed on the ingest
+  // path and accepted on the spec path. Two copies of one rule is the
+  // hazard the Step 10 spec already named; the vocabularies are now the
+  // same, and the divergence test below is what keeps them that way.
+  { name: 'env-assignment', re: /\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS)\s*=\s*\S{8,}/ },
 ];
 
 /** Linear per-string scan — the F21 lesson is standing: no

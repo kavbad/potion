@@ -39,6 +39,12 @@ export interface HarnessSuperpower {
   scopes: string[];
   maxSpendUsdPerRun?: number | undefined;
   maxSpendUsdPerDay?: number | undefined;
+  /** Step 12: the per-(run, tool) CALL ceiling. Before this existed the
+   * only call cap was the library default (DEFAULT_TOOL_CAPS.maxCalls), so
+   * a caller who authorised "5 tool calls" — as the live leg's operator did
+   * — had no way to say it, and the run silently used 20. A cap you cannot
+   * configure is not a cap the operator agreed to. */
+  maxCalls?: number | undefined;
 }
 
 export interface HarnessMemory {

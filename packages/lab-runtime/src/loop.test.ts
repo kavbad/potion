@@ -136,20 +136,24 @@ describe('pause-for-human (first-class, across invocations)', () => {
     const { answerLabRun } = await import('@potion/db');
     expect(await answerLabRun(h.db, 'run-loop', ORG, 'yes, send it')).toBe(true);
     const secondClient = scripted([
-      // Resumed conversation carries the answer; model calls the tool again.
-      ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't2', type: 'function', function: { name: 'send_email', arguments: '{}' } }] }),
+      // The resumed leg does NOT ask the model what to do first — the
+      // approved call runs from the record. These answers are what the model
+      // says AFTER it sees the tool result.
       ok({ text: 'sent. done.' }),
       ok({ text: 'Wrap-up: email sent after approval; done.' }),
     ]);
-    // NOTE: the gate fires per tool call; the resumed leg re-asks unless the
-    // answer covers it. v1 semantics: the gate consumes the pending answer —
-    // one answer authorizes the NEXT external action.
+    // Step 12 (L2/L3/L4) changed the semantics here, and the change is the
+    // point: the answer no longer authorizes "the NEXT external action" —
+    // it authorizes THE action the human read, which is replayed byte for
+    // byte out of the check-in record. The model is not consulted about what
+    // to run; it is only told what happened.
     const leg2 = await runLeg({
       db: h.db, client: secondClient, runId: 'run-loop', orgId: ORG, spec: s, harnessHash: hash, tools: [emailTool],
     });
-    // One answer, one action: t2 is authorized by the recorded answer.
     expect(leg2.status).toBe('completed');
-    expect(sent).toBe(1);
+    expect(sent, 'exactly the approved call ran, exactly once').toBe(1);
+    // …and the durable answer is burned, so no later leg can re-spend it.
+    expect((await getLabRun(h.db, 'run-loop', ORG))!.pendingAnswer).toBeNull();
     const steps = await listLabSteps(h.db, 'run-loop', ORG);
     expect(steps.find((x) => x.kind === 'check-in')).toBeDefined();
     await h.close();

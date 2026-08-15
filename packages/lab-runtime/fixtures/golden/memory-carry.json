@@ -51,6 +51,7 @@
         "completionId": "chatcmpl-golden0001",
         "finishReason": "stop",
         "responseText": "I remember the last query; summary complete.",
+        "toolGuidance": [],
         "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
         "requestPayload": {
           "model": "potion-auto",

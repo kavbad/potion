@@ -279,6 +279,31 @@ export async function killLabRun(
 /** Record a check-in answer. Only valid while awaiting-human with no answer
  * yet — answering twice, or answering a running run, is a caller bug
  * surfaced as `false`, not silently absorbed. */
+/**
+ * Step 12 (L3, CRITICAL): burn a consumed check-in answer, durably, at the
+ * moment the authorization is USED.
+ *
+ * Consumption used to be an in-memory boolean in the loop while the durable
+ * `pending_answer` column survived — and the leg-cap exit releases the lease
+ * without transitioning, so the column stayed set. The next leg claimed the
+ * run, saw the same answer beside the same check-in step, and re-armed the
+ * external-action gate. One "yes" bought one unreviewed act per leg, for as
+ * many legs as the run had.
+ *
+ * Scoped to a RUNNING run so it can never race a fresh answer being recorded
+ * against a run that is waiting for one.
+ */
+export async function consumeLabRunAnswer(
+  db: PotionDb,
+  runId: string,
+  orgId: string,
+): Promise<void> {
+  await db
+    .update(labRuns)
+    .set({ pendingAnswer: null, updatedAt: new Date() })
+    .where(and(eq(labRuns.id, runId), eq(labRuns.orgId, orgId), eq(labRuns.state, 'running')));
+}
+
 export async function answerLabRun(
   db: PotionDb,
   runId: string,

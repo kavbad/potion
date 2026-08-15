@@ -124,8 +124,12 @@ export function replayRun(
           );
           messages = (p.requestPayload?.messages as ChatMessage[] | undefined) ?? [];
         } else {
+          // Step 12 (L8): re-derive with the RECORDED guidance, not with
+          // an empty list — the leg's system prompt included it, so a
+          // replay that omits it is comparing against a prompt that never
+          // existed.
           messages = [
-            { role: 'system', content: systemPrompt(spec, p.memoryReads) },
+            { role: 'system', content: systemPrompt(spec, p.memoryReads, p.toolGuidance ?? []) },
             { role: 'user', content: 'Begin the mission.' },
           ];
         }

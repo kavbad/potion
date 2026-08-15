@@ -117,6 +117,15 @@ function forbiddenStrings(): Array<[string, string]> {
       [`${label} (base64url)`, Buffer.from(secret).toString('base64url')],
       [`${label} (base64, unpadded)`, Buffer.from(secret).toString('base64').replace(/=+$/, '')],
       [`${label} (url-encoded)`, encodeURIComponent(secret)],
+      // Step 12 (pass 1): HEX was missing here. The Step 10 review added hex
+      // to the redactor precisely because a hosted server that hex-encodes
+      // the bearer evaded the original set — but this sweep, whose own test
+      // name promises "in any encoding", never looked for it. An instrument
+      // that does not measure what its sentence claims is the shape this
+      // build keeps finding; the encodings are now derived from the SAME
+      // list the redactor scrubs, so the two cannot drift apart again.
+      [`${label} (hex)`, Buffer.from(secret).toString('hex')],
+      [`${label} (hex, upper)`, Buffer.from(secret).toString('hex').toUpperCase()],
     );
   }
   forms.push(

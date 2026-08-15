@@ -77,6 +77,7 @@ const SuperpowerSchema = z
     scopes: z.array(z.string().min(1).max(MAX_SCOPE_CHARS)).max(MAX_SCOPES_PER_SUPERPOWER),
     maxSpendUsdPerRun: z.number().positive().optional(),
     maxSpendUsdPerDay: z.number().positive().optional(),
+    maxCalls: z.number().int().positive().max(1000).optional(),
   })
   .strict();
 

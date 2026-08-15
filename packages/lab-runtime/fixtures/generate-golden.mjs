@@ -138,9 +138,11 @@ await record('checkin-suspend-resume',
   baseSpec({ name: 'golden checkin harness', checkIns: [{ trigger: 'before-external-action' }] }),
   [
     { results: [ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't1', type: 'function', function: { name: 'send_email', arguments: '{}' } }] })] },
+    // Step 12: the resumed leg replays the APPROVED call out of the check-in
+    // record rather than asking the model to re-propose it, so the scripted
+    // answers here are what the model says AFTER seeing the tool result.
     { answer: 'yes, send it',
       results: [
-        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 't2', type: 'function', function: { name: 'send_email', arguments: '{}' } }] }),
         ok({ text: 'sent; mission complete.' }),
         ok({ text: 'Wrap-up: sent the email after approval; done-definition met.' }),
       ] },

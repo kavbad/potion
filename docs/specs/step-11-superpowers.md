@@ -445,6 +445,40 @@ Two of them falsified claims this very spec makes — recorded plainly.
    the preamble appears in the recorded system prompt, and with no guidance
    the prompt is byte-identical to a brain-only run (no phantom section).
 
+## 14b. FALSIFIED BY STEP 12 — recorded here, not in the step that found it
+
+Step 12's addition 3 widened the context-provenance comparison from
+`requestPayload.tools` to the FULL `requestPayload`. The same standard this
+build applied to its own prior claims applies here: the widened comparison
+falsified Step 11's central claim **as worded**, in two distinct ways, and
+both are recorded as falsified rather than reworded quietly.
+
+1. **FALSE on a production path — now fixed.** "No server-supplied string
+   reaches model context" was still false after §14.1's leg-note fix, through
+   a sibling path §14.1 did not cover: `toolError.detail` in `mcp-tools.ts`
+   carried `e.message`, and for an `McpTransportError` of kind `rpc` that
+   string embeds the server's own JSON-RPC `error.message` (`transport.ts`).
+   A hostile connector wrote attacker-chosen prose into the conversation and
+   the durable checkpoint. Fixed in Step 12 (finding L5): the model receives
+   the typed kind rendered as authored prose. The prediction in the Step 12
+   spec — "assume siblings" — was correct, which is itself the lesson: one
+   instance of an untrusted-string path is evidence of others, not of a
+   class closed.
+
+2. **NARROWER THAN ITS SENTENCE — now re-scoped.** Tool RESULT content is
+   server text by design; it is the data channel, and no honest claim can
+   exclude it. The claim covers METADATA and NARRATION — tool names,
+   descriptions, parameter schemas, usage guidance, and failure prose — and
+   never the bytes a tool was called to fetch. Step 12 pins that bound as an
+   executable fact: two servers differing only in what a tool RETURNS produce
+   different context, and the test says so out loud rather than leaving the
+   reader to assume coverage the proof never had.
+
+The corrected claim, in one sentence: **no server-supplied string reaches
+model context as tool metadata or harness narration; tool result content is
+server data by design, redacted before it lands, and gated by the pore on the
+way out.**
+
 ## 15. Definition of done (restated)
 
 The ~25 packages each pass their mini-eval (load, scope-filter, pore-fires

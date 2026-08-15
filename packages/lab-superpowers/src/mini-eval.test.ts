@@ -129,14 +129,27 @@ describe('catalog completeness + honesty (the anti-decoration gates)', () => {
     }
   });
 
-  it('LEAST PRIVILEGE: the default grant funds the read tools and never an act tool', () => {
+  it('LEAST PRIVILEGE: the default grant funds the read tools, and every act it DOES fund is a declared vendor limit', () => {
     for (const pkg of CATALOG) {
       const granted = new Set(pkg.defaultScopes);
       for (const t of pkg.tools) {
         const funded = t.requiredScopes.every((s) => granted.has(s));
-        if (t.action === 'act' && t.requiredScopes.length > 0) {
-          expect(funded, `${pkg.id}.${t.name}: an ACT tool is funded by the DEFAULT grant`).toBe(false);
+        if (t.action === 'act' && t.requiredScopes.length > 0 && funded) {
+          // Step 12 (T8): a funded act is allowed ONLY with a written
+          // reason naming the vendor limit that forces it. Silence fails.
+          const reason = pkg.scopeLimits?.[t.name];
+          expect(
+            reason,
+            `${pkg.id}.${t.name}: an ACT tool is funded by the DEFAULT grant and declares no scopeLimits reason`,
+          ).toBeTruthy();
+          expect(reason!.length).toBeGreaterThan(30);
         }
+      }
+      // a declared limit must name a tool that exists and is an act
+      for (const name of Object.keys(pkg.scopeLimits ?? {})) {
+        const t = pkg.tools.find((x) => x.name === name);
+        expect(t, `${pkg.id}: scopeLimits names unknown tool ${name}`).toBeDefined();
+        expect(t!.action, `${pkg.id}.${name}: scopeLimits on a read tool`).toBe('act');
       }
       // and every default scope is actually needed by some read tool
       const readScopes = new Set(pkg.tools.filter((t) => t.action === 'read').flatMap((t) => t.requiredScopes));

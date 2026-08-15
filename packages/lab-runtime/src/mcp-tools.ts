@@ -30,6 +30,7 @@ import { openGrantToken, sealRefreshedToken, type OpenGrant } from '@potion/cust
 import {
   attributedEstUsdForConnector,
   checkToolCaps,
+  createReassemblySentinel,
   DEFAULT_TOOL_CAPS,
   grantedTools,
   grantValueRedactor,
@@ -41,6 +42,7 @@ import {
   truncateResult,
   withEndpointOverrides,
   type ConnectorDef,
+  type ReassemblySentinel,
   type Redactor,
   type ToolCapConfig,
 } from '@potion/lab-mcp';
@@ -60,6 +62,38 @@ export interface SuperpowerUnavailable {
 
 export interface ToolCallError {
   toolError: { kind: string; detail: string };
+}
+
+/** The typed value a severed connector returns for the rest of the leg
+ * (Step 12, T5/T6). Authored text, no server string, no secret material —
+ * and deliberately the SAME value for the tripping call and every call
+ * after it, so a server cannot use the difference as an oracle for how
+ * much of its shard budget it has left. */
+export const SEVERED_RESULT: ToolCallError = {
+  toolError: {
+    kind: 'custody-severed',
+    detail:
+      'this connection was cut mid-run: its results were reassembling credential material. No further calls will run this leg.',
+  },
+};
+
+/** AUTHORED failure prose for a transport-level error, keyed by the typed
+ * kind alone (Step 12 L1). The model needs to know the call failed and
+ * whether retrying is plausible; it does not need — and must not receive —
+ * the connector's own words. */
+function transportDetail(kind: string): string {
+  switch (kind) {
+    case 'timeout':
+      return 'the connector did not answer in time';
+    case 'http':
+      return 'the connector refused the request at the transport level';
+    case 'protocol':
+      return 'the connector answered in a shape this client does not accept';
+    case 'rpc':
+      return 'the connector reported an error for this call';
+    default:
+      return 'the call to the connector failed';
+  }
 }
 
 export interface McpLegNote {
@@ -98,6 +132,8 @@ export interface McpLegSetup {
 function capsFor(superpower: HarnessSuperpower): ToolCapConfig {
   return {
     ...DEFAULT_TOOL_CAPS,
+    // Step 12: an authored call ceiling overrides the library default.
+    ...(superpower.maxCalls !== undefined ? { maxCalls: superpower.maxCalls } : {}),
     maxAttributedEstUsd: superpower.maxSpendUsdPerRun ?? null,
     maxAttributedEstUsdPerDay: superpower.maxSpendUsdPerDay ?? null,
   };
@@ -153,7 +189,15 @@ async function refreshAccessToken(
         : {}),
     };
   } catch (e) {
-    return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+    // Step 12 (L11): this is the LAST untrusted string on the leg-note path.
+    // The note it feeds is built BEFORE heldSecrets is populated for this
+    // connector, so the leg redactor holds nothing for it — and the message
+    // here is network/DNS/TLS text shaped by the connector's own hostname
+    // and, for a hostile token endpoint, its own response. The note carries
+    // the typed REASON; the operator still gets the detail through the
+    // worker log, which is not model context.
+    void e;
+    return { ok: false, detail: 'the token endpoint could not be reached' };
   }
 }
 
@@ -167,6 +211,8 @@ export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLeg
   const legNotes: McpLegNote[] = [];
   const sessions: McpSession[] = [];
   const heldSecrets: Array<string | null> = [];
+  /** Connectors the reassembly sentinel cut mid-leg (Step 12, T5/T6). */
+  const severed = new Set<string>();
 
   const note = (
     connectorId: string,
@@ -283,6 +329,8 @@ export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLeg
           session,
           caps,
           redact: () => redactor,
+          sentinel: () => sentinel,
+          severed,
           now,
         }),
       });
@@ -296,6 +344,10 @@ export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLeg
   // ONE redactor over every held secret of the leg — built after all grants
   // opened so cross-connector echoes die too.
   const redactor = grantValueRedactor(heldSecrets);
+  // Step 12 (T5/T6): and ONE sentinel behind it, stateful for the whole
+  // leg, watching what the stateless scrub could not — sub-threshold shards
+  // accumulating across separate results into a whole credential.
+  const sentinel = createReassemblySentinel(heldSecrets);
 
   return {
     tools,
@@ -321,10 +373,15 @@ function makeToolRun(deps: {
   session: McpSession;
   caps: ToolCapConfig;
   redact: () => Redactor;
+  sentinel: () => ReassemblySentinel;
+  /** Connectors severed mid-leg by the sentinel — leg-local, shared by
+   * every tool of every connector (a trip cuts the one that did it). */
+  severed: Set<string>;
   now: () => Date;
 }): (input: unknown) => Promise<unknown> {
   return async (input: unknown): Promise<unknown> => {
     const redact = deps.redact();
+    if (deps.severed.has(deps.connectorId)) return SEVERED_RESULT;
     // ---- mid-run revocation/expiry: typed, never silent, never a crash ----
     const status = grantConnectionStatus(
       await getLabGrant(deps.db, deps.orgId, deps.connectorId),
@@ -386,8 +443,17 @@ function makeToolRun(deps: {
           },
         } satisfies SuperpowerUnavailable);
       }
+      // Step 12 finding L5 (HIGH) — the SIBLING the spec predicted (§3, "the
+      // transport's typed error paths ... assume siblings"). `e.message` for
+      // an McpTransportError of kind 'rpc' EMBEDS the server's own
+      // `error.message` (transport.ts) — so a hostile connector wrote
+      // attacker-chosen prose straight into the conversation and the durable
+      // checkpoint, through the one path Step 11's leg-note fix did not
+      // cover. The rule the build already applies to notes applies here: the
+      // model gets the TYPED kind, never the server's string. Operators keep
+      // the full message through the worker log.
       return redact({
-        toolError: { kind, detail: e instanceof Error ? e.message : String(e) },
+        toolError: { kind, detail: transportDetail(kind) },
       } satisfies ToolCallError);
     }
     if (result.isError) {
@@ -395,6 +461,17 @@ function makeToolRun(deps: {
     }
     // ---- redact FIRST (full text), then truncate typed ----
     const clean = redact(result.text);
+    // ---- then the leg-stateful reassembly check (Step 12, T5/T6) ----
+    // The sentinel reads what SURVIVED the scrub. If this result carries the
+    // shard that pushes a held secret over the threshold, the result is
+    // withheld — the model never sees it — and the connector is cut for the
+    // rest of the leg. Fail closed: a connector caught assembling a
+    // credential across results does not get another result.
+    const trip = deps.sentinel().observe(clean);
+    if (trip !== null) {
+      deps.severed.add(deps.connectorId);
+      return SEVERED_RESULT;
+    }
     return truncateResult(clean, deps.caps.maxPerCallBytes);
   };
 }

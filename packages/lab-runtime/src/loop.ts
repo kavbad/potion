@@ -16,8 +16,9 @@
 //   sleep  — injected; tests make it instant. The retry test asserts on the
 //            REQUESTED delays, not wall-clock (a fake sleep proves ordering,
 //            never duration).
-import { seedFromString, type ChatMessage, type Tool } from '@potion/core';
+import { seedFromString, sha256, type ChatMessage, type Tool } from '@potion/core';
 import {
+  consumeLabRunAnswer,
   appendLabStep,
   claimLabRun,
   getLabMemory,
@@ -116,6 +117,45 @@ function mulberry32(seed: number): () => number {
 
 /** System prompt: mission + rules + memory snapshot. Deterministic given the
  * same spec + memory — this text is part of every step's requestPayload. */
+/**
+ * The fingerprint of one external action: WHICH tool, with WHICH arguments.
+ * The arguments are hashed rather than stored so the identity survives long
+ * payloads without duplicating them into a second durable place.
+ *
+ * Arguments are canonicalised as the raw string the model emitted — the
+ * exact bytes the question rendered — so "the same call" means the same
+ * call, not an equivalent-looking one.
+ */
+/**
+ * Affirmative consent (L4). The check-in answer is free text a human typed,
+ * and the old rule was `answer !== null` — so "no", "stop", "absolutely
+ * not" all armed the pore exactly as "yes" did. This recognises approval
+ * and nothing else: an answer it does not recognise authorizes NOTHING and
+ * the pore fires again, which is the safe direction for a control whose
+ * whole job is to stop an action a human did not want.
+ */
+export function isAffirmative(answer: string): boolean {
+  const t = answer.trim().toLowerCase();
+  if (t === '') return false;
+  // An explicit refusal anywhere in the answer wins outright — "yes, but no"
+  // is not consent, and neither is "proceed? no".
+  if (/\b(no|nope|don'?t|do not|stop|cancel|deny|denied|refuse|reject|never)\b/.test(t)) return false;
+  // "go" is an ordinary way a human approves a check-in — the Step 10
+  // walkthrough and the golden corpus both use it — so it belongs here. It
+  // is accepted only where it reads as consent on its own ("go", "go
+  // ahead", "go on", "go for it"), never as the head of some other
+  // instruction, which is why this is not a bare /^go/.
+  if (/^go(\s+(ahead|on|for it))?[.! ]*$/.test(t)) return true;
+  return /^(y|ye|yes|yep|yeah|ok|okay|sure|approve|approved|proceed|continue|confirm|confirmed|do it|run it)\b/.test(t);
+}
+
+export function actionFingerprint(
+  toolName: string,
+  rawArguments: string,
+): { toolName: string; argsHash: string; arguments: string } {
+  return { toolName, argsHash: sha256(rawArguments), arguments: rawArguments };
+}
+
 export function systemPrompt(
   spec: HarnessSpec,
   memory: Record<string, unknown>,
@@ -217,9 +257,31 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // semantics the resumed leg would re-ask on the very tool call the
     // human just approved — an infinite politeness loop.
     const lastCheckIn = [...priorSteps].reverse().find((s) => s.kind === 'check-in');
-    let externalAuthorized =
+    const lastCheckInPayload = lastCheckIn?.payload as StepPayload | undefined;
+    // Step 12 findings L2/L3/L4 — three CRITICAL defects met in one place,
+    // because they were three faces of the same mistake: treating "an answer
+    // exists" as "this action is approved".
+    //
+    //   L2  the authorization was bound to the check-in's TRIGGER TYPE, so a
+    //       DIFFERENT act consumed the approval the human gave for another.
+    //       → it is now bound to the action's fingerprint (tool + arguments).
+    //   L4  ANY answer armed it, including "no". A refusal authorized the
+    //       action it refused. → affirmative consent is now required, and
+    //       anything not recognised as affirmative authorizes nothing.
+    //   L3  consumption was an in-memory boolean while the durable
+    //       pending_answer survived the leg-cap exit, so one "yes" re-armed
+    //       the pore on every following leg. → consumption CLEARS the
+    //       durable answer, at the moment of use.
+    //
+    // All three fail closed: an unparseable answer, a missing fingerprint,
+    // or a mismatched call all mean "not authorized", never "authorized".
+    let authorizedAction: { toolName: string; argsHash: string; arguments: string } | null =
       claim.pendingAnswer !== null &&
-      (lastCheckIn?.payload as StepPayload | undefined)?.checkInTrigger === 'before-external-action';
+      isAffirmative(claim.pendingAnswer) &&
+      lastCheckInPayload?.checkInTrigger === 'before-external-action' &&
+      lastCheckInPayload.checkInAction !== undefined
+        ? lastCheckInPayload.checkInAction
+        : null;
     let budgetFractionAsked = priorSteps.some(
       (s) => s.kind === 'check-in' && (s.payload as StepPayload).checkInTrigger === 'on-budget-fraction',
     );
@@ -239,7 +301,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // carries them.
     let legStamp: Partial<StepPayload> | null =
       priorSteps.length === 0
-        ? { memoryReads: memory }
+        ? { memoryReads: memory, toolGuidance: [...(opts.toolGuidance ?? [])] }
         : claim.pendingAnswer !== null
           ? { checkInAnswer: claim.pendingAnswer }
           : null;
@@ -262,6 +324,53 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
       });
       messages.push(toolResultMessage(legNote.toolName, legNote.note));
+    }
+
+    // ---- the APPROVED action runs; the model is not asked to re-propose ----
+    //
+    // Step 12 (L2, second half). Binding the approval to a fingerprint is
+    // only half the property. The other half surfaced when the walkthrough
+    // started re-asking forever: on resume the conversation now CONTAINS the
+    // approval, so the model's next proposal differs — different arguments,
+    // sometimes a different tool — and a fingerprint match would essentially
+    // never happen. An operator facing an endless re-ask turns the check-in
+    // off, which is worse than no gate at all.
+    //
+    // So the resumed leg does not ask the model what to do next: it EXECUTES
+    // THE CALL THE HUMAN READ, byte for byte, out of the check-in record.
+    // What was approved is what runs — which is both the safer rule and the
+    // one a person would assume was already true.
+    if (authorizedAction !== null) {
+      const approved = authorizedAction;
+      const tool = tools.find((t) => t.name === approved.toolName);
+      if (tool === undefined) {
+        // The approved tool is not loaded this leg (a grant revoked between
+        // the question and the answer, say). Fail closed: nothing runs, and
+        // the authorization is burned so it cannot be spent later.
+        await consumeLabRunAnswer(opts.db, opts.runId, opts.orgId);
+        authorizedAction = null;
+      } else {
+        const input: unknown = JSON.parse(approved.arguments || '{}');
+        const output = await tool.run(input);
+        seq += 1;
+        await appendLabStep(opts.db, {
+          runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'tool',
+          payload: buildStepPayload({
+            ...takeLegStamp(),
+            kind: 'tool', toolName: tool.name, toolInput: input, toolOutput: output,
+            clockMs: clock.now(), rngSample: rng(),
+          }),
+          harnessHash: opts.harnessHash,
+          ...(isMemoryCarrier(output) ? { memoryWrites: output._memoryWrites } : {}),
+          leaseMs, now: new Date(clock.now()),
+        });
+        messages.push(toolResultMessage(tool.name, output));
+        // Consumed — one answer, THAT one action, once. The durable clear is
+        // what makes "once" survive a leg boundary (L3): the in-memory null
+        // alone died with the leg and left the row armed.
+        authorizedAction = null;
+        await consumeLabRunAnswer(opts.db, opts.runId, opts.orgId);
+      }
     }
 
     let stepsThisLeg = 0;
@@ -341,15 +450,22 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             return { status: 'failed', reason: 'unknown-tool', steps: stepsThisLeg };
           }
           // ---- before-external-action check-in ----
+          //
+          // Step 12: there is no "already authorized" branch here any more,
+          // and its absence is the point. The ONLY way an external action
+          // runs without a human seeing it is the approved-call execution
+          // above, which replays the exact call the human read. Inside the
+          // loop, every external call the model proposes fires the pore —
+          // no exceptions, no in-flight flag to get out of step with the
+          // durable record.
           const gate = opts.spec.checkIns.some((c) => c.trigger === 'before-external-action');
-          if (gate && tool.external && externalAuthorized) {
-            externalAuthorized = false; // consumed — one answer, one action
-          } else if (gate && tool.external) {
+          const fingerprint = actionFingerprint(tool.name, call.function.arguments);
+          if (gate && tool.external) {
             const question = `About to run external tool '${tool.name}' with input ${JSON.stringify(call.function.arguments).slice(0, 200)}. Proceed?`;
             seq += 1;
             await appendLabStep(opts.db, {
               runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
-              payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'before-external-action', checkInQuestion: question, clockMs: clock.now(), rngSample: rng() }),
+              payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'before-external-action', checkInQuestion: question, checkInAction: fingerprint, clockMs: clock.now(), rngSample: rng() }),
               harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
             });
             await fenced.transition('awaiting-human', undefined, question);

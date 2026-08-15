@@ -109,6 +109,7 @@ export class StreamableHttpTransport {
     try {
       await this.fetchImpl(this.baseUrl, {
         method: 'DELETE',
+        redirect: 'error',
         headers: this.headers(),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
@@ -124,6 +125,14 @@ export class StreamableHttpTransport {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(payload),
+        // Step 12 (L6): fetch follows 3xx by default, which made the
+        // hosted-only wall exactly one redirect wide — a connector could
+        // answer with a Location pointing at loopback or an internal host
+        // and our own client, holding the bearer, would follow it there.
+        // A hosted MCP endpoint has no legitimate reason to move us: the
+        // URL is the one the operator connected to, and a redirect is now
+        // a typed transport error instead of a silent hop.
+        redirect: 'error',
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (e) {

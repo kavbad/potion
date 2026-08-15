@@ -394,3 +394,84 @@ route inventory complete and classified by both-directions meta-test; every
 §2 target attempted with its outcome written; the bound live leg run,
 ledgered, and its grant revoked; and the non-coverage statement (§10)
 published rather than implied. Verify unfiltered.
+
+## 13. Build deviations — recorded, never silent
+
+1. **The severity of T5/T6 landed at MEDIUM, not CRITICAL.** The rubric reads
+   "credential material reaching any durable or visible surface" as CRITICAL,
+   and the split-token attack does exactly that. The downgrade is on a written
+   falsification, per §4's anti-negotiation rule: the material a hostile
+   server can plant this way is **its own bearer**, which it already holds, so
+   the harm is pollution of our durable surfaces rather than disclosure to a
+   party that lacked it. Recorded with the finding, not applied quietly.
+
+2. **The sentinel bounds the leak; it does not eliminate it.** Up to
+   `SPLIT_TOKEN_MIN_MATCH − 1` characters escape before the trip, and shards
+   below `SHARD_MIN_MATCH` (5) evade the detector entirely at a cost of one
+   metered tool call per four characters. Both limits are asserted by test so
+   they are numbers in the record rather than discoveries someone makes later.
+   The floor is 5 and not 4 because 4-grams of a random credential collide
+   with ordinary prose often enough that a long run would sever itself — an
+   honest trade named in the code.
+
+3. **The L2 fix changed check-in semantics product-wide.** Binding the
+   approval to a fingerprint was not enough: on resume the model re-proposes a
+   *different* call (the conversation now contains the approval), so a
+   fingerprint match would essentially never happen and the pore would re-ask
+   forever. The resumed leg therefore REPLAYS the approved call from the
+   check-in record instead of asking the model to re-propose it. This is a
+   behaviour change beyond "fix the defect", taken because the narrow fix
+   produced a control no operator would leave switched on. Four tests and one
+   golden fixture encoded the old semantics and were updated with the reason
+   recorded in each.
+
+4. **`maxCalls` became a spec field.** The pass found the operator's
+   authorized "5 tool calls" was not expressible: `capsFor` had no path from
+   the spec, so every run used the library default of 20. Adding
+   `HarnessSuperpower.maxCalls` is a product change inside an adversarial
+   step, taken because the alternative was to keep a cap the operator agreed
+   to and the code could not honour.
+
+5. **`scopeLimits` became part of the package format.** T8 found that the
+   least-privilege invariant passed for Salesforce only because
+   `update_record` declared `api_write`, a scope Salesforce does not have —
+   a test satisfied by a fiction. Where a vendor genuinely offers no narrower
+   scope, the package must now say so in writing, per tool, and both the
+   validator and the mini-eval demand the reason. Silence fails.
+
+6. **Five tools moved `read` → `act`.** Fail-closed under the accepted
+   pushback, with a per-tool confidence recorded in the audit exhibit. Two
+   packages (dropbox, discord) additionally lost a default scope, because a
+   scope that now supports no read tool has no business in the default grant.
+
+7. **The independent pass ran two rounds, not to dryness.** §4 asks for two
+   consecutive rounds with no new confirmed finding; round two still produced
+   confirmed findings when the budget ceiling arrived. Reported as
+   **"budget-capped, not dry"**, exactly as §4 requires. Five verification
+   legs stalled and exhausted their retries, leaving two round-1 candidates
+   unverified — recorded as unverified, never as absent.
+
+8. **The rehearsal (addition 2) found four defects in the live-leg script
+   itself**, three of which would have wasted the operator's sitting outright
+   and one of which would have produced a FALSE PASS on the bound Step 10 DoD
+   item. They are in the findings artifact as L12/L13. This is the strongest
+   argument for the addition: the script's only previously tested path was its
+   refusal path.
+
+## 14. Exit statement
+
+- **Every §2 target attempted**, each closing with a typed disposition in
+  `artifacts/step-12-targets.json`; the meta-test refuses an untyped close and
+  pins the row set so the table cannot shrink.
+- **All CRITICAL findings fixed and pinned** (L2, L3, L4) — before Gate C, as
+  §10.2 requires. Both HIGHs and all five MEDIUMs are fixed and pinned too.
+- **Non-criticals recorded with owners** (L14, L15 → Step 13; T9/T10/T13/T14/
+  T17 in the register).
+- **The route inventory is complete and classified**, proven both directions
+  against the live route tree.
+- **The live leg is staged and rehearsed, not run.** It needs the operator's
+  hands. Until it runs, three things stay open and are listed as open: the
+  bound Step 10 cap-trip under a real grant, T9's behavioural half, and L15.
+- **The non-coverage statement (§10) stands published**: this is an internal
+  adversarial pass by the same author, not a third-party audit, and an
+  external review belongs before customer credentials at scale.
