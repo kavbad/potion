@@ -445,3 +445,85 @@ describe('RBAC matrix (viewer=read, member=+write, admin=+invite)', () => {
     ).toBe(200);
   });
 });
+
+// ── Self-serve signup, end to end, with the dev bypass OFF ───────────────
+//
+// The flag existed and was gate-tested, but the LOOP was never proven: with
+// no SMTP, a production self-serve signup creates the org and then strands
+// the person, because the magic link only reaches the server log. These pin
+// the whole path — signup → link → session → authenticated work — under
+// production auth semantics, plus the property that makes the new flag safe
+// to reason about (it is its own switch, and it is off unless asked for).
+describe('self-serve signup (POTION_SELF_SERVE=1, dev bypass OFF)', () => {
+  let selfApp: FastifyInstance;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeAll(async () => {
+    for (const k of ['POTION_SELF_SERVE', 'POTION_MAGIC_LINK_IN_RESPONSE', 'POTION_DEV_AUTH']) {
+      saved[k] = process.env[k];
+    }
+    process.env.POTION_SELF_SERVE = '1';
+    process.env.POTION_MAGIC_LINK_IN_RESPONSE = '1';
+    process.env.POTION_DEV_AUTH = '0';
+    const { buildServer } = await import('../src/server.js');
+    selfApp = await buildServer({ seed: false });
+  }, 60_000);
+
+  afterAll(async () => {
+    await selfApp?.close();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it('an unknown email signs up, receives a usable link, and lands in its own org as admin', async () => {
+    const email = 'stranger@newco.test';
+    const signup = await selfApp.inject({
+      method: 'POST',
+      url: '/auth/request-link',
+      headers: { 'content-type': 'application/json' },
+      payload: { email },
+    });
+    expect(signup.statusCode).toBe(200);
+    const link = signup.json().devLink as string;
+    expect(typeof link).toBe('string'); // without this the signup strands
+
+    const token = new URL(link).searchParams.get('token')!;
+    const verify = await selfApp.inject({ method: 'GET', url: `/auth/verify?token=${encodeURIComponent(token)}` });
+    expect(verify.statusCode).toBe(200);
+    const cookie = String(verify.headers['set-cookie'] ?? '').split(';')[0]!;
+
+    // A real session doing real work: read, then mint a serving key.
+    expect((await selfApp.inject({ method: 'GET', url: '/api/keys', headers: { cookie } })).statusCode).toBe(200);
+    const policy = await selfApp.inject({
+      method: 'POST',
+      url: '/api/policies',
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { policy: { type: 'min_cost', qualityFloor: 0.8 }, createKey: true },
+    });
+    expect(policy.statusCode).toBe(201);
+    expect(typeof policy.json().apiKey).toBe('string');
+
+    // The org is the signer's own, and they are its admin.
+    const user = await getUserByEmail(selfApp.potion.db.db, email);
+    expect(user).not.toBeNull();
+    const memberships = await listMembershipsByUser(selfApp.potion.db.db, user!.id);
+    expect(memberships.length).toBe(1);
+    expect(memberships[0]!.role).toBe('admin');
+    expect(memberships[0]!.orgId).not.toBe(DEFAULT_ORG_ID); // never the demo org
+
+    // Still single-use.
+    const replay = await selfApp.inject({ method: 'GET', url: `/auth/verify?token=${encodeURIComponent(token)}` });
+    expect(replay.statusCode).toBe(401);
+  }, 60_000);
+
+  it('the link-in-response flag is INDEPENDENT of self-serve and off unless set', async () => {
+    const { magicLinkInResponseEnabled } = await import('../src/routes/auth.js');
+    expect(magicLinkInResponseEnabled({})).toBe(false);
+    expect(magicLinkInResponseEnabled({ POTION_SELF_SERVE: '1' })).toBe(false); // not implied
+    expect(magicLinkInResponseEnabled({ POTION_MAGIC_LINK_IN_RESPONSE: '0' })).toBe(false);
+    expect(magicLinkInResponseEnabled({ POTION_MAGIC_LINK_IN_RESPONSE: '1' })).toBe(true);
+    expect(magicLinkInResponseEnabled({ POTION_MAGIC_LINK_IN_RESPONSE: 'true' })).toBe(true);
+  });
+});

@@ -209,6 +209,26 @@ export function selfServeEnabled(): boolean {
 }
 
 /**
+ * Return the magic link IN THE RESPONSE instead of only emailing/logging it.
+ *
+ * There is no SMTP (honest-stub convention), so with self-serve ON in
+ * production a signup completes, the org is created, and the link exists
+ * only in the server log — the person who signed up can never sign in. This
+ * flag closes that loop for a PRIVATE deployment being tested.
+ *
+ * It is off unless explicitly set, and it is deliberately its own flag
+ * rather than riding `POTION_SELF_SERVE`, because the two decisions are
+ * different: one opens signup, this one hands the caller a session-minting
+ * token for whatever email they typed. With both on, anyone who can reach
+ * the endpoint can sign in AS any address — fine for a closed test box,
+ * never for a public one. Real SMTP is what retires it.
+ */
+export function magicLinkInResponseEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = env.POTION_MAGIC_LINK_IN_RESPONSE;
+  return v === '1' || v?.toLowerCase() === 'true';
+}
+
+/**
  * Mint + record + deliver a magic link (G2.7 extraction: the operator
  * create-org route issues links outside this module's route closure).
  * Returns the raw link — the CALLER decides whether to surface it (dev
@@ -281,7 +301,10 @@ export function registerAuthRoutes(
     const link = await deliverMagicLink(email, orgId, baseUrlOf(req, opts.publicBaseUrl));
     // No account enumeration: identical response either way. devLink is
     // dev-only (documented bypass semantics) — the login page shows it.
-    const dev = devAuthBypassEnabled() ? { devLink: link } : {};
+    // POTION_MAGIC_LINK_IN_RESPONSE additionally surfaces it in production,
+    // which is the only way a self-serve signup can complete without SMTP.
+    const dev =
+      devAuthBypassEnabled() || magicLinkInResponseEnabled() ? { devLink: link } : {};
     return reply.send({ ok: true, email, ...dev });
   });
 

@@ -67,9 +67,18 @@ services:
       QUEUE_DRIVER: bullmq
       POTION_MASTER_KEY: ${POTION_MASTER_KEY:?set POTION_MASTER_KEY (64 hex, `openssl rand -hex 32`)}
       POTION_OPERATOR_TOKEN: ${POTION_OPERATOR_TOKEN:?set POTION_OPERATOR_TOKEN}
-      # Self-serve signup stays OFF: operator onboarding is the only way a
-      # partner org comes into being (docs/ONBOARDING-RUNBOOK.md).
-      POTION_SELF_SERVE: ""
+      # Self-serve signup. Default OFF — operator onboarding
+      # (docs/ONBOARDING-RUNBOOK.md) is the only way a partner org comes into
+      # being unless this is set. It is now passed THROUGH from .env.prod
+      # rather than pinned to "": the value was hardcoded, so setting it in
+      # the env file did nothing and the flag could not be tested on a real
+      # deployment at all.
+      POTION_SELF_SERVE: ${POTION_SELF_SERVE:-}
+      # There is no SMTP. With self-serve ON this returns the magic link in
+      # the signup response so the flow can complete; without it the link
+      # only reaches the server log and nobody can sign in. Closed test
+      # deployments only — see apps/server/src/routes/auth.ts.
+      POTION_MAGIC_LINK_IN_RESPONSE: ${POTION_MAGIC_LINK_IN_RESPONSE:-}
       POTION_METRICS: ${POTION_METRICS:-1}
       # G0.5: the default clustering threshold is MOCK-tuned (0.62). With a
       # real embedder it must be 0.2 — the walkthrough prints this warning at
