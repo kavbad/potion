@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// SERVING-ROADMAP S1 — reordered platform-first. "Connect keys" (BYOK) was
-// step 1, which framed bringing your own provider keys as the price of entry.
-// The first step is now connecting to the endpoint and setting a policy, both
-// of which work with no keys of your own; BYOK moved to settings, where an
-// option belongs.
+// SERVING-ROADMAP S1 — platform-first. "Connect keys" (BYOK) used to be step
+// 1, which framed bringing your own provider keys as the price of entry.
+// BYOK is no longer offered at all (operator decision, 2026-08-17): Potion
+// serves every request from its own provider keys, which is also what lets it
+// route across the whole catalog rather than the one account a customer
+// happened to bring.
 const ITEMS = [
   // S2: the from-scratch door comes FIRST. Someone starting a new thing has
   // no keys, no traffic and no policy — every other entry point assumes at
@@ -25,7 +26,6 @@ const ITEMS = [
   { href: '/playground', label: 'Playground', step: '›' },
   { href: '/rubrics', label: 'Rubrics', step: '›' },
   { href: '/leaderboard', label: 'Leaderboard', step: '›' },
-  { href: '/settings/provider-keys', label: 'Your provider keys', step: '›' },
   { href: '/settings/audit', label: 'Audit trail', step: '›' },
 ];
 

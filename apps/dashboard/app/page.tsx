@@ -7,6 +7,11 @@
 // capped it, since a customer's own key can only reach the models that
 // customer's account can reach.
 //
+// BYOK is not offered (operator decision, 2026-08-17). Potion serves every
+// request from its own provider keys — which is also the thing that lets it
+// route across the whole catalogue rather than the one account a customer
+// happened to bring.
+//
 // So this page answers the four questions someone actually has, in order:
 //   1. Where do I point traffic?          → endpoint + snippets
 //   2. With what key?                     → issue/list, honest about the hash
@@ -161,23 +166,10 @@ export default async function ConnectPage() {
         <div className="rounded-xl border border-line bg-panel px-6 py-5">
           <div className="text-xs uppercase tracking-wide text-faint">Who serves your traffic</div>
           <p className="mt-1 text-sm text-soft">
-            {serving.byok ? (
-              <>
-                Your own keys serve{' '}
-                <span className="font-medium text-ink">{serving.byokProviders.join(', ')}</span>.
-                Potion&apos;s platform keys serve everything else.
-              </>
-            ) : (
-              <>
-                Potion&apos;s platform keys, across{' '}
-                <span className="font-medium text-ink">{serving.platformProviders.length}</span>{' '}
-                providers. You have not connected any of your own.
-              </>
-            )}{' '}
-            <Link href="/settings/provider-keys" className="text-accent underline">
-              Bring your own keys
-            </Link>{' '}
-            if you want a provider billed to your account instead.
+            Potion, across{' '}
+            <span className="font-medium text-ink">{serving.platformProviders.length}</span>{' '}
+            providers. You never connect a provider account — that is what lets Potion choose
+            across the whole catalogue instead of whichever one account you brought.
           </p>
           {serving.providerMode === 'mock' && (
             <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">

@@ -10,7 +10,6 @@
 //   4. POST a max_quality policy          → 201 + fresh pk_ key
 //   5. POST /v1/chat/completions          → 200 + x-frontier-trace header
 //   6. GET /frontiers page HTML           → SSR chart + SIMULATED badges (M1a)
-//   7. GET /settings/provider-keys        → custody note, connect form ON by default (M2)
 //   7b. GET / page HTML                   → S1 connect surface: endpoint, the
 //       policy in plain language, and the routing proof reporting a NON-ZERO
 //       routed count for the request step 5 actually sent
@@ -306,25 +305,12 @@ async function main(): Promise<void> {
     const badges = (html.match(/SIMULATED/g) ?? []).length;
     return `${(html.length / 1024).toFixed(0)}KB html, ${circles} <circle> nodes, caption + ticks + marker present, ${badges} SIMULATED badges`;
   });
+  // ---- 7. (retired) the BYOK provider-key page ----
+  // BYOK is no longer offered (operator, 2026-08-17), so /settings/provider-keys
+  // is gone and this leg with it. Step 1 still registers a provider key over the
+  // API: the custody machinery stays and stays tested, because the Lab's MCP
+  // OAuth grants depend on it. It is simply not a customer-facing surface.
 
-  // ---- 7. BYOK custody (M2): custody note + self-serve form ON by default ----
-  // SERVING-ROADMAP S1: this page MOVED from `/` to /settings/provider-keys —
-  // BYOK is an option, not the front door. Same assertions, new address.
-  await step('7. GET /settings/provider-keys (custody note, connect form ON by default)', async () => {
-    const res = await dashFetch('/settings/provider-keys');
-    const html = await res.text();
-    assert(res.ok, `HTTP ${res.status}`);
-    assert(html.includes('encrypted at rest'), 'custody note missing');
-    // The M1a honesty banner and flag gate are gone — custody shipped.
-    assert(
-      !html.includes('Keys are stored masked and used for validation only'),
-      'M1a honesty banner should be gone',
-    );
-    // Flag default ON: self-serve form rendered, no contact-us fallback.
-    assert(html.includes('Connect key</button>'), 'key form should be ON by default');
-    assert(!html.includes('NEXT_PUBLIC_BYOK_ENABLED=false'), 'opt-out note should be absent');
-    return 'custody note + form present, M1a banner gone (NEXT_PUBLIC_BYOK_ENABLED unset)';
-  });
 
   // ---- 7b. SERVING-ROADMAP S1: the connect surface is now the front door ----
   // The DoD of S1 in one step: a signed-in org lands on `/` and finds where
