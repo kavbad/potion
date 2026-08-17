@@ -22,9 +22,12 @@ command or commit that showed it) or marked as **unverified**.
 
 Unpacked into the properties that actually bind the build:
 
-1. **No BYOK requirement.** Potion serves from its own provider key so the
-   choice spans the whole catalog, not the one provider a customer happened to
-   bring. BYOK stays supported, as an option, not the price of entry.
+1. **No BYOK at all** (hardened 2026-08-17 — it began as "no BYOK
+   *requirement*", with BYOK kept as an option). Potion serves from its own
+   provider key, which is exactly what lets the choice span the whole catalog
+   instead of the one provider a customer happened to bring. Keeping BYOK as
+   an option would have preserved the ceiling it imposes for the customers
+   most likely to take it.
 2. **Valuable from scratch.** A customer with **zero traffic** must get real,
    measured routing on their first request — not a placeholder, not a default.
    This is the hard case and the one most easily faked.
@@ -74,13 +77,16 @@ redeploy and never affect the running process. Verified externally
 parsed), `supported_parameters` (incl. `tools`), `context_length` and
 `top_provider.max_completion_tokens`; a prior live check recorded ~338 models.
 
-### G2 — Billing truth: nothing records who paid
-`OrgProviders.byok` / `byokProviders` are computed (`context.ts:120-121`) and
-**consumed nowhere** in production. `request_logs.provider` is documented NULL
-on serving rows (`schema.ts:306-312`), and `usage_daily.platformCostUsd` is the
-*same SQL expression* as `costUsd` (`usage.ts:113-114`). Under BYOK that was
-harmless; under platform serving it is the invoice. An org can be partly BYOK,
-so the distinction is per-request, not per-org.
+### G2 — Billing truth: the cost we record is not the cost we are charged
+*(S3, done. The gap was NOT the one written here first.)*
+As originally filed: nothing recorded who paid, and
+`usage_daily.platformCostUsd` was the *same SQL expression* as `costUsd`. With
+BYOK retired that half dissolved — every served request is ours.
+What remained was worse and is now fixed: the recorded cost was **modelled**
+from a price table shaped only as input/output per 1M, so it could express
+neither a cached-input discount (we overcharged) nor reasoning tokens billed
+outside the completion count (we undercharged). Measured, not assumed —
+see S3 below. Cost now comes from the provider's own billed figure.
 
 ### G3 — The auto-switch has no page
 The API half is fixed, the surface is not. The serving key appears **once**,
