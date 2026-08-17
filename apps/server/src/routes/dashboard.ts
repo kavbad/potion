@@ -22,6 +22,7 @@ import {
   getApiKeyById,
   getFirstApiKeyWithPolicy,
   getPolicyById,
+  listPolicies,
   insertApiKey,
   insertPolicy,
   listClusters,
@@ -515,13 +516,27 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
   /** curl + openai-node snippets for the chat endpoint under a policy. */
   app.get('/api/endpoint-snippet', async (req, reply) => {
     const { policy: raw } = req.query as { policy?: string };
-    const policy = parsePolicyQuery(raw);
+    // With ?policy= this answers "what would the snippet look like for THIS
+    // policy" — how the policy picker uses it. Without it, the question a
+    // connecting user actually asks is "where do I point my traffic?", so
+    // fall back to the policy their org already has bound rather than 400.
+    // Before this, a freshly signed-up org could not retrieve its own
+    // connection details at all without re-supplying its policy JSON.
+    let policy = parsePolicyQuery(raw);
+    if (!policy && raw === undefined) {
+      const bound = await listPolicies(ctx.db.db, req.potionOrg!.orgId);
+      const first = bound[0];
+      if (first) {
+        const parsed = PolicySchema.safeParse(first.config);
+        if (parsed.success) policy = parsed.data;
+      }
+    }
     if (!policy) {
       return reply
         .code(400)
         .send(
           openAiError(
-            'invalid ?policy= — pass a JSON-encoded Policy or one of: max_quality, min_cost, latency_bound',
+            'invalid ?policy= — pass a JSON-encoded Policy or one of: max_quality, min_cost, latency_bound (omit it entirely to use the policy bound to your org)',
             'invalid_request_error',
           ),
         );

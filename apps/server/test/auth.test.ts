@@ -518,6 +518,52 @@ describe('self-serve signup (POTION_SELF_SERVE=1, dev bypass OFF)', () => {
     expect(replay.statusCode).toBe(401);
   }, 60_000);
 
+  it('a fresh org can retrieve its OWN connection details with no ?policy=', async () => {
+    // The onramp question is "where do I point my traffic?", and before this
+    // the only way to ask it was to already know your policy JSON — a fresh
+    // self-serve org got a 400 from the surface meant to onboard it.
+    const email = 'connect@newco.test';
+    const signup = await selfApp.inject({
+      method: 'POST',
+      url: '/auth/request-link',
+      headers: { 'content-type': 'application/json' },
+      payload: { email },
+    });
+    const token = new URL(signup.json().devLink as string).searchParams.get('token')!;
+    const verify = await selfApp.inject({ method: 'GET', url: `/auth/verify?token=${encodeURIComponent(token)}` });
+    const cookie = String(verify.headers['set-cookie'] ?? '').split(';')[0]!;
+
+    // Before a policy exists there is nothing to describe — still a 400.
+    const before = await selfApp.inject({ method: 'GET', url: '/api/endpoint-snippet', headers: { cookie } });
+    expect(before.statusCode).toBe(400);
+
+    await selfApp.inject({
+      method: 'POST',
+      url: '/api/policies',
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { policy: { type: 'min_cost', qualityFloor: 0.8 }, createKey: true },
+    });
+
+    const after = await selfApp.inject({ method: 'GET', url: '/api/endpoint-snippet', headers: { cookie } });
+    expect(after.statusCode).toBe(200);
+    const body = after.json();
+    expect(body.policy).toEqual({ type: 'min_cost', qualityFloor: 0.8 }); // THEIR bound policy
+    expect(body.url).toContain('/v1/chat/completions');
+    expect(body.openaiNode).toContain('potion-auto'); // the auto-switch, named
+
+    // An explicit ?policy= still wins, and a bogus one still 400s.
+    const explicit = await selfApp.inject({
+      method: 'GET',
+      url: '/api/endpoint-snippet?policy=max_quality',
+      headers: { cookie },
+    });
+    expect(explicit.json().policy.type).toBe('max_quality');
+    expect(
+      (await selfApp.inject({ method: 'GET', url: '/api/endpoint-snippet?policy=bogus', headers: { cookie } }))
+        .statusCode,
+    ).toBe(400);
+  }, 60_000);
+
   it('the link-in-response flag is INDEPENDENT of self-serve and off unless set', async () => {
     const { magicLinkInResponseEnabled } = await import('../src/routes/auth.js');
     expect(magicLinkInResponseEnabled({})).toBe(false);
