@@ -46,8 +46,8 @@
     "@potion/queue": "workspace:^",
     "@potion/strategies": "workspace:*",
     "@potion/workers": "workspace:^",
-    "fastify": "^5.0.0",
-    "zod": "^3.23.8"
+    "fastify": "^5.12.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
