@@ -1,127 +1,181 @@
-// / — connect provider keys (SPEC §9 flow 1). Server component renders the
-// masked list of stored keys; the form + per-key actions are client islands.
+// / — CONNECT & AUTO-ROUTE. The front door (SERVING-ROADMAP S1).
 //
-// BYOK custody (M2 Wave 2, ROADMAP #16): keys are ENCRYPTED AT REST
-// (AES-256-GCM envelope — per-key data key wrapped by the master key) and
-// serve their org's traffic; platform keys remain the fallback for providers
-// without a connected key. The M1a honesty banner and the flag gate are gone
-// — custody shipped. NEXT_PUBLIC_BYOK_ENABLED stays as an emergency opt-out
-// (default ON; set to 'false' to hide the self-serve form).
-import { KeyActions } from '@/components/key-actions';
-import { KeysForm } from '@/components/keys-form';
+// What used to be here was "Connect keys" — bring your own provider keys —
+// which made BYOK read as the price of entry. It never was: an org with no
+// keys of its own has always been served from Potion's platform keys, across
+// every provider at once. The old framing both understated the product and
+// capped it, since a customer's own key can only reach the models that
+// customer's account can reach.
+//
+// So this page answers the four questions someone actually has, in order:
+//   1. Where do I point traffic?          → endpoint + snippets
+//   2. With what key?                     → issue/list, honest about the hash
+//   3. Under what rule?                   → the bound policy, in a sentence
+//   4. Is it actually doing anything?     → the routing proof table
+//
+// (3) and (4) are the ones that were unanswerable before. A policy was raw
+// JSON shown once during setup, and whether the auto-switch had done any work
+// was knowable only by catching a response header live.
+import Link from 'next/link';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
-import { CUSTODY_NOTE } from '@/lib/provenance';
-import type { KeysResponse, ProviderKeyStatus } from '@/lib/types';
+import { CopyBlock } from '@/components/copy-block';
+import { RoutingProof } from '@/components/routing-proof';
+import { ServingKeys } from '@/components/serving-keys';
+import type { ConnectionResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-/** Emergency opt-out only — custody is shipped, so the form defaults ON. */
-function byokEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_BYOK_ENABLED !== 'false';
-}
-
-const STATUS_STYLE: Record<ProviderKeyStatus, string> = {
-  active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  revoked: 'border-red-200 bg-red-50 text-red-700',
-  rotating: 'border-amber-200 bg-amber-50 text-amber-700',
-};
-
-export default async function ConnectKeysPage() {
-  let keys: KeysResponse['keys'] = [];
+export default async function ConnectPage() {
+  let conn: ConnectionResponse | null = null;
   let unreachable = false;
   try {
-    keys = (await apiFetch<KeysResponse>('/api/keys')).keys;
+    conn = await apiFetch<ConnectionResponse>('/api/connection');
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
     else throw e;
   }
 
-  return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Connect keys</h1>
-      <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        Bring your own provider keys and Potion bills your accounts directly. Connected keys serve
-        your org&apos;s traffic for their provider; Potion platform keys remain the fallback
-        everywhere else.
-      </p>
-
-      {/* custody note (M2 #16 — replaces the M1a honesty banner) */}
-      <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-6 py-4">
-        <p className="text-sm font-medium text-emerald-800">{CUSTODY_NOTE}</p>
-      </div>
-
-      <div className="rounded-xl border border-line bg-panel px-8 py-8">
-        {byokEnabled() ? (
-          <KeysForm />
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-soft">
-              Self-serve key connection is disabled in this deployment
-              (NEXT_PUBLIC_BYOK_ENABLED=false).
-            </p>
-            <p className="text-sm text-soft">
-              Need a provider key connected?{' '}
-              <span className="font-medium text-ink">Contact us</span> at{' '}
-              <a href="mailto:support@potion.dev" className="text-accent underline">
-                support@potion.dev
-              </a>{' '}
-              and we will add it for you.
-            </p>
-          </div>
-        )}
-        <p className="mt-6 border-t border-line pt-4 text-xs leading-relaxed text-faint">
-          <span className="font-medium text-soft">Platform-keys fallback:</span> no key connected
-          for a provider? Potion serves that provider on its own platform keys (in this demo:
-          built-in mock providers). Connected keys take over serving — and billing — for their
-          provider immediately.
-        </p>
-      </div>
-
-      <h2 className="mb-4 mt-12 text-sm font-medium text-ink">
-        Connected keys {keys.length > 0 && <span className="text-faint">({keys.length})</span>}
-      </h2>
-      {unreachable ? (
-        <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+  if (unreachable || !conn) {
+    return (
+      <div className="max-w-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight">Connect &amp; auto-route</h1>
+        <div className="mt-6 rounded-lg border border-line bg-panel p-6 text-sm text-soft">
           The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
           (default port 3000) and reload.
         </div>
-      ) : keys.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-line p-6 text-sm text-faint">
-          None yet — you are on platform keys.
+      </div>
+    );
+  }
+
+  const { autoRouting, serving } = conn;
+  const readyAll = autoRouting.ready === autoRouting.total;
+
+  return (
+    <div className="max-w-3xl space-y-12">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Connect &amp; auto-route</h1>
+        <p className="mt-2 text-sm leading-relaxed text-soft">
+          Point any OpenAI-compatible client at the endpoint below. Potion reads each request,
+          works out what kind of task it is, and serves it from the model — or combination of
+          models — measured best for that task under your policy. No provider keys required.
+        </p>
+      </div>
+
+      {/* 1 + 3 — where, and under what rule */}
+      <section className="space-y-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium text-ink">1 · Point your traffic here</h2>
+          {!conn.baseUrlConfigured && (
+            <span className="text-xs text-faint">
+              derived from this request — set POTION_PUBLIC_URL behind a proxy
+            </span>
+          )}
         </div>
-      ) : (
-        <ul className="divide-y divide-line rounded-xl border border-line bg-panel">
-          {keys.map((k) => (
-            <li key={k.id} className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-ink">{k.name}</span>
-                    {k.status && (
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[k.status]}`}
-                      >
-                        {k.status}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs capitalize text-faint">
-                    {k.provider}
-                    {k.keyVersion ? ` · key v${k.keyVersion}` : ''}
-                    {k.lastValidatedAt
-                      ? ` · validated ${new Date(k.lastValidatedAt).toLocaleString()}`
-                      : ' · not validated yet'}
-                  </div>
-                </div>
-                <code className="rounded bg-paper px-2 py-1 font-mono text-xs text-soft">
-                  {k.maskedKey}
-                </code>
-              </div>
-              {k.status && <KeyActions id={k.id} status={k.status} />}
-            </li>
-          ))}
-        </ul>
-      )}
+        <CopyBlock label="Base URL" text={`${conn.baseUrl}/v1`} />
+        {conn.snippets ? (
+          <>
+            <CopyBlock label="curl" text={conn.snippets.curl} />
+            <CopyBlock label="Node.js (openai SDK)" text={conn.snippets.openaiNode} />
+          </>
+        ) : (
+          <p className="text-sm text-soft">
+            No policy bound yet — <Link href="/policy" className="text-accent underline">choose one</Link>{' '}
+            and the ready-to-paste snippets appear here.
+          </p>
+        )}
+
+        {conn.policy && (
+          <div className="rounded-lg border border-line bg-paper px-6 py-4">
+            <div className="text-xs uppercase tracking-wide text-faint">Your policy</div>
+            <p className="mt-1 text-sm text-ink">{conn.policy.description}</p>
+            <p className="mt-2 text-xs text-faint">
+              <span className="font-mono">{conn.policy.name}</span> · applies to every request on
+              your serving keys ·{' '}
+              <Link href="/policy" className="text-accent underline">
+                change it
+              </Link>
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* 2 — with what key */}
+      <section className="space-y-5">
+        <h2 className="text-sm font-medium text-ink">2 · Your serving key</h2>
+        <ServingKeys initial={conn.servingKeys} />
+      </section>
+
+      {/* 4 — is it doing anything */}
+      <section className="space-y-5">
+        <h2 className="text-sm font-medium text-ink">3 · Proof it is routing</h2>
+        <RoutingProof />
+      </section>
+
+      {/* the standing state: what the switch can route today, and who pays */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-medium text-ink">What Potion can route today</h2>
+        <div className="rounded-xl border border-line bg-panel px-6 py-5">
+          <p className="text-sm text-soft">
+            <span className="font-medium text-ink">
+              {autoRouting.ready} of {autoRouting.total}
+            </span>{' '}
+            workload types have measured routing on this deployment
+            {readyAll ? '.' : ' — the rest ride the default strategy until they are measured.'}
+          </p>
+          <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+            {autoRouting.clusters.map((c) => (
+              <li key={c.clusterId} className="flex items-center justify-between text-xs">
+                <span className={c.ready ? 'text-soft' : 'text-faint'}>{c.name}</span>
+                <span
+                  className={
+                    c.ready
+                      ? c.provenance === 'live'
+                        ? 'text-emerald-700'
+                        : 'text-amber-700'
+                      : 'text-faint'
+                  }
+                >
+                  {c.ready ? `${c.pointCount} measured · ${c.provenance}` : 'not measured'}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 border-t border-line pt-3 text-xs leading-relaxed text-faint">
+            Only measured points are routable. A model Potion knows about but has not evaluated for
+            your kind of work is never selected automatically — that is the whole difference
+            between a catalog and a frontier.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-line bg-panel px-6 py-5">
+          <div className="text-xs uppercase tracking-wide text-faint">Who serves your traffic</div>
+          <p className="mt-1 text-sm text-soft">
+            {serving.byok ? (
+              <>
+                Your own keys serve{' '}
+                <span className="font-medium text-ink">{serving.byokProviders.join(', ')}</span>.
+                Potion&apos;s platform keys serve everything else.
+              </>
+            ) : (
+              <>
+                Potion&apos;s platform keys, across{' '}
+                <span className="font-medium text-ink">{serving.platformProviders.length}</span>{' '}
+                providers. You have not connected any of your own.
+              </>
+            )}{' '}
+            <Link href="/settings/provider-keys" className="text-accent underline">
+              Bring your own keys
+            </Link>{' '}
+            if you want a provider billed to your account instead.
+          </p>
+          {serving.providerMode === 'mock' && (
+            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This deployment is running on built-in MOCK providers — responses are simulated and
+              costs are modelled, not billed. Set a provider API key to serve real traffic.
+            </p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

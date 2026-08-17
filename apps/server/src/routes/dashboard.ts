@@ -37,6 +37,7 @@ import { isDominated } from '@potion/pareto';
 import {
   roleAtLeast, authenticate, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
+import { publicBaseUrl } from '../public-url.js';
 import { highestQualityPoint } from './chat.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 
@@ -149,10 +150,10 @@ export function buildEndpointSnippets(baseUrl: string, policy: Policy): {
   return { url, curl, openaiNode };
 }
 
+/** The base URL handed to customers. POTION_PUBLIC_URL wins behind a proxy;
+ * see ../public-url.ts for why the request-derived form is not enough. */
 function baseUrlOf(req: FastifyRequest): string {
-  const proto = req.protocol || 'http';
-  const host = req.headers.host ?? 'localhost:3000';
-  return `${proto}://${host}`;
+  return publicBaseUrl(req);
 }
 
 /**

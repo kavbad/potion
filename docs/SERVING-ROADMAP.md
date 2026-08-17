@@ -128,7 +128,7 @@ Named here so "measured routing" is not read as more than it is.
 Phases are dependency-ordered. Each has a **done-when** that is provable, and
 names its spend. Nothing here requires the deployed URL unless marked.
 
-### S1 — Make it visible *(smallest, highest daily value)*
+### S1 — Make it visible *(smallest, highest daily value)* — **DONE 2026-08-17**
 **Fixes G3, part of G4.**
 - A durable **Connect & auto-route** page: base_url, serving key (re-issuable,
   shown once per issue), the bound policy in plain language, and **proof** —
@@ -141,6 +141,20 @@ names its spend. Nothing here requires the deployed URL unless marked.
 **Done when:** a fresh self-serve org can find where to point traffic without
 being told, and can see that its requests were routed (not defaulted).
 **Spend:** $0.
+
+**Shipped.** `GET /api/connection` + `GET /api/routing-activity`;
+`apps/server/src/public-url.ts` (POTION_PUBLIC_URL wins, three call sites
+unified); `/` is the connect page and BYOK moved to
+`/settings/provider-keys`. The honesty rule: `routed` is read back out of the
+`x-frontier-trace` string the caller received and needs BOTH a real frontier
+AND a policy-selected point, so the panel cannot disagree with the serving
+path; readiness reuses `guardFrontierProvenance` rather than counting rows.
+Proven on a bare database for an org that self-served seconds earlier —
+10/10 clusters ready all-live, three prompts routing from three different
+clusters, page reporting 3 of 3 routed. Walkthrough leg 7b asserts a
+non-zero routed count. One gap stayed open on purpose: the readiness list
+answers "what can Potion route", not "what should I build with" — that is
+S2's job.
 
 ### S2 — "What are you building?" *(the from-scratch front door)*
 **Fixes G4.**

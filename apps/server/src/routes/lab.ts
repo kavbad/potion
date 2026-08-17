@@ -117,6 +117,7 @@ import {
 } from '../connector-oauth.js';
 import type { PotionQueue } from '@potion/queue';
 import { openAiError, parseCookies, roleAtLeast } from '../auth.js';
+import { publicBaseUrl } from '../public-url.js';
 import { actorOf } from './keys.js';
 import type { PotionContext } from '../context.js';
 
@@ -984,8 +985,7 @@ export function registerLabRoutes(
   }
 
   function callbackUrlFor(req: FastifyRequest, connectorId: string): string {
-    const base = process.env.POTION_PUBLIC_URL ?? `http://${req.headers.host ?? 'localhost'}`;
-    return `${base}/api/lab/connectors/${connectorId}/oauth/callback`;
+    return `${publicBaseUrl(req)}/api/lab/connectors/${connectorId}/oauth/callback`;
   }
 
   // ---- GET /api/lab/connectors (viewer) — catalog + grant statuses ----

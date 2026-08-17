@@ -14,6 +14,7 @@ import { registerRateLimiting } from './middleware/ratelimit.js';
 import { registerUsageRoutes } from './routes/usage.js';
 // M2 Wave 2 key custody + lifecycle (ROADMAP #15/#16) — appended import.
 import { registerKeyRoutes } from './routes/keys.js';
+import { registerConnectionRoutes } from './routes/connection.js';
 // ---- M3 #26 observability (m3-observability) — appended imports ----
 import {
   REQUEST_ID_HEADER,
@@ -175,6 +176,14 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // in context.ts (providersForOrg) + routes/chat.ts.
   registerKeyRoutes(app, ctx);
   // ---- end M2 Wave 2 key custody ----
+
+  // ---- Connect & auto-route (SERVING-ROADMAP S1) ----
+  // GET /api/connection + /api/routing-activity: the durable answers to
+  // "where do I point traffic" and "did the auto-switch actually route my
+  // requests". Reads only — every field comes from state the serving path
+  // already wrote. Registered after keys so it sees the same auth hook.
+  registerConnectionRoutes(app, ctx);
+  // ---- end Connect & auto-route ----
 
   // ---- M3 #26 observability (m3-observability) ----
   // Direct-attach plugin (NOT app.register): its hooks must see every route

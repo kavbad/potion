@@ -270,6 +270,89 @@ export function traceHeaderValue(op: {
   );
 }
 
+/** The routing decision as recorded, read back out of a trace string. */
+export interface ParsedTrace {
+  clusterId: string | null;
+  strategyHash8: string | null;
+  frontierVersion: number | null;
+  policyType: string | null;
+  /** null when the token is absent or unrecognised — never silently 0. */
+  fallback: 0 | 1 | null;
+  provenance: 'live' | 'mock' | 'blocked' | null;
+  /** Every other token verbatim (upgraded, policy_override, latency fields). */
+  extra: Record<string, string>;
+}
+
+/**
+ * Inverse of `traceHeaderValue`, over the string persisted on
+ * `request_logs.trace` — which is byte-identical to the `x-frontier-trace`
+ * header the caller received, so reading it back is quoting what we told
+ * them, not re-deriving it.
+ *
+ * Every field is nullable on purpose. A missing or unrecognised token means
+ * "we do not know", and the surfaces above treat that as unproven rather than
+ * defaulting it to the reassuring value: `fallback: null` must never render
+ * as routed. Rows that predate a token, and the non-serving rows that carry
+ * no trace at all, are exactly the cases that would otherwise be flattered.
+ */
+export function parseTraceHeader(trace: string | null | undefined): ParsedTrace {
+  const out: ParsedTrace = {
+    clusterId: null,
+    strategyHash8: null,
+    frontierVersion: null,
+    policyType: null,
+    fallback: null,
+    provenance: null,
+    extra: {},
+  };
+  if (!trace) return out;
+  for (const part of trace.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq);
+    const value = part.slice(eq + 1);
+    switch (key) {
+      case 'cluster':
+        out.clusterId = value;
+        break;
+      case 'strategy':
+        out.strategyHash8 = value;
+        break;
+      case 'frontier': {
+        const n = Number(value.replace(/^v/, ''));
+        out.frontierVersion = Number.isFinite(n) ? n : null;
+        break;
+      }
+      case 'policy':
+        out.policyType = value;
+        break;
+      case 'fallback':
+        out.fallback = value === '0' ? 0 : value === '1' ? 1 : null;
+        break;
+      case 'provenance':
+        out.provenance =
+          value === 'live' || value === 'mock' || value === 'blocked' ? value : null;
+        break;
+      default:
+        out.extra[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Did the auto-switch actually do work on this request?
+ *
+ * Both halves are required and neither is inferable from the other: a real
+ * frontier had to exist (`frontier=v<n>`, n>0) AND the policy had to select a
+ * point from it (`fallback=0`). A request can carry a frontier version and
+ * still be a fallback — no point satisfied the policy — and that is precisely
+ * the case a one-field check would report as routed. Unknown ⇒ false.
+ */
+export function traceWasRouted(t: ParsedTrace): boolean {
+  return t.fallback === 0 && t.frontierVersion !== null && t.frontierVersion > 0;
+}
+
 /** OpenAI streaming tool_calls delta (M3 #25): the wire format carries an
  * `index` per tool call inside the delta. */
 interface SseToolCallDelta {

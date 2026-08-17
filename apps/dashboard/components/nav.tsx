@@ -4,18 +4,24 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+// SERVING-ROADMAP S1 — reordered platform-first. "Connect keys" (BYOK) was
+// step 1, which framed bringing your own provider keys as the price of entry.
+// The first step is now connecting to the endpoint and setting a policy, both
+// of which work with no keys of your own; BYOK moved to settings, where an
+// option belongs.
 const ITEMS = [
-  { href: '/', label: 'Connect keys', step: '1' },
-  { href: '/workload', label: 'Your workload', step: '2' },
+  { href: '/', label: 'Connect & auto-route', step: '1' },
+  { href: '/policy', label: 'Set a policy', step: '2' },
   { href: '/frontiers', label: 'Frontiers', step: '3' },
-  { href: '/playground', label: 'Playground', step: '›' },
-  { href: '/policy', label: 'Set a policy', step: '4' },
+  { href: '/workload', label: 'Your workload', step: '4' },
   { href: '/usage', label: 'Usage & billing', step: '5' },
   { href: '/reports', label: 'Savings', step: '6' },
   { href: '/recipes', label: 'Recipe library', step: '7' },
   { href: '/traces', label: 'Traces', step: '8' },
+  { href: '/playground', label: 'Playground', step: '›' },
   { href: '/rubrics', label: 'Rubrics', step: '›' },
   { href: '/leaderboard', label: 'Leaderboard', step: '›' },
+  { href: '/settings/provider-keys', label: 'Your provider keys', step: '›' },
   { href: '/settings/audit', label: 'Audit trail', step: '›' },
 ];
 

@@ -488,3 +488,77 @@ export interface TraceRetentionResponse {
   orgId: string;
   traceRetentionDays: number;
 }
+
+// ---- Connect & auto-route (SERVING-ROADMAP S1) ----
+
+/** One serving key, metadata only. The raw `pk_…` exists in no readable
+ * form — only its sha256 is stored — so no field here can carry it. */
+export interface ServingKeyDto {
+  id: string;
+  name: string;
+  scopes: string | null;
+  env: string | null;
+  policyId: string | null;
+  createdAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface ClusterReadinessDto {
+  clusterId: string;
+  name: string;
+  description: string;
+  /** A frontier exists AND survives the provenance guard for this server. */
+  ready: boolean;
+  frontierVersion: number | null;
+  pointCount: number;
+  provenance: 'live' | 'mock' | 'blocked';
+}
+
+export interface ConnectionResponse {
+  baseUrl: string;
+  endpoint: string;
+  /** false = derived from the request, only trustworthy without a proxy. */
+  baseUrlConfigured: boolean;
+  policy: { id: string; name: string; config: Policy; description: string } | null;
+  snippets: { url: string; curl: string; openaiNode: string } | null;
+  servingKeys: ServingKeyDto[];
+  serving: {
+    providerMode: 'mock' | 'live';
+    byok: boolean;
+    byokProviders: string[];
+    platformProviders: string[];
+  };
+  autoRouting: { ready: number; total: number; clusters: ClusterReadinessDto[] };
+}
+
+/** One request, with the routing decision it actually got — read back out of
+ * the `x-frontier-trace` we returned to the caller, not re-derived. */
+export interface RoutingActivityRow {
+  ts: string;
+  status: string | null;
+  model: string | null;
+  latencyMs: number | null;
+  costUsd: number | null;
+  clusterId: string | null;
+  strategy: string | null;
+  frontierVersion: number | null;
+  policyType: string | null;
+  /** null = no routing decision on this row (auth failures, budget refusals). */
+  fallback: 0 | 1 | null;
+  provenance: 'live' | 'mock' | 'blocked' | null;
+  /** Requires BOTH a real frontier and a policy-selected point. Unknown ⇒ false. */
+  routed: boolean;
+}
+
+export interface RoutingActivityResponse {
+  requests: RoutingActivityRow[];
+  summary: {
+    returned: number;
+    withRoutingDecision: number;
+    routed: number;
+    defaulted: number;
+    clustersSeen: string[];
+    byCluster: Record<string, number>;
+  };
+}

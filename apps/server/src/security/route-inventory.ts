@@ -112,6 +112,12 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/frontiers', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/frontiers/:clusterId', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':clusterId', seededResource: 'cluster', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'GET', path: '/api/endpoint-snippet', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'non-tenant', crossOrgProbe: { expect: 'skip', skipReason: "pure snippet rendering; reads no tenant state" } },
+  // SERVING-ROADMAP S1 — the connect surface. Both are org-scoped READS over
+  // state the caller's own traffic wrote: /api/connection returns the org's
+  // policy + serving-key metadata (never raw key material — only sha256 is
+  // stored), /api/routing-activity returns the org's own request_logs rows.
+  { method: 'GET', path: '/api/connection', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'apiKey', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'GET', path: '/api/routing-activity', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/usage', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/usage/current', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/usage/export.csv', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },

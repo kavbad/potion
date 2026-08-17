@@ -185,6 +185,19 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
     notes: 'M1a: a live server never serves a mock-provenance frontier; the request takes the (now live) fallback.',
   },
   {
+    file: 'apps/server/src/routes/connection.ts',
+    symbol: 'clusterReadiness (guardFrontierProvenance) + providersForOrg',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/connection.test.ts',
+    notes:
+      'SERVING-ROADMAP S1, READ-ONLY: reports readiness by running the SAME guard the serve path runs, so a ' +
+      'mock-provenance frontier under live providers reports provenance=blocked and ready=false — the surface ' +
+      'cannot claim routing the next request would not get. Reusing the guard (rather than counting frontier ' +
+      'rows) is what makes the two incapable of disagreeing. providersForOrg is read only for the ' +
+      'platform-vs-BYOK provider LISTS; no model is resolved and nothing is served from here.',
+  },
+  {
     file: 'apps/server/src/routes/playground.ts',
     symbol: 'resolvePlaygroundPoint',
     kind: 'default-strategy',

@@ -10,7 +10,10 @@
 //   4. POST a max_quality policy          → 201 + fresh pk_ key
 //   5. POST /v1/chat/completions          → 200 + x-frontier-trace header
 //   6. GET /frontiers page HTML           → SSR chart + SIMULATED badges (M1a)
-//   7. GET / page HTML                    → custody note, connect form ON by default (M2)
+//   7. GET /settings/provider-keys        → custody note, connect form ON by default (M2)
+//   7b. GET / page HTML                   → S1 connect surface: endpoint, the
+//       policy in plain language, and the routing proof reporting a NON-ZERO
+//       routed count for the request step 5 actually sent
 //   8–11. M4: playground, share links, budget hard stop, audit trail
 //   12. M4b: mock research scan → cycles → /recipes SIMULATED → public
 //       /leaderboard awaiting live verification. The scan's registry write
@@ -302,8 +305,10 @@ async function main(): Promise<void> {
   });
 
   // ---- 7. BYOK custody (M2): custody note + self-serve form ON by default ----
-  await step('7. GET / (custody note, connect form ON by default)', async () => {
-    const res = await dashFetch('/');
+  // SERVING-ROADMAP S1: this page MOVED from `/` to /settings/provider-keys —
+  // BYOK is an option, not the front door. Same assertions, new address.
+  await step('7. GET /settings/provider-keys (custody note, connect form ON by default)', async () => {
+    const res = await dashFetch('/settings/provider-keys');
     const html = await res.text();
     assert(res.ok, `HTTP ${res.status}`);
     assert(html.includes('encrypted at rest'), 'custody note missing');
@@ -316,6 +321,47 @@ async function main(): Promise<void> {
     assert(html.includes('Connect key</button>'), 'key form should be ON by default');
     assert(!html.includes('NEXT_PUBLIC_BYOK_ENABLED=false'), 'opt-out note should be absent');
     return 'custody note + form present, M1a banner gone (NEXT_PUBLIC_BYOK_ENABLED unset)';
+  });
+
+  // ---- 7b. SERVING-ROADMAP S1: the connect surface is now the front door ----
+  // The DoD of S1 in one step: a signed-in org lands on `/` and finds where
+  // to point traffic, what rule applies, and whether routing actually
+  // happened — WITHOUT being told any of it. Step 5 already sent a chat
+  // request through this org's key, so the proof half has something real to
+  // report; asserting the routed count here is what stops the panel from
+  // being decoration that renders the same either way.
+  await step('7b. GET / (connect: endpoint, policy in words, routing proof)', async () => {
+    const res = await dashFetch('/');
+    const html = await res.text();
+    assert(res.ok, `HTTP ${res.status}`);
+    assert(html.includes('Connect &amp; auto-route'), 'connect page heading missing');
+    assert(html.includes(`${API}/v1`), `base url ${API}/v1 not offered`);
+    assert(html.includes('Base URL'), 'base url block missing');
+    // The policy has to be readable as a sentence, not just as JSON.
+    assert(
+      /(Cheapest option|Highest measured quality|Best quality that holds)/.test(html),
+      'policy is not stated in plain language',
+    );
+
+    // And the routing evidence, read through the same API the panel uses.
+    const activity = await dashFetch('/api/routing-activity?limit=25');
+    assert(activity.ok, `routing-activity HTTP ${activity.status}`);
+    const body = (await activity.json()) as {
+      summary: { routed: number; withRoutingDecision: number; defaulted: number };
+    };
+    assert(
+      body.summary.withRoutingDecision > 0,
+      'no request carried a routing decision — step 5 should have produced one',
+    );
+    assert(
+      body.summary.routed > 0,
+      `every request DEFAULTED (routed=0 of ${body.summary.withRoutingDecision}) — the auto-switch did nothing`,
+    );
+    return (
+      `endpoint + plain-language policy rendered; ` +
+      `${body.summary.routed}/${body.summary.withRoutingDecision} recent requests routed, ` +
+      `${body.summary.defaulted} defaulted`
+    );
   });
 
   // ---- 8. M4 #31: /playground renders the chat surface ----
