@@ -196,9 +196,24 @@ is `POTION_EMBEDDER=openai`, which the deployment turns on.
 **Done when:** an org with mixed BYOK/platform traffic produces an invoice that
 bills exactly the platform-paid half. **Spend:** $0.
 
-### S4 — Spending safety on our own key
+### S4 — Spending safety on our own key — **DONE 2026-08-17**
 **Fixes G6. Required before the operator points a real key at anything
 long-running, and non-negotiable before strangers.**
+
+**Shipped, and reordered ahead of S3** — billing truth matters once someone
+is invoiced (deferred); this protects the operator's own card the moment a
+key is set. Who pays is answerable per request via `providersForOrg().byok`,
+so it did not have to wait for S3. A **fourth** hole turned up in the code
+that was not on this list: an org with no budget row had **no cap at all**.
+Now `POTION_PLATFORM_ORG_CAP_USD` defaults ON at $10 (never overriding a
+customer's own), the check fails closed when we pay, an org rate bucket sits
+at 10× the per-key allowance, and `POTION_PLATFORM_DAILY_CAP_USD` is the
+operator's kill switch (defaults OFF; its denominator over-counts BYOK until
+S3, which is the safe direction). All scoped to live + platform-paid, pinned
+by negative tests so BYOK and mock are provably unchanged. Live leg: **5
+served, 6th refused**, $0.001368 metered across three runs. The first live
+attempt failed honestly — a $0.02 cap was above what the experiment could
+spend — and the recalibration is recorded rather than quietly fixed.
 - Budget hard stop **fails closed** for platform-paid orgs (fail-open on a db
   error is acceptable when the customer pays; not when we do).
 - An **org-level** ceiling in addition to per-key, and a platform-wide daily
