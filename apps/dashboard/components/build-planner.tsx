@@ -252,7 +252,17 @@ export function BuildPlanner() {
                               <dd className="text-ink">${o.point!.costPer1K.toFixed(4)}</dd>
                             </div>
                             <div className="flex justify-between">
-                              <dt className="text-faint">p95 latency</dt>
+                              <dt className="text-faint">
+                                p95 latency
+                                {o.point!.latencyProvisional && (
+                                  <span
+                                    className="ml-1 cursor-help text-amber-700"
+                                    title="Measured during evaluation (strategy-only span), not on live serving traffic. Provisional until your own requests measure it end-to-end."
+                                  >
+                                    *
+                                  </span>
+                                )}
+                              </dt>
                               <dd className="text-ink">{Math.round(o.point!.latencyP95)} ms</dd>
                             </div>
                             {o.point!.n !== null && (
@@ -292,6 +302,16 @@ export function BuildPlanner() {
                   which does not exist yet. Once you send requests, Potion measures{' '}
                   <span className="font-medium text-soft">your</span> workload and the numbers
                   become yours.
+                  {plan.evidence.latencySource === 'harness' && (
+                    <>
+                      {' '}
+                      <span className="text-amber-700">*</span> Latency is the one number measured
+                      differently: these come from evaluation runs (the model call only) rather than
+                      from live requests end to end, so treat them as provisional and expect your
+                      real p95 to include network and your own overhead. Potion switches to
+                      serving-grade latency automatically once you have enough traffic.
+                    </>
+                  )}
                 </>
               ) : (
                 <>Nothing has been measured for this workload type on this deployment.</>

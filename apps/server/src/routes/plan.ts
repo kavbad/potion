@@ -40,10 +40,17 @@
 // keys, not a second one that happens to live behind a nicer page.
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { selectPoint, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
+import {
+  selectPoint,
+  type FrontierPoint,
+  type LatencyEvidence,
+  type Policy,
+  type StrategyConfig,
+} from '@potion/core';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { openAiError } from '../auth.js';
+import { bindServingLatency } from '../latency-policy.js';
 import type { PotionContext } from '../context.js';
 import { guardFrontierProvenance } from './chat.js';
 import { describeStrategyBrief } from './reports.js';
@@ -52,6 +59,14 @@ import { describePolicy } from './connection.js';
 /** Cap on how much text we embed per plan — a bound on cost and on abuse. */
 const MAX_DESCRIPTION_CHARS = 4000;
 const MAX_SAMPLES = 10;
+
+/** Per-strategyHash latency provenance, as `resolveLatency` reports it. */
+export type LatencyEvidenceMap = Record<string, LatencyEvidence>;
+
+/** Placeholder on an option that has no policy to offer at all. Never
+ *  applied — `infeasible` is non-null on exactly these, and the surfaces
+ *  render the reason instead of a button. */
+const NO_POLICY: Policy = { type: 'min_cost', qualityFloor: 0.8 };
 
 const PlanBodySchema = z.object({
   /** Plain language: "a customer support triage bot", "I'm summarizing
@@ -82,6 +97,18 @@ export interface PolicyOption {
     quality: number;
     costPer1K: number;
     latencyP95: number;
+    /**
+     * G2.6's standing decision, carried onto this surface: latency evidence
+     * is either SERVING-grade (measured on real requests, end-to-end) or
+     * HARNESS-grade (measured during evaluation, strategy-only span) — and
+     * harness-grade is PROVISIONAL and must say so. A from-scratch customer
+     * has no serving evidence by definition, so every number they see here
+     * is provisional; presenting it flat as "p95 latency" would state a fact
+     * about their production traffic that nobody has measured.
+     */
+    latencySource: 'serving' | 'harness';
+    latencyProvisional: boolean;
+    latencySpan: 'end-to-end' | 'strategy-only';
     providerMode: string;
     /** Sample count behind the quality number; null on pre-evidence points. */
     n: number | null;
@@ -92,14 +119,41 @@ export interface PolicyOption {
 }
 
 /**
- * The three single-constraint policy shapes, each with the point it would
- * actually select. The defaults are the platform defaults used everywhere
- * else (min_cost @ 0.8, max_quality @ $1/1K, latency_bound @ 1000ms) so a
- * customer arriving here and a customer arriving through the policy picker
- * get the same thing.
+ * The latency bound to offer for "make it fast", DERIVED from this cluster's
+ * own measurements rather than fixed.
+ *
+ * The fixed 1000ms default that used to sit here was tuned in the mock era
+ * and is unreachable on live evidence: the Step 5 sweep measured p95 between
+ * 3.2s and 54s across the taxonomy, so ZERO of 29 measured points cleared it
+ * and "make it fast" was permanently unavailable on every workload — a dial
+ * with nothing behind it, which is precisely what the dial-honesty decision
+ * forbids.
+ *
+ * The fix is NOT to pick a looser number until an option appears; that is the
+ * quiet-widening this file refuses to do elsewhere. It is to state the bound
+ * the evidence supports: the fastest p95 we have actually measured for this
+ * workload. The resulting policy is meaningful ("no slower than the fastest
+ * thing we measured for you") and, being an exact measured value, it always
+ * admits at least that point — so the option is available exactly when
+ * measurements exist, and infeasible exactly when they do not.
  */
-export function policyOptionsFor(points: FrontierPoint[]): PolicyOption[] {
-  const shapes: Array<{ priority: PolicyOption['priority']; policy: Policy; infeasibleWhy: string }> = [
+export function derivedLatencyBoundMs(points: FrontierPoint[]): number | null {
+  const measured = points.map((p) => p.latencyP95).filter((n) => Number.isFinite(n) && n > 0);
+  if (measured.length === 0) return null;
+  return Math.ceil(Math.min(...measured));
+}
+
+/**
+ * The three single-constraint policy shapes, each with the point it would
+ * actually select. Quality and cost keep the platform defaults used
+ * everywhere else (min_cost @ 0.8, max_quality @ $1/1K) so a customer
+ * arriving here and one arriving through the policy picker get the same
+ * thing; the latency bound is derived per cluster — see above for why a
+ * fixed default was a dial with nothing behind it.
+ */
+export function policyOptionsFor(points: FrontierPoint[], evidence: LatencyEvidenceMap = {}): PolicyOption[] {
+  const boundMs = derivedLatencyBoundMs(points);
+  const shapes: Array<{ priority: PolicyOption['priority']; policy: Policy | null; infeasibleWhy: string }> = [
     {
       priority: 'cost',
       policy: { type: 'min_cost', qualityFloor: 0.8 },
@@ -112,12 +166,15 @@ export function policyOptionsFor(points: FrontierPoint[]): PolicyOption[] {
     },
     {
       priority: 'speed',
-      policy: { type: 'latency_bound', p95Ms: 1000 },
-      infeasibleWhy: 'no measured strategy for this workload holds p95 latency under 1000 ms',
+      policy: boundMs === null ? null : { type: 'latency_bound', p95Ms: boundMs },
+      infeasibleWhy: 'nothing has been measured for this workload, so there is no latency to bound',
     },
   ];
 
   return shapes.map(({ priority, policy, infeasibleWhy }) => {
+    if (policy === null) {
+      return { priority, policy: NO_POLICY, description: '', point: null, infeasible: infeasibleWhy };
+    }
     // The SERVING path's selector, not a reimplementation — if these could
     // differ, the page would be promising a point the endpoint would not pick.
     const selected = selectPoint(policy, {
@@ -130,6 +187,7 @@ export function policyOptionsFor(points: FrontierPoint[]): PolicyOption[] {
       pricesVersion: 'plan',
       createdAt: new Date(0).toISOString(),
     });
+    const latency = selected ? evidence[selected.strategyHash] : undefined;
     return {
       priority,
       policy,
@@ -141,6 +199,12 @@ export function policyOptionsFor(points: FrontierPoint[]): PolicyOption[] {
             quality: selected.quality,
             costPer1K: selected.costPer1K,
             latencyP95: selected.latencyP95,
+            // Absent evidence is reported as the WEAKER case, never the
+            // stronger one: an unknown provenance is harness-grade and
+            // provisional until something proves otherwise.
+            latencySource: latency?.source ?? 'harness',
+            latencyProvisional: latency?.provisional ?? true,
+            latencySpan: latency?.span ?? 'strategy-only',
             providerMode: selected.providerMode ?? 'unknown',
             n: selected.evidence?.n ?? null,
             qualityCi95: selected.evidence?.qualityCi95 ?? null,
@@ -196,7 +260,24 @@ export function registerPlanRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // unmeasured here exactly as it would fall back there.
     const loaded = await loadCurrentFrontier(ctx.db.db, winner.clusterId, orgId);
     const guarded = guardFrontierProvenance(loaded, ctx.providerMode);
-    const points = guarded.frontier?.points ?? [];
+
+    // G2.6's seam, not a shortcut around it. Serving-grade p95 replaces the
+    // harness number wherever this org has enough real requests for this
+    // cluster; a from-scratch org has none, so everything stays harness-grade
+    // and PROVISIONAL — which is the honest label, and the one the serving
+    // path would apply to the very same points. Using the raw frontier
+    // latency here (as this route first did) states a fact about production
+    // traffic that nobody has measured.
+    const bound = await bindServingLatency(
+      ctx,
+      { type: 'latency_bound', p95Ms: Number.MAX_SAFE_INTEGER },
+      guarded.frontier,
+      orgId,
+      winner.clusterId,
+      (msg) => app.log.warn(msg),
+    );
+    const points = bound.frontier?.points ?? [];
+    const latencyEvidence: LatencyEvidenceMap = bound.evidence ?? {};
 
     return reply.send({
       intent: {
@@ -228,8 +309,12 @@ export function registerPlanRoutes(app: FastifyInstance, ctx: PotionContext): vo
         frontierVersion: guarded.frontier?.version ?? null,
         provenance: guarded.provenance,
         pointCount: points.length,
+        /** 'harness' until this org has real serving traffic for this
+         *  cluster — which, for the customer this page exists for, is
+         *  always. Per-option provenance rides on each point. */
+        latencySource: bound.source,
       },
-      options: policyOptionsFor(points),
+      options: policyOptionsFor(points, latencyEvidence),
       /**
        * WHAT THESE NUMBERS ARE. Potion's own measurement of this workload
        * type across providers — not a measurement of the caller's traffic,

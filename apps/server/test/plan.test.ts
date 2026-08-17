@@ -13,7 +13,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/server.js';
-import { assignmentMargin, policyOptionsFor } from '../src/routes/plan.js';
+import { assignmentMargin, derivedLatencyBoundMs, policyOptionsFor } from '../src/routes/plan.js';
 import type { FrontierPoint } from '@potion/core';
 
 // ---------------------------------------------------------------- unit ----
@@ -44,24 +44,19 @@ describe('policyOptionsFor — every option carries the point it would really se
     const quality = options.find((o) => o.priority === 'quality')!;
     expect(quality.point!.strategyHash).toBe('best'); // best under the $1 ceiling
     const speed = options.find((o) => o.priority === 'speed')!;
-    expect(speed.point!.strategyHash).toBe('cheap'); // only one under 1000ms
+    expect(speed.point!.strategyHash).toBe('cheap'); // the fastest measured point
     for (const o of options) expect(o.infeasible).toBeNull();
   });
 
   it('reports an INFEASIBLE shape with the reason instead of hiding it', () => {
-    // Nothing reaches quality 0.80 and nothing is under 1000ms. Both of those
-    // options must come back visibly unavailable — the failure mode here is
-    // dropping them from the list, which reads as "we have three options" when
-    // there is one.
+    // Nothing reaches quality 0.80. That option must come back visibly
+    // unavailable — the failure mode is dropping it from the list, which reads
+    // as "we have three options" when there is one.
     const options = policyOptionsFor([pt({ quality: 0.5, costPer1K: 0.2, latencyP95: 3000 })]);
     const cost = options.find((o) => o.priority === 'cost')!;
-    const speed = options.find((o) => o.priority === 'speed')!;
     expect(cost.point).toBeNull();
     expect(cost.infeasible).toMatch(/0\.80/);
-    expect(speed.point).toBeNull();
-    expect(speed.infeasible).toMatch(/1000 ms/);
-    // …and the one that IS feasible still resolves, so a partial answer is
-    // still a useful answer.
+    // …and the others still resolve, so a partial answer is still useful.
     expect(options.find((o) => o.priority === 'quality')!.point).not.toBeNull();
     expect(options).toHaveLength(3); // never silently shortened
   });
@@ -76,6 +71,64 @@ describe('policyOptionsFor — every option carries the point it would really se
     // A point just under the quality floor must NOT be offered for 'cost'.
     const options = policyOptionsFor([pt({ quality: 0.799, costPer1K: 0.01, latencyP95: 100 })]);
     expect(options.find((o) => o.priority === 'cost')!.point).toBeNull();
+  });
+});
+
+describe('the latency bound is DERIVED, because a fixed one had nothing behind it', () => {
+  // The bug this pins: with a hardcoded 1000ms bound, ZERO of the 29 measured
+  // points in the committed baseline cleared it (p95 runs 3.2s–54s on live
+  // evidence), so "make it fast" was permanently unavailable on every single
+  // workload — a dial with nothing under it.
+  it('is the FASTEST measured p95, so the option exists exactly when evidence does', () => {
+    expect(derivedLatencyBoundMs([pt({ latencyP95: 16892 }), pt({ latencyP95: 3156 })])).toBe(3156);
+    expect(derivedLatencyBoundMs([])).toBeNull();
+  });
+
+  it('rounds UP, so the bound can never exclude the point it was derived from', () => {
+    const points = [pt({ strategyHash: 'fastest', latencyP95: 3155.4 })];
+    const bound = derivedLatencyBoundMs(points)!;
+    expect(bound).toBe(3156);
+    expect(bound).toBeGreaterThanOrEqual(points[0]!.latencyP95);
+    expect(policyOptionsFor(points).find((o) => o.priority === 'speed')!.point!.strategyHash).toBe(
+      'fastest',
+    );
+  });
+
+  it('offers speed on REAL baseline latencies, where a fixed 1000ms offered nothing', () => {
+    // The extraction cluster's actual committed numbers.
+    const options = policyOptionsFor([
+      pt({ strategyHash: 'slow', quality: 0.98, costPer1K: 0.174, latencyP95: 16892 }),
+      pt({ strategyHash: 'fast', quality: 0.91, costPer1K: 0.02, latencyP95: 3156 }),
+    ]);
+    const speed = options.find((o) => o.priority === 'speed')!;
+    expect(speed.point).not.toBeNull();
+    expect(speed.point!.strategyHash).toBe('fast');
+    expect(speed.policy).toEqual({ type: 'latency_bound', p95Ms: 3156 });
+  });
+
+  it('an unmeasured cluster still has NO speed option — derived, not invented', () => {
+    const speed = policyOptionsFor([]).find((o) => o.priority === 'speed')!;
+    expect(speed.point).toBeNull();
+    expect(speed.infeasible).toMatch(/nothing has been measured/);
+  });
+});
+
+describe('latency provenance — G2.6 harness-vs-serving, carried onto this surface', () => {
+  it('defaults to the WEAKER claim when no evidence is supplied', () => {
+    const point = policyOptionsFor([pt({})]).find((o) => o.priority === 'cost')!.point!;
+    expect(point.latencySource).toBe('harness');
+    expect(point.latencyProvisional).toBe(true);
+    expect(point.latencySpan).toBe('strategy-only');
+  });
+
+  it('reports SERVING-grade evidence as non-provisional when it exists', () => {
+    const options = policyOptionsFor([pt({ strategyHash: 'h1' })], {
+      h1: { source: 'serving', p95Ms: 820, n: 40, provisional: false, windowMin: 60, span: 'end-to-end' },
+    });
+    const point = options.find((o) => o.priority === 'cost')!.point!;
+    expect(point.latencySource).toBe('serving');
+    expect(point.latencyProvisional).toBe(false);
+    expect(point.latencySpan).toBe('end-to-end');
   });
 });
 

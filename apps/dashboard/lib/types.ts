@@ -576,6 +576,12 @@ export interface PlanPolicyOption {
     quality: number;
     costPer1K: number;
     latencyP95: number;
+    /** G2.6: 'harness' latency is measured during EVALUATION (strategy-only
+     *  span) and is provisional; 'serving' is measured on real requests,
+     *  end-to-end. A from-scratch customer always sees harness-grade. */
+    latencySource: 'serving' | 'harness';
+    latencyProvisional: boolean;
+    latencySpan: 'end-to-end' | 'strategy-only';
     providerMode: string;
     n: number | null;
     qualityCi95: number | null;
@@ -599,6 +605,8 @@ export interface PlanResponse {
     frontierVersion: number | null;
     provenance: 'live' | 'mock' | 'blocked';
     pointCount: number;
+    /** 'harness' until this org has real serving traffic for this cluster. */
+    latencySource: 'serving' | 'harness';
   };
   options: PlanPolicyOption[];
   /** platform-measured = Potion's measurement of this WORKLOAD TYPE, not of
