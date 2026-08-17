@@ -5,7 +5,7 @@
 // resolution chain runs e2e; retention arithmetic is pinned via the pure
 // computeRetention; live-only rails (budget refusal) are pinned to refuse
 // BEFORE any provider access.
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,6 +95,19 @@ function ctx(queue?: { enqueue(kind: string, payload: unknown): Promise<void> })
 // windows `sinceDays: 7` back from now, so hardcoded calendar dates rot out
 // of the window as real time advances (the '2026-08-06T…' literals these
 // replace expired on 2026-08-13).
+//
+// F21 — THIS RULE WAS BROKEN A SECOND TIME, and nothing noticed. After the
+// 2026-08-13 fix, two step-suite fixtures were added carrying fresh
+// `new Date('2026-08-10T09:00:00Z')` literals. They passed for four days and
+// began failing on 2026-08-17, when wall-clock crossed that date plus the
+// 7-day window, with messages that named the symptom and nothing else:
+// `unknown cluster 'agent-a1605b-acd14c'` and a null `-replays-v2` suite.
+// That reads exactly like a real defect in the step-level flip, which is what
+// makes this failure mode expensive — it burns an investigation each time.
+//
+// A comment did not hold the line, because a comment is not a check. The
+// meta-test at the bottom of this file re-greps this source for date literals
+// and fails by name, so the third occurrence is caught at authoring time.
 const FIXTURE_BASE_MS = Date.now() - 24 * 60 * 60 * 1000;
 const fixtureTs = (minutes = 0): string => new Date(FIXTURE_BASE_MS + minutes * 60_000).toISOString();
 
@@ -765,7 +778,7 @@ describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lo
   it('resolves the STEP-LEVEL suite when one exists: the verdict is rendered over -replays-v2 (post-capstone item 2)', async () => {
     // A converter-v2 session: 6 llm.call steps → 6 step items (≥ the 5-pair
     // floor), so the whole retention pipeline runs over the step suite.
-    const t0 = new Date('2026-08-10T09:00:00Z').getTime();
+    const t0 = FIXTURE_BASE_MS;
     const spans = [
       span({ traceId: 'tr_step', spanId: 'tr_step_root', attrs: { 'gen_ai.prompt': 'Audit the payment retries for account <num>' }, ts: new Date(t0) }),
       ...Array.from({ length: 6 }, (_, i) =>
@@ -821,7 +834,7 @@ describe('mode-mismatch guard (post-capstone item 1 — the leg-5c false-live lo
 
     // The cluster flips to step-level synthesis: same tool signature, so the
     // SAME cluster id, now resolving to a v2 suite with its own roster.
-    const t0 = new Date('2026-08-10T09:00:00Z').getTime();
+    const t0 = FIXTURE_BASE_MS;
     await insertTraceSpans(db.db, [
       span({ traceId: 'tr_flip', spanId: 'tr_flip_root', attrs: { 'gen_ai.prompt': 'Audit the payment retries for account <num>' }, ts: new Date(t0) }),
       ...Array.from({ length: 6 }, (_, i) =>
@@ -999,5 +1012,32 @@ describe('suite:certify + contractual gating (post-capstone item 3, Decision 2)'
       return JSON.stringify({ status: r.status === 'superseded' ? 'certified' : r.status, e });
     };
     expect(stripVolatile(rows[0]!)).toBe(stripVolatile(rows[1]!));
+  });
+});
+
+describe('F21 meta: no fixture may carry a calendar date literal', () => {
+  // The check the two previous occurrences needed and did not have. Trace
+  // fixtures feed `tracesClusterHandler`, which filters on a ROLLING window
+  // (TRACES_CLUSTER_DEFAULT_SINCE_DAYS back from now). A literal date in one
+  // of them is a timer: the suite keeps passing until wall-clock walks past
+  // it, then fails for a reason that has nothing to do with any change
+  // anybody made. It has now cost two investigations — 2026-08-13 and
+  // 2026-08-17 — so it gets a test instead of a third comment.
+  it('greps its own source and finds no YYYY-MM-DD literal', () => {
+    const source = readFileSync(fileURLToPath(new URL('./suite-verify.test.ts', import.meta.url)), 'utf8');
+    const offenders = source
+      .split('\n')
+      .map((line, i) => ({ line, n: i + 1 }))
+      // Skip the prose that explains the rule (which necessarily quotes dates)
+      // — only real code is a timer.
+      .filter(({ line }) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .filter(({ line }) => /\d{4}-\d{2}-\d{2}/.test(line))
+      .map(({ line, n }) => `  line ${n}: ${line.trim()}`);
+
+    expect(
+      offenders,
+      'calendar-date literals in fixtures rot out of the clustering window as real time ' +
+        'advances — use FIXTURE_BASE_MS (relative to now) instead:\n' + offenders.join('\n'),
+    ).toEqual([]);
   });
 });
