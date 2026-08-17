@@ -64,6 +64,7 @@ is now real. What remains is breadth, billing truth, visibility, and safety.
 Ordered by what blocks the experience, not by size.
 
 ### G1 — Breadth: the catalog is 24 models, in a file
+*(S5. Now the only phase left before measurement spend.)*
 `prices.json` **is** the model registry (`researcher/registry.ts:1-11`). The
 only thing that grows it, `research:scan`, writes the file with
 `writeFileSync` (`workers/handlers.ts:1255`), and `loadPrices` runs **once at
@@ -184,7 +185,7 @@ avoids cluster vocabulary (a support-email description scored 0.047, margin
 0.008 — the caveat fired, and three real prompts corrected it). The real fix
 is `POTION_EMBEDDER=openai`, which the deployment turns on.
 
-### S3 — Billing truth
+### S3 — Billing truth — **DONE 2026-08-17**
 **Fixes G2. Prerequisite for charging anyone for platform serving.**
 - Record the funding source per serving request (`paid_by: platform | byok`)
   plus the resolved provider — both already known at request time, just not
@@ -193,8 +194,28 @@ is `POTION_EMBEDDER=openai`, which the deployment turns on.
 - Invoice bills platform-paid spend at cost + margin (`--margin-pct` already
   exists in the invoice CLI); BYOK spend keeps its informational meaning.
 
-**Done when:** an org with mixed BYOK/platform traffic produces an invoice that
-bills exactly the platform-paid half. **Spend:** $0.
+**Done when:** ~~an org with mixed BYOK/platform traffic produces an invoice
+that bills exactly the platform-paid half~~ — restated, because BYOK is no
+longer offered: **the recorded cost of a served request equals what the
+provider actually billed, and every request carries the counterfactual needed
+to price on outcomes.** **Spend:** ~$0.0002 (one measurement probe).
+
+**Shipped.** Migration 0039 records `paid_by` and `baseline_cost_usd` per
+request. The baseline is the one with a deadline — "money saved" compares
+against a price table and a frontier that both drift, so it is a fact when
+recorded and an estimate when reconstructed.
+
+Leg 2 turned out to be the important one, and not what this doc predicted. It
+assumed the fix was a richer price shape (cache-read and reasoning rates). A
+$0.000007 probe showed the real answer: **OpenRouter returns the cost it
+actually billed**, so `costUsd()` now prefers that and models only as a
+fallback for transports that report none. Measured, not assumed —
+`deepseek-chat` came back 9% *over*-modelled because 3 of 10 prompt tokens
+were cached, and `gpt-5-mini` returned `completion_tokens: 0` alongside
+`reasoning_tokens: 107`, which no token-based model could ever have counted.
+Cached input makes us overcharge the customer; reasoning tokens make us
+undercharge ourselves. This should also close the Step 5 campaign's ~0.3%
+reconciliation residual, which was exactly this drift.
 
 ### S4 — Spending safety on our own key — **DONE 2026-08-17**
 **Fixes G6. Required before the operator points a real key at anything
