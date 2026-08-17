@@ -79,6 +79,13 @@ services:
       # only reaches the server log and nobody can sign in. Closed test
       # deployments only — see apps/server/src/routes/auth.ts.
       POTION_MAGIC_LINK_IN_RESPONSE: ${POTION_MAGIC_LINK_IN_RESPONSE:-}
+      # Import the live PLATFORM FRONTIER BASELINE on first boot (default ON
+      # for deployments). Without it a fresh database has no live-provenance
+      # platform frontier, the provenance guard discards the mock seed, and
+      # EVERY request from every org falls through to the default strategy —
+      # the auto-switch is absent rather than degraded. Idempotent, and it
+      # never clobbers a frontier this deployment already has.
+      POTION_PLATFORM_BASELINE: ${POTION_PLATFORM_BASELINE:-1}
       POTION_METRICS: ${POTION_METRICS:-1}
       # G0.5: the default clustering threshold is MOCK-tuned (0.62). With a
       # real embedder it must be 0.2 — the walkthrough prints this warning at

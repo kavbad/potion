@@ -1,0 +1,2823 @@
+{
+ "source": "Step 5 platform live sweep (docs/LAB-BUILD-STATUS.md row 5, commit 64b3ea8)",
+ "capturedFrom": ".pglite/platform-sweep-step5",
+ "capturedAt": "2026-08-17",
+ "providerMode": "live",
+ "note": "Live-provenance PLATFORM frontiers (org_id NULL) for the full cluster taxonomy, measured under the Step 5 campaign ($3.5774 metered, ledgered). Seeded into a fresh database so a deployment inherits measured routing instead of falling back to a default strategy. NEVER clobbers an existing frontier.",
+ "frontiers": [
+  {
+   "frontier": {
+    "id": "fr-53f47bab-760c-47dd-93ba-b3cc6b49d24e",
+    "cluster_id": "agentic-tool-use",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.8642857142857142,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-ca9c32dd"
+       ],
+       "suiteId": "agentic-tool-use",
+       "latencyN": 14,
+       "cacheKeys": [
+        "30c981e7359328277db63c216d85d116084a817c9821838652f4747bb69cd6c7",
+        "f5b20346ba6ea80bb88e5bb8399a387f584b73c93ad06e961abf0020cb4f64b2",
+        "4b0c252087d15389c1e86555509d0ed070fee42b5acd74f3d3401aa7d81e4f28",
+        "694b3b853a20309dbc726c51d49e003c2a7eba9d6c9c26783c53f6be9b1eb8ab",
+        "f5aace2a1c80dda5c3660740f6c38f4535be967763d2ff9706cb7fe7399b2651",
+        "7163813ac1872c7b836c089a8f4a203db01dc3544be28596f2377c549289cd53",
+        "4e24dad7481f87eb6d0f79e46748219ab48ba164c21d4356d764a30db8a10f59",
+        "26a22bd19aafde77654c6861f8a97a0e6d150bba0b004d886e7bf3af8e2f77c2",
+        "f04dcb744344c6c5a74d22499371fbe94debfee589bb548e8faab393a208eab9",
+        "6733bee6bc383c0d55a6d0aefeb5581d9a7149e97e2a03a2c2c72b3eb2293e80",
+        "63f528170983cc63266004ede355fab1075bbacbad85805b675bc712bc311d24",
+        "ab2bdfecb8556d8582824d9738891220f74fd1fbcd52b3df73ede893bc744773",
+        "69a298f6cb68b63398ce65e158cb2dca81438ad8404e75cebfdccf527e7364fb",
+        "2b0476e43956380110a0f5d1a371fe885e3fdfdaa2c370d6562bbafd46a1a0bb"
+       ],
+       "latencySeed": 1998697250,
+       "qualityCi95": 0.0757912111811633,
+       "latencyP95Ci95": [
+        20311,
+        33187
+       ],
+       "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      },
+      "clusterId": "agentic-tool-use",
+      "costPer1K": 7.075357142857144,
+      "latencyP95": 33187,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.892857142857143,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-ca9c32dd"
+       ],
+       "suiteId": "agentic-tool-use",
+       "latencyN": 14,
+       "cacheKeys": [
+        "6789b94ce7744f81d61a2368dd09a0668adc7bf717b41509ac968a52803678ee",
+        "ee60962fc05baecc34cee80879c15a3a80600c2fe5b2b8ae7efb1bbe06352c07",
+        "0e77596b58d257e6ba162c1e66c46ccd292bf67165ae3822f47edaa32071927f",
+        "e6365a92e7ce350ae8621c9b042d07117129e0c7e81fde45236e0b442c599e28",
+        "654675088fa2a4ccc0f33ccec65a551ab76b1bda7279696a6a841e9da6a468c7",
+        "db4aa08afb8b8bed98f666dfeb19e5364d7e53077dd095a851fee736c3ac5613",
+        "5a2b06a1dcfdd700b46c5e5c0878904051a31f439a56efac4c41e0eee18f4747",
+        "b42448e38d791fe6679a9e4534dd8f36a3c70287d3c91efbfdbf903d0140bda2",
+        "a7225a918e9dca25a56d22d11b1116442746f00d8ce92e8c53d955c2f424237f",
+        "04d8c6e0420cf71bdc89cd22ed2d77846454f50e5dfb88def5aa426c8197831c",
+        "6fd56133616f431ad03b923730b01e15a124d0f0b88bd5ee0a432080f3402ffc",
+        "5163130d6f78e9973e2a62edd5de579ceb0d1dcde255aa8b2e3b9005039505bc",
+        "c87dffd4c80b7e4769082aff2d1588e609986228dda5b978ead5461eace8d056",
+        "8725684c81be41366f37f52644a6a98bd97f9844f5ee662814f1c512bf0344b2"
+       ],
+       "latencySeed": 3342215576,
+       "qualityCi95": 0.05977650683362795,
+       "latencyP95Ci95": [
+        29482,
+        47428
+       ],
+       "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      },
+      "clusterId": "agentic-tool-use",
+      "costPer1K": 9.508071428571427,
+      "latencyP95": 47428,
+      "providerMode": "live",
+      "strategyHash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+      "strategyConfig": {
+       "type": "cascade",
+       "stages": [
+        {
+         "model": "or-deepseek",
+         "escalateIf": {
+          "confidenceBelow": 0.72
+         }
+        },
+        {
+         "model": "or-opus"
+        }
+       ],
+       "confidenceMethod": "self-report-calibrated"
+      }
+     },
+     {
+      "quality": 0.5642857142857143,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-ca9c32dd"
+       ],
+       "suiteId": "agentic-tool-use",
+       "latencyN": 14,
+       "cacheKeys": [
+        "7401f09ada124a1d4f39e283c08fbded142dcb6933f24921f139cad79220cb24",
+        "fe21738fc88bbfe14a8ce775a75f08687ca58d19bdec4ca553a6c6cde376b5c5",
+        "81cda9127f7859137b310e416615fdcc2a0e22988314a88ac647bffca56dda19",
+        "c1677e96c6d6d89afe140ec47be24e17e8c132d1a1ea3d4b6d8ff380e2dc69be",
+        "b384eb0d020b7542cffd4e9ca3d0e3a5d8bfd1c172a09bc75b586141b9f57c08",
+        "7b25588dd10942d3dc7d00745426caf7c1fb9e72f443e6e145507eac7f0649af",
+        "2698ac6eca951bd15892720363dcd1593ae5ba4efe14eaea34b0ce5b470fbe44",
+        "bf7b0314be0e195484666596760e7f29c5670767d8c1a949a18a29810343e233",
+        "38aead3a1eee506215e7dfca18819ea05f27fae250803bbbeed3f5c557e38a9d",
+        "0cd0ba28bd8f3655e5641fab8fabcec6eed13d67840cf0e2b24339fb51becdcc",
+        "1fccf6f50fb096fc1b6f660aad3c7f9ba1f5aeaa4e553d285625f2e98e70478f",
+        "f184e83b47f8d7deb1dd344aaa0db708d04d6b0fd407a5bd2967ef093ac1cff4",
+        "32c13b3ddec36e304db519c6c4198e3d2a30fd16ab746d2bd9d8c927391389f6",
+        "3096b82918c9e00fba85ea140496a3aba8d0db39229d4cc746d011475e63070f"
+       ],
+       "latencySeed": 944885418,
+       "qualityCi95": 0.17865566364894833,
+       "latencyP95Ci95": [
+        15453,
+        16074
+       ],
+       "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      },
+      "clusterId": "agentic-tool-use",
+      "costPer1K": 21.811500000000002,
+      "latencyP95": 16074,
+      "providerMode": "live",
+      "strategyHash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-gemini-pro"
+      }
+     },
+     {
+      "quality": 0.9500000000000001,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-ca9c32dd"
+       ],
+       "suiteId": "agentic-tool-use",
+       "latencyN": 14,
+       "cacheKeys": [
+        "c69a2137a7a9b8e645d33b0b9c4387a7a898e568b9419ee23846151ee4b235bf",
+        "74c4ac67b689b431c64846ad4680b79dfa9b8f2b47b40d89e371a32e3808a8ab",
+        "e231c20742ab4cea448d99043d0985905d1a2f5a0690234fe103a628b2fd0ff4",
+        "51a4f46cbbdf502a7ef6203fa1519f0d674a016e2b33e2a1ca3fb135061d7b1d",
+        "333b90935ba3e948f304d337f826dcbd8c2ec58a92105add4e14e1e2b1625543",
+        "4cc761bf3b87c5acb04978cec6e3ec106726277e930ee5444100621ab7c33ebb",
+        "b930f9a2dfd18b131ef76c2a07779f4f7c445e2aa17d5447ba114fb2d3865ff8",
+        "cd89b5a0e3a7e883cc4ace36b5d201bb53ade34e86eefb75afb163e54800b778",
+        "75df1c84d9d671f821ec2b26d763e8b80b5c5ffb160d64acf6bbc1135f5c47ee",
+        "67c59765ac313576725529099f5aff93f8bce0631377ff7eda67ee5fe2d45bfe",
+        "cf302187bff170a1c5e08e3862ab6d2a0a857324d9ae04fa6101bd6859a7a62e",
+        "568f30df1a4caf7a490233c21917f605874f5945956f1efef4f7a0f567650176",
+        "91ca8a8d679cc4b74eaab7d77cb529b065c8f1014f81a9f55658c2cede12b3f8",
+        "6e48af2bedb1984cb463ed264eaa20e0617b255a6590a24062cde9122f733a5b"
+       ],
+       "latencySeed": 2454211776,
+       "qualityCi95": 0.04477980313970539,
+       "latencyP95Ci95": [
+        18047,
+        18930
+       ],
+       "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      },
+      "clusterId": "agentic-tool-use",
+      "costPer1K": 26.64371428571429,
+      "latencyP95": 18930,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T04:02:12.572Z"
+   },
+   "points": [
+    {
+     "cluster_id": "agentic-tool-use",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.8642857142857142,
+     "cost_per_1k": 7.075357142857144,
+     "latency_p95": 33187,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-ca9c32dd"
+      ],
+      "suiteId": "agentic-tool-use",
+      "latencyN": 14,
+      "cacheKeys": [
+       "30c981e7359328277db63c216d85d116084a817c9821838652f4747bb69cd6c7",
+       "f5b20346ba6ea80bb88e5bb8399a387f584b73c93ad06e961abf0020cb4f64b2",
+       "4b0c252087d15389c1e86555509d0ed070fee42b5acd74f3d3401aa7d81e4f28",
+       "694b3b853a20309dbc726c51d49e003c2a7eba9d6c9c26783c53f6be9b1eb8ab",
+       "f5aace2a1c80dda5c3660740f6c38f4535be967763d2ff9706cb7fe7399b2651",
+       "7163813ac1872c7b836c089a8f4a203db01dc3544be28596f2377c549289cd53",
+       "4e24dad7481f87eb6d0f79e46748219ab48ba164c21d4356d764a30db8a10f59",
+       "26a22bd19aafde77654c6861f8a97a0e6d150bba0b004d886e7bf3af8e2f77c2",
+       "f04dcb744344c6c5a74d22499371fbe94debfee589bb548e8faab393a208eab9",
+       "6733bee6bc383c0d55a6d0aefeb5581d9a7149e97e2a03a2c2c72b3eb2293e80",
+       "63f528170983cc63266004ede355fab1075bbacbad85805b675bc712bc311d24",
+       "ab2bdfecb8556d8582824d9738891220f74fd1fbcd52b3df73ede893bc744773",
+       "69a298f6cb68b63398ce65e158cb2dca81438ad8404e75cebfdccf527e7364fb",
+       "2b0476e43956380110a0f5d1a371fe885e3fdfdaa2c370d6562bbafd46a1a0bb"
+      ],
+      "latencySeed": 1998697250,
+      "qualityCi95": 0.0757912111811633,
+      "latencyP95Ci95": [
+       20311,
+       33187
+      ],
+      "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "agentic-tool-use",
+     "strategy_hash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+     "strategy_config": {
+      "type": "cascade",
+      "stages": [
+       {
+        "model": "or-deepseek",
+        "escalateIf": {
+         "confidenceBelow": 0.72
+        }
+       },
+       {
+        "model": "or-opus"
+       }
+      ],
+      "confidenceMethod": "self-report-calibrated"
+     },
+     "quality": 0.892857142857143,
+     "cost_per_1k": 9.508071428571427,
+     "latency_p95": 47428,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-ca9c32dd"
+      ],
+      "suiteId": "agentic-tool-use",
+      "latencyN": 14,
+      "cacheKeys": [
+       "6789b94ce7744f81d61a2368dd09a0668adc7bf717b41509ac968a52803678ee",
+       "ee60962fc05baecc34cee80879c15a3a80600c2fe5b2b8ae7efb1bbe06352c07",
+       "0e77596b58d257e6ba162c1e66c46ccd292bf67165ae3822f47edaa32071927f",
+       "e6365a92e7ce350ae8621c9b042d07117129e0c7e81fde45236e0b442c599e28",
+       "654675088fa2a4ccc0f33ccec65a551ab76b1bda7279696a6a841e9da6a468c7",
+       "db4aa08afb8b8bed98f666dfeb19e5364d7e53077dd095a851fee736c3ac5613",
+       "5a2b06a1dcfdd700b46c5e5c0878904051a31f439a56efac4c41e0eee18f4747",
+       "b42448e38d791fe6679a9e4534dd8f36a3c70287d3c91efbfdbf903d0140bda2",
+       "a7225a918e9dca25a56d22d11b1116442746f00d8ce92e8c53d955c2f424237f",
+       "04d8c6e0420cf71bdc89cd22ed2d77846454f50e5dfb88def5aa426c8197831c",
+       "6fd56133616f431ad03b923730b01e15a124d0f0b88bd5ee0a432080f3402ffc",
+       "5163130d6f78e9973e2a62edd5de579ceb0d1dcde255aa8b2e3b9005039505bc",
+       "c87dffd4c80b7e4769082aff2d1588e609986228dda5b978ead5461eace8d056",
+       "8725684c81be41366f37f52644a6a98bd97f9844f5ee662814f1c512bf0344b2"
+      ],
+      "latencySeed": 3342215576,
+      "qualityCi95": 0.05977650683362795,
+      "latencyP95Ci95": [
+       29482,
+       47428
+      ],
+      "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "agentic-tool-use",
+     "strategy_hash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-gemini-pro"
+     },
+     "quality": 0.5642857142857143,
+     "cost_per_1k": 21.811500000000002,
+     "latency_p95": 16074,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-ca9c32dd"
+      ],
+      "suiteId": "agentic-tool-use",
+      "latencyN": 14,
+      "cacheKeys": [
+       "7401f09ada124a1d4f39e283c08fbded142dcb6933f24921f139cad79220cb24",
+       "fe21738fc88bbfe14a8ce775a75f08687ca58d19bdec4ca553a6c6cde376b5c5",
+       "81cda9127f7859137b310e416615fdcc2a0e22988314a88ac647bffca56dda19",
+       "c1677e96c6d6d89afe140ec47be24e17e8c132d1a1ea3d4b6d8ff380e2dc69be",
+       "b384eb0d020b7542cffd4e9ca3d0e3a5d8bfd1c172a09bc75b586141b9f57c08",
+       "7b25588dd10942d3dc7d00745426caf7c1fb9e72f443e6e145507eac7f0649af",
+       "2698ac6eca951bd15892720363dcd1593ae5ba4efe14eaea34b0ce5b470fbe44",
+       "bf7b0314be0e195484666596760e7f29c5670767d8c1a949a18a29810343e233",
+       "38aead3a1eee506215e7dfca18819ea05f27fae250803bbbeed3f5c557e38a9d",
+       "0cd0ba28bd8f3655e5641fab8fabcec6eed13d67840cf0e2b24339fb51becdcc",
+       "1fccf6f50fb096fc1b6f660aad3c7f9ba1f5aeaa4e553d285625f2e98e70478f",
+       "f184e83b47f8d7deb1dd344aaa0db708d04d6b0fd407a5bd2967ef093ac1cff4",
+       "32c13b3ddec36e304db519c6c4198e3d2a30fd16ab746d2bd9d8c927391389f6",
+       "3096b82918c9e00fba85ea140496a3aba8d0db39229d4cc746d011475e63070f"
+      ],
+      "latencySeed": 944885418,
+      "qualityCi95": 0.17865566364894833,
+      "latencyP95Ci95": [
+       15453,
+       16074
+      ],
+      "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "agentic-tool-use",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.9500000000000001,
+     "cost_per_1k": 26.64371428571429,
+     "latency_p95": 18930,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-ca9c32dd"
+      ],
+      "suiteId": "agentic-tool-use",
+      "latencyN": 14,
+      "cacheKeys": [
+       "c69a2137a7a9b8e645d33b0b9c4387a7a898e568b9419ee23846151ee4b235bf",
+       "74c4ac67b689b431c64846ad4680b79dfa9b8f2b47b40d89e371a32e3808a8ab",
+       "e231c20742ab4cea448d99043d0985905d1a2f5a0690234fe103a628b2fd0ff4",
+       "51a4f46cbbdf502a7ef6203fa1519f0d674a016e2b33e2a1ca3fb135061d7b1d",
+       "333b90935ba3e948f304d337f826dcbd8c2ec58a92105add4e14e1e2b1625543",
+       "4cc761bf3b87c5acb04978cec6e3ec106726277e930ee5444100621ab7c33ebb",
+       "b930f9a2dfd18b131ef76c2a07779f4f7c445e2aa17d5447ba114fb2d3865ff8",
+       "cd89b5a0e3a7e883cc4ace36b5d201bb53ade34e86eefb75afb163e54800b778",
+       "75df1c84d9d671f821ec2b26d763e8b80b5c5ffb160d64acf6bbc1135f5c47ee",
+       "67c59765ac313576725529099f5aff93f8bce0631377ff7eda67ee5fe2d45bfe",
+       "cf302187bff170a1c5e08e3862ab6d2a0a857324d9ae04fa6101bd6859a7a62e",
+       "568f30df1a4caf7a490233c21917f605874f5945956f1efef4f7a0f567650176",
+       "91ca8a8d679cc4b74eaab7d77cb529b065c8f1014f81a9f55658c2cede12b3f8",
+       "6e48af2bedb1984cb463ed264eaa20e0617b255a6590a24062cde9122f733a5b"
+      ],
+      "latencySeed": 2454211776,
+      "qualityCi95": 0.04477980313970539,
+      "latencyP95Ci95": [
+       18047,
+       18930
+      ],
+      "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-b9965b42-ff91-48b6-b215-3f9e0261d6df",
+    "cluster_id": "classification",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 1,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-31e27c5d",
+        "run-9f7247e9"
+       ],
+       "suiteId": "classification",
+       "latencyN": 15,
+       "cacheKeys": [
+        "3183c782543d52300c10ed2a828e73cf6179c7213379b93b1dee95a0eafaddf2",
+        "59aa3772303a899ce25afec4b4bb69a7a31c7525511ec60d3b802919b77bb04e",
+        "3bfdffa39b9812513be32506df56583e7aaa2e9157a97271dc58c6e98c0b53f7",
+        "70678ebfd07dd883748f551ecc617062625f62fd4a0ffd65d79fd793a6272cc8",
+        "47d6c07757e8e9d620361cda249068064f9adf3564f784dfd43be7bd17ff5c80",
+        "45247f4864d24fa9900fd2b81971dfb1951b610c6acf3f39dfedf304d0a0958d",
+        "03db23bda9e342fe0ca1051d1b3d7d4d4358e14d2cd633c176a4a2d87fb3832a",
+        "d09b7b3ab226acfd7ee6ec6b2b7dbda6bf215580a7dc7cbdc60460f66618d097",
+        "19ba14ae237683446976fccc4ce7c22da3044b25c4dfaa5fc1517e3118a370dd",
+        "8ab9b911fff9adc562f75d771a37f6002f4699e9f88b10e041930760d3792efb",
+        "25812e44468d1c0c07a5c30e1cd42f33040b95092243124cac1424189d6c7105",
+        "e7644e3deb6ea44644f0b7272bea82c396206360df0ac75353359e4dec585341",
+        "0ce24c57237c79fe6d6c234717f17568ccff59997d42e8ac587d9d69812099a1",
+        "ccb2caf68c367557d0ade8e6ff5e82d5e636c68008ea24280b01fddb2f9cb5b7",
+        "ca34f19c32144833805bd4bf06dd62dff045b81d87db3b0c0829b27a89c6ae1d"
+       ],
+       "latencySeed": 1327014067,
+       "qualityCi95": 0,
+       "latencyP95Ci95": [
+        1673,
+        10231
+       ],
+       "suiteContentHash": "56b83941e621bdc851ad3298fade3898c970f56805866693b7438fd9af857c98"
+      },
+      "clusterId": "classification",
+      "costPer1K": 0.017733333333333334,
+      "latencyP95": 10231,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 1,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-9f7247e9"
+       ],
+       "suiteId": "classification",
+       "latencyN": 15,
+       "cacheKeys": [
+        "6b8ad91823f59c84a3d15ba7af3ef8c01ad0c3a43816820bd2830fe773cbf4ef",
+        "43185b1b75dfa2318cc26b9b7a76e92ee5a261518967eb9fc155283c887020b7",
+        "eb5ceed3544353bea868eb93e02d278741334cbd59746083f257bb1a8436b59c",
+        "c4da2af05819ddd583c81675ed0a98cff645cff371ac707c1826288fbb09fcf5",
+        "2c7eda93326badb7f8543d1216138f777e5aeba33a043a7a0db6966bde0f34c7",
+        "91323d4f37a01e61e3447c40b6bacddf3188b1e4a80e5aed2e852213f04cbec6",
+        "aa0c9e32590dac7a2d5400f8f3abeb178e71c4a556f875db96bcfef2324f2d00",
+        "f36c9ad3f2a175febb115f8a8b5d37c895c7e1ab5b56c0fc1b6d43e99fc1e23c",
+        "c4a92f5d0751a1fba2343d5f7cc91db91bef56bc568c209c8f5750d1da91ade1",
+        "b8952aa98ffb29c182077b94b11510c8da03f9ebc9523744385b750b39e3e699",
+        "1796a27c44b2a96962c0229f9c71fdc1dee6bd570ce941d5fdf3a815e3ec4a1c",
+        "011ebab855062a71462676e6d5e6bf75a4a6590d3b2ef90fe69d53162e03e427",
+        "46075915c621b14555df6fd926cd935d6d37d89f36faf389c110b2caa5a8dde7",
+        "dc14e219cd7ecbd289e67998b9ca71bacdeb1f24310e2acc79b4d3e5fa451529",
+        "79e4c27bede4c3858fccd656c81e21780b7db13f69770a9ceff73adf310d60cc"
+       ],
+       "latencySeed": 1705730983,
+       "qualityCi95": 0,
+       "latencyP95Ci95": [
+        6310,
+        8200
+       ],
+       "suiteContentHash": "56b83941e621bdc851ad3298fade3898c970f56805866693b7438fd9af857c98"
+      },
+      "clusterId": "classification",
+      "costPer1K": 4.7318,
+      "latencyP95": 8200,
+      "providerMode": "live",
+      "strategyHash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-gemini-pro"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T02:27:16.012Z"
+   },
+   "points": [
+    {
+     "cluster_id": "classification",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 1,
+     "cost_per_1k": 0.017733333333333334,
+     "latency_p95": 10231,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-31e27c5d",
+       "run-9f7247e9"
+      ],
+      "suiteId": "classification",
+      "latencyN": 15,
+      "cacheKeys": [
+       "3183c782543d52300c10ed2a828e73cf6179c7213379b93b1dee95a0eafaddf2",
+       "59aa3772303a899ce25afec4b4bb69a7a31c7525511ec60d3b802919b77bb04e",
+       "3bfdffa39b9812513be32506df56583e7aaa2e9157a97271dc58c6e98c0b53f7",
+       "70678ebfd07dd883748f551ecc617062625f62fd4a0ffd65d79fd793a6272cc8",
+       "47d6c07757e8e9d620361cda249068064f9adf3564f784dfd43be7bd17ff5c80",
+       "45247f4864d24fa9900fd2b81971dfb1951b610c6acf3f39dfedf304d0a0958d",
+       "03db23bda9e342fe0ca1051d1b3d7d4d4358e14d2cd633c176a4a2d87fb3832a",
+       "d09b7b3ab226acfd7ee6ec6b2b7dbda6bf215580a7dc7cbdc60460f66618d097",
+       "19ba14ae237683446976fccc4ce7c22da3044b25c4dfaa5fc1517e3118a370dd",
+       "8ab9b911fff9adc562f75d771a37f6002f4699e9f88b10e041930760d3792efb",
+       "25812e44468d1c0c07a5c30e1cd42f33040b95092243124cac1424189d6c7105",
+       "e7644e3deb6ea44644f0b7272bea82c396206360df0ac75353359e4dec585341",
+       "0ce24c57237c79fe6d6c234717f17568ccff59997d42e8ac587d9d69812099a1",
+       "ccb2caf68c367557d0ade8e6ff5e82d5e636c68008ea24280b01fddb2f9cb5b7",
+       "ca34f19c32144833805bd4bf06dd62dff045b81d87db3b0c0829b27a89c6ae1d"
+      ],
+      "latencySeed": 1327014067,
+      "qualityCi95": 0,
+      "latencyP95Ci95": [
+       1673,
+       10231
+      ],
+      "suiteContentHash": "56b83941e621bdc851ad3298fade3898c970f56805866693b7438fd9af857c98"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "classification",
+     "strategy_hash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-gemini-pro"
+     },
+     "quality": 1,
+     "cost_per_1k": 4.7318,
+     "latency_p95": 8200,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-9f7247e9"
+      ],
+      "suiteId": "classification",
+      "latencyN": 15,
+      "cacheKeys": [
+       "6b8ad91823f59c84a3d15ba7af3ef8c01ad0c3a43816820bd2830fe773cbf4ef",
+       "43185b1b75dfa2318cc26b9b7a76e92ee5a261518967eb9fc155283c887020b7",
+       "eb5ceed3544353bea868eb93e02d278741334cbd59746083f257bb1a8436b59c",
+       "c4da2af05819ddd583c81675ed0a98cff645cff371ac707c1826288fbb09fcf5",
+       "2c7eda93326badb7f8543d1216138f777e5aeba33a043a7a0db6966bde0f34c7",
+       "91323d4f37a01e61e3447c40b6bacddf3188b1e4a80e5aed2e852213f04cbec6",
+       "aa0c9e32590dac7a2d5400f8f3abeb178e71c4a556f875db96bcfef2324f2d00",
+       "f36c9ad3f2a175febb115f8a8b5d37c895c7e1ab5b56c0fc1b6d43e99fc1e23c",
+       "c4a92f5d0751a1fba2343d5f7cc91db91bef56bc568c209c8f5750d1da91ade1",
+       "b8952aa98ffb29c182077b94b11510c8da03f9ebc9523744385b750b39e3e699",
+       "1796a27c44b2a96962c0229f9c71fdc1dee6bd570ce941d5fdf3a815e3ec4a1c",
+       "011ebab855062a71462676e6d5e6bf75a4a6590d3b2ef90fe69d53162e03e427",
+       "46075915c621b14555df6fd926cd935d6d37d89f36faf389c110b2caa5a8dde7",
+       "dc14e219cd7ecbd289e67998b9ca71bacdeb1f24310e2acc79b4d3e5fa451529",
+       "79e4c27bede4c3858fccd656c81e21780b7db13f69770a9ceff73adf310d60cc"
+      ],
+      "latencySeed": 1705730983,
+      "qualityCi95": 0,
+      "latencyP95Ci95": [
+       6310,
+       8200
+      ],
+      "suiteContentHash": "56b83941e621bdc851ad3298fade3898c970f56805866693b7438fd9af857c98"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-5d5a9d08-9590-46cb-a480-3ac901fa2b67",
+    "cluster_id": "code-gen",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 1,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-160203b0"
+       ],
+       "suiteId": "code-gen-potion-v2",
+       "latencyN": 15,
+       "cacheKeys": [
+        "d85fb7c97d6dffee439bb8a7b10b572b40eb593fc95d5f8c949c3d1361e1cb02",
+        "55e0acd238610230203fd9aaf55bb40b8d7d6ce2c0471b5a932b23a74dc954bf",
+        "1ddc72b761784064ad65d3d9bb528219ba73abba846545d9545f37a0ed871f9f",
+        "76dcf041d2e06d5d0c8c59d4ba0f18c755b7cffb19a671a5ab959ad16aeab14e",
+        "e4ee8b2778ba2643acf621ee66afea0fe61e1aee7e1b2e30b3b17f762281f246",
+        "e65c03c703e52a51c38fa32c81c36b98ea5301b24675f1bd8b29ad27f3ee3d9b",
+        "602f2491287d888b7b917b7bc3940d8120059d2383e71a66cf8321f739ed7958",
+        "60a40639417d318c3e3ee598082a36ac6732d4c819c37b9e89e4a6748bdb5166",
+        "790c2bd14f515921763858fd6cc057c623188da9c2d573f98141cb3dda48e4ec",
+        "2c92fa067efd2109e115283c391757fb081e32616a4fd8fe221d12f2b21f5a35",
+        "de5ca4011e06343c6229874f565c768666745bd8330392dd99a48427dbe5883d",
+        "45a423f5234ac3b434dc079f01a4129557a964c96f6f2870e0a2ba0d5a2df266",
+        "42d83e541e14a71bc68bb0db6c3c5856c5a694049b4a9be283aaf3f8743c7eed",
+        "fb4cfed183e5da3abe09e10c3e4367ab6eaf993dd37b65ccd241e23a06502be6",
+        "32c96dd75110a563adf74b1e2e4062df6523edd109be7d98756e7d70eb0b2596"
+       ],
+       "latencySeed": 344104567,
+       "qualityCi95": 0,
+       "latencyP95Ci95": [
+        4670,
+        14073
+       ],
+       "suiteContentHash": "7faee5450fbf0c377e3d43870b12a68f4cd1790266c7c42f35dd18670ea4878b"
+      },
+      "clusterId": "code-gen",
+      "costPer1K": 0.10439999999999998,
+      "latencyP95": 14073,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 1,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-160203b0"
+       ],
+       "suiteId": "code-gen-potion-v2",
+       "latencyN": 15,
+       "cacheKeys": [
+        "0a6c2541da2ed7ab2be672f6bd9ef63b19817e8895baa9847c583d7b1fb35b20",
+        "86e2f64f2bd8dabaa643a4d83147d76d151547b400e587bfe3c5cd0e3aa8963c",
+        "2041d27c73396576db805d9b45614cdcc3efac2b0ac6fa7d6e04f3e717f8eb4c",
+        "ce2ff9de5610312a7ba303f1f45af5342fdcdd503c18713ddeba6cdc8dd10de1",
+        "91d699b1ad0ec979227f04a1a9abb4019c6a0cde647c6c21a8e19b655779ec70",
+        "b62bf47852176b82ef6634e4d489639b890009371d3e863b3299967d62077f40",
+        "14db2f76da93271b8600a8a99ca81db21f97b2f71d6ef222f0793dd4b63550d6",
+        "27e8dcea518563d3ceb844453a821de8283d868e00a698c909d6a10c04821387",
+        "cf4a73cc85e3e13798005ce9d12ee9324baa7ac0bb15aac59bd386fa4f6e5e48",
+        "0eaf4e0774eaeeb1678b6e02afc0cea9676632da1cd3860a04c0ba30d203c462",
+        "ee7825193205848b439842c92b8d4aa1b41d1e121d2ae3a6d42bb9312ad1fcb3",
+        "a647e091ae8062ab5f21cb6bbff6e5321a4766176e4216b785e6c8fa7cee936c",
+        "1c19b10b038b38c0087561aab1155574e63990c74240d96a16ddf0f5c1d0c89a",
+        "9ca383f739937b54b71005c0ac8061f8310ca05f240b428b6e8e22a8d4743988",
+        "228311943db26a5760a1565ac5bd84f566a53866a4148fd10581577596c08062"
+       ],
+       "latencySeed": 1574037182,
+       "qualityCi95": 0,
+       "latencyP95Ci95": [
+        2747,
+        11510
+       ],
+       "suiteContentHash": "7faee5450fbf0c377e3d43870b12a68f4cd1790266c7c42f35dd18670ea4878b"
+      },
+      "clusterId": "code-gen",
+      "costPer1K": 2.790333333333333,
+      "latencyP95": 11510,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T02:46:00.507Z"
+   },
+   "points": [
+    {
+     "cluster_id": "code-gen",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 1,
+     "cost_per_1k": 0.10439999999999998,
+     "latency_p95": 14073,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-160203b0"
+      ],
+      "suiteId": "code-gen-potion-v2",
+      "latencyN": 15,
+      "cacheKeys": [
+       "d85fb7c97d6dffee439bb8a7b10b572b40eb593fc95d5f8c949c3d1361e1cb02",
+       "55e0acd238610230203fd9aaf55bb40b8d7d6ce2c0471b5a932b23a74dc954bf",
+       "1ddc72b761784064ad65d3d9bb528219ba73abba846545d9545f37a0ed871f9f",
+       "76dcf041d2e06d5d0c8c59d4ba0f18c755b7cffb19a671a5ab959ad16aeab14e",
+       "e4ee8b2778ba2643acf621ee66afea0fe61e1aee7e1b2e30b3b17f762281f246",
+       "e65c03c703e52a51c38fa32c81c36b98ea5301b24675f1bd8b29ad27f3ee3d9b",
+       "602f2491287d888b7b917b7bc3940d8120059d2383e71a66cf8321f739ed7958",
+       "60a40639417d318c3e3ee598082a36ac6732d4c819c37b9e89e4a6748bdb5166",
+       "790c2bd14f515921763858fd6cc057c623188da9c2d573f98141cb3dda48e4ec",
+       "2c92fa067efd2109e115283c391757fb081e32616a4fd8fe221d12f2b21f5a35",
+       "de5ca4011e06343c6229874f565c768666745bd8330392dd99a48427dbe5883d",
+       "45a423f5234ac3b434dc079f01a4129557a964c96f6f2870e0a2ba0d5a2df266",
+       "42d83e541e14a71bc68bb0db6c3c5856c5a694049b4a9be283aaf3f8743c7eed",
+       "fb4cfed183e5da3abe09e10c3e4367ab6eaf993dd37b65ccd241e23a06502be6",
+       "32c96dd75110a563adf74b1e2e4062df6523edd109be7d98756e7d70eb0b2596"
+      ],
+      "latencySeed": 344104567,
+      "qualityCi95": 0,
+      "latencyP95Ci95": [
+       4670,
+       14073
+      ],
+      "suiteContentHash": "7faee5450fbf0c377e3d43870b12a68f4cd1790266c7c42f35dd18670ea4878b"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "code-gen",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 1,
+     "cost_per_1k": 2.790333333333333,
+     "latency_p95": 11510,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-160203b0"
+      ],
+      "suiteId": "code-gen-potion-v2",
+      "latencyN": 15,
+      "cacheKeys": [
+       "0a6c2541da2ed7ab2be672f6bd9ef63b19817e8895baa9847c583d7b1fb35b20",
+       "86e2f64f2bd8dabaa643a4d83147d76d151547b400e587bfe3c5cd0e3aa8963c",
+       "2041d27c73396576db805d9b45614cdcc3efac2b0ac6fa7d6e04f3e717f8eb4c",
+       "ce2ff9de5610312a7ba303f1f45af5342fdcdd503c18713ddeba6cdc8dd10de1",
+       "91d699b1ad0ec979227f04a1a9abb4019c6a0cde647c6c21a8e19b655779ec70",
+       "b62bf47852176b82ef6634e4d489639b890009371d3e863b3299967d62077f40",
+       "14db2f76da93271b8600a8a99ca81db21f97b2f71d6ef222f0793dd4b63550d6",
+       "27e8dcea518563d3ceb844453a821de8283d868e00a698c909d6a10c04821387",
+       "cf4a73cc85e3e13798005ce9d12ee9324baa7ac0bb15aac59bd386fa4f6e5e48",
+       "0eaf4e0774eaeeb1678b6e02afc0cea9676632da1cd3860a04c0ba30d203c462",
+       "ee7825193205848b439842c92b8d4aa1b41d1e121d2ae3a6d42bb9312ad1fcb3",
+       "a647e091ae8062ab5f21cb6bbff6e5321a4766176e4216b785e6c8fa7cee936c",
+       "1c19b10b038b38c0087561aab1155574e63990c74240d96a16ddf0f5c1d0c89a",
+       "9ca383f739937b54b71005c0ac8061f8310ca05f240b428b6e8e22a8d4743988",
+       "228311943db26a5760a1565ac5bd84f566a53866a4148fd10581577596c08062"
+      ],
+      "latencySeed": 1574037182,
+      "qualityCi95": 0,
+      "latencyP95Ci95": [
+       2747,
+       11510
+      ],
+      "suiteContentHash": "7faee5450fbf0c377e3d43870b12a68f4cd1790266c7c42f35dd18670ea4878b"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-1ca5f60b-3f81-4623-ac1f-c64ecaecd0f3",
+    "cluster_id": "code-review",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.8571428571428571,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-54e76b8e"
+       ],
+       "suiteId": "code-review",
+       "latencyN": 14,
+       "cacheKeys": [
+        "b40b25b586eb53d8e69cd355742eadb9c6eade6168d91c4d860c48c42f253ff8",
+        "a7fcf2139b122de3d32cc848e1cded04fa02c13a4c606fd6fce6bbacb7ba0e64",
+        "6a7920ce13e849d522eb11bbd1a4044fefb9395d0b4d47ece92a9f07039ff7e0",
+        "6cb928f41de124937f2c159af2e58026c097db513ceb21e0924c40f865bdb759",
+        "be7db7dfc06e02465f03e4d2c05f2cee4f355c72a87a7c4e2d64f44d0e3f3bb8",
+        "03dda7d82fb7990954f803d4f9e4b21710f4f00b030a92599412ab1bcf09bdff",
+        "39abf40764b71ff9b238489d7bd72f42219457594847b3ecf2d0120a40e8bbb4",
+        "94e5c88bc57d73156a46712e377ba1df7dca143865643c70fbfff17e5ddaa4fa",
+        "c7731a001718d19abb46efb8b3bd3c9fb3659dd8306c8173019b4842b51ad968",
+        "00b5de0afbec267adebba3c9571dae858082870be2344be57f8b14b9b90cf5f7",
+        "5b232ea03f33ebbe2b31f3108d931356059f3fcf69aedc2a8f1da1227e5b39bb",
+        "bb8152a43832f1f2dbd2ff465f05acc13245943ca3af22524de0afad95438a2c",
+        "ee475b9c8c46f8c518b5f165468123ad7264134d171f84a08c32222991943eb2",
+        "58364358e4ad0fd4ff12c83c248eeb1f1cb8a9c9b2b2e72923f57bc1c1f8dbb1"
+       ],
+       "latencySeed": 4168119995,
+       "qualityCi95": 0.1902225417362921,
+       "latencyP95Ci95": [
+        20287,
+        30104
+       ],
+       "suiteContentHash": "19d0d5f91e5de2c5118bb8077374e6faceb1e03c97385f5a0546edf3c721cc7c"
+      },
+      "clusterId": "code-review",
+      "costPer1K": 4.431357142857142,
+      "latencyP95": 30104,
+      "providerMode": "live",
+      "strategyHash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+      "strategyConfig": {
+       "type": "cascade",
+       "stages": [
+        {
+         "model": "or-deepseek",
+         "escalateIf": {
+          "confidenceBelow": 0.72
+         }
+        },
+        {
+         "model": "or-opus"
+        }
+       ],
+       "confidenceMethod": "self-report-calibrated"
+      }
+     },
+     {
+      "quality": 0.9857142857142858,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-54e76b8e"
+       ],
+       "suiteId": "code-review",
+       "latencyN": 14,
+       "cacheKeys": [
+        "76e04d355a9077251266df5defae9ada68e3c1278d79a98a437e094acf308fbb",
+        "a0601cf442f552a26d35d543adddc7d92ebd7c65804af5e548d2be1562d4f2b4",
+        "c3ba6fc175b688f252f2e81543217be5f602c19a076f1567192a9912f62fb133",
+        "9a9f5e73ae16f03661c18c0260df49784ae9d61eed815f7d5a25e8fd63e8eb31",
+        "fbcc1f14e9b1e4652e9d01cf9b11c0fccf148905599adc9d0502ce16c15c2dfd",
+        "92382a5818b5299a7e11ceffad844310d888788ab6ccbcc8b708ffe5738dbeaa",
+        "cadf4092eb35c63a112e49343a00c0de2362e2980a519a706d091b2d1ffd9a81",
+        "f79d499c5a8e4974930ce00497faf5a23dec2b1222f9455ef3a587dea2515701",
+        "32f75e64114e8d5effada45a89e73ad81b318d409bf77c435e210ba7370e405f",
+        "c9003ee2f06ce23ad7280e6959240062d5eeb29c418902e96a86599f47e22e69",
+        "3d6ecf7f9a6210e50b5640e99b84aa2c5afc7aa80ac1b7aa26aa5994591edff9",
+        "b980480fadc897f796a3d7585858e3ed490fcccceaf7b89960153c4c63590e4a",
+        "584c6d653de5707c4eb7b3e27d9658178e164e23cdcdc082bffb17fc3d4f136f",
+        "d300df380e4379ae01ec1a6e190208404079fdb2d3c2cc41f4463c238f33f827"
+       ],
+       "latencySeed": 154803517,
+       "qualityCi95": 0.027999999999999987,
+       "latencyP95Ci95": [
+        21610,
+        31096
+       ],
+       "suiteContentHash": "19d0d5f91e5de2c5118bb8077374e6faceb1e03c97385f5a0546edf3c721cc7c"
+      },
+      "clusterId": "code-review",
+      "costPer1K": 4.537571428571428,
+      "latencyP95": 31096,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.9928571428571429,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-54e76b8e"
+       ],
+       "suiteId": "code-review",
+       "latencyN": 14,
+       "cacheKeys": [
+        "a81baa05fe9e23065bc16a04a26b0824555e58871b0875cf913d19645df79384",
+        "c9a279da9edf93fbd1b8c26d381afc72c4adf6ff1803cbf2afdee76b941dfb90",
+        "628d5b58657f3588f45a2927079405b9fc9e11e41f652dcbf154656be3aa980e",
+        "0d9696911fc0860c632fb71bf935bb61c5464d41d6af52232ebc979e17380f9c",
+        "1984cf6f8a8892c4b4c84348407ca8b6c6fa33ae31fadec5d88c111063bafef2",
+        "613d832497dd2af220dbb5aeb42e81bfec7fa8478a72281ffc3b1c7853985bc1",
+        "f04a186719cac8457ca5396b5d076887105c7845e250fc4869dcf6b3807941fb",
+        "dabf3b203bb852b7237401f48b6c069b91a3bb658d62870f13a94bda014a4464",
+        "397108de56b570d4f0b4ee5fa69ff231d8a1ff2aa4d554c0c3dc0e8aa971b99a",
+        "4ae033575155a18fc3e77053ae3cba6ad261df1a29a4ee04faa56cd30e30db46",
+        "c77a7a3447975f47e317077b8762f4fc4eb3d020040a0db66ad3321077dac54d",
+        "11b4de72dcfac852aeee9e1ad68382107d6cc7f73c5264f1363291de07a5f58f",
+        "4f033d2bb0dce26ce562d586ffac47a2869b2e25e99d0ea015a965662de6870f",
+        "17d973920f4b94c21d40f0b3a3ac301dc3753736030dbb1dfa46ed0648949761"
+       ],
+       "latencySeed": 4201191233,
+       "qualityCi95": 0.013999999999999997,
+       "latencyP95Ci95": [
+        6776,
+        8285
+       ],
+       "suiteContentHash": "19d0d5f91e5de2c5118bb8077374e6faceb1e03c97385f5a0546edf3c721cc7c"
+      },
+      "clusterId": "code-review",
+      "costPer1K": 12.17264285714286,
+      "latencyP95": 8285,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T03:24:06.226Z"
+   },
+   "points": [
+    {
+     "cluster_id": "code-review",
+     "strategy_hash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+     "strategy_config": {
+      "type": "cascade",
+      "stages": [
+       {
+        "model": "or-deepseek",
+        "escalateIf": {
+         "confidenceBelow": 0.72
+        }
+       },
+       {
+        "model": "or-opus"
+       }
+      ],
+      "confidenceMethod": "self-report-calibrated"
+     },
+     "quality": 0.8571428571428571,
+     "cost_per_1k": 4.431357142857142,
+     "latency_p95": 30104,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-54e76b8e"
+      ],
+      "suiteId": "code-review",
+      "latencyN": 14,
+      "cacheKeys": [
+       "b40b25b586eb53d8e69cd355742eadb9c6eade6168d91c4d860c48c42f253ff8",
+       "a7fcf2139b122de3d32cc848e1cded04fa02c13a4c606fd6fce6bbacb7ba0e64",
+       "6a7920ce13e849d522eb11bbd1a4044fefb9395d0b4d47ece92a9f07039ff7e0",
+       "6cb928f41de124937f2c159af2e58026c097db513ceb21e0924c40f865bdb759",
+       "be7db7dfc06e02465f03e4d2c05f2cee4f355c72a87a7c4e2d64f44d0e3f3bb8",
+       "03dda7d82fb7990954f803d4f9e4b21710f4f00b030a92599412ab1bcf09bdff",
+       "39abf40764b71ff9b238489d7bd72f42219457594847b3ecf2d0120a40e8bbb4",
+       "94e5c88bc57d73156a46712e377ba1df7dca143865643c70fbfff17e5ddaa4fa",
+       "c7731a001718d19abb46efb8b3bd3c9fb3659dd8306c8173019b4842b51ad968",
+       "00b5de0afbec267adebba3c9571dae858082870be2344be57f8b14b9b90cf5f7",
+       "5b232ea03f33ebbe2b31f3108d931356059f3fcf69aedc2a8f1da1227e5b39bb",
+       "bb8152a43832f1f2dbd2ff465f05acc13245943ca3af22524de0afad95438a2c",
+       "ee475b9c8c46f8c518b5f165468123ad7264134d171f84a08c32222991943eb2",
+       "58364358e4ad0fd4ff12c83c248eeb1f1cb8a9c9b2b2e72923f57bc1c1f8dbb1"
+      ],
+      "latencySeed": 4168119995,
+      "qualityCi95": 0.1902225417362921,
+      "latencyP95Ci95": [
+       20287,
+       30104
+      ],
+      "suiteContentHash": "19d0d5f91e5de2c5118bb8077374e6faceb1e03c97385f5a0546edf3c721cc7c"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "code-review",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.9857142857142858,
+     "cost_per_1k": 4.537571428571428,
+     "latency_p95": 31096,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-54e76b8e"
+      ],
+      "suiteId": "code-review",
+      "latencyN": 14,
+      "cacheKeys": [
+       "76e04d355a9077251266df5defae9ada68e3c1278d79a98a437e094acf308fbb",
+       "a0601cf442f552a26d35d543adddc7d92ebd7c65804af5e548d2be1562d4f2b4",
+       "c3ba6fc175b688f252f2e81543217be5f602c19a076f1567192a9912f62fb133",
+       "9a9f5e73ae16f03661c18c0260df49784ae9d61eed815f7d5a25e8fd63e8eb31",
+       "fbcc1f14e9b1e4652e9d01cf9b11c0fccf148905599adc9d0502ce16c15c2dfd",
+       "92382a5818b5299a7e11ceffad844310d888788ab6ccbcc8b708ffe5738dbeaa",
+       "cadf4092eb35c63a112e49343a00c0de2362e2980a519a706d091b2d1ffd9a81",
+       "f79d499c5a8e4974930ce00497faf5a23dec2b1222f9455ef3a587dea2515701",
+       "32f75e64114e8d5effada45a89e73ad81b318d409bf77c435e210ba7370e405f",
+       "c9003ee2f06ce23ad7280e6959240062d5eeb29c418902e96a86599f47e22e69",
+       "3d6ecf7f9a6210e50b5640e99b84aa2c5afc7aa80ac1b7aa26aa5994591edff9",
+       "b980480fadc897f796a3d7585858e3ed490fcccceaf7b89960153c4c63590e4a",
+       "584c6d653de5707c4eb7b3e27d9658178e164e23cdcdc082bffb17fc3d4f136f",
+       "d300df380e4379ae01ec1a6e190208404079fdb2d3c2cc41f4463c238f33f827"
+      ],
+      "latencySeed": 154803517,
+      "qualityCi95": 0.027999999999999987,
+      "latencyP95Ci95": [
+       21610,
+       31096
+      ],
+      "suiteContentHash": "19d0d5f91e5de2c5118bb8077374e6faceb1e03c97385f5a0546edf3c721cc7c"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "code-review",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.9928571428571429,
+     "cost_per_1k": 12.17264285714286,
+     "latency_p95": 8285,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-54e76b8e"
+      ],
+      "suiteId": "code-review",
+      "latencyN": 14,
+      "cacheKeys": [
+       "a81baa05fe9e23065bc16a04a26b0824555e58871b0875cf913d19645df79384",
+       "c9a279da9edf93fbd1b8c26d381afc72c4adf6ff1803cbf2afdee76b941dfb90",
+       "628d5b58657f3588f45a2927079405b9fc9e11e41f652dcbf154656be3aa980e",
+       "0d9696911fc0860c632fb71bf935bb61c5464d41d6af52232ebc979e17380f9c",
+       "1984cf6f8a8892c4b4c84348407ca8b6c6fa33ae31fadec5d88c111063bafef2",
+       "613d832497dd2af220dbb5aeb42e81bfec7fa8478a72281ffc3b1c7853985bc1",
+       "f04a186719cac8457ca5396b5d076887105c7845e250fc4869dcf6b3807941fb",
+       "dabf3b203bb852b7237401f48b6c069b91a3bb658d62870f13a94bda014a4464",
+       "397108de56b570d4f0b4ee5fa69ff231d8a1ff2aa4d554c0c3dc0e8aa971b99a",
+       "4ae033575155a18fc3e77053ae3cba6ad261df1a29a4ee04faa56cd30e30db46",
+       "c77a7a3447975f47e317077b8762f4fc4eb3d020040a0db66ad3321077dac54d",
+       "11b4de72dcfac852aeee9e1ad68382107d6cc7f73c5264f1363291de07a5f58f",
+       "4f033d2bb0dce26ce562d586ffac47a2869b2e25e99d0ea015a965662de6870f",
+       "17d973920f4b94c21d40f0b3a3ac301dc3753736030dbb1dfa46ed0648949761"
+      ],
+      "latencySeed": 4201191233,
+      "qualityCi95": 0.013999999999999997,
+      "latencyP95Ci95": [
+       6776,
+       8285
+      ],
+      "suiteContentHash": "19d0d5f91e5de2c5118bb8077374e6faceb1e03c97385f5a0546edf3c721cc7c"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-067dc803-a31c-478a-b273-9d8916fc0826",
+    "cluster_id": "creative",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.8571428571428573,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-5f037562"
+       ],
+       "suiteId": "creative",
+       "latencyN": 14,
+       "cacheKeys": [
+        "df2c9e23c795dd367ff309eb9fce493a787356a9fd8719cfd1ae0d66a174643e",
+        "23288e4a5f63bf5c109b26628723a90cfdbfb16c517616b32882e4135d3e3c9f",
+        "c38351c83bf883e6502a8f48a36edb1142b86bc02c3c9e58b260ba21786756d2",
+        "587245d6e36159fd8db4e45c1977b4616f2de4dc5a35ae0cf53b2a143c84b12e",
+        "1e9615822f6b56c598e34841ae03516d5186fa9bf82e80ac07a1839efb463267",
+        "ecd0e7a84e361bad73eded2896c386f67af219f56d44f731cc1549dd4901b3cc",
+        "7e58bbb082380391dcf33ecb5f31bd5f1806fea661aa6346fd85a5582771a990",
+        "33b533c5e2e22d191193e5cc38492c7b2d1cb253b021a2d2bbe2466818d2f012",
+        "a82a74fb931e8c24c1af7b6c35c8f3ae0917c35f2a9ce2146dc03133a302fab6",
+        "35c7e5ecca07831ad836d3a37a38971c6d735e4961b4c1f351c9f915368785d9",
+        "dfcfbceb3a996734123d25fd448900e1ce7018bbf6848eebf5c39e5266ffe282",
+        "5550839d8e9ed84448b2d70528204d08d9fcb75ea2bee0db751bc6da8a763a2e",
+        "372c20d9c080b20109279e246f9b1f5c829a021a336b071900a88d8facebd658",
+        "4691c9ef3412e6abc759c9d7f2413c8968a5d4383e20e3b0a58c534631029768"
+       ],
+       "latencySeed": 2302469215,
+       "qualityCi95": 0.05706676252088763,
+       "latencyP95Ci95": [
+        10489,
+        29523
+       ],
+       "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      },
+      "clusterId": "creative",
+      "costPer1K": 4.3804285714285705,
+      "latencyP95": 29523,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.8214285714285715,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-5f037562"
+       ],
+       "suiteId": "creative",
+       "latencyN": 14,
+       "cacheKeys": [
+        "0b8ca7c6753b8659590b90250bd3c5a75956313babe269369dfa07b6c0faa38e",
+        "9930f6634b9ae3893ad1524cc8b3785a47a347f56f6ee4e8934b5a295264f056",
+        "8b4f893a9202eff5250585c1d680d950aa03e6c016e11e3d5d1d6742dbf39767",
+        "e1bdd747b24991830c2e254d28724844a67ae6efce1b7e28607afee748072acf",
+        "39199e2e98cc25271d73c53cb026de6be91e47a1745a65c543e78a889bb18778",
+        "d0e1c014d55e493901afc27643551211a283d96681e893db4b90e33de45d5b58",
+        "6444b7453b690fc82285a14fd7563b97cbd57b17e235f1c6350ce08c7abc92a7",
+        "b609ca513d54c4f6c1754ff814782130c3d3631755607dbffe705accdd14777e",
+        "037ae4dabdc6bb6b208625f5cd1a3337eee356f5326ce3ea37864e7cec1e66d2",
+        "01cde49411f690fa28945df4921ecac3c58056472f155cbc74aca5f79574251f",
+        "617e68949c1c6207f74e782319b9929fbce6574ba3e3fc0155d4b23dc78d6db3",
+        "a9ed4fd307c1deb4ad19f1dc983731dbbbdf1a0f0afcdff638afe43cd43ec8a0",
+        "f96d070fa51b7c38102585f7419c140b20137b46724614f109e0c92a06d61cd1",
+        "ba9e4be9f4f7d650c02e1d6e6a80fc0edfd4b0537fcabfd476714f5c738bf289"
+       ],
+       "latencySeed": 3712425396,
+       "qualityCi95": 0.10512556594560915,
+       "latencyP95Ci95": [
+        13435,
+        23704
+       ],
+       "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      },
+      "clusterId": "creative",
+      "costPer1K": 5.077857142857143,
+      "latencyP95": 23704,
+      "providerMode": "live",
+      "strategyHash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+      "strategyConfig": {
+       "type": "cascade",
+       "stages": [
+        {
+         "model": "or-deepseek",
+         "escalateIf": {
+          "confidenceBelow": 0.72
+         }
+        },
+        {
+         "model": "or-opus"
+        }
+       ],
+       "confidenceMethod": "self-report-calibrated"
+      }
+     },
+     {
+      "quality": 0.8785714285714288,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-5f037562"
+       ],
+       "suiteId": "creative",
+       "latencyN": 14,
+       "cacheKeys": [
+        "9677f486834716b4c66e9189cc0843bd15a42fc39b10ada7f66aaf38d7574038",
+        "e85ae869457d04eec7d433f1756d1676c8c967c2eb23b28e2686415395f39a6f",
+        "cc33b78d619517f01f5cafa7c5e4df24cbce0399af9aedc172d844255ff3667e",
+        "5f7faadede5a2b71a39fe3c323a11cc06dfc7f929832088ae33c467653a66c8e",
+        "8da7c1066f2d75f1766544a426cdb1467281c111628d9a676be46783900cc185",
+        "72ed931b97bac5e1d12df0db0534f9ca0c59b7d6d302d31c7d4e75cc4777bc40",
+        "c51ea5e8190f4e8b54a37a8bf90c406d9258102582cd4f18d6e9df5a56a1cd5a",
+        "bad7fb5680fb83307c3795fa8fcc3ce1b50118b3c3ae4e44ac24c9907d689125",
+        "ca3171598ddc96a0e49a558eb21f8277576141f1f96c53648eb6c0c38762c1d6",
+        "c6c4e82ef307ad353bee9d083aaddb29a6504b225520a69dae3dbe340ff1f3e1",
+        "ac6a79986adee09a5f47b6cc7291792ceb4f4f92565518c5895a9a7c68a2fc86",
+        "79e2ccace091e0cb7acb8300b94571e02d9377a5d2fcaed1b34a8753d17f33c0",
+        "af939f34c3062a1197b1db2506e32af5f87347257a234eee2ff64db39448749d",
+        "d108945e553c79c2b9dfb7f338fea8850b05990fb767c2d65b000828e7b83703"
+       ],
+       "latencySeed": 3341075748,
+       "qualityCi95": 0.06869553786875042,
+       "latencyP95Ci95": [
+        7300,
+        10046
+       ],
+       "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      },
+      "clusterId": "creative",
+      "costPer1K": 9.553500000000003,
+      "latencyP95": 10046,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T03:07:30.032Z"
+   },
+   "points": [
+    {
+     "cluster_id": "creative",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.8571428571428573,
+     "cost_per_1k": 4.3804285714285705,
+     "latency_p95": 29523,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-5f037562"
+      ],
+      "suiteId": "creative",
+      "latencyN": 14,
+      "cacheKeys": [
+       "df2c9e23c795dd367ff309eb9fce493a787356a9fd8719cfd1ae0d66a174643e",
+       "23288e4a5f63bf5c109b26628723a90cfdbfb16c517616b32882e4135d3e3c9f",
+       "c38351c83bf883e6502a8f48a36edb1142b86bc02c3c9e58b260ba21786756d2",
+       "587245d6e36159fd8db4e45c1977b4616f2de4dc5a35ae0cf53b2a143c84b12e",
+       "1e9615822f6b56c598e34841ae03516d5186fa9bf82e80ac07a1839efb463267",
+       "ecd0e7a84e361bad73eded2896c386f67af219f56d44f731cc1549dd4901b3cc",
+       "7e58bbb082380391dcf33ecb5f31bd5f1806fea661aa6346fd85a5582771a990",
+       "33b533c5e2e22d191193e5cc38492c7b2d1cb253b021a2d2bbe2466818d2f012",
+       "a82a74fb931e8c24c1af7b6c35c8f3ae0917c35f2a9ce2146dc03133a302fab6",
+       "35c7e5ecca07831ad836d3a37a38971c6d735e4961b4c1f351c9f915368785d9",
+       "dfcfbceb3a996734123d25fd448900e1ce7018bbf6848eebf5c39e5266ffe282",
+       "5550839d8e9ed84448b2d70528204d08d9fcb75ea2bee0db751bc6da8a763a2e",
+       "372c20d9c080b20109279e246f9b1f5c829a021a336b071900a88d8facebd658",
+       "4691c9ef3412e6abc759c9d7f2413c8968a5d4383e20e3b0a58c534631029768"
+      ],
+      "latencySeed": 2302469215,
+      "qualityCi95": 0.05706676252088763,
+      "latencyP95Ci95": [
+       10489,
+       29523
+      ],
+      "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "creative",
+     "strategy_hash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+     "strategy_config": {
+      "type": "cascade",
+      "stages": [
+       {
+        "model": "or-deepseek",
+        "escalateIf": {
+         "confidenceBelow": 0.72
+        }
+       },
+       {
+        "model": "or-opus"
+       }
+      ],
+      "confidenceMethod": "self-report-calibrated"
+     },
+     "quality": 0.8214285714285715,
+     "cost_per_1k": 5.077857142857143,
+     "latency_p95": 23704,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-5f037562"
+      ],
+      "suiteId": "creative",
+      "latencyN": 14,
+      "cacheKeys": [
+       "0b8ca7c6753b8659590b90250bd3c5a75956313babe269369dfa07b6c0faa38e",
+       "9930f6634b9ae3893ad1524cc8b3785a47a347f56f6ee4e8934b5a295264f056",
+       "8b4f893a9202eff5250585c1d680d950aa03e6c016e11e3d5d1d6742dbf39767",
+       "e1bdd747b24991830c2e254d28724844a67ae6efce1b7e28607afee748072acf",
+       "39199e2e98cc25271d73c53cb026de6be91e47a1745a65c543e78a889bb18778",
+       "d0e1c014d55e493901afc27643551211a283d96681e893db4b90e33de45d5b58",
+       "6444b7453b690fc82285a14fd7563b97cbd57b17e235f1c6350ce08c7abc92a7",
+       "b609ca513d54c4f6c1754ff814782130c3d3631755607dbffe705accdd14777e",
+       "037ae4dabdc6bb6b208625f5cd1a3337eee356f5326ce3ea37864e7cec1e66d2",
+       "01cde49411f690fa28945df4921ecac3c58056472f155cbc74aca5f79574251f",
+       "617e68949c1c6207f74e782319b9929fbce6574ba3e3fc0155d4b23dc78d6db3",
+       "a9ed4fd307c1deb4ad19f1dc983731dbbbdf1a0f0afcdff638afe43cd43ec8a0",
+       "f96d070fa51b7c38102585f7419c140b20137b46724614f109e0c92a06d61cd1",
+       "ba9e4be9f4f7d650c02e1d6e6a80fc0edfd4b0537fcabfd476714f5c738bf289"
+      ],
+      "latencySeed": 3712425396,
+      "qualityCi95": 0.10512556594560915,
+      "latencyP95Ci95": [
+       13435,
+       23704
+      ],
+      "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "creative",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.8785714285714288,
+     "cost_per_1k": 9.553500000000003,
+     "latency_p95": 10046,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-5f037562"
+      ],
+      "suiteId": "creative",
+      "latencyN": 14,
+      "cacheKeys": [
+       "9677f486834716b4c66e9189cc0843bd15a42fc39b10ada7f66aaf38d7574038",
+       "e85ae869457d04eec7d433f1756d1676c8c967c2eb23b28e2686415395f39a6f",
+       "cc33b78d619517f01f5cafa7c5e4df24cbce0399af9aedc172d844255ff3667e",
+       "5f7faadede5a2b71a39fe3c323a11cc06dfc7f929832088ae33c467653a66c8e",
+       "8da7c1066f2d75f1766544a426cdb1467281c111628d9a676be46783900cc185",
+       "72ed931b97bac5e1d12df0db0534f9ca0c59b7d6d302d31c7d4e75cc4777bc40",
+       "c51ea5e8190f4e8b54a37a8bf90c406d9258102582cd4f18d6e9df5a56a1cd5a",
+       "bad7fb5680fb83307c3795fa8fcc3ce1b50118b3c3ae4e44ac24c9907d689125",
+       "ca3171598ddc96a0e49a558eb21f8277576141f1f96c53648eb6c0c38762c1d6",
+       "c6c4e82ef307ad353bee9d083aaddb29a6504b225520a69dae3dbe340ff1f3e1",
+       "ac6a79986adee09a5f47b6cc7291792ceb4f4f92565518c5895a9a7c68a2fc86",
+       "79e2ccace091e0cb7acb8300b94571e02d9377a5d2fcaed1b34a8753d17f33c0",
+       "af939f34c3062a1197b1db2506e32af5f87347257a234eee2ff64db39448749d",
+       "d108945e553c79c2b9dfb7f338fea8850b05990fb767c2d65b000828e7b83703"
+      ],
+      "latencySeed": 3341075748,
+      "qualityCi95": 0.06869553786875042,
+      "latencyP95Ci95": [
+       7300,
+       10046
+      ],
+      "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-26056686-d5d9-4eee-8835-9ef770d5b540",
+    "cluster_id": "extraction",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.9821428571428572,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-5d4c49a6"
+       ],
+       "suiteId": "extraction-potion-v2",
+       "latencyN": 15,
+       "cacheKeys": [
+        "34f1094a9062af977d2e2b9510ce32196f5edb426e45a0eb83ee02670d57ca49",
+        "9c63ac1c2b9ac0dfeb79dbc455ceb18a00ae10d0f7fad3f7fc87bdcfe06169a2",
+        "9328f182d674ef6e649e292da5a181b3c786688dfd0e5fc8ffe40cd25c2cc5a5",
+        "311978107177f0f1a9b4dc7f775494d1d8681b38d92a3e4ad318575ca2753781",
+        "0c9c7fee96e876a319e72de77fa64d84181de8b24876fb5bfea46294226b9034",
+        "55fc9d5101f6da9fb551933da834200d9b4cca47fcfdb658cdad11495be5bc51",
+        "6c724e0cf8dc791dda01f8501d8302040f2c87d591d3d5c01fcb9b39d994eb81",
+        "3426b9bdabca87cf502bed3f01ad15382358cebb64788798e8c5bf0a3bc8261d",
+        "4b3ab0e44f921c663c57aed1abd9396474df25b9c560eb1367803820571b22a3",
+        "fee699aa178ba7edb07abfe87e04c9c0b842d0002b969099c495d0b0bcc1794f",
+        "43bbaa1b981f8af2c0780fab518f2c62b6d2c132f71c1db5c26c0cf58140785d",
+        "9b85b2808624c4641e4cb52791a42e59c49f51a564ee2cb6446b881193b9ee56",
+        "d3a9688fb7bb673d03ee49f95525149cd0965ab58241de019d0462ac6a7589cd",
+        "49820ec0265453b63598b55f18dadbc242c66c42b173bd61419e1acca1e40911",
+        "5bef66fe7afca1853d4a7d8a8e8125a87395866f6d34aab8b5047ea010fec192"
+       ],
+       "latencySeed": 2898082179,
+       "qualityCi95": 0.023909551787239063,
+       "latencyP95Ci95": [
+        6696,
+        16892
+       ],
+       "suiteContentHash": "7b03b9b28e6ecc9e3840dbb4c75c82ab04ecbb3ad2a6aafc2ecb079e26f1cb58"
+      },
+      "clusterId": "extraction",
+      "costPer1K": 0.17420000000000002,
+      "latencyP95": 16892,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.9904761904761905,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-5d4c49a6"
+       ],
+       "suiteId": "extraction-potion-v2",
+       "latencyN": 15,
+       "cacheKeys": [
+        "a3cb8f4cb4e08b1f1a21b3624c32d2fe8f667df9c82686ebf01ed4d059cb0dff",
+        "aac8b7599cfb247ecdeccfed2d9e5b74db717e8db845c0a90be7571eb0037ac0",
+        "0cee09a3bb333b28f34b5849c3c7430d99a42139bcc58880b6eca49809813a39",
+        "a46417b824e5f407818924f70ae1d1343792efc4001a3350df6260f33e91a249",
+        "ee354c1803754a50353e373232ae7574d9bb0a862a6393acc1e58a00634995ba",
+        "23e88a6d0bb15c4450c3140b55b72a9cc5de8694fc82d75226a1f64065027746",
+        "26e1c012e46cf7f9984204a5b639058829468f275f70fc52d73bd74434156a0a",
+        "ecf2f1506ca5bb8c0ac559a4588df7cd59b57adb78d8db64a665bd80ec7bbb0b",
+        "104c2c869f63be46d2903f0783d73c9bd8d5a96a88d74b97b8b53694504d1653",
+        "68090d9fc2212bc11831aa087fe9c125dd68502a40eb9df1da181edbb14e1364",
+        "deece7be30d4082768e8df21c869a418f6e392c9c9ba1e15e551d5d9ce71df04",
+        "22e699a8c92f3e67d0337dfdaf09e5cf1aacdddc4d853b397ac5049fa8f71a32",
+        "87dec15acb64e02bdd0823fb207b677e62cd7c0618b5d3925b4bb72026bc0e5c",
+        "c0128e621d154c8da3bb24f4d4a14897270cd327fede1d9043d6a39917e982b1",
+        "331d1eaf329db3b5dbee6cdb29314a07195afd80d9310edbe53b7270c5dc1428"
+       ],
+       "latencySeed": 1107844565,
+       "qualityCi95": 0.018666666666666665,
+       "latencyP95Ci95": [
+        2353,
+        3156
+       ],
+       "suiteContentHash": "7b03b9b28e6ecc9e3840dbb4c75c82ab04ecbb3ad2a6aafc2ecb079e26f1cb58"
+      },
+      "clusterId": "extraction",
+      "costPer1K": 4.148666666666667,
+      "latencyP95": 3156,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T02:52:00.561Z"
+   },
+   "points": [
+    {
+     "cluster_id": "extraction",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.9821428571428572,
+     "cost_per_1k": 0.17420000000000002,
+     "latency_p95": 16892,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-5d4c49a6"
+      ],
+      "suiteId": "extraction-potion-v2",
+      "latencyN": 15,
+      "cacheKeys": [
+       "34f1094a9062af977d2e2b9510ce32196f5edb426e45a0eb83ee02670d57ca49",
+       "9c63ac1c2b9ac0dfeb79dbc455ceb18a00ae10d0f7fad3f7fc87bdcfe06169a2",
+       "9328f182d674ef6e649e292da5a181b3c786688dfd0e5fc8ffe40cd25c2cc5a5",
+       "311978107177f0f1a9b4dc7f775494d1d8681b38d92a3e4ad318575ca2753781",
+       "0c9c7fee96e876a319e72de77fa64d84181de8b24876fb5bfea46294226b9034",
+       "55fc9d5101f6da9fb551933da834200d9b4cca47fcfdb658cdad11495be5bc51",
+       "6c724e0cf8dc791dda01f8501d8302040f2c87d591d3d5c01fcb9b39d994eb81",
+       "3426b9bdabca87cf502bed3f01ad15382358cebb64788798e8c5bf0a3bc8261d",
+       "4b3ab0e44f921c663c57aed1abd9396474df25b9c560eb1367803820571b22a3",
+       "fee699aa178ba7edb07abfe87e04c9c0b842d0002b969099c495d0b0bcc1794f",
+       "43bbaa1b981f8af2c0780fab518f2c62b6d2c132f71c1db5c26c0cf58140785d",
+       "9b85b2808624c4641e4cb52791a42e59c49f51a564ee2cb6446b881193b9ee56",
+       "d3a9688fb7bb673d03ee49f95525149cd0965ab58241de019d0462ac6a7589cd",
+       "49820ec0265453b63598b55f18dadbc242c66c42b173bd61419e1acca1e40911",
+       "5bef66fe7afca1853d4a7d8a8e8125a87395866f6d34aab8b5047ea010fec192"
+      ],
+      "latencySeed": 2898082179,
+      "qualityCi95": 0.023909551787239063,
+      "latencyP95Ci95": [
+       6696,
+       16892
+      ],
+      "suiteContentHash": "7b03b9b28e6ecc9e3840dbb4c75c82ab04ecbb3ad2a6aafc2ecb079e26f1cb58"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "extraction",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.9904761904761905,
+     "cost_per_1k": 4.148666666666667,
+     "latency_p95": 3156,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-5d4c49a6"
+      ],
+      "suiteId": "extraction-potion-v2",
+      "latencyN": 15,
+      "cacheKeys": [
+       "a3cb8f4cb4e08b1f1a21b3624c32d2fe8f667df9c82686ebf01ed4d059cb0dff",
+       "aac8b7599cfb247ecdeccfed2d9e5b74db717e8db845c0a90be7571eb0037ac0",
+       "0cee09a3bb333b28f34b5849c3c7430d99a42139bcc58880b6eca49809813a39",
+       "a46417b824e5f407818924f70ae1d1343792efc4001a3350df6260f33e91a249",
+       "ee354c1803754a50353e373232ae7574d9bb0a862a6393acc1e58a00634995ba",
+       "23e88a6d0bb15c4450c3140b55b72a9cc5de8694fc82d75226a1f64065027746",
+       "26e1c012e46cf7f9984204a5b639058829468f275f70fc52d73bd74434156a0a",
+       "ecf2f1506ca5bb8c0ac559a4588df7cd59b57adb78d8db64a665bd80ec7bbb0b",
+       "104c2c869f63be46d2903f0783d73c9bd8d5a96a88d74b97b8b53694504d1653",
+       "68090d9fc2212bc11831aa087fe9c125dd68502a40eb9df1da181edbb14e1364",
+       "deece7be30d4082768e8df21c869a418f6e392c9c9ba1e15e551d5d9ce71df04",
+       "22e699a8c92f3e67d0337dfdaf09e5cf1aacdddc4d853b397ac5049fa8f71a32",
+       "87dec15acb64e02bdd0823fb207b677e62cd7c0618b5d3925b4bb72026bc0e5c",
+       "c0128e621d154c8da3bb24f4d4a14897270cd327fede1d9043d6a39917e982b1",
+       "331d1eaf329db3b5dbee6cdb29314a07195afd80d9310edbe53b7270c5dc1428"
+      ],
+      "latencySeed": 1107844565,
+      "qualityCi95": 0.018666666666666665,
+      "latencyP95Ci95": [
+       2353,
+       3156
+      ],
+      "suiteContentHash": "7b03b9b28e6ecc9e3840dbb4c75c82ab04ecbb3ad2a6aafc2ecb079e26f1cb58"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-ab2d7d5e-83ab-4d42-a571-5ca0a4b36e2e",
+    "cluster_id": "multi-step-reasoning",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.06666666666666667,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-db88084c"
+       ],
+       "suiteId": "multi-step-reasoning",
+       "latencyN": 15,
+       "cacheKeys": [
+        "18c14e9d3de8df4b775a8dd6939691311231bb96867fed3e3757312bfa9a6486",
+        "faf6f9348030f0e3860f71791abf30a7f690ac502a04520f57967e89ba076aba",
+        "fc176ed0fbc4137d89c03876b87c5e5d1ab522d53e3dac9511dcf97b0051b6de",
+        "a8cf5c4e655df31f45b221137dfaff8c7621efcf6e4e49865f73a8c863e991e1",
+        "6eaa65c7aed5331ed12a4c8cd94dc5c43941ebf7d3a0fe9165d72505ad89d4e1",
+        "bf570efb0689b919cbeec11969a347c061927241ec72cc5c5ff95a20b4dd4e50",
+        "8ac57321e0500042d1ef249d5dd97b10460d7038de600897982601e8d30da04c",
+        "ba374d77b0cb9bbafca84b7e3da99ab0db28bf1dd06b0b6138010a061bba3a53",
+        "db9079f50d8dda2841945f65c56b53771f62440e1dfc5a4ed189dec5e07f01a9",
+        "e5772b65a295d9e52db8e56477582978f226dff95d61713e12ddb7a64fcf1f39",
+        "45c2f6045778bd38892b76f6cedb61958d6a8b54dbc72d7a5fd00f997e35f6c4",
+        "5863dc6b3d3bbe897668941bd5ecdf82c6b088e0381306b8859d143dec45eee0",
+        "88f94520fcf1780095ded8d9ee9dcaeb353e5ed4d7be63b4c0c97973219b7420",
+        "b1cfa00d25db481c55091733135164492e81e27a488256cefbe9ed708c700a79",
+        "4030a6ec07a8d1dd9fc06714e8c683eed8514aaa7d6c524875ff8dde6cc222ba"
+       ],
+       "latencySeed": 2721015784,
+       "qualityCi95": 0.13066666666666668,
+       "latencyP95Ci95": [
+        12322,
+        23522
+       ],
+       "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+      },
+      "clusterId": "multi-step-reasoning",
+      "costPer1K": 0.15373333333333333,
+      "latencyP95": 23522,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.2,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-db88084c"
+       ],
+       "suiteId": "multi-step-reasoning",
+       "latencyN": 15,
+       "cacheKeys": [
+        "723f10284e2fcdcbac5abbe725ea888535d84bf6729e185c0e4128b15c7c4d51",
+        "0f5fa38eb9c8e3742318588af2e7c52f9aefb32737db1160dc483bbc837d4b71",
+        "3a7f75bf3aca120bbd652889d85cefd25efbfe8457f4a11ce015b543c99c5525",
+        "fd0f2583a7f33486705b5f7d90cef70de3a58f98900741c189b4e823be0c8289",
+        "19518dcb551973f4ca4412c2769c2af514a4f8c444e7d50a198e8b9a801a1ad3",
+        "d6d1bdc30769e3f3e78164837cb879a62796a0cd41dd9852bdaf2ca45a4422a4",
+        "9cefdc533ebaba1095904ccee791640806b51b2825baf686614741280feeaeda",
+        "569e51556d63d3803954d99b905cd1c51a443a68cc0a40669c06707ee9181a2b",
+        "91aa020e944995900a4064f39f3212c2608b03752ac4d56e6beddbed3d6bde6c",
+        "ded1b6e77b466d233cf4df53ff9aabd8d9de5579be5554c14fb917e52dba9ccf",
+        "861b0cc819a00d0e9141c59f608770053c91604d23c29880599c54c893970dd4",
+        "67197251bf2a90f8fea47cbf24eab6819844e323515af11c505eb0c4aaef764a",
+        "dbefa0b3c01ffa85eb846b79df8153257d10cf7c0d2ef03774cfd90ed9e69f7f",
+        "9db4530b031f39abe4b4537d0a8a93e56fe8209c53bc9058edbe79bf3cf8c5fb",
+        "c928c0b79646ca24804cfe4ad798a5acbae9423e37e2836bab922ee93b6a8f3f"
+       ],
+       "latencySeed": 4160902210,
+       "qualityCi95": 0.20953281365934076,
+       "latencyP95Ci95": [
+        16862,
+        36722
+       ],
+       "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+      },
+      "clusterId": "multi-step-reasoning",
+      "costPer1K": 0.26819999999999994,
+      "latencyP95": 36722,
+      "providerMode": "live",
+      "strategyHash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+      "strategyConfig": {
+       "type": "cascade",
+       "stages": [
+        {
+         "model": "or-deepseek",
+         "escalateIf": {
+          "confidenceBelow": 0.72
+         }
+        },
+        {
+         "model": "or-opus"
+        }
+       ],
+       "confidenceMethod": "self-report-calibrated"
+      }
+     },
+     {
+      "quality": 0.2,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-db88084c"
+       ],
+       "suiteId": "multi-step-reasoning",
+       "latencyN": 15,
+       "cacheKeys": [
+        "2fb6866c8f5868e6f9837274ee9081f18aba51c509d02457347b6c421a3c445f",
+        "2b699e47cc564ae9df5d71f389dbd358527aca14efa195376278e512acee3c3d",
+        "f7a9700d5efaf0d9db2b2ba7ba18825e03729f1707a183f20c79b2238ddff53a",
+        "15eb5bdb7eabdb0630f412c142eec5d535f8080f2ba0c0c8e6e3de0eaf4aa9e7",
+        "2d33f8269a59e7d44b18534a2c0b9ff30735cecbed2325800490300baf9684cc",
+        "4259308b633313e8a9355e77166762b0e96c7ebe76f10d315c067c00f38fd898",
+        "81190c1b5745cfeb55787395e792d0f8f30bdf2ce048288ec9f081a203c64d2a",
+        "70c6924e3ed17a1a3a4898e24bc5683916f69a5def6d30ebe6e3f10c949353f2",
+        "9971f5decb5ebf8aa3944fcda8140a56d63f30556d53ea4ac79c8ffa5f680294",
+        "ac7712d76bcc99e06bdfe01b4623f9e693ed422ae74ed7e960cb04ae312ab966",
+        "71c8a355a83ee0a421f1dea28d8bcc3fefb5b36e1c2b74d1445619fa6225ecd0",
+        "c1154d96e5b6c265cd82d7f944a39eb6c8f0ce05e7aecdad5dd3ad3656021a37",
+        "87a9decc59610dd87257c4861289016c2951bb09dae28e06e0ac77e2c60fb254",
+        "30e6e355e8fae8661ce70b75ffb46aaea9dee080315f842c8f8d620a384e4817",
+        "7011ebb2bf9e600be4ddc90e7a4310c62f729459b354f0da77570d161df1e728"
+       ],
+       "latencySeed": 3410835138,
+       "qualityCi95": 0.20953281365934076,
+       "latencyP95Ci95": [
+        3787,
+        4600
+       ],
+       "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+      },
+      "clusterId": "multi-step-reasoning",
+      "costPer1K": 3.593666666666666,
+      "latencyP95": 4600,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     },
+     {
+      "quality": 0.9333333333333333,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-db88084c"
+       ],
+       "suiteId": "multi-step-reasoning",
+       "latencyN": 15,
+       "cacheKeys": [
+        "ba3f7fcc56e4deda7aba28c5be49f8b5a62916b218f63eb3b96d671cf19460e4",
+        "a39d3b6ed07d44d6c72be93f09579213f9fe7b0a45f5cbf70cf66cf95bd6ebf1",
+        "0b206f97b5e79df241cc0dc0e15ec7178f8968063bf87813e1d74434a26e5523",
+        "77860b28685e8fbce98521d338841b5b8d7fac9afb846c641c76700ddec901ea",
+        "300ec09366008e6b58d0fdfac5c3d11e210b21c02d47d5f33f1d463282c46fdf",
+        "34722648c89244191c94dc280e9d0c85735892dda382db10e76c42487a56ad71",
+        "ff69eeffe0ecc3c5215fb2b3acd174bbb91a8c0116ca6953d245697f2c495a22",
+        "ef612353e548e9448a082b0044ae77cde0614a06b86f1c7a2c0220f66e9e1496",
+        "a7be3719e425bb137746a2aa2e374a93499b57bce88f2012a5521c5cdf8d6a3f",
+        "78fe581a6ade9a1b501a094b026f79db385743979e414ea13f5787837993a004",
+        "f770a4ce57a286cc27c738a07b20387602c87bbeee153d180feb75052b588d62",
+        "89a0f6618942e2207f5cbd40b3d3585461bb501c5dc2daa514f8c86d57f0577d",
+        "70647ee17302c0cae4a15f7c9befab549ef478eaa556b29670cecc576c6d1d1b",
+        "1bf78e3314340e64a9cf174548560ae565abf2249fb7a9d51a221379f86436b3",
+        "6a3a8e44e27ce35effd505f5ac3a99e05faf02e7d8c3f891c4b07d3780ca9269"
+       ],
+       "latencySeed": 2233289466,
+       "qualityCi95": 0.13066666666666668,
+       "latencyP95Ci95": [
+        9292,
+        15043
+       ],
+       "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+      },
+      "clusterId": "multi-step-reasoning",
+      "costPer1K": 7.296133333333334,
+      "latencyP95": 15043,
+      "providerMode": "live",
+      "strategyHash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-gemini-pro"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T02:35:28.614Z"
+   },
+   "points": [
+    {
+     "cluster_id": "multi-step-reasoning",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.06666666666666667,
+     "cost_per_1k": 0.15373333333333333,
+     "latency_p95": 23522,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-db88084c"
+      ],
+      "suiteId": "multi-step-reasoning",
+      "latencyN": 15,
+      "cacheKeys": [
+       "18c14e9d3de8df4b775a8dd6939691311231bb96867fed3e3757312bfa9a6486",
+       "faf6f9348030f0e3860f71791abf30a7f690ac502a04520f57967e89ba076aba",
+       "fc176ed0fbc4137d89c03876b87c5e5d1ab522d53e3dac9511dcf97b0051b6de",
+       "a8cf5c4e655df31f45b221137dfaff8c7621efcf6e4e49865f73a8c863e991e1",
+       "6eaa65c7aed5331ed12a4c8cd94dc5c43941ebf7d3a0fe9165d72505ad89d4e1",
+       "bf570efb0689b919cbeec11969a347c061927241ec72cc5c5ff95a20b4dd4e50",
+       "8ac57321e0500042d1ef249d5dd97b10460d7038de600897982601e8d30da04c",
+       "ba374d77b0cb9bbafca84b7e3da99ab0db28bf1dd06b0b6138010a061bba3a53",
+       "db9079f50d8dda2841945f65c56b53771f62440e1dfc5a4ed189dec5e07f01a9",
+       "e5772b65a295d9e52db8e56477582978f226dff95d61713e12ddb7a64fcf1f39",
+       "45c2f6045778bd38892b76f6cedb61958d6a8b54dbc72d7a5fd00f997e35f6c4",
+       "5863dc6b3d3bbe897668941bd5ecdf82c6b088e0381306b8859d143dec45eee0",
+       "88f94520fcf1780095ded8d9ee9dcaeb353e5ed4d7be63b4c0c97973219b7420",
+       "b1cfa00d25db481c55091733135164492e81e27a488256cefbe9ed708c700a79",
+       "4030a6ec07a8d1dd9fc06714e8c683eed8514aaa7d6c524875ff8dde6cc222ba"
+      ],
+      "latencySeed": 2721015784,
+      "qualityCi95": 0.13066666666666668,
+      "latencyP95Ci95": [
+       12322,
+       23522
+      ],
+      "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "multi-step-reasoning",
+     "strategy_hash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+     "strategy_config": {
+      "type": "cascade",
+      "stages": [
+       {
+        "model": "or-deepseek",
+        "escalateIf": {
+         "confidenceBelow": 0.72
+        }
+       },
+       {
+        "model": "or-opus"
+       }
+      ],
+      "confidenceMethod": "self-report-calibrated"
+     },
+     "quality": 0.2,
+     "cost_per_1k": 0.26819999999999994,
+     "latency_p95": 36722,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-db88084c"
+      ],
+      "suiteId": "multi-step-reasoning",
+      "latencyN": 15,
+      "cacheKeys": [
+       "723f10284e2fcdcbac5abbe725ea888535d84bf6729e185c0e4128b15c7c4d51",
+       "0f5fa38eb9c8e3742318588af2e7c52f9aefb32737db1160dc483bbc837d4b71",
+       "3a7f75bf3aca120bbd652889d85cefd25efbfe8457f4a11ce015b543c99c5525",
+       "fd0f2583a7f33486705b5f7d90cef70de3a58f98900741c189b4e823be0c8289",
+       "19518dcb551973f4ca4412c2769c2af514a4f8c444e7d50a198e8b9a801a1ad3",
+       "d6d1bdc30769e3f3e78164837cb879a62796a0cd41dd9852bdaf2ca45a4422a4",
+       "9cefdc533ebaba1095904ccee791640806b51b2825baf686614741280feeaeda",
+       "569e51556d63d3803954d99b905cd1c51a443a68cc0a40669c06707ee9181a2b",
+       "91aa020e944995900a4064f39f3212c2608b03752ac4d56e6beddbed3d6bde6c",
+       "ded1b6e77b466d233cf4df53ff9aabd8d9de5579be5554c14fb917e52dba9ccf",
+       "861b0cc819a00d0e9141c59f608770053c91604d23c29880599c54c893970dd4",
+       "67197251bf2a90f8fea47cbf24eab6819844e323515af11c505eb0c4aaef764a",
+       "dbefa0b3c01ffa85eb846b79df8153257d10cf7c0d2ef03774cfd90ed9e69f7f",
+       "9db4530b031f39abe4b4537d0a8a93e56fe8209c53bc9058edbe79bf3cf8c5fb",
+       "c928c0b79646ca24804cfe4ad798a5acbae9423e37e2836bab922ee93b6a8f3f"
+      ],
+      "latencySeed": 4160902210,
+      "qualityCi95": 0.20953281365934076,
+      "latencyP95Ci95": [
+       16862,
+       36722
+      ],
+      "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "multi-step-reasoning",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.2,
+     "cost_per_1k": 3.593666666666666,
+     "latency_p95": 4600,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-db88084c"
+      ],
+      "suiteId": "multi-step-reasoning",
+      "latencyN": 15,
+      "cacheKeys": [
+       "2fb6866c8f5868e6f9837274ee9081f18aba51c509d02457347b6c421a3c445f",
+       "2b699e47cc564ae9df5d71f389dbd358527aca14efa195376278e512acee3c3d",
+       "f7a9700d5efaf0d9db2b2ba7ba18825e03729f1707a183f20c79b2238ddff53a",
+       "15eb5bdb7eabdb0630f412c142eec5d535f8080f2ba0c0c8e6e3de0eaf4aa9e7",
+       "2d33f8269a59e7d44b18534a2c0b9ff30735cecbed2325800490300baf9684cc",
+       "4259308b633313e8a9355e77166762b0e96c7ebe76f10d315c067c00f38fd898",
+       "81190c1b5745cfeb55787395e792d0f8f30bdf2ce048288ec9f081a203c64d2a",
+       "70c6924e3ed17a1a3a4898e24bc5683916f69a5def6d30ebe6e3f10c949353f2",
+       "9971f5decb5ebf8aa3944fcda8140a56d63f30556d53ea4ac79c8ffa5f680294",
+       "ac7712d76bcc99e06bdfe01b4623f9e693ed422ae74ed7e960cb04ae312ab966",
+       "71c8a355a83ee0a421f1dea28d8bcc3fefb5b36e1c2b74d1445619fa6225ecd0",
+       "c1154d96e5b6c265cd82d7f944a39eb6c8f0ce05e7aecdad5dd3ad3656021a37",
+       "87a9decc59610dd87257c4861289016c2951bb09dae28e06e0ac77e2c60fb254",
+       "30e6e355e8fae8661ce70b75ffb46aaea9dee080315f842c8f8d620a384e4817",
+       "7011ebb2bf9e600be4ddc90e7a4310c62f729459b354f0da77570d161df1e728"
+      ],
+      "latencySeed": 3410835138,
+      "qualityCi95": 0.20953281365934076,
+      "latencyP95Ci95": [
+       3787,
+       4600
+      ],
+      "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "multi-step-reasoning",
+     "strategy_hash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-gemini-pro"
+     },
+     "quality": 0.9333333333333333,
+     "cost_per_1k": 7.296133333333334,
+     "latency_p95": 15043,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-db88084c"
+      ],
+      "suiteId": "multi-step-reasoning",
+      "latencyN": 15,
+      "cacheKeys": [
+       "ba3f7fcc56e4deda7aba28c5be49f8b5a62916b218f63eb3b96d671cf19460e4",
+       "a39d3b6ed07d44d6c72be93f09579213f9fe7b0a45f5cbf70cf66cf95bd6ebf1",
+       "0b206f97b5e79df241cc0dc0e15ec7178f8968063bf87813e1d74434a26e5523",
+       "77860b28685e8fbce98521d338841b5b8d7fac9afb846c641c76700ddec901ea",
+       "300ec09366008e6b58d0fdfac5c3d11e210b21c02d47d5f33f1d463282c46fdf",
+       "34722648c89244191c94dc280e9d0c85735892dda382db10e76c42487a56ad71",
+       "ff69eeffe0ecc3c5215fb2b3acd174bbb91a8c0116ca6953d245697f2c495a22",
+       "ef612353e548e9448a082b0044ae77cde0614a06b86f1c7a2c0220f66e9e1496",
+       "a7be3719e425bb137746a2aa2e374a93499b57bce88f2012a5521c5cdf8d6a3f",
+       "78fe581a6ade9a1b501a094b026f79db385743979e414ea13f5787837993a004",
+       "f770a4ce57a286cc27c738a07b20387602c87bbeee153d180feb75052b588d62",
+       "89a0f6618942e2207f5cbd40b3d3585461bb501c5dc2daa514f8c86d57f0577d",
+       "70647ee17302c0cae4a15f7c9befab549ef478eaa556b29670cecc576c6d1d1b",
+       "1bf78e3314340e64a9cf174548560ae565abf2249fb7a9d51a221379f86436b3",
+       "6a3a8e44e27ce35effd505f5ac3a99e05faf02e7d8c3f891c4b07d3780ca9269"
+      ],
+      "latencySeed": 2233289466,
+      "qualityCi95": 0.13066666666666668,
+      "latencyP95Ci95": [
+       9292,
+       15043
+      ],
+      "suiteContentHash": "f6cb96dcc07f7740c08164f20bb778e6f8b72b7e031612fd3db8e2ea4eeb7069"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-f6af93d1-7201-4703-89c9-880b844b8c9e",
+    "cluster_id": "rag-answer",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.8,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-8af0d936"
+       ],
+       "suiteId": "rag-answer",
+       "latencyN": 15,
+       "cacheKeys": [
+        "28297f6991801697e54b49dfceaa77ba3c290cacbeaa79a7bd7f7b455b79e8a4",
+        "ccecf6189d75ea56e859a73b42bb35902aa26126e22904449fc0c7b90c810f98",
+        "66a970b7cee814cdd2161ca59ff95406913471da50695278e0211d339abd3df5",
+        "b3f6761ca9e7bf2d22e5fa1c963721f0b021acc871a3f189d7f6513f4503f2b8",
+        "f897fdc98e7500ffc6b9858b0cc95072aceb6d31fd0159a399c5a9f03d1649fc",
+        "dfe4bdada5d168fba174e2083b7e5e934731317fc7fff89e1220d4231ce1ec1c",
+        "64960e5fd2343a52cb9a69f7160d836a10394143e8cdead1fd626be40f0582f5",
+        "4a3c21e3af1d102ae77907102b21725c59cbd58b544deb1fb0b3df877b28a1d7",
+        "dfa9380b2eac2b2e218b4ff3630bd0d28ddd585fd11fc8b9e66d284e6443d1fe",
+        "058c5a0b4ca5c2e5c90ebd477fe70aba465c042a55c797108e6c0cd6bacfcd94",
+        "948557412b521314c63305098844a184565f94de272086c1383e1d09953b99cf",
+        "3e9af32bc6deaf1f21c3d3844ab0347471540054110cc81a69f6a493ec88c924",
+        "eea4f19e538a0d8c95726d934501446f4008ac6b2b0f4b244e46d9dc74c221dc",
+        "babb3a665480320dc8078dbab66fbad756d6ff3673a1a7f7ea19614f7ed5e375",
+        "80866d68107d333221780e369f1ded6afa2ec628ea1ce027af73a11819cce3d8"
+       ],
+       "latencySeed": 982533,
+       "qualityCi95": 0.20953281365934076,
+       "latencyP95Ci95": [
+        2190,
+        3385
+       ],
+       "suiteContentHash": "7368910e8656780b30ec24097f88db3a2e2496c13b9c473950e4627f448dc995"
+      },
+      "clusterId": "rag-answer",
+      "costPer1K": 0.032666666666666656,
+      "latencyP95": 3385,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.8666666666666667,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-8af0d936"
+       ],
+       "suiteId": "rag-answer",
+       "latencyN": 15,
+       "cacheKeys": [
+        "6469af36f6af0e6088db09d62b23b0c162e57d5692fb12870d1f0fe843933ff4",
+        "3842f1a6dd8b267268523279bae73c0b0d9572b8f212a6501bc078fee5a30323",
+        "11e6adf1dd052a72cfa2f9dbc430c5b2c7307984c46bde7b8ef71772b9ff89b1",
+        "e84d4ad639d388ef2c1a4c975d5e5ac596b6c76d9159b6921306a24388c6b890",
+        "c330448f354d5a263de98fb9fef93c2b1e0be908cc12e8fe76406540a006b116",
+        "02f021320fa5cfe2dbd00304509c7a4c4af64ca46f311dd74e7082d1e197308f",
+        "02967a47b8c55bc4954a8db5ebb4608bbf5b7bedc649adbcc2ef83c89bb16a21",
+        "612a589cabbc8d1db5f3cafa496b1a71e62560d3a866c4638a99ed95fd0b3b2c",
+        "d0f057196ee9e2a53cc975c05f2286c1427d8161c9b22f1fbcad1c4c97ba73eb",
+        "1e0d9b38e1a0fa7ec35d5370e850cee09fc3a5238244c065b9f370a58ebe0c01",
+        "89734425ee84289d22c26dc9d8d0f30da63cdaf12fc9753e5356bcc76e429f84",
+        "57e02e26693c9ba779bcf3e3edbaad44fb92bc94a1f87af3494d40616f3dacc4",
+        "ed0a7263005e8751a1ee498bed28e9421aeb1291cf506d26edb16401ba6030c9",
+        "c3dbb92c248d277897a8806b67e7cc47a3927a85974c3871d572624b9609ebdb",
+        "e6c32ccefbba6b304d60bf49fe1cb9d3169d9c3de52b3cc62eae1436f1a12c0d"
+       ],
+       "latencySeed": 2850222917,
+       "qualityCi95": 0.1780686509311632,
+       "latencyP95Ci95": [
+        1907,
+        4681
+       ],
+       "suiteContentHash": "7368910e8656780b30ec24097f88db3a2e2496c13b9c473950e4627f448dc995"
+      },
+      "clusterId": "rag-answer",
+      "costPer1K": 0.8143333333333332,
+      "latencyP95": 4681,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     },
+     {
+      "quality": 0.8666666666666667,
+      "evidence": {
+       "n": 15,
+       "runIds": [
+        "run-8af0d936"
+       ],
+       "suiteId": "rag-answer",
+       "latencyN": 15,
+       "cacheKeys": [
+        "1fea3f7fcb91212720ce38fbc69906cc2d446fdb7d958c5cfd32d8437beff0fd",
+        "637d1b5a9a141e8bf469bddced05ad9d36a180c01454007f012b4673d865d7bb",
+        "63f536ce4ba933d66dc97eb6d4b6cb79707eb85f82acd9885803d745f738f2e2",
+        "06aa4d92c592c0d20b59932a22d70c8a4751bb533b13c65cf757c1c10fccf1e8",
+        "a68c933e720abd8381c47b1e87edd4b0d69ada9f288acc42e9cd3cc67fa4805c",
+        "e42b312435b059b45d4fe11bd9e8a2ba89bdafc43d95328d9a21ee5e0e1e712a",
+        "697080cdb2f2ca9278a3cc074f9bc0ccaf51b5d26e935d294868bdd171fdfc81",
+        "7e11156e91107bb933e74fa2174689d2767e6ee060939e86d4e7aa36f0ef9fe4",
+        "28f3e1c818b9bec9b0a211772793a0553b5a9f50ba31a2057b45d68588029bed",
+        "fb33fb6960545d6a61e5b0be4c5bfe18a4fc879cc612cd3cbc8d7c1269bd0c0e",
+        "bdef9b2a7271157e82ff972789b37896a076dd7ede9199c92bfde28baf0899c0",
+        "27ea066e23704601afd906f8e6c3f17a67aebf6ed7518022d6a73dcb0a749501",
+        "2cb18fe40c23ca25df0e6142e20ed5cbd5e92bef58afbad04cb2f791d72076d1",
+        "a104ace890458dd11c8413833386ba704dba2b85ff545524130475db0f5fc100",
+        "d7b1da4699e499df5da41fc7d18e5ac51fb9195f3b1ec9114bacd34ed314b0b6"
+       ],
+       "latencySeed": 951852121,
+       "qualityCi95": 0.17806865093116314,
+       "latencyP95Ci95": [
+        3923,
+        4431
+       ],
+       "suiteContentHash": "7368910e8656780b30ec24097f88db3a2e2496c13b9c473950e4627f448dc995"
+      },
+      "clusterId": "rag-answer",
+      "costPer1K": 2.719266666666667,
+      "latencyP95": 4431,
+      "providerMode": "live",
+      "strategyHash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-gemini-pro"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T02:38:12.921Z"
+   },
+   "points": [
+    {
+     "cluster_id": "rag-answer",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.8,
+     "cost_per_1k": 0.032666666666666656,
+     "latency_p95": 3385,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-8af0d936"
+      ],
+      "suiteId": "rag-answer",
+      "latencyN": 15,
+      "cacheKeys": [
+       "28297f6991801697e54b49dfceaa77ba3c290cacbeaa79a7bd7f7b455b79e8a4",
+       "ccecf6189d75ea56e859a73b42bb35902aa26126e22904449fc0c7b90c810f98",
+       "66a970b7cee814cdd2161ca59ff95406913471da50695278e0211d339abd3df5",
+       "b3f6761ca9e7bf2d22e5fa1c963721f0b021acc871a3f189d7f6513f4503f2b8",
+       "f897fdc98e7500ffc6b9858b0cc95072aceb6d31fd0159a399c5a9f03d1649fc",
+       "dfe4bdada5d168fba174e2083b7e5e934731317fc7fff89e1220d4231ce1ec1c",
+       "64960e5fd2343a52cb9a69f7160d836a10394143e8cdead1fd626be40f0582f5",
+       "4a3c21e3af1d102ae77907102b21725c59cbd58b544deb1fb0b3df877b28a1d7",
+       "dfa9380b2eac2b2e218b4ff3630bd0d28ddd585fd11fc8b9e66d284e6443d1fe",
+       "058c5a0b4ca5c2e5c90ebd477fe70aba465c042a55c797108e6c0cd6bacfcd94",
+       "948557412b521314c63305098844a184565f94de272086c1383e1d09953b99cf",
+       "3e9af32bc6deaf1f21c3d3844ab0347471540054110cc81a69f6a493ec88c924",
+       "eea4f19e538a0d8c95726d934501446f4008ac6b2b0f4b244e46d9dc74c221dc",
+       "babb3a665480320dc8078dbab66fbad756d6ff3673a1a7f7ea19614f7ed5e375",
+       "80866d68107d333221780e369f1ded6afa2ec628ea1ce027af73a11819cce3d8"
+      ],
+      "latencySeed": 982533,
+      "qualityCi95": 0.20953281365934076,
+      "latencyP95Ci95": [
+       2190,
+       3385
+      ],
+      "suiteContentHash": "7368910e8656780b30ec24097f88db3a2e2496c13b9c473950e4627f448dc995"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "rag-answer",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.8666666666666667,
+     "cost_per_1k": 0.8143333333333332,
+     "latency_p95": 4681,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-8af0d936"
+      ],
+      "suiteId": "rag-answer",
+      "latencyN": 15,
+      "cacheKeys": [
+       "6469af36f6af0e6088db09d62b23b0c162e57d5692fb12870d1f0fe843933ff4",
+       "3842f1a6dd8b267268523279bae73c0b0d9572b8f212a6501bc078fee5a30323",
+       "11e6adf1dd052a72cfa2f9dbc430c5b2c7307984c46bde7b8ef71772b9ff89b1",
+       "e84d4ad639d388ef2c1a4c975d5e5ac596b6c76d9159b6921306a24388c6b890",
+       "c330448f354d5a263de98fb9fef93c2b1e0be908cc12e8fe76406540a006b116",
+       "02f021320fa5cfe2dbd00304509c7a4c4af64ca46f311dd74e7082d1e197308f",
+       "02967a47b8c55bc4954a8db5ebb4608bbf5b7bedc649adbcc2ef83c89bb16a21",
+       "612a589cabbc8d1db5f3cafa496b1a71e62560d3a866c4638a99ed95fd0b3b2c",
+       "d0f057196ee9e2a53cc975c05f2286c1427d8161c9b22f1fbcad1c4c97ba73eb",
+       "1e0d9b38e1a0fa7ec35d5370e850cee09fc3a5238244c065b9f370a58ebe0c01",
+       "89734425ee84289d22c26dc9d8d0f30da63cdaf12fc9753e5356bcc76e429f84",
+       "57e02e26693c9ba779bcf3e3edbaad44fb92bc94a1f87af3494d40616f3dacc4",
+       "ed0a7263005e8751a1ee498bed28e9421aeb1291cf506d26edb16401ba6030c9",
+       "c3dbb92c248d277897a8806b67e7cc47a3927a85974c3871d572624b9609ebdb",
+       "e6c32ccefbba6b304d60bf49fe1cb9d3169d9c3de52b3cc62eae1436f1a12c0d"
+      ],
+      "latencySeed": 2850222917,
+      "qualityCi95": 0.1780686509311632,
+      "latencyP95Ci95": [
+       1907,
+       4681
+      ],
+      "suiteContentHash": "7368910e8656780b30ec24097f88db3a2e2496c13b9c473950e4627f448dc995"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "rag-answer",
+     "strategy_hash": "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-gemini-pro"
+     },
+     "quality": 0.8666666666666667,
+     "cost_per_1k": 2.719266666666667,
+     "latency_p95": 4431,
+     "evidence": {
+      "n": 15,
+      "runIds": [
+       "run-8af0d936"
+      ],
+      "suiteId": "rag-answer",
+      "latencyN": 15,
+      "cacheKeys": [
+       "1fea3f7fcb91212720ce38fbc69906cc2d446fdb7d958c5cfd32d8437beff0fd",
+       "637d1b5a9a141e8bf469bddced05ad9d36a180c01454007f012b4673d865d7bb",
+       "63f536ce4ba933d66dc97eb6d4b6cb79707eb85f82acd9885803d745f738f2e2",
+       "06aa4d92c592c0d20b59932a22d70c8a4751bb533b13c65cf757c1c10fccf1e8",
+       "a68c933e720abd8381c47b1e87edd4b0d69ada9f288acc42e9cd3cc67fa4805c",
+       "e42b312435b059b45d4fe11bd9e8a2ba89bdafc43d95328d9a21ee5e0e1e712a",
+       "697080cdb2f2ca9278a3cc074f9bc0ccaf51b5d26e935d294868bdd171fdfc81",
+       "7e11156e91107bb933e74fa2174689d2767e6ee060939e86d4e7aa36f0ef9fe4",
+       "28f3e1c818b9bec9b0a211772793a0553b5a9f50ba31a2057b45d68588029bed",
+       "fb33fb6960545d6a61e5b0be4c5bfe18a4fc879cc612cd3cbc8d7c1269bd0c0e",
+       "bdef9b2a7271157e82ff972789b37896a076dd7ede9199c92bfde28baf0899c0",
+       "27ea066e23704601afd906f8e6c3f17a67aebf6ed7518022d6a73dcb0a749501",
+       "2cb18fe40c23ca25df0e6142e20ed5cbd5e92bef58afbad04cb2f791d72076d1",
+       "a104ace890458dd11c8413833386ba704dba2b85ff545524130475db0f5fc100",
+       "d7b1da4699e499df5da41fc7d18e5ac51fb9195f3b1ec9114bacd34ed314b0b6"
+      ],
+      "latencySeed": 951852121,
+      "qualityCi95": 0.17806865093116314,
+      "latencyP95Ci95": [
+       3923,
+       4431
+      ],
+      "suiteContentHash": "7368910e8656780b30ec24097f88db3a2e2496c13b9c473950e4627f448dc995"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-3d75d74c-5926-40cc-a883-f121d464ffb7",
+    "cluster_id": "rewrite-edit",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.8785714285714288,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-4e679b96"
+       ],
+       "suiteId": "rewrite-edit",
+       "latencyN": 14,
+       "cacheKeys": [
+        "73c200cc9200c4f0387521f45c0669af1f48bb44eb6dd25de0d3653e0698748c",
+        "c52e60956fd10d438b742096e4318dd92fe1d2cab3e7c1782d0c5d6ad39dd167",
+        "4c49ad6b639d2cbf88548bc56901b3ee03e87910d4d04c8dd3668b7db9681577",
+        "f265f0ba534efe551698a78571c8bb5bf12e668f834adf08ad7d10186b7f1b45",
+        "6c76463bcd3450c72126e4c9eed277467337ae5d221bf9c2a04e89ed56ca663f",
+        "44d6a1fa8e361412d5f03cfa3cc5a605c17cb62476098d60317b57d140c7ea02",
+        "723ccef2951a548c755835f37902854ffd42fcc0121d4a5998fdabc0c8cc690a",
+        "bdd6a1df32efcbf7475032206f108fd8a6ccea9819477df0150495dcd47809bf",
+        "bc6bf64ae781780030a814d5f576bb8e1918ece91aa0e770e6bafc644d71b67b",
+        "edae23ad70c2df26ef418b983fd9f870af5004b1d73311ecf79b6f761b75ad64",
+        "c4f58954eb79c4d020862ea131dc92d05a72b4a4d7b7cdb0302282705bb92127",
+        "0b2ca4972541dc70d7bab1aad26b564c0359e91e14cb04a28a83477afec6fab3",
+        "3ece4720f1fc131825fbd5f19866997009feed8617f3eca7257343a09e1f7dbf",
+        "5e5a45353fcd334edd06461346747ab4b68905f63650f454891765c166eac5d8"
+       ],
+       "latencySeed": 1201051747,
+       "qualityCi95": 0.0550496279593381,
+       "latencyP95Ci95": [
+        6787,
+        43246
+       ],
+       "suiteContentHash": "62f675161d41237f718d223c325d072b8f164d4b4baa66363117f92875b888f9"
+      },
+      "clusterId": "rewrite-edit",
+      "costPer1K": 3.1063571428571435,
+      "latencyP95": 43246,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.892857142857143,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-4e679b96"
+       ],
+       "suiteId": "rewrite-edit",
+       "latencyN": 14,
+       "cacheKeys": [
+        "ad693387b574a5b6dfd40d93e8b226ccb0c9248473f9b4f3824bf01410a2f81e",
+        "65f1457a78239af31d31f4dab903da338ae071299724cbc17c46aef8d44907f1",
+        "363e17381a44072064fbdcee3921633e88ffe9b238ff71599ff6b862d2bb61f2",
+        "469ea3a8a9df6d0e6ac27f6a19d81130c5d19a1bf8fb82a911c8af0f0ddc01fc",
+        "acf3524d14bc38a0d7b3048a4a5fd2f07466829a655c0789df86e01aad7e142c",
+        "8ca3c4ecdb874ce520d4809fdc31e0902cb75ee853ac330f1aca692b3a416007",
+        "c34ca7e957e4cc21e8bf044e1ef1247e2cfd909f1629b3580a6e8dee45e1ae70",
+        "1a1bdb3573594c8edfe0e56501eb240db3701832e3671048da8a1d2d489352c5",
+        "b8a5e3e628e033d906ded6524970b37b81906d97e41688fffeec32fbafd87044",
+        "434d77f531a9a7746a5c9956f4e4d056d052c5b1506b3364b197f354db920fe7",
+        "bfda62075b6edd10c29fddfaa20612332f18d69460c8559c0b3878646afe5f05",
+        "d8815594f5042440d8386f712f1d52c31da11ce6ac385ac39b5e07fe781fcda7",
+        "0c04aee87c48223ef235307c2a3c6ea477818d4e7fa2fe37730299b4793c535f",
+        "b23c0f20b4fd3cdae48f20fdadde9e09e3d4db8cd5d8b8452bb04351a33b1b4e"
+       ],
+       "latencySeed": 3381245736,
+       "qualityCi95": 0.03824214348675474,
+       "latencyP95Ci95": [
+        13596,
+        54276
+       ],
+       "suiteContentHash": "62f675161d41237f718d223c325d072b8f164d4b4baa66363117f92875b888f9"
+      },
+      "clusterId": "rewrite-edit",
+      "costPer1K": 3.7829285714285716,
+      "latencyP95": 54276,
+      "providerMode": "live",
+      "strategyHash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+      "strategyConfig": {
+       "type": "cascade",
+       "stages": [
+        {
+         "model": "or-deepseek",
+         "escalateIf": {
+          "confidenceBelow": 0.72
+         }
+        },
+        {
+         "model": "or-opus"
+        }
+       ],
+       "confidenceMethod": "self-report-calibrated"
+      }
+     },
+     {
+      "quality": 0.8857142857142859,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-4e679b96"
+       ],
+       "suiteId": "rewrite-edit",
+       "latencyN": 14,
+       "cacheKeys": [
+        "ce7d4e43aa498532b542cfbdd999654fd5e2cf3f1a3e2d9ea6a213118c311b4b",
+        "ecb2683d01271766b346b2efa4a1078aa728dfc6d45f0f7bb34c2bb007c6baea",
+        "c4fa9b3e447f68d0914b71e53c997d9ed528e783327b6cabe8ab28ddabdb744c",
+        "41bdb64dbab3a39630f9dc795ca7e38b6394236594c1c6fe2af1e54f93b8cd4d",
+        "7ef893f0da4f8ee01ba75d6625e261f9ccc184cdf7f9670aee9123b1287523f5",
+        "05ae56ccdc8792457f3bc2024926497729c8f903684ecce90cccdd8a1fa05500",
+        "3e024a86656a3716bbfc9aeb24de9879a01e4d1ada4dca2aa57faee8cfdbdc09",
+        "e8645db81cfdfd864e3236e96f089d562810dfc7be6a054a7d875f604ec34103",
+        "7d140000652f9b4518c44faa9092cc9ed66b7188225e9f1434694135197b55ad",
+        "87b423366cfbc4627c283c99a9e3f1e34b7d88ba554a4a02bc2d9c611bb73cbb",
+        "8fb262915d6cda92668913d7b1e3e7f42e035bdb87253b73dd149fdfef6d6593",
+        "ea834ee775d382b18239ef4cff0deb97a464349c86848f5cc7cb0072c43bbc04",
+        "e3c49b5f87d17680a5a9182eb9694f76aaa6faa3ae183c0bb6d01320f0aaa7b3",
+        "4dc71b8727847cf7fd04a97583648549ceb08926d9919a0f8b0ce698f12db35e"
+       ],
+       "latencySeed": 290908691,
+       "qualityCi95": 0.06450760241421759,
+       "latencyP95Ci95": [
+        5586,
+        6461
+       ],
+       "suiteContentHash": "62f675161d41237f718d223c325d072b8f164d4b4baa66363117f92875b888f9"
+      },
+      "clusterId": "rewrite-edit",
+      "costPer1K": 5.893071428571428,
+      "latencyP95": 6461,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T03:37:56.817Z"
+   },
+   "points": [
+    {
+     "cluster_id": "rewrite-edit",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.8785714285714288,
+     "cost_per_1k": 3.1063571428571435,
+     "latency_p95": 43246,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-4e679b96"
+      ],
+      "suiteId": "rewrite-edit",
+      "latencyN": 14,
+      "cacheKeys": [
+       "73c200cc9200c4f0387521f45c0669af1f48bb44eb6dd25de0d3653e0698748c",
+       "c52e60956fd10d438b742096e4318dd92fe1d2cab3e7c1782d0c5d6ad39dd167",
+       "4c49ad6b639d2cbf88548bc56901b3ee03e87910d4d04c8dd3668b7db9681577",
+       "f265f0ba534efe551698a78571c8bb5bf12e668f834adf08ad7d10186b7f1b45",
+       "6c76463bcd3450c72126e4c9eed277467337ae5d221bf9c2a04e89ed56ca663f",
+       "44d6a1fa8e361412d5f03cfa3cc5a605c17cb62476098d60317b57d140c7ea02",
+       "723ccef2951a548c755835f37902854ffd42fcc0121d4a5998fdabc0c8cc690a",
+       "bdd6a1df32efcbf7475032206f108fd8a6ccea9819477df0150495dcd47809bf",
+       "bc6bf64ae781780030a814d5f576bb8e1918ece91aa0e770e6bafc644d71b67b",
+       "edae23ad70c2df26ef418b983fd9f870af5004b1d73311ecf79b6f761b75ad64",
+       "c4f58954eb79c4d020862ea131dc92d05a72b4a4d7b7cdb0302282705bb92127",
+       "0b2ca4972541dc70d7bab1aad26b564c0359e91e14cb04a28a83477afec6fab3",
+       "3ece4720f1fc131825fbd5f19866997009feed8617f3eca7257343a09e1f7dbf",
+       "5e5a45353fcd334edd06461346747ab4b68905f63650f454891765c166eac5d8"
+      ],
+      "latencySeed": 1201051747,
+      "qualityCi95": 0.0550496279593381,
+      "latencyP95Ci95": [
+       6787,
+       43246
+      ],
+      "suiteContentHash": "62f675161d41237f718d223c325d072b8f164d4b4baa66363117f92875b888f9"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "rewrite-edit",
+     "strategy_hash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+     "strategy_config": {
+      "type": "cascade",
+      "stages": [
+       {
+        "model": "or-deepseek",
+        "escalateIf": {
+         "confidenceBelow": 0.72
+        }
+       },
+       {
+        "model": "or-opus"
+       }
+      ],
+      "confidenceMethod": "self-report-calibrated"
+     },
+     "quality": 0.892857142857143,
+     "cost_per_1k": 3.7829285714285716,
+     "latency_p95": 54276,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-4e679b96"
+      ],
+      "suiteId": "rewrite-edit",
+      "latencyN": 14,
+      "cacheKeys": [
+       "ad693387b574a5b6dfd40d93e8b226ccb0c9248473f9b4f3824bf01410a2f81e",
+       "65f1457a78239af31d31f4dab903da338ae071299724cbc17c46aef8d44907f1",
+       "363e17381a44072064fbdcee3921633e88ffe9b238ff71599ff6b862d2bb61f2",
+       "469ea3a8a9df6d0e6ac27f6a19d81130c5d19a1bf8fb82a911c8af0f0ddc01fc",
+       "acf3524d14bc38a0d7b3048a4a5fd2f07466829a655c0789df86e01aad7e142c",
+       "8ca3c4ecdb874ce520d4809fdc31e0902cb75ee853ac330f1aca692b3a416007",
+       "c34ca7e957e4cc21e8bf044e1ef1247e2cfd909f1629b3580a6e8dee45e1ae70",
+       "1a1bdb3573594c8edfe0e56501eb240db3701832e3671048da8a1d2d489352c5",
+       "b8a5e3e628e033d906ded6524970b37b81906d97e41688fffeec32fbafd87044",
+       "434d77f531a9a7746a5c9956f4e4d056d052c5b1506b3364b197f354db920fe7",
+       "bfda62075b6edd10c29fddfaa20612332f18d69460c8559c0b3878646afe5f05",
+       "d8815594f5042440d8386f712f1d52c31da11ce6ac385ac39b5e07fe781fcda7",
+       "0c04aee87c48223ef235307c2a3c6ea477818d4e7fa2fe37730299b4793c535f",
+       "b23c0f20b4fd3cdae48f20fdadde9e09e3d4db8cd5d8b8452bb04351a33b1b4e"
+      ],
+      "latencySeed": 3381245736,
+      "qualityCi95": 0.03824214348675474,
+      "latencyP95Ci95": [
+       13596,
+       54276
+      ],
+      "suiteContentHash": "62f675161d41237f718d223c325d072b8f164d4b4baa66363117f92875b888f9"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "rewrite-edit",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.8857142857142859,
+     "cost_per_1k": 5.893071428571428,
+     "latency_p95": 6461,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-4e679b96"
+      ],
+      "suiteId": "rewrite-edit",
+      "latencyN": 14,
+      "cacheKeys": [
+       "ce7d4e43aa498532b542cfbdd999654fd5e2cf3f1a3e2d9ea6a213118c311b4b",
+       "ecb2683d01271766b346b2efa4a1078aa728dfc6d45f0f7bb34c2bb007c6baea",
+       "c4fa9b3e447f68d0914b71e53c997d9ed528e783327b6cabe8ab28ddabdb744c",
+       "41bdb64dbab3a39630f9dc795ca7e38b6394236594c1c6fe2af1e54f93b8cd4d",
+       "7ef893f0da4f8ee01ba75d6625e261f9ccc184cdf7f9670aee9123b1287523f5",
+       "05ae56ccdc8792457f3bc2024926497729c8f903684ecce90cccdd8a1fa05500",
+       "3e024a86656a3716bbfc9aeb24de9879a01e4d1ada4dca2aa57faee8cfdbdc09",
+       "e8645db81cfdfd864e3236e96f089d562810dfc7be6a054a7d875f604ec34103",
+       "7d140000652f9b4518c44faa9092cc9ed66b7188225e9f1434694135197b55ad",
+       "87b423366cfbc4627c283c99a9e3f1e34b7d88ba554a4a02bc2d9c611bb73cbb",
+       "8fb262915d6cda92668913d7b1e3e7f42e035bdb87253b73dd149fdfef6d6593",
+       "ea834ee775d382b18239ef4cff0deb97a464349c86848f5cc7cb0072c43bbc04",
+       "e3c49b5f87d17680a5a9182eb9694f76aaa6faa3ae183c0bb6d01320f0aaa7b3",
+       "4dc71b8727847cf7fd04a97583648549ceb08926d9919a0f8b0ce698f12db35e"
+      ],
+      "latencySeed": 290908691,
+      "qualityCi95": 0.06450760241421759,
+      "latencyP95Ci95": [
+       5586,
+       6461
+      ],
+      "suiteContentHash": "62f675161d41237f718d223c325d072b8f164d4b4baa66363117f92875b888f9"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  },
+  {
+   "frontier": {
+    "id": "fr-f5075535-c685-4cd6-b717-7d00b2ede7f0",
+    "cluster_id": "summarization",
+    "version": 1,
+    "parent_id": null,
+    "trigger": "recompute",
+    "points": [
+     {
+      "quality": 0.8571428571428573,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-a7f63634"
+       ],
+       "suiteId": "summarization",
+       "latencyN": 14,
+       "cacheKeys": [
+        "72cfea9ad2321ebb116d4d39405b9e71845d8b6fe17f3e3ac0eefe937b847e01",
+        "d15d041da9cac591158a5751c743f41db6e6983bc86851c433fab648df8dee54",
+        "56820eea6da66abff027dd030f91564f8cb778dd5afcd3fbaa4b055ca22d550f",
+        "12dc5bebcd7b1c7dbe5fb760d5c8da14b5fe52f4e76261e80a2c5e79cc2e6c44",
+        "fcca55dce2567a979a82cb526639f8f661cad0aebe1983ac0ea7974f07406bbc",
+        "bfe6325862a3f5e3721e1b7733220bbfe0c12248bb2941bf4efbce545b0ab93d",
+        "9e46a741424e86e25cd0e3c19ef1454a50f5d5b48e09050e1aa52e4f418cb0ff",
+        "6fe56cde1fb44a39f5002308cd918a34521d52042543c08a0ea87db26c70667d",
+        "63f5280c1865b4a020694f3c09697966d99a3a6dab3efb09dfe56d0267bc91ac",
+        "01ba9e2322d823a869587505bba9e3e978354ce6b1f14be6e733a1ec60e02535",
+        "f16e4d7419c107ea7925e3ab787633abfddccd26be86307ea861a33762dbb6fd",
+        "2168d34d75b1fc4126e4e10e0a9556ef0ca6259034e0b6b70e9d7d956cdb16e4",
+        "e47fd510031f639d36e4366652eafb3ed4a406064adfe1d8b5680b06f4ebfad6",
+        "ba502a186a5ddc80d1c86bad750366b848858c08c32f99371f7fe92bb29429da"
+       ],
+       "latencySeed": 1313278975,
+       "qualityCi95": 0.05706676252088763,
+       "latencyP95Ci95": [
+        5979,
+        17519
+       ],
+       "suiteContentHash": "b6ca62f40446a167da5a0e0b683d688e268aa06451ced48b01f6a7b769463d17"
+      },
+      "clusterId": "summarization",
+      "costPer1K": 2.2681428571428572,
+      "latencyP95": 17519,
+      "providerMode": "live",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-deepseek"
+      }
+     },
+     {
+      "quality": 0.8142857142857143,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-a7f63634"
+       ],
+       "suiteId": "summarization",
+       "latencyN": 14,
+       "cacheKeys": [
+        "b72ed253573bb4abc4938d70946c26bc16bad8ae62dbc82d6c4bd0d7476b548e",
+        "d03853b5238ba956d0f892100ffc976798ad38d054ccb6854490b4c73c9fddb1",
+        "95db701e9f5ca37a01e3b9d171c5435dcc528dea1b4b7a8a1961904d9b763b1f",
+        "e22cde1a2d57197cee1a034fb06e9085ee9332dc11a6e5550e77467889dcdfc9",
+        "555a4ed6d5da1631444fea522ad2bc58b3b4086efb54c2a05e881a0ae68d11e3",
+        "9acd129630a0e70c2cd0d8fa226680166808799f2fe8fba3c1d31bdb7ce9a54f",
+        "bdd3b47e9056f5166a5d52822299fb131e0556dd6c4a4aa5dab73e1014fb8516",
+        "b8e1c7e6f181a2babc04af70fdb06ed4d4e3b4b2e9a9d2184117d4e41d32b429",
+        "55c2234c36f5e862cd141da1ba5887eab83a23aff3314da418f3f20204f0f762",
+        "ea77ea4cd0b8dae9273a5a7413dc559dc1195cfdca07d243d96572816411e4f4",
+        "afe4344fba21ba3d777bd70c0f2323119cb0862fefb1f13ec48c9a63ef12ec0e",
+        "6f876188630451655125cfa0b8e721dbf39a23d0871b6bc9159f91dc45573c9c",
+        "7b65eaae638ff3035f14eba01857f0d12691f1a62db319ded17e172c752bfdcc",
+        "9d98bd35d1756129c3a2dc240244253bc02171e9a14aaf788bd78fa845a40a81"
+       ],
+       "latencySeed": 743773960,
+       "qualityCi95": 0.07919595949289332,
+       "latencyP95Ci95": [
+        13960,
+        17198
+       ],
+       "suiteContentHash": "b6ca62f40446a167da5a0e0b683d688e268aa06451ced48b01f6a7b769463d17"
+      },
+      "clusterId": "summarization",
+      "costPer1K": 2.5672857142857137,
+      "latencyP95": 17198,
+      "providerMode": "live",
+      "strategyHash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+      "strategyConfig": {
+       "type": "cascade",
+       "stages": [
+        {
+         "model": "or-deepseek",
+         "escalateIf": {
+          "confidenceBelow": 0.72
+         }
+        },
+        {
+         "model": "or-opus"
+        }
+       ],
+       "confidenceMethod": "self-report-calibrated"
+      }
+     },
+     {
+      "quality": 0.9214285714285716,
+      "evidence": {
+       "n": 14,
+       "runIds": [
+        "run-a7f63634"
+       ],
+       "suiteId": "summarization",
+       "latencyN": 14,
+       "cacheKeys": [
+        "f3f7ec5e99ba9118ad3b8d325dfd507a70473b484b68044748980e4e91df3dba",
+        "faf15a5679c92a5ea09d13a0ff50c298d9214d1fb6baf329b4451e6b26dcb6f0",
+        "907dc2ae23ee2b7842d32a08ff94497fe2f4d189bcf791e61564fedd40f6a967",
+        "1e45d7b2e6e4f220acbf52bf0c79a78021b7fc454a2324820118709fd74fa15e",
+        "68fb256b55f72108c0081da42ca5d129e6a8b311193170a92ba1dfaabf557029",
+        "f5c14f806afe5f9131abb383261cb38ed9fbd74c57be3421ac0f938461ec662e",
+        "b429d6ba1ef6a8761e3cdd224cd272fb8a167b1eff0d35b7fcfc57fb04fd298d",
+        "96564872e8921bc4217edf98e48ad7bba42ec4d44998faa3a76d44859cdcc290",
+        "dcbe04545625bba8986e0b2b147aeeeceb57333c2691315c9be48e2c9e35ecc1",
+        "c002107ad735a956e4e4bcaac01f57be20d1df2e8f3674a5c1d768e098eba24d",
+        "594880568dbb49697e9331dda50e9d96cfd3ff84baba30b51403ff6a3f427539",
+        "d953f3a6a138790e009b17408910804045ccffa85a033ebff858e9c9a31852f0",
+        "cd9dd7f0034399f218667fbb57f5d98cca480966e42154e94a69b7de9b86b067",
+        "ee17ae549923391b24082945ddeff4e635fbae3fa2063b44a6e947e55689a830"
+       ],
+       "latencySeed": 1483014363,
+       "qualityCi95": 0.0510715937905573,
+       "latencyP95Ci95": [
+        3750,
+        7471
+       ],
+       "suiteContentHash": "b6ca62f40446a167da5a0e0b683d688e268aa06451ced48b01f6a7b769463d17"
+      },
+      "clusterId": "summarization",
+      "costPer1K": 5.8680714285714295,
+      "latencyP95": 7471,
+      "providerMode": "live",
+      "strategyHash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+      "strategyConfig": {
+       "type": "single",
+       "model": "or-opus"
+      }
+     }
+    ],
+    "org_id": null,
+    "prices_version": "2026-08-04-or2",
+    "created_at": "2026-08-13T02:22:06.086Z"
+   },
+   "points": [
+    {
+     "cluster_id": "summarization",
+     "strategy_hash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-deepseek"
+     },
+     "quality": 0.8571428571428573,
+     "cost_per_1k": 2.2681428571428572,
+     "latency_p95": 17519,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-a7f63634"
+      ],
+      "suiteId": "summarization",
+      "latencyN": 14,
+      "cacheKeys": [
+       "72cfea9ad2321ebb116d4d39405b9e71845d8b6fe17f3e3ac0eefe937b847e01",
+       "d15d041da9cac591158a5751c743f41db6e6983bc86851c433fab648df8dee54",
+       "56820eea6da66abff027dd030f91564f8cb778dd5afcd3fbaa4b055ca22d550f",
+       "12dc5bebcd7b1c7dbe5fb760d5c8da14b5fe52f4e76261e80a2c5e79cc2e6c44",
+       "fcca55dce2567a979a82cb526639f8f661cad0aebe1983ac0ea7974f07406bbc",
+       "bfe6325862a3f5e3721e1b7733220bbfe0c12248bb2941bf4efbce545b0ab93d",
+       "9e46a741424e86e25cd0e3c19ef1454a50f5d5b48e09050e1aa52e4f418cb0ff",
+       "6fe56cde1fb44a39f5002308cd918a34521d52042543c08a0ea87db26c70667d",
+       "63f5280c1865b4a020694f3c09697966d99a3a6dab3efb09dfe56d0267bc91ac",
+       "01ba9e2322d823a869587505bba9e3e978354ce6b1f14be6e733a1ec60e02535",
+       "f16e4d7419c107ea7925e3ab787633abfddccd26be86307ea861a33762dbb6fd",
+       "2168d34d75b1fc4126e4e10e0a9556ef0ca6259034e0b6b70e9d7d956cdb16e4",
+       "e47fd510031f639d36e4366652eafb3ed4a406064adfe1d8b5680b06f4ebfad6",
+       "ba502a186a5ddc80d1c86bad750366b848858c08c32f99371f7fe92bb29429da"
+      ],
+      "latencySeed": 1313278975,
+      "qualityCi95": 0.05706676252088763,
+      "latencyP95Ci95": [
+       5979,
+       17519
+      ],
+      "suiteContentHash": "b6ca62f40446a167da5a0e0b683d688e268aa06451ced48b01f6a7b769463d17"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "summarization",
+     "strategy_hash": "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e",
+     "strategy_config": {
+      "type": "cascade",
+      "stages": [
+       {
+        "model": "or-deepseek",
+        "escalateIf": {
+         "confidenceBelow": 0.72
+        }
+       },
+       {
+        "model": "or-opus"
+       }
+      ],
+      "confidenceMethod": "self-report-calibrated"
+     },
+     "quality": 0.8142857142857143,
+     "cost_per_1k": 2.5672857142857137,
+     "latency_p95": 17198,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-a7f63634"
+      ],
+      "suiteId": "summarization",
+      "latencyN": 14,
+      "cacheKeys": [
+       "b72ed253573bb4abc4938d70946c26bc16bad8ae62dbc82d6c4bd0d7476b548e",
+       "d03853b5238ba956d0f892100ffc976798ad38d054ccb6854490b4c73c9fddb1",
+       "95db701e9f5ca37a01e3b9d171c5435dcc528dea1b4b7a8a1961904d9b763b1f",
+       "e22cde1a2d57197cee1a034fb06e9085ee9332dc11a6e5550e77467889dcdfc9",
+       "555a4ed6d5da1631444fea522ad2bc58b3b4086efb54c2a05e881a0ae68d11e3",
+       "9acd129630a0e70c2cd0d8fa226680166808799f2fe8fba3c1d31bdb7ce9a54f",
+       "bdd3b47e9056f5166a5d52822299fb131e0556dd6c4a4aa5dab73e1014fb8516",
+       "b8e1c7e6f181a2babc04af70fdb06ed4d4e3b4b2e9a9d2184117d4e41d32b429",
+       "55c2234c36f5e862cd141da1ba5887eab83a23aff3314da418f3f20204f0f762",
+       "ea77ea4cd0b8dae9273a5a7413dc559dc1195cfdca07d243d96572816411e4f4",
+       "afe4344fba21ba3d777bd70c0f2323119cb0862fefb1f13ec48c9a63ef12ec0e",
+       "6f876188630451655125cfa0b8e721dbf39a23d0871b6bc9159f91dc45573c9c",
+       "7b65eaae638ff3035f14eba01857f0d12691f1a62db319ded17e172c752bfdcc",
+       "9d98bd35d1756129c3a2dc240244253bc02171e9a14aaf788bd78fa845a40a81"
+      ],
+      "latencySeed": 743773960,
+      "qualityCi95": 0.07919595949289332,
+      "latencyP95Ci95": [
+       13960,
+       17198
+      ],
+      "suiteContentHash": "b6ca62f40446a167da5a0e0b683d688e268aa06451ced48b01f6a7b769463d17"
+     },
+     "provider_mode": "live"
+    },
+    {
+     "cluster_id": "summarization",
+     "strategy_hash": "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+     "strategy_config": {
+      "type": "single",
+      "model": "or-opus"
+     },
+     "quality": 0.9214285714285716,
+     "cost_per_1k": 5.8680714285714295,
+     "latency_p95": 7471,
+     "evidence": {
+      "n": 14,
+      "runIds": [
+       "run-a7f63634"
+      ],
+      "suiteId": "summarization",
+      "latencyN": 14,
+      "cacheKeys": [
+       "f3f7ec5e99ba9118ad3b8d325dfd507a70473b484b68044748980e4e91df3dba",
+       "faf15a5679c92a5ea09d13a0ff50c298d9214d1fb6baf329b4451e6b26dcb6f0",
+       "907dc2ae23ee2b7842d32a08ff94497fe2f4d189bcf791e61564fedd40f6a967",
+       "1e45d7b2e6e4f220acbf52bf0c79a78021b7fc454a2324820118709fd74fa15e",
+       "68fb256b55f72108c0081da42ca5d129e6a8b311193170a92ba1dfaabf557029",
+       "f5c14f806afe5f9131abb383261cb38ed9fbd74c57be3421ac0f938461ec662e",
+       "b429d6ba1ef6a8761e3cdd224cd272fb8a167b1eff0d35b7fcfc57fb04fd298d",
+       "96564872e8921bc4217edf98e48ad7bba42ec4d44998faa3a76d44859cdcc290",
+       "dcbe04545625bba8986e0b2b147aeeeceb57333c2691315c9be48e2c9e35ecc1",
+       "c002107ad735a956e4e4bcaac01f57be20d1df2e8f3674a5c1d768e098eba24d",
+       "594880568dbb49697e9331dda50e9d96cfd3ff84baba30b51403ff6a3f427539",
+       "d953f3a6a138790e009b17408910804045ccffa85a033ebff858e9c9a31852f0",
+       "cd9dd7f0034399f218667fbb57f5d98cca480966e42154e94a69b7de9b86b067",
+       "ee17ae549923391b24082945ddeff4e635fbae3fa2063b44a6e947e55689a830"
+      ],
+      "latencySeed": 1483014363,
+      "qualityCi95": 0.0510715937905573,
+      "latencyP95Ci95": [
+       3750,
+       7471
+      ],
+      "suiteContentHash": "b6ca62f40446a167da5a0e0b683d688e268aa06451ced48b01f6a7b769463d17"
+     },
+     "provider_mode": "live"
+    }
+   ]
+  }
+ ]
+}

@@ -21,7 +21,14 @@ import {
   type EmbedderMode,
   type ResolvedEmbedder,
 } from '@potion/cluster';
-import { createDb, listServableProviderKeys, migrate, type DbHandle } from '@potion/db';
+import {
+  createDb,
+  importPlatformBaseline,
+  listServableProviderKeys,
+  loadPlatformBaseline,
+  migrate,
+  type DbHandle,
+} from '@potion/db';
 import {
   createMockProvider,
   createProviders,
@@ -194,6 +201,19 @@ export interface ContextOptions {
   assignThreshold?: number;
   /** Run the demo seed when the tables are empty (default true). */
   seed?: boolean;
+  /**
+   * Import the live PLATFORM FRONTIER BASELINE for clusters that have none.
+   *
+   * DEFAULT OFF, opted into by `POTION_PLATFORM_BASELINE=1` (the production
+   * compose sets it). This is deliberately NOT automatic on every boot: the
+   * baseline is real evidence that changes what the database contains — the
+   * demo seed's live-never-clobbered ratchet starts skipping, provenance
+   * outcomes change, and frontier version chains shift. A data write at boot
+   * that quietly rewrites the world is the F12 lesson, so it is a
+   * provisioning decision a deployment makes once, not a side effect of
+   * starting a process.
+   */
+  platformBaseline?: boolean;
   log?: (msg: string) => void;
   // ---- BYOK custody + serving (M2 Wave 2, ROADMAP #15/#16) ----
   /** Master-key provider override (tests). Default: POTION_MASTER_KEY env,
@@ -315,6 +335,37 @@ export async function buildContext(opts: ContextOptions = {}): Promise<PotionCon
   const db = opts.db ?? (await createDb(opts.dbUrl));
   await migrate(db.db);
   log(`db ready (${db.driver})`);
+
+  // ---- platform frontier baseline (measured routing on day zero) ----
+  // A freshly migrated database has NO live-provenance platform frontier, so
+  // under a live server every request from every org falls through to the
+  // default strategy (fallback=1) — the auto-switch is absent, not degraded.
+  // This imports the Step 5 platform live sweep's measured evidence for any
+  // cluster that has no platform frontier yet. It never clobbers, never
+  // downgrades, and is idempotent, so it is safe on every boot.
+  try {
+    const enabled = opts.platformBaseline ?? process.env.POTION_PLATFORM_BASELINE === '1';
+    const baseline = enabled ? loadPlatformBaseline() : null;
+    const report = baseline
+      ? await importPlatformBaseline(db.db, baseline)
+      : { imported: [], skippedExisting: [], refusedNotLive: [], pointsImported: 0 };
+    if (report.imported.length > 0) {
+      log(
+        `platform baseline: measured routing for ${report.imported.length} cluster(s) ` +
+          `(${report.pointsImported} live points) — ${report.imported.join(', ')}`,
+      );
+    }
+    if (report.skippedExisting.length > 0) {
+      log(`platform baseline: ${report.skippedExisting.length} cluster(s) already had a frontier, left untouched`);
+    }
+    if (report.refusedNotLive.length > 0) {
+      log(`platform baseline: REFUSED ${report.refusedNotLive.join(', ')} — not live-provenance`);
+    }
+  } catch (e) {
+    // Never a boot blocker: a deployment without the baseline routes on the
+    // fallback, which is exactly today's behaviour. Loud, not fatal.
+    log(`platform baseline: import skipped (${e instanceof Error ? e.message : String(e)})`);
+  }
 
   const { providers, mode } = opts.providers
     ? { providers: opts.providers, mode: 'mock' as const }

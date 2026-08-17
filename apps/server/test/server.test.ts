@@ -156,13 +156,37 @@ describe('auth + validation', () => {
   });
 });
 
+/**
+ * Compare an x-frontier-trace ignoring the frontier VERSION.
+ *
+ * These tests are about policy → strategy resolution, not about version
+ * numbering: which strategy won, under which policy, whether it fell back,
+ * and what provenance backed it. The version is incidental — a fresh database
+ * now imports the live PLATFORM BASELINE before a test saves its own frontier,
+ * so a test-authored frontier is v2 rather than v1. Pinning the literal
+ * version coupled these assertions to unrelated state; the version is still
+ * asserted, as "a real frontier was used", which is the part that carries
+ * meaning.
+ */
+function expectTrace(actual: string | undefined, expected: string): void {
+  const strip = (t: string): string => t.replace(/;frontier=v\d+/, '');
+  expect(strip(actual ?? '')).toBe(strip(expected));
+  const version = Number(/frontier=v(\d+)/.exec(actual ?? '')?.[1] ?? '-1');
+  const expectedVersion = Number(/frontier=v(\d+)/.exec(expected)?.[1] ?? '-1');
+  // v0 means "no frontier at all" — when the expectation says v0 it is
+  // load-bearing, so it still must match exactly.
+  if (expectedVersion === 0) expect(version).toBe(0);
+  else expect(version).toBeGreaterThan(0);
+}
+
 // ---------- policy resolution ----------
 
 describe('policy → strategy resolution (known frontier)', () => {
   it('max_quality (ceiling $1.5/1K) picks the mid single', async () => {
     const res = await chat(KEY_A, {});
     expect(res.statusCode).toBe(200);
-    expect(res.headers['x-frontier-trace']).toBe(
+    expectTrace(
+      res.headers['x-frontier-trace'] as string | undefined,
       `cluster=code-gen;strategy=${H_MID};frontier=v1;policy=max_quality;fallback=0;provenance=mock`,
     );
     expect(res.json().choices[0].message.content).toContain('[mock:mock-mid]');
@@ -173,7 +197,8 @@ describe('policy → strategy resolution (known frontier)', () => {
   it('min_cost (floor 0.8) picks the strong single (cheapest ≥ floor)', async () => {
     const res = await chat(KEY_B, {});
     expect(res.statusCode).toBe(200);
-    expect(res.headers['x-frontier-trace']).toBe(
+    expectTrace(
+      res.headers['x-frontier-trace'] as string | undefined,
       `cluster=code-gen;strategy=${H_STRONG};frontier=v1;policy=min_cost;fallback=0;provenance=mock`,
     );
     expect(res.json().choices[0].message.content).toContain('[mock:mock-frontier]');
@@ -182,7 +207,8 @@ describe('policy → strategy resolution (known frontier)', () => {
   it('latency_bound (500ms) picks the cheap single', async () => {
     const res = await chat(KEY_C, {});
     expect(res.statusCode).toBe(200);
-    expect(res.headers['x-frontier-trace']).toBe(
+    expectTrace(
+      res.headers['x-frontier-trace'] as string | undefined,
       `cluster=code-gen;strategy=${H_CHEAP};frontier=v1;policy=latency_bound;fallback=0;provenance=mock;latency_src=harness`,
     );
   });
@@ -190,7 +216,8 @@ describe('policy → strategy resolution (known frontier)', () => {
   it('infeasible policy falls back to the highest-quality point (fallback=1)', async () => {
     const res = await chat(KEY_D, {});
     expect(res.statusCode).toBe(200);
-    expect(res.headers['x-frontier-trace']).toBe(
+    expectTrace(
+      res.headers['x-frontier-trace'] as string | undefined,
       `cluster=code-gen;strategy=${H_BON};frontier=v1;policy=latency_bound;fallback=1;provenance=mock;latency_src=harness`,
     );
   });
@@ -226,7 +253,8 @@ describe('streaming contract', () => {
     const res = await chat(KEY_C, { stream: true });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
-    expect(res.headers['x-frontier-trace']).toBe(
+    expectTrace(
+      res.headers['x-frontier-trace'] as string | undefined,
       `cluster=code-gen;strategy=${H_CHEAP};frontier=v1;policy=latency_bound;fallback=0;provenance=mock;latency_src=harness`,
     );
     const frames = res.body.split('\n\n').filter((f) => f.trim() !== '');
@@ -270,7 +298,10 @@ describe('request logging', () => {
     expect(row.clusterId).toBe('code-gen');
     expect(row.strategyHash).toBe(strategyHash(CFG_MID));
     expect(row.policyType).toBe('max_quality');
-    expect(row.frontierVersion).toBe(1);
+    // The version is incidental: a fresh db imports the live platform
+    // baseline first, so this test's own frontier sits above it. What must
+    // hold is that a REAL frontier served the request (v0 means none).
+    expect(row.frontierVersion).toBeGreaterThan(0);
     expect(row.model).toBe('potion-auto');
     expect(row.status).toBe('ok');
     expect(row.usage?.inputTokens).toBeGreaterThan(0);
@@ -327,7 +358,8 @@ describe('policy endpoints', () => {
 
     // now resolves the best-of-n composite (q 0.95, $25 ≤ $30)
     const chatRes = await chat(KEY_C, {});
-    expect(chatRes.headers['x-frontier-trace']).toBe(
+    expectTrace(
+      chatRes.headers['x-frontier-trace'] as string | undefined,
       `cluster=code-gen;strategy=${H_BON};frontier=v1;policy=max_quality;fallback=0;provenance=mock`,
     );
   });
@@ -380,7 +412,7 @@ describe('dashboard API', () => {
     const res = await app.inject({ method: 'GET', url: '/api/frontiers/code-gen' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.frontier.version).toBe(1);
+    expect(body.frontier.version).toBeGreaterThan(0); // above the platform baseline
     expect(body.frontier.points).toHaveLength(4);
     for (const p of body.frontier.points) {
       expect(p.dominated).toBe(false);
