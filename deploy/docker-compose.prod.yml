@@ -86,6 +86,14 @@ services:
       # the auto-switch is absent rather than degraded. Idempotent, and it
       # never clobbers a frontier this deployment already has.
       POTION_PLATFORM_BASELINE: ${POTION_PLATFORM_BASELINE:-1}
+      # SERVING-ROADMAP S4 — spending safety on OUR key. Both apply only when
+      # provider mode is live AND the org has no BYOK key of its own.
+      #   ORG cap defaults ON ($10/org/month): an org with no budget row of
+      #     its own was previously unbounded on the platform key.
+      #   DAILY cap defaults OFF: a global ceiling stops ALL serving at once,
+      #     so it is a number the operator chooses deliberately. Set it.
+      POTION_PLATFORM_ORG_CAP_USD: ${POTION_PLATFORM_ORG_CAP_USD:-10}
+      POTION_PLATFORM_DAILY_CAP_USD: ${POTION_PLATFORM_DAILY_CAP_USD:-}
       POTION_METRICS: ${POTION_METRICS:-1}
       # G0.5: the default clustering threshold is MOCK-tuned (0.62). With a
       # real embedder it must be 0.2 — the walkthrough prints this warning at

@@ -14,7 +14,7 @@
 // customer-facing rollup behind /api/usage/current — status='ok' rows,
 // usage->>'costUsd', UTC days), so the cap compares against exactly what
 // the usage page shows.
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   budgetEvents,
@@ -191,4 +191,39 @@ export async function listBudgetEvents(
     .where(eq(budgetEvents.orgId, orgId))
     .orderBy(desc(budgetEvents.createdAt))
     .limit(limit);
+}
+
+/**
+ * Total metered spend across EVERY org for one UTC day (SERVING-ROADMAP S4).
+ *
+ * The platform kill switch's denominator. Deliberately NOT filtered to
+ * platform-paid rows: nothing records who paid for a request yet — that is
+ * S3's `paid_by`, and it does not exist — so this is an UPPER BOUND that
+ * over-counts by whatever BYOK customers spent on their own keys.
+ *
+ * Over-counting is the correct direction for a kill switch. It trips early
+ * rather than late, and "early" costs an operator a raised ceiling while
+ * "late" costs real money. When S3 lands, this narrows to platform-paid rows
+ * and the switch stops being conservative; until then the honest reading of
+ * this number is "total spend we can see", not "our spend".
+ *
+ * Reads request_logs directly rather than usage_daily: the rollup is a batch
+ * job and a kill switch that consults yesterday's aggregate is not a kill
+ * switch. status='ok' only — refusals and rate-limited rows cost nothing.
+ */
+export async function platformSpendUsdForDay(
+  db: PotionDb,
+  now: Date = new Date(),
+): Promise<number> {
+  const day = now.toISOString().slice(0, 10);
+  const res = await db.execute(sql`
+    SELECT coalesce(sum((usage ->> 'costUsd')::double precision), 0) AS cost_usd
+      FROM request_logs
+     WHERE status = 'ok'
+       AND ts >= ${`${day}T00:00:00.000Z`}
+       AND ts <  ${`${day}T23:59:59.999Z`}
+  `);
+  const row = (res.rows as Array<Record<string, unknown>>)[0];
+  const n = Number(row?.cost_usd ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }

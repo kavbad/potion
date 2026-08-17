@@ -53,6 +53,39 @@ export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
   maxBodyKb: 1024,
 };
 
+/**
+ * ORG-LEVEL CEILING (SERVING-ROADMAP S4).
+ *
+ * The per-key bucket above is the only limit that existed, and an org may
+ * mint as many keys as it likes — so N keys bought N × the limit, and the
+ * "limit" was really a per-key formality. Harmless while the customer paid
+ * for whatever got through; not harmless on our own key.
+ *
+ * The multiplier, and why it is not 1: a real org legitimately runs several
+ * services on separate keys, and collapsing them all into one key's budget
+ * would throttle honest use. 10× leaves any plausible key count unaffected
+ * while capping the pathological case (mint 500 keys, get 500× the rate) at
+ * a fixed, knowable blast radius.
+ *
+ * This bounds REQUEST RATE, not spend — the budget hard stop is what actually
+ * protects the money, and this is the second wall behind it. Saying so
+ * matters: a rate limit read as a spend control is how an org with a 10 rps
+ * allowance quietly runs up a bill on expensive completions.
+ */
+export const ORG_LIMIT_MULTIPLIER = 10;
+
+/** Prefix that keeps org buckets from ever colliding with key-id buckets. */
+export const ORG_BUCKET_PREFIX = 'org:';
+
+export function orgRateLimitConfig(cfg: RateLimitConfig): RateLimitConfig {
+  return {
+    rps: cfg.rps * ORG_LIMIT_MULTIPLIER,
+    dailyCap: cfg.dailyCap * ORG_LIMIT_MULTIPLIER,
+    // Body size is a per-request property; multiplying it would be meaningless.
+    maxBodyKb: cfg.maxBodyKb,
+  };
+}
+
 /** Resolve a key row's effective limits (NULL columns → defaults). */
 export function rateLimitConfigForKey(key: ApiKeyRow): RateLimitConfig {
   return {
@@ -247,6 +280,26 @@ export function registerRateLimiting(
       return reply
         .code(429)
         .header('retry-after', String(verdict.retryAfterSec))
+        .send(openAiError(message, 'rate_limit_exceeded', 'rate_limit_exceeded'));
+    }
+
+    // S4: the ORG ceiling, consumed only after the key bucket allowed the
+    // request, so a key already over its own limit does not also burn org
+    // budget. Same store, same math — the bucket key is the org, prefixed so
+    // it can never collide with an api-key id.
+    const orgCfg = orgRateLimitConfig(cfg);
+    const orgVerdict = store.consume(`${ORG_BUCKET_PREFIX}${key.orgId}`, orgCfg);
+    if (!orgVerdict.allowed) {
+      await logRejection({ orgId: key.orgId, apiKeyId: key.id, status: 'rate_limited' });
+      const message =
+        orgVerdict.reason === 'daily_cap'
+          ? `daily request cap of ${orgCfg.dailyCap} reached for this ORGANIZATION (across all ` +
+            `of its api keys) — retry after UTC midnight`
+          : `rate limit of ${orgCfg.rps} requests/sec reached for this ORGANIZATION (across all ` +
+            `of its api keys)`;
+      return reply
+        .code(429)
+        .header('retry-after', String(orgVerdict.retryAfterSec))
         .send(openAiError(message, 'rate_limit_exceeded', 'rate_limit_exceeded'));
     }
   });
