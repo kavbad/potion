@@ -25,7 +25,15 @@ interface OpenAiChatResponse {
     message?: { content?: string | null; tool_calls?: ToolCall[] };
     logprobs?: { content?: Array<{ logprob?: number }> | null } | null;
   }>;
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    /** OpenRouter only, and only when the request asks for it: the ACTUAL
+     *  billed cost in USD for this call. */
+    cost?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
 }
 
 interface OpenAiEmbedResponse {
@@ -58,6 +66,10 @@ export async function openAiCompatibleComplete(
   // anthropic/google transports: the preflight cost projection's per-call
   // output bound is only real if every live path enforces it.
   body[tokenParam] = sampling.maxTokens;
+  // Ask OpenRouter to return what it actually billed. OpenRouter ONLY — the
+  // OpenAI-native endpoint shares this function and rejects unknown top-level
+  // params, so sending it there would 400 every call.
+  if (provider === 'openrouter') body.usage = { include: true };
   if (sampling.logprobs) body.logprobs = true;
   // M3 #25: tool-calling passthrough — forwarded UNMODIFIED.
   if (req.params?.tools !== undefined) body.tools = req.params.tools;
@@ -92,6 +104,16 @@ export async function openAiCompatibleComplete(
     usage: {
       inputTokens: json.usage?.prompt_tokens ?? 0,
       outputTokens: json.usage?.completion_tokens ?? 0,
+      // Only set when the provider actually reported it — absent must stay
+      // absent so costUsd() falls back to the modelled price rather than
+      // billing a fabricated zero.
+      ...(typeof json.usage?.cost === 'number' ? { providerCostUsd: json.usage.cost } : {}),
+      ...(typeof json.usage?.prompt_tokens_details?.cached_tokens === 'number'
+        ? { cachedInputTokens: json.usage.prompt_tokens_details.cached_tokens }
+        : {}),
+      ...(typeof json.usage?.completion_tokens_details?.reasoning_tokens === 'number'
+        ? { reasoningTokens: json.usage.completion_tokens_details.reasoning_tokens }
+        : {}),
     },
     latencyMs: Date.now() - started,
     // exactOptionalPropertyTypes: only present when the provider returned logprobs.

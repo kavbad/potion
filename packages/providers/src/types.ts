@@ -27,7 +27,27 @@ export interface CompleteRequest {
 
 export interface CompleteResponse {
   text: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    /**
+     * The provider's OWN billed cost for this call, in USD, when the
+     * transport reports one (OpenRouter does; Anthropic/Google native do
+     * not). Absent means "the provider did not tell us" — never zero, which
+     * would read as a free call. core's costUsd() prefers this over the
+     * modelled price; see the reasoning there.
+     */
+     providerCostUsd?: number;
+    /**
+     * Diagnostics that EXPLAIN why a modelled cost and a billed cost differ:
+     * cached input is discounted, and reasoning tokens can be billed while
+     * sitting outside the completion count entirely (measured: gpt-5-mini
+     * returned completion_tokens 0 with reasoning_tokens 107). Recorded so
+     * the discrepancy is inspectable rather than mysterious.
+     */
+    cachedInputTokens?: number;
+    reasoningTokens?: number;
+  };
   latencyMs: number;
   logprobConfidence?: number; // mean token logprob → exp, when provider exposes it
   modelVersion: string; // resolved concrete version
