@@ -198,6 +198,19 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
       'platform-vs-BYOK provider LISTS; no model is resolved and nothing is served from here.',
   },
   {
+    file: 'apps/server/src/routes/plan.ts',
+    symbol: 'POST /api/plan (guardFrontierProvenance + selectPoint)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/plan.test.ts',
+    notes:
+      'SERVING-ROADMAP S2, READ-ONLY: recommends from the SAME guarded frontier the serve path would use, so ' +
+      'under live providers a mock-provenance frontier reports measured=false and every option comes back ' +
+      'infeasible-with-a-reason rather than recommending a strategy that would immediately fall back. ' +
+      'Selection is core selectPoint — the serving selector, not a second implementation that could drift ' +
+      'from it. Nothing is executed here: no provider is called and no model is resolved to a transport.',
+  },
+  {
     file: 'apps/server/src/routes/playground.ts',
     symbol: 'resolvePlaygroundPoint',
     kind: 'default-strategy',

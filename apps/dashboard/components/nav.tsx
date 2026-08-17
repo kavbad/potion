@@ -10,14 +10,18 @@ import { usePathname } from 'next/navigation';
 // of which work with no keys of your own; BYOK moved to settings, where an
 // option belongs.
 const ITEMS = [
-  { href: '/', label: 'Connect & auto-route', step: '1' },
-  { href: '/policy', label: 'Set a policy', step: '2' },
-  { href: '/frontiers', label: 'Frontiers', step: '3' },
-  { href: '/workload', label: 'Your workload', step: '4' },
-  { href: '/usage', label: 'Usage & billing', step: '5' },
-  { href: '/reports', label: 'Savings', step: '6' },
-  { href: '/recipes', label: 'Recipe library', step: '7' },
-  { href: '/traces', label: 'Traces', step: '8' },
+  // S2: the from-scratch door comes FIRST. Someone starting a new thing has
+  // no keys, no traffic and no policy — every other entry point assumes at
+  // least one of those.
+  { href: '/build', label: 'What are you building?', step: '1' },
+  { href: '/', label: 'Connect & auto-route', step: '2' },
+  { href: '/policy', label: 'Set a policy', step: '3' },
+  { href: '/frontiers', label: 'Frontiers', step: '4' },
+  { href: '/workload', label: 'Your workload', step: '5' },
+  { href: '/usage', label: 'Usage & billing', step: '6' },
+  { href: '/reports', label: 'Savings', step: '7' },
+  { href: '/recipes', label: 'Recipe library', step: '8' },
+  { href: '/traces', label: 'Traces', step: '9' },
   { href: '/playground', label: 'Playground', step: '›' },
   { href: '/rubrics', label: 'Rubrics', step: '›' },
   { href: '/leaderboard', label: 'Leaderboard', step: '›' },

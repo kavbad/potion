@@ -12,6 +12,23 @@ export interface Assignment {
 export interface ClusterAssigner {
   assign(text: string): Promise<Assignment>;
   assignBatch(texts: string[]): Promise<Assignment[]>;
+  /**
+   * EVERY cluster scored, best first — the same cosines `assign` picks its
+   * winner from, without discarding the losers.
+   *
+   * `assign` returns one id and one number, which is all serving needs and
+   * strictly less than a person needs. When we tell someone "this looks like
+   * code generation", the useful question is immediately "and what else did
+   * it nearly match?" — a confident-looking single answer hides both a near
+   * tie and a weak best. Returning the ranking lets a surface show the
+   * runner-up and the margin, so a wrong classification is VISIBLE rather
+   * than silently acted on.
+   *
+   * Deliberately NOT thresholded: this is the raw ranking, and the caller
+   * decides what to do with a weak best. `assign`'s 'general' fallback is a
+   * routing decision, not a fact about the text, so it does not belong here.
+   */
+  rank(text: string): Promise<Assignment[]>;
 }
 
 export interface Embedder {
@@ -102,6 +119,20 @@ export function createAssigner(
       const [embedding] = await embedder.embed([text]);
       if (!embedding) throw new Error('embedder returned no embedding');
       return toAssignment(embedding);
+    },
+    async rank(text: string): Promise<Assignment[]> {
+      const [embedding] = await embedder.embed([text]);
+      if (!embedding) throw new Error('embedder returned no embedding');
+      assertCanonicalDims(embedding, 'createAssigner: request embedding');
+      const scored: Assignment[] = [];
+      for (const [id, centroid] of centroids) {
+        scored.push({ clusterId: id, confidence: cosine(embedding, centroid) });
+      }
+      // Ties break on cluster id so the ranking is TOTAL and reproducible —
+      // two centroids at an identical cosine must not reorder between calls,
+      // or "your runner-up" becomes a coin flip the user cannot see.
+      scored.sort((a, b) => b.confidence - a.confidence || a.clusterId.localeCompare(b.clusterId));
+      return scored;
     },
     async assignBatch(texts: string[]): Promise<Assignment[]> {
       if (texts.length === 0) return [];

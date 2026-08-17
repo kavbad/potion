@@ -78,9 +78,20 @@ export default async function ConnectPage() {
             <CopyBlock label="Node.js (openai SDK)" text={conn.snippets.openaiNode} />
           </>
         ) : (
+          // No policy bound = this org has not set anything up yet, which is
+          // exactly the from-scratch case /build exists for. Sending them to
+          // the raw policy picker asks them to choose a quality floor before
+          // anyone has told them what their workload is.
           <p className="text-sm text-soft">
-            No policy bound yet — <Link href="/policy" className="text-accent underline">choose one</Link>{' '}
-            and the ready-to-paste snippets appear here.
+            Nothing set up yet.{' '}
+            <Link href="/build" className="text-accent underline">
+              Tell Potion what you&apos;re building
+            </Link>{' '}
+            and it will pick a starting policy from measured evidence — or{' '}
+            <Link href="/policy" className="text-accent underline">
+              choose one yourself
+            </Link>{' '}
+            if you already know what you want.
           </p>
         )}
 

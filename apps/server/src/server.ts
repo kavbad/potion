@@ -15,6 +15,7 @@ import { registerUsageRoutes } from './routes/usage.js';
 // M2 Wave 2 key custody + lifecycle (ROADMAP #15/#16) — appended import.
 import { registerKeyRoutes } from './routes/keys.js';
 import { registerConnectionRoutes } from './routes/connection.js';
+import { registerPlanRoutes } from './routes/plan.js';
 // ---- M3 #26 observability (m3-observability) — appended imports ----
 import {
   REQUEST_ID_HEADER,
@@ -183,6 +184,9 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // requests". Reads only — every field comes from state the serving path
   // already wrote. Registered after keys so it sees the same auth hook.
   registerConnectionRoutes(app, ctx);
+  // S2: POST /api/plan — "what are you building?" for a customer with no
+  // workload. Read-only; applying a choice goes through POST /api/policies.
+  registerPlanRoutes(app, ctx);
   // ---- end Connect & auto-route ----
 
   // ---- M3 #26 observability (m3-observability) ----

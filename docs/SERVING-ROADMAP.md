@@ -156,7 +156,7 @@ non-zero routed count. One gap stayed open on purpose: the readiness list
 answers "what can Potion route", not "what should I build with" — that is
 S2's job.
 
-### S2 — "What are you building?" *(the from-scratch front door)*
+### S2 — "What are you building?" *(the from-scratch front door)* — **DONE 2026-08-17**
 **Fixes G4.**
 - An intent entry point: plain-language description → cluster assignment →
   the live platform frontier for that cluster → a recommended policy and
@@ -169,6 +169,20 @@ S2's job.
 **Done when:** someone with no traffic describes what they're building and
 leaves with a policy, a key, and a routed first request whose evidence they can
 inspect. **Spend:** $0 (embedding only; the frontier is already measured).
+
+**Shipped.** `POST /api/plan` (read-only) + the `/build` page, now nav step 1.
+`ClusterAssigner.rank()` scores every cluster so the runner-up and the margin
+are visible. Three honesty rules hold the surface up: `basis` is a field, not
+prose; alternatives and margin always ship, so a near tie renders as one; an
+infeasible policy shape returns **with its reason** and is never dropped or
+quietly widened. Samples outrank the description, and the override is shown.
+Proven on a bare database through the dashboard's own proxy: idea → Code
+Generation → `single · or-deepseek` q=1.000 $0.1044/1K → policy + key →
+`fallback=0;provenance=live`. **Known limitation:** under the mock embedder,
+description-only classification is keyword-driven and weak for prose that
+avoids cluster vocabulary (a support-email description scored 0.047, margin
+0.008 — the caveat fired, and three real prompts corrected it). The real fix
+is `POTION_EMBEDDER=openai`, which the deployment turns on.
 
 ### S3 — Billing truth
 **Fixes G2. Prerequisite for charging anyone for platform serving.**

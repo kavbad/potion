@@ -118,6 +118,12 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   // stored), /api/routing-activity returns the org's own request_logs rows.
   { method: 'GET', path: '/api/connection', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'apiKey', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/routing-activity', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  // S2 — "what are you building?". POST but READ-ONLY: it classifies text and
+  // reads the caller's org-preferred frontier, creating nothing. Guard is
+  // member+ (matching POST /api/workloads, the other embed-spending read)
+  // because embedding under a live embedder costs money, so a viewer-level
+  // credential must not be able to drive spend.
+  { method: 'POST', path: '/api/plan', surface: 'api', mutating: false, guard: 'member', probeBody: { description: 'a customer support triage bot' }, tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/usage', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/usage/current', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/usage/export.csv', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },

@@ -562,3 +562,46 @@ export interface RoutingActivityResponse {
     byCluster: Record<string, number>;
   };
 }
+
+// ---- "What are you building?" (SERVING-ROADMAP S2) ----
+
+export interface PlanPolicyOption {
+  priority: 'cost' | 'quality' | 'speed';
+  policy: Policy;
+  description: string;
+  /** The point selectPoint returns for this policy on this frontier TODAY. */
+  point: {
+    strategyHash: string;
+    strategy: string;
+    quality: number;
+    costPer1K: number;
+    latencyP95: number;
+    providerMode: string;
+    n: number | null;
+    qualityCi95: number | null;
+  } | null;
+  /** Present exactly when point is null — shown, never hidden. */
+  infeasible: string | null;
+}
+
+export interface PlanResponse {
+  intent: {
+    description: string;
+    cluster: { clusterId: string; name: string; description: string; confidence: number };
+    /** Gap to the runner-up. Near zero = a coin flip the user must see. */
+    margin: number;
+    alternatives: Array<{ clusterId: string; name: string; confidence: number }>;
+    sampleBreakdown: Record<string, number> | null;
+    sampleCount: number;
+  };
+  evidence: {
+    measured: boolean;
+    frontierVersion: number | null;
+    provenance: 'live' | 'mock' | 'blocked';
+    pointCount: number;
+  };
+  options: PlanPolicyOption[];
+  /** platform-measured = Potion's measurement of this WORKLOAD TYPE, not of
+   *  the caller's own traffic, which does not exist yet. */
+  basis: 'platform-measured' | 'unmeasured';
+}

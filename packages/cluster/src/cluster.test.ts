@@ -165,3 +165,51 @@ describe('createAssigner with mock embedder', () => {
     expect(cosine(v, w)).toBeCloseTo(cosine(w, v), 12);
   });
 });
+
+describe('rank — every cluster scored, so a wrong pick is visible', () => {
+  it('AGREES with assign on the winner whenever assign did not fall back', async () => {
+    // The two must not be able to disagree: `assign` picks the argmax and
+    // `rank` returns the sorted scores, so if these ever diverged a surface
+    // would show a runner-up list that does not contain the chosen cluster.
+    const assigner = await makeAssigner();
+    for (const text of [
+      'Write a Python function that checks whether a string is a palindrome',
+      'Extract all dates and amounts from this receipt as JSON',
+      'Summarize this 10-page report into a brief TL;DR',
+    ]) {
+      const picked = await assigner.assign(text);
+      const ranked = await assigner.rank(text);
+      expect(picked.clusterId).not.toBe('general'); // precondition of the claim
+      expect(ranked[0]!.clusterId).toBe(picked.clusterId);
+      expect(ranked[0]!.confidence).toBeCloseTo(picked.confidence, 12);
+    }
+  });
+
+  it('returns EVERY cluster, sorted best-first, with no thresholding', async () => {
+    const assigner = await makeAssigner();
+    const ranked = await assigner.rank('Write a Python function to reverse a list');
+    expect(ranked.map((r) => r.clusterId).sort()).toEqual(['code-gen', 'extraction', 'summarization']);
+    for (let i = 1; i < ranked.length; i++) {
+      expect(ranked[i - 1]!.confidence).toBeGreaterThanOrEqual(ranked[i]!.confidence);
+    }
+  });
+
+  it('keeps the RAW ranking below threshold — "general" is a routing decision, not a fact', async () => {
+    // assign() answers 'general' here. rank() must still report what the text
+    // actually looked most like, because the surface's job is to say "we are
+    // not confident, did you mean X" — which needs X.
+    const assigner = await makeAssigner();
+    const text = 'the and of to a in is it';
+    expect((await assigner.assign(text)).clusterId).toBe('general');
+    const ranked = await assigner.rank(text);
+    expect(ranked.map((r) => r.clusterId)).not.toContain('general');
+    expect(ranked).toHaveLength(3);
+  });
+
+  it('is TOTAL and reproducible — identical input, byte-identical ranking', async () => {
+    const assigner = await makeAssigner();
+    const a = await assigner.rank('Summarize this transcript');
+    const b = await assigner.rank('Summarize this transcript');
+    expect(a).toEqual(b);
+  });
+});

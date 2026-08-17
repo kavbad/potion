@@ -14,6 +14,9 @@
 //   7b. GET / page HTML                   → S1 connect surface: endpoint, the
 //       policy in plain language, and the routing proof reporting a NON-ZERO
 //       routed count for the request step 5 actually sent
+//   7c. POST /api/plan                    → S2 from-scratch door: an idea
+//       classified to a workload type, alternatives visible, and three policy
+//       shapes each either resolving to a MEASURED point or stating why not
 //   8–11. M4: playground, share links, budget hard stop, audit trail
 //   12. M4b: mock research scan → cycles → /recipes SIMULATED → public
 //       /leaderboard awaiting live verification. The scan's registry write
@@ -361,6 +364,59 @@ async function main(): Promise<void> {
       `endpoint + plain-language policy rendered; ` +
       `${body.summary.routed}/${body.summary.withRoutingDecision} recent requests routed, ` +
       `${body.summary.defaulted} defaulted`
+    );
+  });
+
+  // ---- 7c. SERVING-ROADMAP S2: the from-scratch door ----
+  // Someone with an idea and no workload. The whole point is that this
+  // answers with MEASURED evidence rather than a guess, so the leg asserts
+  // the classification, the basis field, that the alternatives are visible,
+  // and that at least one option resolves to a real strategy. A plan that
+  // came back with three empty options would pass a mere 200-check.
+  await step('7c. POST /api/plan (S2: idea → workload type → measured options)', async () => {
+    const res = await dashFetch('/api/plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        description: 'Write and repair Python functions from plain english instructions',
+      }),
+    });
+    assert(res.ok, `HTTP ${res.status}`);
+    const plan = (await res.json()) as {
+      intent: {
+        cluster: { clusterId: string; name: string };
+        margin: number;
+        alternatives: Array<{ clusterId: string }>;
+      };
+      evidence: { measured: boolean; pointCount: number; provenance: string };
+      options: Array<{ priority: string; point: { strategy: string; quality: number } | null; infeasible: string | null }>;
+      basis: string;
+    };
+    assert(plan.intent.cluster.clusterId === 'code-gen', `classified as ${plan.intent.cluster.clusterId}`);
+    // The basis must be NAMED — these are platform numbers, not the caller's.
+    assert(plan.basis === 'platform-measured', `basis=${plan.basis}`);
+    assert(plan.evidence.measured && plan.evidence.pointCount > 0, 'no measured evidence behind the plan');
+    // Alternatives visible, and never containing the pick itself.
+    assert(plan.intent.alternatives.length > 0, 'no alternatives surfaced');
+    assert(
+      !plan.intent.alternatives.some((a) => a.clusterId === plan.intent.cluster.clusterId),
+      'the chosen cluster appears in its own alternatives',
+    );
+    // All three shapes present; each is either a real point or a stated reason.
+    assert(plan.options.length === 3, `${plan.options.length} options, expected 3`);
+    for (const o of plan.options) {
+      assert(
+        (o.point === null) !== (o.infeasible === null),
+        `option ${o.priority} is neither feasible nor explained`,
+      );
+    }
+    const feasible = plan.options.filter((o) => o.point !== null);
+    assert(feasible.length > 0, 'every option came back infeasible');
+    return (
+      `${plan.intent.cluster.name} (margin ${plan.intent.margin.toFixed(3)}, ` +
+      `${plan.intent.alternatives.length} alternatives shown); ` +
+      `${feasible.length}/3 options feasible on ${plan.evidence.pointCount} ${plan.evidence.provenance} points; ` +
+      `best-quality → ${feasible[0]!.point!.strategy}`
     );
   });
 
