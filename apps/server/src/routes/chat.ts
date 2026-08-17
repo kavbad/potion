@@ -253,6 +253,49 @@ export function guardFrontierProvenance(
   return { frontier, provenance: 'mock' };
 }
 
+/**
+ * What this request would have cost on the frontier's HIGHEST-QUALITY point —
+ * the counterfactual behind any "money saved" claim (S3, migration 0039).
+ *
+ * "Saved versus what?" has to be answered honestly, and the honest answer is
+ * the alternative the customer is actually choosing between: just always
+ * using the best model. That is `highestQualityPoint`, which the serving path
+ * already computes for the §8 NULL fallback.
+ *
+ * THE METHOD, and its one assumption. Frontier `costPer1K` is USD per 1000
+ * requests measured over the eval suite — an AVERAGE, not this request. The
+ * actual cost in the log is this request's REAL tokens. Comparing those two
+ * directly would mix measurement bases and make savings scale with request
+ * size in the wrong direction: a large request would look like a small
+ * saving. So the baseline is the real cost scaled by the RATIO of the two
+ * measured points, which shares a basis and cancels:
+ *
+ *     baseline = actualCost × (baseline.costPer1K / chosen.costPer1K)
+ *
+ * The assumption is that the cost ratio between two strategies does not
+ * depend on request size — exactly true under pure per-token pricing, and
+ * approximately true otherwise. It is recorded here rather than buried
+ * because a savings number is a claim about money.
+ *
+ * Returns null — NOT zero — whenever the comparison is undefined: no
+ * frontier (the fallback path), an unknown chosen point, or a zero-cost
+ * denominator. Zero would enter a sum as "saved nothing"; null reads as
+ * "not measured", which is what it is.
+ */
+export function baselineCostUsd(
+  frontier: Frontier | null,
+  chosenStrategyHash: string,
+  actualCostUsd: number | undefined,
+): number | null {
+  if (!frontier || frontier.points.length === 0) return null;
+  if (actualCostUsd === undefined || !Number.isFinite(actualCostUsd)) return null;
+  const chosen = frontier.points.find((p) => p.strategyHash === chosenStrategyHash);
+  const best = highestQualityPoint(frontier.points);
+  if (!chosen || !best || !(chosen.costPer1K > 0)) return null;
+  const scaled = actualCostUsd * (best.costPer1K / chosen.costPer1K);
+  return Number.isFinite(scaled) ? scaled : null;
+}
+
 /** SPEC §8 trace header (semicolon-separated, no spaces), plus the M1a
  * provenance marker: provenance=live|mock|blocked. */
 export function traceHeaderValue(op: {
@@ -779,6 +822,11 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // custody_audit, cached 60s per org); everyone else gets the platform
     // boot set. Platform env keys remain the per-provider fallback.
     const orgProviders = await ctx.providersForOrg(auth.org.orgId);
+    // S3 (billing truth): WHO PAID, recorded at the one place it is known.
+    // Set here rather than earlier on purpose — rows logged before this line
+    // never reached execution (auth failures, budget refusals, unknown
+    // policy) and cost nobody anything, so they correctly keep paid_by NULL.
+    logBase.paidBy = orgProviders.byok ? 'byok' : 'platform';
     const execBase = {
       providers: orgProviders.providers,
       prices: ctx.prices,
@@ -858,7 +906,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
-      await logRequest({ ...logBase, status: 'ok', usage: result.usage, latencyMs: elapsed() });
+      await logRequest({
+        ...logBase,
+        status: 'ok',
+        usage: result.usage,
+        latencyMs: elapsed(),
+        // S3: the counterfactual, captured while the frontier that
+        // defines it is still in hand. null = comparison undefined.
+        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
+      });
       // ---- M3 #21 shadow (m3-shadow) ----
       // Stream fully ended above ([DONE] + end): the shadow run executes
       // strictly AFTER the primary response, fire-and-forget with a
@@ -981,7 +1037,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
-      await logRequest({ ...logBase, status: 'ok', usage: result.usage, latencyMs: elapsed() });
+      await logRequest({
+        ...logBase,
+        status: 'ok',
+        usage: result.usage,
+        latencyMs: elapsed(),
+        // S3: the counterfactual, captured while the frontier that
+        // defines it is still in hand. null = comparison undefined.
+        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
+      });
       return;
     }
     // ---- end M3 #23 composite (m3-composite) ----
@@ -1002,7 +1066,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         void reply.header('x-frontier-trace', `${trace};upgraded=${upgraded}`);
       }
       // ---- end M3 #23 composite (m3-composite) ----
-      await logRequest({ ...logBase, status: 'ok', usage: result.usage, latencyMs: elapsed() });
+      await logRequest({
+        ...logBase,
+        status: 'ok',
+        usage: result.usage,
+        latencyMs: elapsed(),
+        // S3: the counterfactual, captured while the frontier that
+        // defines it is still in hand. null = comparison undefined.
+        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
+      });
       const sent = reply.send({
         id,
         object: 'chat.completion',

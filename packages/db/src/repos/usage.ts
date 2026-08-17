@@ -72,7 +72,12 @@ export interface UsageRollupRow {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** COGS: what Potion paid the provider. Equal to costUsd — the two diverge
+   *  at INVOICE time via margin, not here (BYOK is no longer offered). */
   platformCostUsd: number;
+  /** S3: what the same traffic would have cost on the highest-quality point.
+   *  The counterfactual for outcome pricing; 0 where nothing recorded one. */
+  baselineCostUsd: number;
 }
 
 /** Totals over a range (the shape /api/usage/current and invoices total). */
@@ -82,6 +87,7 @@ export interface UsageTotals {
   outputTokens: number;
   costUsd: number;
   platformCostUsd: number;
+  baselineCostUsd: number;
 }
 
 // The rollup SELECT shared by aggregateUsage (writes usage_daily) and
@@ -101,6 +107,23 @@ export interface UsageTotals {
  * invoices via this single chokepoint. (Invoice wart, pre-existing: cost-
  * only clusters render quantity-0 lines labeled "routed requests" — the
  * relabel is G2.1 scope.)
+ *
+ * S3 (migration 0039) adds `baseline_cost_usd`: what the same traffic would
+ * have cost on the highest-quality point — the counterfactual behind
+ * outcome-based pricing. Summed only over rows that actually recorded one, so
+ * a period with partial coverage under-reports the baseline rather than
+ * fabricating it.
+ *
+ * `platform_cost_usd` deliberately stays equal to `cost_usd`. It is COGS —
+ * what Potion paid the provider — and the two diverge at INVOICE time via
+ * margin, not here. An earlier S3 pass filtered it to paid_by='platform' to
+ * exclude BYOK spend; BYOK is no longer offered, so that filter excluded
+ * nothing real while silently zeroing every pre-0039 row's COGS.
+ *
+ * NOTE for future edits: keep `--` line comments OUT of the sql template
+ * below. Drizzle renders the template around its parameter placeholders and a
+ * line comment there swallowed the remainder of the statement, which surfaces
+ * as the unhelpful "syntax error at end of input".
  */
 function rollupQuery(range: UsageRange, orgId?: string): SQL {
   return sql`
@@ -111,7 +134,8 @@ function rollupQuery(range: UsageRange, orgId?: string): SQL {
            coalesce(sum((usage->>'inputTokens')::numeric) FILTER (WHERE status = 'ok'), 0)::int AS input_tokens,
            coalesce(sum((usage->>'outputTokens')::numeric) FILTER (WHERE status = 'ok'), 0)::int AS output_tokens,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS cost_usd,
-           coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS platform_cost_usd
+           coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS platform_cost_usd,
+           coalesce(sum(baseline_cost_usd) FILTER (WHERE status = 'ok'), 0)::float8 AS baseline_cost_usd
     FROM request_logs
     WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen', 'eval_live')
       AND to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') BETWEEN ${range.fromDay} AND ${range.toDay}
@@ -130,6 +154,7 @@ function toRollupRow(r: Record<string, unknown>): UsageRollupRow {
     outputTokens: Number(r.output_tokens),
     costUsd: Number(r.cost_usd),
     platformCostUsd: Number(r.platform_cost_usd),
+    baselineCostUsd: Number(r.baseline_cost_usd),
   };
 }
 
@@ -207,8 +232,9 @@ export function sumRollup(rows: UsageRollupRow[]): UsageTotals {
       outputTokens: acc.outputTokens + r.outputTokens,
       costUsd: acc.costUsd + r.costUsd,
       platformCostUsd: acc.platformCostUsd + r.platformCostUsd,
+      baselineCostUsd: acc.baselineCostUsd + r.baselineCostUsd,
     }),
-    { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0 },
+    { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0, baselineCostUsd: 0 },
   );
 }
 

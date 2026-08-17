@@ -111,7 +111,17 @@ function registerEmbeddingsRoute(app: FastifyInstance, ctx: PotionContext): void
     // real OpenAI model) and previously wrote no request_logs row at all —
     // invisible to this gate, to the rate limiter, and to the invoice
     // rollup. Gate first, then meter every exit.
-    const logBase: NewRequestLog = { orgId: auth.org.orgId, model: ctx.embedderInfo.model };
+    // S3: embeddings never resolve an ORG provider set — the embedder is a
+    // platform component with no BYOK path — so this route is always
+    // platform-funded. Recorded now, while its costUsd is still 0 (F13:
+    // embeddings are metered but unpriced), so that when pricing lands the
+    // attribution is already on the rows rather than needing a backfill that
+    // would have to guess.
+    const logBase: NewRequestLog = {
+      orgId: auth.org.orgId,
+      model: ctx.embedderInfo.model,
+      paidBy: 'platform',
+    };
     const meter = async (status: string, usage?: Usage): Promise<void> => {
       try {
         await insertRequestLog(ctx.db.db, {
@@ -342,6 +352,10 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
     // → NULL fallback (helpers shared with ./chat.ts).
     const prompts = typeof body.prompt === 'string' ? [body.prompt] : body.prompt;
     const orgProviders = await ctx.providersForOrg(auth.org.orgId);
+    // S3 (billing truth): WHO PAID — the same record chat.ts writes. F6's
+    // lesson is that a rule enforced in one serving route is not enforced;
+    // the same is true of a fact recorded in one serving route.
+    logBase.paidBy = orgProviders.byok ? 'byok' : 'platform';
     const execBase: Pick<ExecContext, 'providers' | 'prices' | 'resolve'> = {
       providers: orgProviders.providers,
       prices: ctx.prices,

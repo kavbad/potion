@@ -286,6 +286,14 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Who funded a served request (S3, migration 0039). The vocabulary is closed
+ * on purpose: a third value would have to mean something for the invoice, and
+ * inventing one silently is how a billing system starts guessing.
+ */
+export type PaidBy = 'platform' | 'byok';
+export const PAID_BY_VALUES: readonly PaidBy[] = ['platform', 'byok'];
+
 export const requestLogs = pgTable('request_logs', {
   id: bigserial('id', { mode: 'bigint' }).primaryKey(),
   ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
@@ -310,6 +318,28 @@ export const requestLogs = pgTable('request_logs', {
    * the reconcile against provider-billed reality is per provider. NULL on
    * serving rows (model implies it) and pre-0030 rows. */
   provider: text('provider'),
+  /**
+   * BILLING TRUTH (S3, migration 0039). Which key funded this request:
+   * 'platform' (Potion's own — billable to the customer under usage
+   * pricing) or 'byok' (the customer's own — their provider bills them).
+   *
+   * NULL means NOT RECORDED, and that reading must be preserved: pre-0039
+   * rows, and requests that never reached execution (auth failures, budget
+   * refusals), cost nobody anything. Defaulting NULL to 'platform' would
+   * silently invoice traffic that was never served.
+   */
+  paidBy: text('paid_by').$type<PaidBy>(),
+  /**
+   * What this same request would have cost on the frontier's highest-quality
+   * point — the counterfactual behind any "money saved" claim, modelled from
+   * the price table at serve time using the request's REAL token counts.
+   *
+   * Recorded rather than derived because the comparison drifts: the price
+   * table and the frontier both move, so next quarter's reconstruction would
+   * answer a different question than the one the customer was actually
+   * choosing between at the time.
+   */
+  baselineCostUsd: doublePrecision('baseline_cost_usd'),
   usage: jsonb('usage').$type<Usage>(),
   latencyMs: doublePrecision('latency_ms'),
   status: text('status'),
