@@ -69,6 +69,33 @@ export function classRepresentative(
   return pool[0] ?? null;
 }
 
+/**
+ * EVERY model of a class, cheapest first (alias tie-break) — the widened
+ * counterpart to classRepresentative (SERVING-ROADMAP S6).
+ *
+ * `classRepresentative` returns ONE model per class, which is right when the
+ * question is "a representative of this tier" and wrong when the question is
+ * "what can we actually route to". Measured against the real OpenRouter-
+ * reachable registry that single pick discarded five of eight answerers —
+ * or-gemini-flash, or-gpt-mini, or-haiku, or-gpt-full and or-sonnet were in
+ * the catalog and had never been evaluated on any cluster. Under dial honesty
+ * an unmeasured model is never routable, so those five were, in practice,
+ * unreachable breadth.
+ *
+ * Deterministic ordering (price, then alias) so a sweep's candidate set is
+ * reproducible from the registry alone — the same discipline the
+ * representative pick already had, applied to the whole class.
+ */
+export function classMembers(
+  registry: ModelRegistryEntry[],
+  cls: ModelClass,
+  excludeProvider?: ProviderId,
+): ModelRegistryEntry[] {
+  return registry
+    .filter((e) => e.cls === cls && e.provider !== excludeProvider)
+    .sort((x, y) => x.inputPer1M - y.inputPer1M || x.alias.localeCompare(y.alias));
+}
+
 /** Up to `n` same-class peers from providers OTHER than `provider`,
  * provider-diverse first (one per provider), then cheapest fill — fully
  * deterministic (price, alias ordering). */

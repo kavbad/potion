@@ -35,6 +35,7 @@
     "@potion/pareto": "workspace:*",
     "@potion/providers": "workspace:*",
     "@potion/queue": "workspace:*",
+    "@potion/researcher": "workspace:*",
     "@potion/server": "workspace:*",
     "@potion/strategies": "workspace:*",
     "@potion/workers": "workspace:*",

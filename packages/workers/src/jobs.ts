@@ -390,6 +390,13 @@ export interface FrontierPlatformSweepPayload {
   /** Answer output ceiling (default 1600 — uniform across candidates:
    * per-candidate ceilings would change what is being measured). */
   maxOutputTokens?: number;
+  /**
+   * S6 width knob: how many reachable answerer models this leg may measure.
+   * Absent → PLATFORM_SWEEP_MAX_ANSWERERS. The sweep evaluates EVERY
+   * reachable answerer up to this ceiling (deterministic price order), and
+   * reports any it dropped rather than silently measuring less.
+   */
+  maxAnswerers?: number;
 }
 
 /**

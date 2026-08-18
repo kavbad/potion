@@ -108,6 +108,7 @@ import {
   DEFAULT_CANDIDATE_BUDGET,
   buildRegistry,
   classRepresentative,
+  classMembers,
   evaluatePromotion,
   generateCandidatesExplained,
   type ItemPair,
@@ -3280,6 +3281,18 @@ export const PLATFORM_OPS_ORG_ID = 'org_platform_ops';
 export const PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW = 0.72;
 
 /**
+ * Ceiling on answerer models per platform-sweep job (S6).
+ *
+ * Not a target — a BLAST RADIUS. The sweep measures every reachable answerer,
+ * which is 8 against today's registry and affordable; a catalog that grows to
+ * hundreds must not silently turn one job into a five-figure sweep. Truncation
+ * follows the same deterministic price order the candidate set uses, and the
+ * job result names what it dropped, so an operator sees "we measured less than
+ * everything" instead of inferring it from a number that looks fine.
+ */
+export const PLATFORM_SWEEP_MAX_ANSWERERS = 12;
+
+/**
  * The committed platform suite for each taxonomy cluster. v1 ids resolve to
  * suites/<id>.jsonl (top level — the simulated/ fallback would throw
  * SimulatedSuiteError in runEval, a wrong mapping fails loudly); v2 ids
@@ -3324,6 +3337,13 @@ export class PlatformSweepRefusalError extends Error {
 
 export interface FrontierPlatformSweepResult {
   runId: string;
+  /**
+   * S6: answerers the width ceiling excluded. Empty on every realistic
+   * catalog today; non-empty means this leg measured LESS than everything
+   * reachable, and an operator must be told that rather than left to infer
+   * it from a candidate count that looks reasonable.
+   */
+  droppedAnswerers: string[];
   spendUsd: number;
   projectedSpendUsd: number;
   executed: number;
@@ -3438,10 +3458,40 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       return rep;
     };
     const cheap = repFor('cheap');
-    const mid = repFor('mid');
+    // Called for its REFUSAL, not its value: the sweep still requires every
+    // answerer tier to be reachable, or it would publish a frontier that
+    // under-measures by construction. S6 widened WHAT gets measured; it did
+    // not relax that gate. (The widened pool below supplies the models.)
+    repFor('mid');
     const strong = repFor('strong');
     const judgeEntry = repFor('judge');
-    const singles: StrategyConfig[] = [cheap, mid, strong].map(
+
+    // S6 — WIDTH. The class representatives above still gate the sweep (all
+    // three answerer tiers must be reachable, or we would publish a frontier
+    // that under-measures by construction), but they no longer BOUND it.
+    //
+    // Measured against the real OpenRouter-reachable registry, one-per-class
+    // evaluated 3 of 8 answerers and discarded five — or-gemini-flash,
+    // or-gpt-mini, or-haiku, or-gpt-full, or-sonnet were in the catalog and
+    // had never been scored on any cluster. Dial honesty makes an unmeasured
+    // model unroutable, so those five were breadth on paper only.
+    //
+    // The widened set is EVERY reachable answerer, capped. Not a sample and
+    // not a heuristic pick: with a reachable catalog this size, "all of them"
+    // is both the honest answer and the affordable one, and it is
+    // reproducible from the registry alone. The cap exists so a catalog that
+    // grows to hundreds cannot silently turn one job into a five-figure
+    // sweep — it truncates by the same deterministic price order, and the
+    // result reports what it dropped rather than quietly measuring less.
+    const answerPool = [
+      ...classMembers(registry, 'cheap'),
+      ...classMembers(registry, 'mid'),
+      ...classMembers(registry, 'strong'),
+    ];
+    const maxAnswerers = payload.maxAnswerers ?? PLATFORM_SWEEP_MAX_ANSWERERS;
+    const answerers = answerPool.slice(0, maxAnswerers);
+    const droppedAnswerers = answerPool.slice(maxAnswerers).map((e) => e.alias);
+    const singles: StrategyConfig[] = answerers.map(
       (e) => ({ type: 'single', model: e.alias }) as StrategyConfig,
     );
     const cascade: StrategyConfig = {
@@ -3548,6 +3598,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       frontierId,
       frontierVersion,
       points: frontierPoints.length,
+      droppedAnswerers,
       singlesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type === 'single').length,
       compositesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type !== 'single').length,
     };

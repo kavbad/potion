@@ -55,6 +55,9 @@ importers:
       '@potion/queue':
         specifier: workspace:*
         version: link:packages/queue
+      '@potion/researcher':
+        specifier: workspace:*
+        version: link:packages/researcher
       '@potion/server':
         specifier: workspace:*
         version: link:apps/server

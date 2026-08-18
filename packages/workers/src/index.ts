@@ -145,6 +145,7 @@ export {
   PLATFORM_OPS_ORG_ID,
   PLATFORM_SUITE_BY_CLUSTER,
   PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW,
+  PLATFORM_SWEEP_MAX_ANSWERERS,
   type FrontierPlatformSweepResult,
   type PlatformSweepRefusalReason,
   // ---- Lab Step 8 trial runs ----
