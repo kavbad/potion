@@ -67,7 +67,9 @@ is now real. What remains is breadth, billing truth, visibility, and safety.
 Ordered by what blocks the experience, not by size.
 
 ### G1 — Breadth: the catalog is 24 models, in a file
-*(S5. Now the only phase left before measurement spend.)*
+*(S5, DONE. Proven concretely: the repo's committed prices.json had been
+polluted by an earlier scan with two MOCK TEST FIXTURES — the bug caught in
+the act. After the fix a full walkthrough scan leaves the file byte-identical.)*
 `prices.json` **is** the model registry (`researcher/registry.ts:1-11`). The
 only thing that grows it, `research:scan`, writes the file with
 `writeFileSync` (`workers/handlers.ts:1255`), and `loadPrices` runs **once at
@@ -89,6 +91,7 @@ outside the completion count (we undercharged). Measured, not assumed —
 see S3 below. Cost now comes from the provider's own billed figure.
 
 ### G3 — The auto-switch has no page
+*(S1, done.)*
 The API half is fixed, the surface is not. The serving key appears **once**,
 transiently, after the policy picker (`policy-picker.tsx:192-220`) and is never
 re-retrievable; `/settings` has exactly one subpage (`audit`); the home page
@@ -96,6 +99,7 @@ still reads *"Bring your own provider keys"* (`app/page.tsx:41-46`), which is
 now the wrong default.
 
 ### G4 — From-scratch has no front door of its own
+*(S2, done.)*
 Cold-start *routing* works, but there is no surface where someone says **"I'm
 building X"** and gets a recommendation. The pieces exist — the cluster
 assigner classifies arbitrary text (`cluster/assigner.ts`), platform frontiers
@@ -110,6 +114,8 @@ routable, so **routable breadth grows only with evaluation spend**. This is a
 budget decision, not a code problem.
 
 ### G6 — Platform serving has no spending safety
+*(S4, done — plus a FOURTH hole this list missed: an org with no budget row
+had no cap at all.)*
 Three verified facts, harmless under BYOK and dangerous on our own key: the
 budget hard stop **fails OPEN on a db error** (`budgets.ts:78-80`); rate
 limiting is **per-API-key only**, with no org or platform ceiling
@@ -251,7 +257,7 @@ spend — and the recalibration is recorded rather than quietly fixed.
 provably kills it, and the db-error path refuses rather than allows.
 **Spend:** ≤ $1 to re-prove the kill on live pricing.
 
-### S5 — Breadth
+### S5 — Breadth — **DONE 2026-08-17**
 **Fixes G1, enables G5.**
 - Move the model registry from `prices.json`-on-disk into the database; keep
   the file as the seed for a fresh db; `research:scan` writes rows, not bytes,
@@ -261,9 +267,12 @@ provably kills it, and the db-error path refuses rather than allows.
 - Keep **catalog ≠ frontier**: everything reachable, only measured points
   routable. `GET /v1/models` must stop advertising the whole table as if it
   were routable.
-- Record the honest bound: our price shape is input/output per 1M, so
-  cache-read and reasoning-token pricing are **not** modelled — cost estimates
-  under-count reasoning-heavy models.
+- ~~Record the honest bound: our price shape is input/output per 1M, so
+  cache-read and reasoning-token pricing are not modelled~~ — **superseded by
+  S3 leg 2**, which stopped modelling billed cost altogether and reads the
+  provider's own figure. The price table still *projects* cost (preflight
+  estimates, frontier `costPer1K`), and those projections keep the shape's
+  limits; what a customer is charged no longer does.
 - **Refused:** OpenRouter's `benchmarks` field must never influence selection.
   Routing on third-party benchmark percentiles is the incumbent's game.
 
@@ -271,6 +280,29 @@ provably kills it, and the db-error path refuses rather than allows.
 simulated redeploy, takes effect without a boot, and an unmeasured model is
 visible-but-never-auto-selected (asserted by test). **Spend:** $0 (the models
 endpoint is free).
+
+**Shipped.** Migration 0040 adopts the `models` table — which turned out to be
+**dead**, declared in the schema and read/written nowhere. prices.json is
+demoted to a seed that never clobbers a live row. Proven concretely: the repo's
+committed `prices.json` had been polluted by an earlier scan with two *mock
+test fixtures*; after the change a full walkthrough scan leaves the file byte-
+identical.
+
+`/v1/models` was misrepresenting something sharper than this doc recorded: it
+listed every alias like `potion-auto`, implying you could pick one. You cannot
+— `body.model` is a **label**, and the strategy comes from cluster + policy +
+frontier. A test now proves it by sending two different `model` values and
+requiring the same resolved strategy. Each entry carries `potion.role` and
+`potion.measured`; the OpenAI fields are untouched.
+
+The benchmarks refusal is now **pinned by test**, not just stated: adding it
+later has to be a decision made against a failing test rather than a
+convenience slipped in beside context lengths.
+
+**Residual, recorded:** the serving path's model *resolver* is still built at
+boot, so a freshly discovered model cannot be **served** until the next
+restart. Narrow — it cannot be routed to before it is measured, and
+measurement runs in the workers, which do read the live registry — but real.
 
 ### S6 — Widen what is measured
 **Fixes G5 and G7. The only phase whose cost is real.**
