@@ -147,6 +147,25 @@ export const clusterExemplars = pgTable('cluster_exemplars', {
   embedding: vector('embedding', { dimensions: 384 }),
 });
 
+/**
+ * THE MODEL REGISTRY (adopted by S5, migration 0040) — the catalog of every
+ * model Potion knows it could call.
+ *
+ * Deliberately NOT the set it will route to. Only measured frontier points
+ * are routable (dial honesty); this table has no opinion about measurement,
+ * and conflating the two is exactly how "300 models" becomes a claim nobody
+ * evaluated. Catalog ≠ frontier.
+ *
+ * This table pre-existed S5 and was DEAD — declared here, written and read
+ * nowhere. S5 adopts it as the live registry, replacing prices.json, whose
+ * discoveries used to be written back to a file that dies on redeploy and
+ * never reaches the running process (loadPrices runs once at boot).
+ * prices.json remains as the SEED for a fresh database.
+ *
+ * `pricesVersion` is per-row and stays that way: it keys eval-result cache
+ * cells, so the registry's current version is the version of its newest row —
+ * derivable, and it moves exactly when a scan adds something.
+ */
 export const models = pgTable('models', {
   alias: text('alias').primaryKey(),
   provider: text('provider').notNull(),
@@ -154,8 +173,20 @@ export const models = pgTable('models', {
   inputPer1M: doublePrecision('input_per_1m').notNull(),
   outputPer1M: doublePrecision('output_per_1m').notNull(),
   pricesVersion: text('prices_version').notNull(),
+  /** Catalog facts a scan can learn. ALL NULLABLE: absent means the provider
+   *  did not report it, never a fabricated default — a guessed context window
+   *  silently truncates a prompt, and a guessed tool flag routes a
+   *  tool-calling request to a model that cannot do it. */
+  contextLength: integer('context_length'),
+  maxOutputTokens: integer('max_output_tokens'),
+  supportsTools: boolean('supports_tools'),
+  /** 'seed' (committed prices.json) | 'scan' (discovered live). */
+  source: text('source').notNull().default('seed'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+export type ModelRow = typeof models.$inferSelect;
+export type NewModelRow = typeof models.$inferInsert;
 
 export const strategyConfigs = pgTable('strategy_configs', {
   hash: text('hash').primaryKey(),

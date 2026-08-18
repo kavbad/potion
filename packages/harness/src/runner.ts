@@ -107,6 +107,17 @@ export interface RunDeps {
   suitesDir?: string;
   suitesV2Dir?: string;
   pricesPath?: string;
+  /**
+   * The resolved price table, when the caller already has one (S5).
+   *
+   * Takes precedence over `pricesPath`. The registry moved into the database,
+   * so a caller that just discovered a model has a table the FILE does not
+   * contain — and re-reading the file here would make that model unevaluable
+   * until someone committed it, which is the redeploy-shaped bug S5 exists to
+   * remove. `pricesPath` stays for the CLI and for tests that genuinely mean
+   * "the file".
+   */
+  prices?: PriceTable;
   /** Per-call spend metering (post-capstone item 1): when present, the run's
    * provider set is wrapped with meteredProviders so EVERY successful
    * complete() — strategy and judge alike — reports its spend before the
@@ -304,7 +315,7 @@ export class MockAliasInLiveRunError extends Error {
 }
 
 export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<RunSummary> {
-  const { table: prices } = loadPrices(deps.pricesPath);
+  const prices = deps.prices ?? loadPrices(deps.pricesPath).table;
   // ---- provenance gate: simulated suites require an explicit opt-in ----
   const resolved = opts.suiteIds.map((id) => resolveSuite(id, deps.suitesDir));
   const simulatedIds = resolved.filter((r) => r.simulated).map((r) => r.suiteId);

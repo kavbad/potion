@@ -144,11 +144,15 @@ describe('GET /v1/models', () => {
     const ids = body.data.map((m: { id: string }) => m.id);
     expect(ids).toEqual(['potion-auto', ...app.potion.prices.entries.map((e) => e.alias)]);
     for (const m of body.data) {
-      expect(Object.keys(m).sort()).toEqual(['created', 'id', 'object', 'owned_by']);
+      // S5 added a namespaced `potion` block (role, measured) — see
+      // models-catalog.test.ts for what it asserts and why. The OpenAI-shaped
+      // keys are asserted EXACTLY as before, which is the compatibility claim
+      // that block was designed not to break.
+      expect(Object.keys(m).sort()).toEqual(['created', 'id', 'object', 'owned_by', 'potion']);
       expect(m.object).toBe('model');
       expect(m.created).toBe(created);
     }
-    expect(body.data[0]).toEqual({ id: 'potion-auto', object: 'model', created, owned_by: 'potion' });
+    expect(body.data[0]).toMatchObject({ id: 'potion-auto', object: 'model', created, owned_by: 'potion' });
     // owned_by = the price entry's provider
     const byId = new Map(app.potion.prices.entries.map((e) => [e.alias, e.provider]));
     for (const m of body.data.slice(1)) {

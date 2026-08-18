@@ -24,6 +24,8 @@ import {
 import {
   createDb,
   importPlatformBaseline,
+  seedModelRegistry,
+  loadModelRegistry,
   listServableProviderKeys,
   loadPlatformBaseline,
   migrate,
@@ -329,12 +331,43 @@ export function pgliteDataDirFromUrl(url: string | undefined): string | null {
 
 export async function buildContext(opts: ContextOptions = {}): Promise<PotionContext> {
   const log = opts.log ?? (() => {});
-  const { table: prices } = loadPrices(opts.pricesPath ?? process.env.POTION_PRICES_PATH ?? DEFAULT_PRICES_PATH);
+  const { table: seedPrices } = loadPrices(
+    opts.pricesPath ?? process.env.POTION_PRICES_PATH ?? DEFAULT_PRICES_PATH,
+  );
 
   const externalDb = opts.db !== undefined;
   const db = opts.db ?? (await createDb(opts.dbUrl));
   await migrate(db.db);
   log(`db ready (${db.driver})`);
+
+  // ---- the model registry lives in the DATABASE (S5) ----
+  // prices.json is now a SEED, not the registry. It used to be both, and
+  // `research:scan` grew it with writeFileSync — so every discovered model
+  // died on the next redeploy (the file ships in the image) and never reached
+  // the running process anyway (loadPrices runs once, here).
+  //
+  // Seed-then-load, and NEVER clobber: an alias already in the table wins
+  // over the committed file, or a redeploy would silently revert the live
+  // catalog to whatever was checked in — reintroducing the exact bug this
+  // replaces. Falls back to the file on any failure: a catalog read is not
+  // worth refusing to boot over, and the file is a correct if stale answer.
+  let prices = seedPrices;
+  try {
+    const seeded = await seedModelRegistry(db.db, seedPrices);
+    const registry = await loadModelRegistry(db.db);
+    if (registry) {
+      prices = { ...seedPrices, version: registry.version, updatedAt: registry.updatedAt,
+                 entries: registry.entries as typeof seedPrices.entries };
+      log(
+        `model registry: ${registry.entries.length} models from the database` +
+          (seeded.inserted.length > 0 ? ` (seeded ${seeded.inserted.length} from prices.json)` : ''),
+      );
+    }
+  } catch (e) {
+    log(
+      `model registry: falling back to prices.json (${e instanceof Error ? e.message : String(e)})`,
+    );
+  }
 
   // ---- platform frontier baseline (measured routing on day zero) ----
   // A freshly migrated database has NO live-provenance platform frontier, so

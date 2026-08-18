@@ -18,7 +18,13 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { strategyHash, type ChatMessage, type StrategyConfig, type Usage } from '@potion/core';
-import { DEFAULT_ORG_ID, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
+import {
+  DEFAULT_ORG_ID,
+  insertRequestLog,
+  loadModelRegistry,
+  resolvePolicyRef,
+  type NewRequestLog,
+} from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute, type ExecContext } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError, type AuthResult } from '../auth.js';
@@ -75,15 +81,52 @@ function registerModelsRoute(app: FastifyInstance, ctx: PotionContext): void {
     const auth = await requireApiKey(ctx, req, reply);
     if (!auth) return reply;
     const created = modelListCreated(ctx);
+    // CATALOG ≠ FRONTIER, and `model` ≠ a choice (S5).
+    //
+    // Two things were misleading here. First, this listed every price-table
+    // alias exactly like `potion-auto`, implying a customer could pick one —
+    // they cannot: routes/chat.ts uses `body.model` as a LABEL only (echoed
+    // in the response, recorded in request_logs) and resolves the strategy
+    // from cluster + policy + frontier. Second, an entry appearing here says
+    // nothing about whether Potion has MEASURED it, and only measured points
+    // are ever routed to.
+    //
+    // Both are now stated in a namespaced `potion` block rather than left to
+    // be inferred. The OpenAI-shaped fields are untouched, so existing
+    // clients that enumerate models keep working unchanged.
+    // Read the LIVE registry, not ctx.prices — that is a boot snapshot, so a
+    // model discovered by a scan would be missing from the catalogue until
+    // someone restarted the server, which is the redeploy-shaped staleness S5
+    // exists to remove. Falls back to the boot table if the read fails.
+    const catalogue = await liveCatalogue(ctx);
+    const routable = new Set(await routableAliases(ctx));
     return {
       object: 'list',
       data: [
-        { id: 'potion-auto', object: 'model', created, owned_by: 'potion' },
-        ...ctx.prices.entries.map((e) => ({
+        {
+          id: 'potion-auto',
+          object: 'model',
+          created,
+          owned_by: 'potion',
+          potion: {
+            role: 'router',
+            note:
+              'The only id that means anything here. Potion picks the model (or ' +
+              'combination) per request from your policy and the measured frontier; ' +
+              'any other `model` value is recorded as a label and otherwise ignored.',
+          },
+        },
+        ...catalogue.map((e) => ({
           id: e.alias,
           object: 'model' as const,
           created,
           owned_by: e.provider,
+          potion: {
+            role: 'catalog' as const,
+            /** True when this model sits on a frontier Potion actually routes
+             *  from. False = known and callable, never auto-selected. */
+            measured: routable.has(e.alias),
+          },
         })),
       ],
     };
@@ -559,4 +602,54 @@ export function registerOpenAiParityRoutes(app: FastifyInstance, ctx: PotionCont
   registerModelsRoute(app, ctx);
   registerEmbeddingsRoute(app, ctx);
   registerLegacyCompletionsRoute(app, ctx);
+}
+
+/**
+ * The catalogue as it stands RIGHT NOW, not as it stood at boot.
+ *
+ * ctx.prices is loaded once in buildContext, so a model a scan discovered
+ * five minutes ago would be absent here until a restart — exactly the
+ * staleness that made the file-based registry useless. Falls back to the boot
+ * table on any failure: a slightly stale catalogue beats an empty one.
+ *
+ * RESIDUAL, recorded rather than implied away: this fixes what /v1/models
+ * ADVERTISES. The serving path's model RESOLVER is still built from the boot
+ * table, so a freshly discovered model cannot actually be served until the
+ * next restart. It also cannot be routed to before it is measured, and
+ * measurement runs in the workers (which do read the live registry) — so the
+ * window is narrow, but it is real and it is not closed here.
+ */
+async function liveCatalogue(
+  ctx: PotionContext,
+): Promise<Array<{ alias: string; provider: string }>> {
+  try {
+    const registry = await loadModelRegistry(ctx.db.db);
+    if (registry) return registry.entries;
+  } catch {
+    // fall through to the boot table
+  }
+  return ctx.prices.entries;
+}
+
+/**
+ * Aliases that appear on at least one frontier this deployment would route
+ * from — the difference between "we know about this model" and "we have
+ * measured it for some kind of work".
+ *
+ * Reads the frontier points directly rather than any cached summary: the
+ * whole value of the distinction is that it cannot drift from what routing
+ * would actually do. Failure returns EMPTY, so an error degrades to "nothing
+ * is marked measured" — understating what we have, never overstating it.
+ */
+export async function routableAliases(ctx: PotionContext): Promise<string[]> {
+  try {
+    const res = await ctx.db.db.execute(
+      "select distinct strategy_config->>'model' as alias from frontier_points " +
+        "where strategy_config->>'model' is not null",
+    );
+    const rows = (res.rows ?? []) as Array<{ alias: string | null }>;
+    return rows.map((r) => r.alias).filter((a): a is string => typeof a === 'string');
+  } catch {
+    return [];
+  }
 }

@@ -4,6 +4,7 @@ export * from './pool.js';
 export * from './migrate.js';
 export * from './org-context.js';
 export * from './repos/frontiers.js';
+export * from './repos/model-registry.js';
 export * from './repos/platform-baseline.js';
 export * from './repos/eval-results.js';
 export * from './repos/request-logs.js';

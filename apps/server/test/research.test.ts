@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type StrategyConfig } from '@potion/core';
-import {
+import { loadModelRegistry,
   createMembership,
   createSession,
   createUser,
@@ -114,12 +114,20 @@ describe('POST /api/research/scan', () => {
     const job = await waitJob(jobId);
     expect(job.error).toBeUndefined();
 
-    // The tmp registry (never the repo file) gained the two fixture models.
-    const merged = JSON.parse(readFileSync(tmpPrices, 'utf8')) as {
-      entries: { alias: string }[];
-    };
+    // The registry gained the two fixture models.
+    //
+    // S5: the registry is the DATABASE now. This used to read the tmp
+    // prices.json, because a scan wrote there — which is exactly the bug S5
+    // removed: a file inside the container image loses every discovery on
+    // redeploy and never reaches the running process regardless. Same claim,
+    // read from where the catalog actually lives.
+    const merged = (await loadModelRegistry(app.potion.db.db))!;
     expect(merged.entries.map((e) => e.alias)).toContain('or-mock-nova-1');
     expect(merged.entries.map((e) => e.alias)).toContain('or-mock-apex-1');
+    // …and the FILE is untouched, which is the property that makes the
+    // catalog survive a deploy.
+    const onDisk = JSON.parse(readFileSync(tmpPrices, 'utf8')) as { entries: { alias: string }[] };
+    expect(onDisk.entries.map((e) => e.alias)).not.toContain('or-mock-nova-1');
 
     // The scan fanned out research:cycle jobs; their ledger rows complete.
     const deadline = Date.now() + 120_000;

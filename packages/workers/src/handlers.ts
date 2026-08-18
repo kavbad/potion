@@ -6,8 +6,10 @@ import {
   redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi, costUsd, roundCost,
   type ProviderId, seedFromString, sha256, strategyHash, suiteContentHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
-  type ChatMessage, type EvalItem, type Policy, type StrategyConfig } from '@potion/core';
+  type ChatMessage, type EvalItem, type Policy, type PriceTable, type StrategyConfig } from '@potion/core';
 import {
+  addScannedModels,
+  loadModelRegistry,
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
   certificationStateForCluster,
@@ -89,7 +91,6 @@ import {
 import { perCallRequestLogSink, reconcileMetering } from './spend-sink.js';
 import { createProviders, ENV_VAR_BY_PROVIDER, loadPrices } from '@potion/providers';
 // ---- M4b #37 autoresearcher (SPEC §15) ----
-import { writeFileSync } from 'node:fs';
 import {
   diffModelListings,
   fetchOpenRouterModels,
@@ -172,6 +173,35 @@ import type {
   StalenessScanPayload,
   SweepRunPayload,
 } from './jobs.js';
+
+
+/**
+ * The price table every handler should read: THE REGISTRY, from the database.
+ *
+ * S5 moved the catalog out of prices.json, which a scan used to grow with
+ * writeFileSync — so discoveries died on the next redeploy and never reached
+ * the running process. Reading the db here is what makes a scan take effect
+ * IMMEDIATELY, in-process, for every later cycle and sweep in the same run.
+ *
+ * It also fixes a bug this move introduced and an existing test caught: the
+ * scan diffed new listings against the FILE. With writes redirected to the
+ * database, the file never changed, so every re-scan would have re-discovered
+ * the same models forever and re-enqueued a cycle for each.
+ *
+ * Falls back to the file when the registry is empty or unreadable. A stale
+ * catalog is a worse answer than a fresh one and a far better answer than
+ * none — an empty price table resolves no models at all.
+ */
+async function registryPrices(ctx: { db: PotionDb; pricesPath: string }): Promise<PriceTable> {
+  try {
+    const registry = await loadModelRegistry(ctx.db);
+    if (registry) return registry as PriceTable;
+  } catch {
+    // fall through to the seed file
+  }
+  return loadPrices(ctx.pricesPath).table;
+}
+
 
 /** Repo-root prices.json — works from src/ (tsx/vitest) and dist/. */
 export const DEFAULT_PRICES_PATH = fileURLToPath(
@@ -270,6 +300,9 @@ export const evalRunHandler: WorkerHandler<'eval:run'> = async (
 ): Promise<EvalRunResult> => {
   const strategies = await loadStrategies(ctx.db, payload.strategyHashes);
   const budgetCapUsd = payload.capUsd ?? DEFAULT_EVAL_CAP_USD;
+  // S5: the registry, not the file — a model discovered by a scan in this
+  // same process must be evaluable without waiting for a commit and a deploy.
+  const prices = await registryPrices(ctx);
   const summary: RunSummary = await runEval(
     {
       suiteIds: payload.suiteIds,
@@ -282,6 +315,7 @@ export const evalRunHandler: WorkerHandler<'eval:run'> = async (
     {
       db: ctx.dbHandle,
       pricesPath: ctx.pricesPath,
+      prices,
       ...(ctx.suitesDir !== undefined ? { suitesDir: ctx.suitesDir } : {}),
     },
   );
@@ -343,7 +377,7 @@ export const sweepRunHandler: WorkerHandler<'sweep:run'> = async (
   payload: SweepRunPayload,
   ctx: JobContext,
 ): Promise<SweepRunResult> => {
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   const itemsBySuite = payload.suiteIds.map((id) => loadSuite(id, ctx.suitesDir));
   const outcomes: SweepSuiteOutcome[] = [];
   let totalSpendUsd = 0;
@@ -373,6 +407,7 @@ export const sweepRunHandler: WorkerHandler<'sweep:run'> = async (
       {
         db: ctx.dbHandle,
         pricesPath: ctx.pricesPath,
+      prices,
         ...(ctx.suitesDir !== undefined ? { suitesDir: ctx.suitesDir } : {}),
       },
     );
@@ -410,7 +445,7 @@ export const stalenessScanHandler: WorkerHandler<'staleness:scan'> = async (
   _payload: StalenessScanPayload,
   ctx: JobContext,
 ): Promise<StaleCounts> => {
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   const judge = prices.entries.find((e) => e.alias === 'judge-class');
   const modelVersions: Record<string, string> = {};
   for (const entry of prices.entries) modelVersions[entry.alias] = entry.model;
@@ -1244,18 +1279,25 @@ export const researchScanHandler: WorkerHandler<'research:scan'> = async (
     listings = mockModels();
   }
 
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   const diff = diffModelListings(listings, prices);
 
-  // Append new entries to the registry (SPEC: "with provider-reported
-  // pricing when present" — no-pricing ids are reported, not appended).
-  // The version bump deliberately invalidates stale-price eval cells (same
-  // semantics as the M1a recompute flow's mergePriceEntry).
+  // Record new entries in the registry (SPEC: "with provider-reported pricing
+  // when present" — no-pricing ids are reported, not appended). The version
+  // bump deliberately invalidates stale-price eval cells (same semantics as
+  // the M1a recompute flow's mergePriceEntry).
+  //
+  // S5: this writes ROWS, not bytes. It used to writeFileSync into
+  // prices.json, which meant every discovery died on the next redeploy (the
+  // file ships inside the container image) and never reached the running
+  // process regardless, because loadPrices runs once at boot. mergePriceEntry
+  // is still used — for the VERSION it computes — so the invalidation
+  // semantics are unchanged; only the destination moved.
   let pricesVersion: string | null = null;
   if (diff.added.length > 0) {
     const merged = diff.added.reduce((t, e) => mergePriceEntry(t, e), prices);
-    writeFileSync(ctx.pricesPath, `${JSON.stringify(merged, null, 2)}\n`);
     pricesVersion = merged.version;
+    await addScannedModels(ctx.db, diff.added, merged.version);
   }
 
   // One cycle per new alias, cap RESEARCH_SCAN_MAX_CYCLES (SPEC §15.2).
@@ -1379,7 +1421,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
   // F10: one delivery does the work. This handler SPENDS; a queue retry
   // (or a stalled-job redelivery) must not buy the same tokens twice.
   withDeliveryGuard('research:cycle', ctx, payload.orgId, async () => {
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   // Live cycles are operator-enabled (POTION_RESEARCH_PROVIDER=live + real
   // provider keys); everything else runs the deterministic mock world.
   const provider: 'mock' | 'live' =
@@ -1615,6 +1657,7 @@ export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
         {
           db: ctx.dbHandle,
           pricesPath: ctx.pricesPath,
+      prices,
           ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
           ...(meter !== null ? { spendSink: meter.sink } : {}),
         },
@@ -2119,7 +2162,7 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
     bySlug.set(slug, list);
   });
 
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   const registry = buildRegistry(prices);
   const judgeAlias = classRepresentative(registry, 'judge')?.alias ?? 'mock-judge';
   const suitesV2Dir = ctx.suitesV2Dir ?? SUITES_V2_DIR;
@@ -2422,7 +2465,8 @@ export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
             // G1.6: org evidence is org-attributed at write time.
             orgId,
           },
-          { db: ctx.dbHandle, pricesPath: ctx.pricesPath, suitesV2Dir },
+          { db: ctx.dbHandle, pricesPath: ctx.pricesPath,
+      prices, suitesV2Dir },
         );
         evalRunId = summary.runId;
         result.spendUsd += summary.spendUsd;
@@ -2609,7 +2653,7 @@ export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
         c.startsWith('agent-'),
       );
       if (affectedClusters.length > 0) {
-        const { table: prices } = loadPrices(ctx.pricesPath);
+        const prices = await registryPrices(ctx);
         const registry = buildRegistry(prices);
         const strategies = (['cheap', 'mid', 'strong'] as const)
           .map((cls) => classRepresentative(registry, cls))
@@ -2815,7 +2859,7 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
   // F10: one delivery does the work. This handler SPENDS; a queue retry
   // (or a stalled-job redelivery) must not buy the same tokens twice.
   withDeliveryGuard('rubric:generate', ctx, payload.orgId, async () => {
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   // Org isolation INSIDE the job, not just at the route: a forged payload
   // for another org's cluster dies here.
   const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
@@ -3104,7 +3148,7 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
   // spend — G1.7 live-leg finding). The registry carries OpenRouter-routed
   // equivalents for every class, so one key can cover the sweep. The
   // runner's MockAliasInLiveRunError backstops the mock exclusion.
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   const reachable = (p: string): boolean =>
     p !== 'mock' &&
     process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
@@ -3152,7 +3196,8 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = as
       judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
       maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
     },
-    { db: ctx.dbHandle, pricesPath: ctx.pricesPath, spendSink: meter.sink },
+    { db: ctx.dbHandle, pricesPath: ctx.pricesPath,
+      prices, spendSink: meter.sink },
   );
 
   // 6. Run row (provider 'live', org-attributed). Completion RECONCILES the
@@ -3371,7 +3416,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // sweep's mechanism), but REFUSING on any unrepresented answerer class:
     // the DoD needs all three singles, and a silent two-single sweep would
     // publish a frontier that under-measures by construction.
-    const { table: prices } = loadPrices(ctx.pricesPath);
+    const prices = await registryPrices(ctx);
     const reachable = (p: string): boolean =>
       p !== 'mock' &&
       process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
@@ -3448,7 +3493,8 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
         ...(payload.sampleN !== undefined ? { itemSampleN: payload.sampleN } : {}),
       },
-      { db: ctx.dbHandle, pricesPath: ctx.pricesPath, spendSink: meter.sink },
+      { db: ctx.dbHandle, pricesPath: ctx.pricesPath,
+      prices, spendSink: meter.sink },
     );
     // 8. Run row — platform (org NULL); completion RECONCILES the per-call
     // record, never writes spend anew.
@@ -4099,7 +4145,7 @@ const runSuiteVerify = async (
     }
   }
 
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   prov.pricesVersion = prices.version;
   let judgeModelOverride: string | undefined;
   if (providerMode === 'live') {
@@ -4147,6 +4193,7 @@ const runSuiteVerify = async (
     {
       db: ctx.dbHandle,
       pricesPath: ctx.pricesPath,
+      prices,
       ...(meter !== null ? { spendSink: meter.sink } : {}),
     },
   );
@@ -4639,7 +4686,7 @@ const runSuiteCertify = async (
     }
   }
 
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  const prices = await registryPrices(ctx);
   let judgeModelOverride: string | undefined;
   if (providerMode === 'live') {
     const reachable = (p: string): boolean =>
@@ -4681,6 +4728,7 @@ const runSuiteCertify = async (
       {
         db: ctx.dbHandle,
         pricesPath: ctx.pricesPath,
+      prices,
         ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
         ...(meter !== null ? { spendSink: meter.sink } : {}),
       },

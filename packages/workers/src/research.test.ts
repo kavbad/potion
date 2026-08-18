@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { strategyHash, type EvalResult, type StrategyConfig } from '@potion/core';
 import {
+  loadModelRegistry,
   alertDeliveries,
   alertRules,
   createDb,
@@ -100,8 +101,12 @@ describe('research:scan', () => {
     expect(res.pricesVersion).toContain('+or-mock-nova-1');
     expect(res.cyclesEnqueued).toEqual(['or-mock-nova-1', 'or-mock-apex-1']);
 
-    // The registry file itself was extended (per-token × 1e6 → per-1M).
-    const merged = loadPrices(pricesPath).table;
+    // S5: the registry is the DATABASE now, not the file. A scan used to
+    // writeFileSync into prices.json, which meant every discovery died on the
+    // next redeploy and never reached the running process anyway (loadPrices
+    // runs once at boot). Same assertions — pricing converted per-token × 1e6
+    // → per-1M — read from where the catalog actually lives.
+    const merged = (await loadModelRegistry(db.db))!;
     const nova = merged.entries.find((e) => e.alias === 'or-mock-nova-1');
     expect(nova?.inputPer1M).toBeCloseTo(0.2, 12);
     const apex = merged.entries.find((e) => e.alias === 'or-mock-apex-1');

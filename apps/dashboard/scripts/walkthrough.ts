@@ -559,9 +559,24 @@ async function main(): Promise<void> {
       cycles.every((c) => c.status === 'completed'),
       `cycle(s) failed: ${JSON.stringify(cycles)}`,
     );
-    // The tmp registry now carries the mock-discovered models (repo file untouched).
-    const extended = await readFile(tmpPricesPath, 'utf8');
-    assert(extended.includes('mock-nova-1'), 'tmp prices.json missing scanned model mock-nova-1');
+    // The registry now carries the mock-discovered models — and the FILE does
+    // not, which is the point. S5 moved the catalog into the database: a scan
+    // used to writeFileSync into prices.json, so every discovery died on the
+    // next redeploy (the file ships inside the container image) and never
+    // reached the running process anyway (loadPrices runs once at boot).
+    const listed = await fetch(`${API}/v1/models`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+    });
+    const catalogue = ((await listed.json()) as { data: Array<{ id: string }> }).data.map((m) => m.id);
+    assert(
+      catalogue.some((id) => id.includes('mock-nova-1')),
+      `registry missing scanned model mock-nova-1 (catalogue: ${catalogue.join(', ')})`,
+    );
+    const onDisk = await readFile(tmpPricesPath, 'utf8');
+    assert(
+      !onDisk.includes('mock-nova-1'),
+      'prices.json was written — the catalog must live in the db, or it dies on redeploy',
+    );
     // /recipes: the library renders candidates badged SIMULATED with lineage.
     const recipes = await dashFetch('/recipes');
     const html = await recipes.text();
