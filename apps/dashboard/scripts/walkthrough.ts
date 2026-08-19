@@ -406,6 +406,40 @@ async function main(): Promise<void> {
     );
   });
 
+  // ---- 7d. the shell: collapsed nav, API keys with SCOPES, docs ----
+  // The nav used to be 13 flat links shown to signed-out visitors too. And
+  // `serve+admin` existed in the API with no supported way to obtain one, so
+  // nothing programmatic could get past a 403 — this asserts the affordance
+  // that closes it, not just that a page renders.
+  await step('7d. shell: /settings/keys mints serve+admin, /docs renders', async () => {
+    const keysPage = await dashFetch('/settings/keys');
+    assert(keysPage.ok, `keys page HTTP ${keysPage.status}`);
+    const keysHtml = await keysPage.text();
+    assert(keysHtml.includes('Admin token'), 'no admin-scope affordance on the keys page');
+
+    const made = await dashFetch('/api/api-keys', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'walkthrough-admin', scopes: 'serve+admin' }),
+    });
+    assert(made.status === 201, `mint serve+admin HTTP ${made.status}`);
+    const listed = (await (await dashFetch('/api/api-keys')).json()) as {
+      keys: Array<{ name: string; scopes: string | null }>;
+    };
+    const admin = listed.keys.find((k) => k.name === 'walkthrough-admin');
+    assert(admin?.scopes === 'serve+admin', `scope not honoured: ${String(admin?.scopes)}`);
+
+    const docs = await dashFetch('/docs');
+    const docsHtml = await docs.text();
+    assert(docs.ok, `docs HTTP ${docs.status}`);
+    // A quickstart missing its examples is the one hole docs must not have —
+    // and a brand-new reader has no bound policy to personalise them from.
+    assert(docsHtml.includes('Quickstart'), 'docs missing quickstart');
+    assert(docsHtml.includes('chat/completions'), 'docs quickstart has no curl example');
+    assert(docsHtml.includes('openai'), 'docs quickstart has no SDK example');
+    return 'keys page mints serve+admin; docs render quickstart + curl + SDK';
+  });
+
   // ---- 8. M4 #31: /playground renders the chat surface ----
   await step('8. GET /playground (M4: chat surface + point selector)', async () => {
     const res = await dashFetch('/playground?cluster=code-gen');
