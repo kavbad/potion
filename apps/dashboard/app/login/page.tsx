@@ -1,7 +1,18 @@
-// /login (M2 Wave 2, ROADMAP #14) — magic-link sign-in. Email in → "check
-// your email" state; in dev mode (server dev bypass on) the link is shown
-// inline so the whole flow works without an email server. Warm paper
-// neutrals + the one teal accent, matching the rest of the dashboard.
+// /login (M2 Wave 2, ROADMAP #14) — magic-link sign-in.
+//
+// TWO PATHS, and the page must not confuse them. When the deployment has a
+// real email sender, the response carries no link and "check your email" is
+// the truth. When it does NOT, the server returns the link inline
+// (POTION_MAGIC_LINK_IN_RESPONSE) — and this page used to render "Check your
+// email … we sent a single-use sign-in link to you@…" anyway, then offer the
+// link underneath as a footnote. That is a dead end dressed as a next step:
+// the server had already said no email was sent, and the page told the user
+// to go look for one.
+//
+// So a returned link is FOLLOWED, not footnoted. Enter an email, and you are
+// signed in — no inbox, no second click, and no instruction to wait for
+// something that is never coming. The production path is untouched: no link
+// in the response means the email copy, unchanged.
 'use client';
 
 import { Suspense, useState } from 'react';
@@ -11,7 +22,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
   const [email, setEmail] = useState('');
-  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'entering'>('idle');
   const [devLink, setDevLink] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(error);
 
@@ -31,7 +42,16 @@ function LoginForm() {
         setState('idle');
         return;
       }
-      setDevLink(body?.devLink ?? null);
+      const link = body?.devLink ?? null;
+      if (link) {
+        // The server told us there is no email server. Use the link rather
+        // than sending the user to an inbox that will never receive one.
+        setDevLink(link);
+        setState('entering');
+        window.location.href = link;
+        return;
+      }
+      setDevLink(null);
       setState('sent');
     } catch {
       setFormError('the Potion API is unreachable — start apps/server first.');
@@ -43,8 +63,8 @@ function LoginForm() {
     <div className="max-w-md">
       <h1 className="text-2xl font-semibold tracking-tight">Sign in to Potion</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        Passwordless: we email you a single-use sign-in link. First sign-in creates your
-        workspace; teammates join by admin invite.
+        Passwordless — no password to choose or forget. First sign-in creates your workspace;
+        teammates join by admin invite.
       </p>
 
       {formError && (
@@ -54,22 +74,26 @@ function LoginForm() {
       )}
 
       <div className="rounded-xl border border-line bg-panel px-8 py-8">
-        {state === 'sent' ? (
+        {state === 'entering' ? (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-ink">Signing you in…</p>
+            <p className="text-sm leading-relaxed text-soft">
+              This deployment has no email sender configured, so Potion signed you in directly
+              instead of mailing a link.
+            </p>
+            {devLink && (
+              <a href={devLink} className="text-sm font-medium text-accent underline">
+                Continue
+              </a>
+            )}
+          </div>
+        ) : state === 'sent' ? (
           <div className="space-y-3">
             <p className="text-sm font-medium text-ink">Check your email</p>
             <p className="text-sm leading-relaxed text-soft">
               We sent a single-use sign-in link to{' '}
               <span className="font-medium text-ink">{email}</span>. It expires in 15 minutes.
             </p>
-            {devLink && (
-              <p className="rounded-lg bg-accent-soft px-4 py-3 text-sm leading-relaxed text-accent">
-                <span className="font-medium">Dev mode:</span> no email server here —{' '}
-                <a href={devLink} className="font-medium underline">
-                  click to sign in
-                </a>
-                .
-              </p>
-            )}
             <button
               type="button"
               onClick={() => setState('idle')}
