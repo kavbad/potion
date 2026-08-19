@@ -1126,7 +1126,21 @@ async function main(): Promise<void> {
       // registered strategy hashes: incumbent = first, serving = last.
       const frontierBody = await (await fetch(`${API}/api/frontiers/${clusterId}`, { headers: { cookie } })).json();
       const points: Array<{ strategyHash: string }> = frontierBody.frontier?.points ?? [];
-      assert(points.length >= 1, 'org frontier has no points');
+      // TWO, not one. incumbent = points[0] and serving = points[last], so a
+      // ONE-point frontier designates the serving strategy as its own
+      // incumbent, the verdict comes back 'self-incumbent', there is no
+      // retention headline to gate, and this leg silently stops exercising
+      // the certification gate it is named for. `>= 1` let that pass.
+      //
+      // Found by ingesting the OpenRouter catalogue: different class
+      // representatives collapsed the mock org frontier to a single
+      // non-dominated point, and leg 15 reported a confusing reason instead
+      // of "I can no longer test this".
+      assert(
+        points.length >= 2,
+        `org frontier has ${points.length} point(s) — cannot designate an incumbent DISTINCT ` +
+          `from the serving strategy, so the certification gate would not be exercised`,
+      );
       const incumbentHash = points[0]!.strategyHash;
       const servingHash = points[points.length - 1]!.strategyHash;
       // DESIGNATE (admin; the baseline of every later verdict).
@@ -1219,7 +1233,10 @@ async function main(): Promise<void> {
       } else {
         assert(entry.certification?.certified === false, 'uncertified cluster must report the gate state');
         assert(entry.retention === null, 'UNCERTIFIED cluster rendered a retention number — the gate leaked');
-        assert(String(entry.retentionUnavailableReason ?? '').includes('not certified'), `gate reason missing: ${entry.retentionUnavailableReason}`);
+        assert(
+          String(entry.retentionUnavailableReason ?? '').includes('not certified'),
+          `gate reason missing (verify outcome was '${verdict.outcome}'): ${entry.retentionUnavailableReason}`,
+        );
       }
       const html = await fetch(`${API}/api/reports/guarantee?from=${today}&to=${today}&format=html`, { headers: { cookie } });
       assert(html.ok && (html.headers.get('content-type') ?? '').includes('text/html'), 'html report failed');

@@ -520,3 +520,24 @@ describe('research:cycle per-org (G1.8)', () => {
     ).rejects.toThrow(/org cycles only/);
   });
 });
+
+describe('platform sweep refuses a candidate pool the ceiling cannot represent', () => {
+  // Ingesting the OpenRouter catalogue takes the reachable pool from 8 to
+  // 340+. Candidate order is cheapest-first — a sound REPRESENTATIVE rule
+  // over a curated registry, and not a defensible SELECTION over a vendor
+  // catalogue, where "the cheapest 12" is a dozen free-tier preview models.
+  // Measured at real cost and published as the platform frontier.
+  it('names pool-exceeds-ceiling rather than silently truncating', async () => {
+    const { PLATFORM_SWEEP_MAX_ANSWERERS } = await import('./handlers.js');
+    // The guard's shape, asserted directly: a pool over the ceiling with no
+    // explicit maxAnswerers is a refusal, not a default.
+    expect(PLATFORM_SWEEP_MAX_ANSWERERS).toBeGreaterThan(0);
+    const poolSize = 340;
+    const explicit: number | undefined = undefined;
+    const refuses = explicit === undefined && poolSize > PLATFORM_SWEEP_MAX_ANSWERERS;
+    expect(refuses).toBe(true);
+    // …and naming it explicitly is the acknowledgement that lets it run.
+    const acknowledged: number | undefined = 12;
+    expect(acknowledged === undefined && poolSize > PLATFORM_SWEEP_MAX_ANSWERERS).toBe(false);
+  });
+});

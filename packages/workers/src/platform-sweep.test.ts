@@ -157,7 +157,7 @@ describe('suite map — both directions against the taxonomy', () => {
 });
 
 describe('openrouter-only class coverage (the or-opus addition)', () => {
-  it('one OpenRouter key represents all four classes; strong resolves to or-opus', () => {
+  it('one OpenRouter key represents all four classes', () => {
     const { table: prices } = loadPrices(pricesPath);
     const registry = buildRegistry(prices).filter((e) => e.provider === 'openrouter');
     const cheap = classRepresentative(registry, 'cheap');
@@ -168,8 +168,15 @@ describe('openrouter-only class coverage (the or-opus addition)', () => {
     expect(mid).not.toBeNull();
     expect(judge).not.toBeNull();
     // Pre-Step-5 this was null (no or-* alias classified strong) — the
-    // sweep would have silently published a two-single frontier.
-    expect(strong?.alias).toBe('or-opus');
+    // sweep would have silently published a two-single frontier. THAT is the
+    // property: every answerer tier has a reachable representative on one
+    // key. The specific alias is NOT — this asserted 'or-opus' while the
+    // registry held 8 curated models, and ingesting the OpenRouter catalogue
+    // (24 → 362 entries) correctly moved it to a cheaper strong-tier model.
+    // Pinning the alias would have made every catalogue refresh a test
+    // failure that says nothing about whether the sweep can run.
+    expect(strong).not.toBeNull();
+    expect(strong?.provider).toBe('openrouter');
   });
 });
 

@@ -71,6 +71,30 @@ export async function fetchOpenRouterModels(opts: {
       const pricing = (r['pricing'] ?? {}) as Record<string, unknown>;
       const prompt = Number(pricing['prompt']);
       const completion = Number(pricing['completion']);
+
+      // NOT EVERY CATALOGUE ROW IS A SERVABLE MODEL. Measured against the
+      // live OpenRouter catalogue (415 rows), two kinds must never become
+      // routing candidates, and both would have without this:
+      //
+      //   NEGATIVE PRICING (5 rows: openrouter/auto, /auto-beta, /fusion,
+      //   /pareto-code, /bodybuilder) — these are OpenRouter's OWN routers,
+      //   and the negative number is a sentinel for "varies", not a price.
+      //   Routing to a router is circular, unmeasurable, and a negative cost
+      //   silently inverts every comparison that reads it: it sorts cheapest,
+      //   so it would have become the class representative for the next
+      //   sweep, and it makes budget arithmetic run backwards.
+      //
+      //   :batch VARIANTS (61 rows) — asynchronous batch endpoints, cheaper
+      //   because delivery is deferred. A synchronous serving request cannot
+      //   use one, so listing them as options for a chat endpoint offers a
+      //   choice that cannot be honoured.
+      //
+      // `:free` variants are KEPT: they are real models on rate-limited
+      // tiers, and being unmeasured they are visible-but-never-auto-selected
+      // like anything else in the catalogue.
+      if (prompt < 0 || completion < 0) continue;
+      if (/[:-]batch$/.test(r['id'])) continue;
+
       out.push({
         id: r['id'],
         ...(typeof r['canonical_slug'] === 'string' ? { canonicalSlug: r['canonical_slug'] } : {}),

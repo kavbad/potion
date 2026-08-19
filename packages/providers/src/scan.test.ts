@@ -117,3 +117,43 @@ describe('mockModels fixture (SPEC §15.2)', () => {
     expect(MOCK_MODEL_LISTINGS[0]!.id).toBe('mock-cheap-v1');
   });
 });
+
+describe('what the catalogue parser REFUSES to call a model', () => {
+  // Measured against the live OpenRouter catalogue, not imagined: 415 rows
+  // contained 5 negative-priced router pseudo-models and 61 :batch variants.
+  // Both would have entered the registry as routing candidates.
+  const body = (models: unknown[]): Response =>
+    new Response(JSON.stringify({ data: models }), { status: 200 });
+
+  it('drops NEGATIVE pricing — a router sentinel that would sort cheapest', async () => {
+    const out = await fetchOpenRouterModels({
+      apiKey: 'k',
+      fetchImpl: async () =>
+        body([
+          { id: 'openrouter/auto', pricing: { prompt: '-1', completion: '-1' } },
+          { id: 'vendor/real', pricing: { prompt: '0.0000005', completion: '0.0000015' } },
+        ]),
+    });
+    expect(out.map((m) => m.id)).toEqual(['vendor/real']);
+  });
+
+  it('drops :batch variants — a sync request cannot be served by an async endpoint', async () => {
+    const out = await fetchOpenRouterModels({
+      apiKey: 'k',
+      fetchImpl: async () =>
+        body([
+          { id: 'anthropic/claude-opus-5:batch', pricing: { prompt: '0.0000025', completion: '0.00001' } },
+          { id: 'anthropic/claude-opus-5', pricing: { prompt: '0.000005', completion: '0.000025' } },
+        ]),
+    });
+    expect(out.map((m) => m.id)).toEqual(['anthropic/claude-opus-5']);
+  });
+
+  it('KEEPS :free variants — real models, and unmeasured ones are never auto-selected anyway', async () => {
+    const out = await fetchOpenRouterModels({
+      apiKey: 'k',
+      fetchImpl: async () => body([{ id: 'vendor/small:free', pricing: { prompt: '0', completion: '0' } }]),
+    });
+    expect(out.map((m) => m.id)).toEqual(['vendor/small:free']);
+  });
+});

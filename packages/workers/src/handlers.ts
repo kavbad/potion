@@ -3321,7 +3321,10 @@ export type PlatformSweepRefusalReason =
   | 'org-owned-cluster'
   | 'belt-missing'
   | 'no-keys'
-  | 'class-unrepresented';
+  | 'class-unrepresented'
+  /** More reachable answerers than the width ceiling: cheapest-first would
+   *  pick a subset nobody chose. Operator must name maxAnswerers. */
+  | 'pool-exceeds-ceiling';
 
 /** Typed refusal, all pre-spend: the reason is machine-checkable so tests
  * pin fails-for-the-RIGHT-reason, never just "it threw". */
@@ -3489,6 +3492,29 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       ...classMembers(registry, 'strong'),
     ];
     const maxAnswerers = payload.maxAnswerers ?? PLATFORM_SWEEP_MAX_ANSWERERS;
+
+    // REFUSE A POOL THIS CEILING CANNOT HONESTLY REPRESENT.
+    //
+    // The candidate order is cheapest-first, which was a sound
+    // representative rule over a curated registry of 8 answerers. It is not
+    // a defensible SELECTION over a full vendor catalogue: ingesting
+    // OpenRouter takes the reachable pool past 340, where "the cheapest 12"
+    // means a dozen free-tier preview models — a candidate set nobody chose,
+    // measured at real cost, published as the platform frontier.
+    //
+    // So a pool that overflows the ceiling is an operator decision, not a
+    // default. Passing `maxAnswerers` explicitly is the acknowledgement that
+    // the run is measuring a deliberate subset; without it the sweep refuses
+    // rather than silently truncating 340 down to 12 by price.
+    if (payload.maxAnswerers === undefined && answerPool.length > maxAnswerers) {
+      throw new PlatformSweepRefusalError(
+        'pool-exceeds-ceiling',
+        `${answerPool.length} reachable answerers but the ceiling is ${maxAnswerers} — ` +
+          `cheapest-first would measure a subset nobody chose. Pass maxAnswerers explicitly ` +
+          `to acknowledge the truncation, or narrow the registry.`,
+      );
+    }
+
     const answerers = answerPool.slice(0, maxAnswerers);
     const droppedAnswerers = answerPool.slice(maxAnswerers).map((e) => e.alias);
     const singles: StrategyConfig[] = answerers.map(
