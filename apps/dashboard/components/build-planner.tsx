@@ -202,6 +202,43 @@ export function BuildPlanner() {
           </section>
 
           {/* ---- 3. what matters most ---- */}
+          {plan.evidence.measured && plan.evidence.evaluations > 0 && (
+            <section className="rounded-xl border border-line bg-panel px-6 py-5">
+              <p className="text-sm leading-relaxed text-soft">
+                To answer this, Potion ran{' '}
+                <span className="font-medium text-ink">
+                  {plan.evidence.evaluations.toLocaleString()} live evaluations
+                </span>{' '}
+                for {plan.intent.cluster.name} —{' '}
+                <span className="font-medium text-ink">{plan.evidence.strategies}</span> strategies
+                across <span className="font-medium text-ink">{plan.evidence.items}</span> test items,
+                each answer scored against a reference.
+                {plan.evidence.dominatedAway !== null && plan.evidence.dominatedAway > 0 ? (
+                  <>
+                    {' '}
+                    <span className="font-medium text-ink">{plan.evidence.dominatedAway}</span> of
+                    those were beaten outright on every dimension and discarded; the{' '}
+                    <span className="font-medium text-ink">{plan.evidence.pointCount}</span> below are
+                    what survived.
+                  </>
+                ) : (
+                  <>
+                    {' '}
+                    Only the{' '}
+                    <span className="font-medium text-ink">{plan.evidence.pointCount}</span> that
+                    nothing else beat outright are offered below.
+                  </>
+                )}
+              </p>
+              <p className="mt-2 text-xs text-faint">
+                Frontier v{plan.evidence.frontierVersion} · {plan.evidence.provenance} provider
+                evidence · you are seeing the same numbers the router uses.
+                {!plan.evidence.countsAreComplete &&
+                  ' Counts cover the strategies still on the frontier; candidates measured and then beaten are not included here.'}
+              </p>
+            </section>
+          )}
+
           <section className="space-y-4">
             <h2 className="text-sm font-medium text-ink">What matters most to you?</h2>
 
@@ -248,8 +285,18 @@ export function BuildPlanner() {
                               </dd>
                             </div>
                             <div className="flex justify-between">
-                              <dt className="text-faint">Cost / 1K</dt>
+                              {/* costPer1K is USD per 1000 REQUESTS (core
+                                  types.ts). It was labelled "Cost / 1K",
+                                  which every reader takes as per-1K-TOKENS —
+                                  a ~1000x misread of the price. */}
+                              <dt className="text-faint">Per 1,000 requests</dt>
                               <dd className="text-ink">${o.point!.costPer1K.toFixed(4)}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                              <dt className="text-faint">Per request</dt>
+                              <dd className="text-ink">
+                                ${(o.point!.costPer1K / 1000).toFixed(6)}
+                              </dd>
                             </div>
                             <div className="flex justify-between">
                               <dt className="text-faint">
@@ -272,6 +319,27 @@ export function BuildPlanner() {
                               </div>
                             )}
                           </dl>
+                          {o.point!.savedVsBestQuality !== null && o.point!.savedVsBestQuality > 0.005 && (
+                            <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-800">
+                              <span className="font-semibold">
+                                {(o.point!.savedVsBestQuality * 100).toFixed(0)}% cheaper
+                              </span>{' '}
+                              than always using the highest-quality strategy — at 100k requests/mo
+                              that is{' '}
+                              <span className="font-semibold">
+                                ${((o.point!.costPer1K / 1000) * 100_000).toFixed(0)}
+                              </span>{' '}
+                              instead of{' '}
+                              <span className="font-semibold">
+                                $
+                                {(
+                                  ((o.point!.costPer1K / (1 - o.point!.savedVsBestQuality!)) / 1000) *
+                                  100_000
+                                ).toFixed(0)}
+                              </span>
+                              .
+                            </p>
+                          )}
                           <button
                             onClick={() => void apply(o)}
                             disabled={busy}

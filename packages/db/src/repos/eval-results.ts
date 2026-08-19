@@ -1,6 +1,6 @@
 // Thin typed repository for eval_results (SPEC §7; G1.6 org attribution +
 // retirement-by-staleness; G2.1 paired qualities).
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { EvalResult, ProviderMode } from '@potion/core';
 import type { PotionDb } from '../db.js';
 import { evalResults } from '../schema.js';
@@ -232,4 +232,45 @@ export async function pairedQualities(
     });
   }
   return { pairs, unpairable };
+}
+
+/**
+ * How much measurement stands behind one cluster's frontier.
+ *
+ * The "what are you building" surface showed three cards of numbers and no
+ * indication of what produced them, so a reader had no way to tell a measured
+ * recommendation from a plausible-looking guess. These are the counts that
+ * make the difference legible — and they are counts of rows that actually
+ * exist, not a marketing figure: distinct strategies tried, distinct items
+ * they were tried on, and total evaluations.
+ *
+ * Counts PLATFORM evidence (org_id IS NULL) plus the caller's own, matching
+ * what `loadCurrentFrontier` reads org-preferred — so the number described
+ * is the evidence behind the frontier the caller is actually being shown.
+ */
+export interface ClusterEvidenceCounts {
+  evaluations: number;
+  strategies: number;
+  items: number;
+}
+
+export async function clusterEvidenceCounts(
+  db: PotionDb,
+  clusterId: string,
+  orgId?: string,
+): Promise<ClusterEvidenceCounts> {
+  const res = await db.execute(sql`
+    SELECT count(*)::int                          AS evaluations,
+           count(DISTINCT strategy_hash)::int     AS strategies,
+           count(DISTINCT item_id)::int           AS items
+      FROM eval_results
+     WHERE cluster_id = ${clusterId}
+       AND (org_id IS NULL ${orgId === undefined ? sql`` : sql`OR org_id = ${orgId}`})
+  `);
+  const r = (res.rows as Array<Record<string, unknown>>)[0];
+  return {
+    evaluations: Number(r?.evaluations ?? 0),
+    strategies: Number(r?.strategies ?? 0),
+    items: Number(r?.items ?? 0),
+  };
 }

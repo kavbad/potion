@@ -13,7 +13,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/server.js';
-import { assignmentMargin, derivedLatencyBoundMs, policyOptionsFor } from '../src/routes/plan.js';
+import {
+  assignmentMargin,
+  derivedCostCeilingUsd,
+  derivedLatencyBoundMs,
+  policyOptionsFor,
+} from '../src/routes/plan.js';
 import type { FrontierPoint } from '@potion/core';
 
 // ---------------------------------------------------------------- unit ----
@@ -46,6 +51,35 @@ describe('policyOptionsFor — every option carries the point it would really se
     const speed = options.find((o) => o.priority === 'speed')!;
     expect(speed.point!.strategyHash).toBe('cheap'); // the fastest measured point
     for (const o of options) expect(o.infeasible).toBeNull();
+  });
+
+  it('MAKE IT GOOD resolves — a fixed $1 ceiling made it permanently unavailable', () => {
+    // The bug an operator hit on a real screen: costPer1K is USD per 1000
+    // REQUESTS, so the hardcoded $1.00 ceiling meant a tenth of a cent per
+    // request. Agentic tool use measures $6.72–$13.05 per 1000, so EVERY
+    // strategy blew it and the card a customer most wants rendered blocked.
+    const options = policyOptionsFor([
+      pt({ strategyHash: 'cheap', quality: 0.914, costPer1K: 6.7181 }),
+      pt({ strategyHash: 'best', quality: 0.957, costPer1K: 13.0541 }),
+    ]);
+    const quality = options.find((o) => o.priority === 'quality')!;
+    expect(quality.point, 'make-it-good must not be blocked by an arbitrary ceiling').not.toBeNull();
+    expect(quality.point!.strategyHash).toBe('best');
+    // …and the ceiling is DERIVED, never a bigger arbitrary number.
+    expect(derivedCostCeilingUsd([pt({ costPer1K: 6.7181 }), pt({ costPer1K: 13.0541 })])).toBe(13.0541);
+    expect(derivedCostCeilingUsd([])).toBeNull();
+  });
+
+  it('reports the cost of each option RELATIVE to just using the best model', () => {
+    const options = policyOptionsFor([
+      pt({ strategyHash: 'cheap', quality: 0.914, costPer1K: 6.7181 }),
+      pt({ strategyHash: 'best', quality: 0.957, costPer1K: 13.0541 }),
+    ]);
+    const cost = options.find((o) => o.priority === 'cost')!;
+    expect(cost.point!.savedVsBestQuality).toBeCloseTo(1 - 6.7181 / 13.0541, 6);
+    // The best-quality option is not "0% cheaper than itself" — that is a
+    // comparison with nothing in it, and null says so.
+    expect(options.find((o) => o.priority === 'quality')!.point!.savedVsBestQuality).toBeNull();
   });
 
   it('reports an INFEASIBLE shape with the reason instead of hiding it', () => {

@@ -585,6 +585,8 @@ export interface PlanPolicyOption {
     providerMode: string;
     n: number | null;
     qualityCi95: number | null;
+    /** Cost relative to the highest-quality measured strategy. Fraction. */
+    savedVsBestQuality: number | null;
   } | null;
   /** Present exactly when point is null — shown, never hidden. */
   infeasible: string | null;
@@ -607,6 +609,14 @@ export interface PlanResponse {
     pointCount: number;
     /** 'harness' until this org has real serving traffic for this cluster. */
     latencySource: 'serving' | 'harness';
+    /** Real row counts behind the frontier — what produced these numbers. */
+    evaluations: number;
+    strategies: number;
+    items: number;
+    /** Strategies measured then beaten outright. null = not knowable here. */
+    dominatedAway: number | null;
+    /** false = counts are a floor from surviving points, not the full campaign. */
+    countsAreComplete: boolean;
   };
   options: PlanPolicyOption[];
   /** platform-measured = Potion's measurement of this WORKLOAD TYPE, not of

@@ -49,9 +49,11 @@ export function describePolicy(policy: Policy): string {
         `${policy.qualityFloor.toFixed(2)}.`
       );
     case 'max_quality':
+      // "per 1K tokens" was WRONG and made every cost read ~1000x too high:
+      // FrontierPoint.costPer1K is USD per 1000 REQUESTS (core types.ts).
       return (
         `Highest measured quality available under ` +
-        `$${policy.costCeilingPer1K.toFixed(4)} per 1K tokens.`
+        `$${policy.costCeilingPer1K.toFixed(4)} per 1,000 requests.`
       );
     case 'latency_bound':
       return `Best quality that holds p95 latency under ${policy.p95Ms} ms.`;

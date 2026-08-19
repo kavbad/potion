@@ -49,6 +49,7 @@ import {
 } from '@potion/core';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
+import { clusterEvidenceCounts } from '@potion/db';
 import { openAiError } from '../auth.js';
 import { bindServingLatency } from '../latency-policy.js';
 import type { PotionContext } from '../context.js';
@@ -113,9 +114,44 @@ export interface PolicyOption {
     /** Sample count behind the quality number; null on pre-evidence points. */
     n: number | null;
     qualityCi95: number | null;
+    /**
+     * Cost relative to the highest-quality measured strategy — the honest
+     * counterfactual for "what if I just always used the best model", and the
+     * same comparison request logging records per served request.
+     *
+     * Null on the best-quality option itself (comparing it to itself says
+     * nothing) and whenever the comparison is undefined. A fraction, not a
+     * percentage, so the surface decides how to render it.
+     */
+    savedVsBestQuality: number | null;
   } | null;
   /** Present exactly when point is null. Never hidden, never worked around. */
   infeasible: string | null;
+}
+
+/**
+ * The cost ceiling to offer for "make it good", DERIVED from this cluster's
+ * own measurements rather than fixed.
+ *
+ * The fixed $1.00 that used to sit here had the same defect as the fixed
+ * 1000ms latency bound, and it shipped anyway because I fixed one and left
+ * the other. `costPer1K` is USD per 1000 REQUESTS, so $1.00 means a tenth of
+ * a cent per request — below which almost no real workload lands. Agentic
+ * tool use measures $6.72–$8.81 per 1000 requests, so EVERY strategy blew
+ * the ceiling and "Make it good" rendered permanently unavailable: a dial
+ * with nothing behind it, on the card a customer is most likely to want.
+ *
+ * As with latency, the fix is not a bigger arbitrary number. It is to state
+ * the bound the evidence supports: the most expensive strategy actually
+ * measured for this workload. max_quality then means what the card promises —
+ * the best measured quality among things we have measured — and it is
+ * available exactly when evidence exists.
+ */
+export function derivedCostCeilingUsd(points: FrontierPoint[]): number | null {
+  const measured = points.map((p) => p.costPer1K).filter((n) => Number.isFinite(n) && n > 0);
+  if (measured.length === 0) return null;
+  // Round UP so the ceiling can never exclude the point it came from.
+  return Math.ceil(Math.max(...measured) * 10000) / 10000;
 }
 
 /**
@@ -151,8 +187,21 @@ export function derivedLatencyBoundMs(points: FrontierPoint[]): number | null {
  * thing; the latency bound is derived per cluster — see above for why a
  * fixed default was a dial with nothing behind it.
  */
+/** The most expensive measured point — the "just use the best model" baseline. */
+function bestQualityCost(points: FrontierPoint[]): number | null {
+  let best: FrontierPoint | null = null;
+  for (const p of points) {
+    if (best === null || p.quality > best.quality || (p.quality === best.quality && p.costPer1K < best.costPer1K)) {
+      best = p;
+    }
+  }
+  return best && best.costPer1K > 0 ? best.costPer1K : null;
+}
+
 export function policyOptionsFor(points: FrontierPoint[], evidence: LatencyEvidenceMap = {}): PolicyOption[] {
   const boundMs = derivedLatencyBoundMs(points);
+  const ceilingUsd = derivedCostCeilingUsd(points);
+  const baselineCost = bestQualityCost(points);
   const shapes: Array<{ priority: PolicyOption['priority']; policy: Policy | null; infeasibleWhy: string }> = [
     {
       priority: 'cost',
@@ -161,8 +210,8 @@ export function policyOptionsFor(points: FrontierPoint[], evidence: LatencyEvide
     },
     {
       priority: 'quality',
-      policy: { type: 'max_quality', costCeilingPer1K: 1.0 },
-      infeasibleWhy: 'every measured strategy for this workload costs more than $1.0000 per 1K tokens',
+      policy: ceilingUsd === null ? null : { type: 'max_quality', costCeilingPer1K: ceilingUsd },
+      infeasibleWhy: 'nothing has been measured for this workload, so there is no cost to bound',
     },
     {
       priority: 'speed',
@@ -208,6 +257,10 @@ export function policyOptionsFor(points: FrontierPoint[], evidence: LatencyEvide
             providerMode: selected.providerMode ?? 'unknown',
             n: selected.evidence?.n ?? null,
             qualityCi95: selected.evidence?.qualityCi95 ?? null,
+            savedVsBestQuality:
+              baselineCost !== null && baselineCost > 0 && selected.costPer1K < baselineCost
+                ? (baselineCost - selected.costPer1K) / baselineCost
+                : null,
           }
         : null,
       infeasible: selected ? null : infeasibleWhy,
@@ -278,6 +331,23 @@ export function registerPlanRoutes(app: FastifyInstance, ctx: PotionContext): vo
     );
     const points = bound.frontier?.points ?? [];
     const latencyEvidence: LatencyEvidenceMap = bound.evidence ?? {};
+    // How much measurement stands behind this frontier.
+    //
+    // Prefer the eval_results row counts, which include candidates that were
+    // measured and then DOMINATED — the honest total campaign effort. But a
+    // fresh deployment imports the committed baseline, which ships frontiers
+    // and points and NOT the eval rows behind them, so those counts are zero
+    // there. Falling back to the points' own evidence keeps the claim true on
+    // every deployment; it just becomes a FLOOR (survivors only), and
+    // `dominatedAway` is reported as unknown rather than guessed at zero.
+    const rowCounts = await clusterEvidenceCounts(ctx.db.db, winner.clusterId, orgId);
+    const fromPoints = {
+      evaluations: points.reduce((sum, p) => sum + (p.evidence?.n ?? 0), 0),
+      strategies: points.length,
+      items: points.reduce((max, p) => Math.max(max, p.evidence?.n ?? 0), 0),
+    };
+    const haveRows = rowCounts.evaluations > 0;
+    const counts = haveRows ? rowCounts : fromPoints;
 
     return reply.send({
       intent: {
@@ -306,6 +376,18 @@ export function registerPlanRoutes(app: FastifyInstance, ctx: PotionContext): vo
       },
       evidence: {
         measured: points.length > 0,
+        /** How much measurement stands behind this frontier — distinct
+         *  strategies tried, items tried on, and total evaluations. Real row
+         *  counts, so the surface can show what produced the numbers rather
+         *  than asking the reader to take three cards on faith. */
+        ...counts,
+        /** Strategies measured and then beaten outright. NULL when the eval
+         *  rows are absent (a baseline-only deployment), because "we
+         *  discarded 0" and "we cannot see how many we discarded" are
+         *  different statements and only one of them is true. */
+        dominatedAway: haveRows ? Math.max(0, rowCounts.strategies - points.length) : null,
+        /** false = counts are a floor derived from surviving points only. */
+        countsAreComplete: haveRows,
         frontierVersion: guarded.frontier?.version ?? null,
         provenance: guarded.provenance,
         pointCount: points.length,
