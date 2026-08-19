@@ -14,16 +14,30 @@ horizontally scaled.
                                        redis (pub/sub + queue) ◀── shared, optional
 ```
 
-> ## ⛔ Do not deploy multiple replicas yet
+> ## Multi-replica: the rate limiter is now shared (F18 CLOSED)
 >
-> The sentence below — "the only cross-request in-memory state that matters
-> for correctness" — is **not true today**, and this note exists so the two
-> documents cannot drift into disagreeing. The rate limiter's token buckets
-> and daily caps are also cross-request in-memory state that matters for
-> correctness, and `InMemoryRateLimiterStore` is the ONLY implementation of
-> the store seam: it is what production runs, not a test stand-in. At N
-> replicas a key's rate AND daily cap are both N×, and a rollout resets every
-> bucket. Filed as **F18** with a reproducing test.
+> This note used to read "⛔ do not deploy multiple replicas yet", because the
+> sentence below — "the only cross-request in-memory state that matters for
+> correctness" — was **false**: the rate limiter's token buckets and daily
+> caps were also cross-request in-memory state that mattered, and
+> `InMemoryRateLimiterStore` was the ONLY implementation of the store seam, so
+> it was what production ran. At N replicas a key's rate AND daily cap were
+> both N×, and a rollout reset every bucket — a client could lift its own
+> limit by inducing one.
+>
+> **Fixed.** `RedisRateLimiterStore` fills the seam: one Redis hash per key,
+> updated by a single Lua script so refill+check+consume is atomic (two
+> replicas cannot both read `tokens=1` and both spend it). It is selected
+> automatically when `REDIS_URL` is set, which `docker-compose.prod.yml` does.
+> Reproducing tests became passing ones in
+> `apps/server/test/f18-shared-rate-limit.test.ts`.
+>
+> **What F18 was NOT, stated because it is easy to overclaim:** the budget
+> hard stop was never per-replica. `checkBudgetHardStop` reads MTD spend and
+> platform day-spend from the SHARED database, so its threshold is global; only
+> the 60s memo of the answer is per-process. That bounds overshoot by one
+> staleness window of traffic — it does not multiply the cap by the replica
+> count. Two different sizes of problem, and only one of them was F18.
 >
 > (The `/readyz` example further down showing an **open circuit breaker** used
 > to be unreachable for the same reason — `factory.ts` called `resilient(p)`

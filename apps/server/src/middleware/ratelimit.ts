@@ -26,15 +26,20 @@
 // Retry-After (seconds) and an OpenAI-style error body (code
 // 'rate_limit_exceeded').
 //
-// HA note: InMemoryRateLimiterStore is process-local. For multi-replica
-// serving, swap in a Redis-backed RateLimiterStore (the interface is the
-// seam — see TODO in this file); the hook code does not change.
+// HA (F18, CLOSED): InMemoryRateLimiterStore is process-local — with N
+// replicas a key's rate AND daily cap were both N×, and a rollout emptied
+// every bucket, so a client could lift its own limit by inducing one. The
+// store is now selected at registration: REDIS_URL present → the shared
+// RedisRateLimiterStore, absent → in-memory. The hook code did not change,
+// which is what the seam was for.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isServingRoute } from '../security/serving-routes.js';
 import { sha256 } from '@potion/core';
 import { getApiKeyByKeyHash, insertRequestLog, type ApiKeyRow } from '@potion/db';
 import { bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
+import { Redis } from 'ioredis';
+import { RedisRateLimiterStore } from './redis-rate-limiter.js';
 
 /** Per-key limit set (post-default-resolution). */
 export interface RateLimitConfig {
@@ -109,13 +114,26 @@ export type RateLimitVerdict =
  * The store seam (HA swap point). Implementations must make consume() an
  * atomic check-and-increment for one request.
  *
- * TODO(HA): RedisRateLimiterStore — the bucket state maps 1:1 to a Redis
- * hash per key (`rl:{keyId}`: tokens, last_refill_ms, day, day_used) updated
- * by a Lua script (atomic refill+check+consume, EXPIRE ~2 days). Until
- * multi-replica serving is real, the in-memory store below is the default.
+ * F18 CLOSED: RedisRateLimiterStore (./redis-rate-limiter.ts) implements this
+ * over a Redis hash per key, updated by a single Lua script so
+ * refill+check+consume is atomic — two replicas cannot both read tokens=1 and
+ * both spend it. It is selected automatically when REDIS_URL is set; the
+ * in-memory store remains the default for single-process deployments and
+ * tests, where a shared store would buy nothing.
  */
 export interface RateLimiterStore {
-  consume(keyId: string, cfg: RateLimitConfig, nowMs?: number): RateLimitVerdict;
+  /**
+   * F18: the return type admits a Promise so a SHARED store can implement
+   * this seam. The in-memory store stays synchronous and its tests are
+   * unchanged — `await` on a plain value is a no-op — while
+   * RedisRateLimiterStore (redis-rate-limiter.ts) satisfies the same contract
+   * across replicas.
+   */
+  consume(
+    keyId: string,
+    cfg: RateLimitConfig,
+    nowMs?: number,
+  ): RateLimitVerdict | Promise<RateLimitVerdict>;
 }
 
 interface BucketState {
@@ -211,8 +229,39 @@ export class InMemoryRateLimiterStore implements RateLimiterStore {
 // Read surfaces (usage/dashboard) remain deliberately unthrottled.
 
 export interface RateLimitRegistrationOptions {
-  /** Store override (tests); default: a fresh InMemoryRateLimiterStore. */
+  /** Store override (tests); default: resolveRateLimiterStore(). */
   store?: RateLimiterStore;
+}
+
+/**
+ * Pick the store this deployment should run (F18).
+ *
+ * REDIS_URL present ⇒ SHARED, because the moment there is a second replica
+ * the in-memory buckets stop being a limit and start being a limit-per-
+ * replica. Absent ⇒ in-memory, which is correct for a single process and
+ * for tests, where a shared store would add a dependency and buy nothing.
+ *
+ * Deliberately keyed off REDIS_URL rather than a dedicated flag: Redis is
+ * already how this system runs more than one of anything (queue, pub/sub),
+ * so "there is a Redis" and "there may be more than one replica" are the
+ * same condition. A separate flag would let someone scale out while leaving
+ * the limiter per-replica, which is the failure F18 filed.
+ *
+ * Connection failures are NOT swallowed into a silent in-memory fallback:
+ * that would restore the defect precisely when the operator believed it
+ * fixed. A broken Redis surfaces as failing requests, which is visible.
+ */
+export function resolveRateLimiterStore(
+  log: (msg: string) => void = () => {},
+): RateLimiterStore {
+  const url = process.env.REDIS_URL;
+  if (url === undefined || url.trim() === '') {
+    log('rate limiter: in-memory store (single process; set REDIS_URL before scaling out)');
+    return new InMemoryRateLimiterStore();
+  }
+  const redis = new Redis(url, { maxRetriesPerRequest: null });
+  log('rate limiter: SHARED redis store (buckets survive rollouts and span replicas)');
+  return new RedisRateLimiterStore(redis);
 }
 
 /**
@@ -224,7 +273,7 @@ export function registerRateLimiting(
   ctx: PotionContext,
   opts: RateLimitRegistrationOptions = {},
 ): RateLimiterStore {
-  const store = opts.store ?? new InMemoryRateLimiterStore();
+  const store = opts.store ?? resolveRateLimiterStore((msg) => app.log.info(msg));
 
   const logRejection = async (fields: {
     orgId: string;
@@ -267,7 +316,7 @@ export function registerRateLimiting(
         );
     }
 
-    const verdict = store.consume(key.id, cfg);
+    const verdict = await store.consume(key.id, cfg);
     void reply.header('x-ratelimit-remaining-requests', String(verdict.remaining));
     void reply.header('x-ratelimit-reset', String(verdict.resetEpochSec));
 
@@ -288,7 +337,7 @@ export function registerRateLimiting(
     // budget. Same store, same math — the bucket key is the org, prefixed so
     // it can never collide with an api-key id.
     const orgCfg = orgRateLimitConfig(cfg);
-    const orgVerdict = store.consume(`${ORG_BUCKET_PREFIX}${key.orgId}`, orgCfg);
+    const orgVerdict = await store.consume(`${ORG_BUCKET_PREFIX}${key.orgId}`, orgCfg);
     if (!orgVerdict.allowed) {
       await logRejection({ orgId: key.orgId, apiKeyId: key.id, status: 'rate_limited' });
       const message =

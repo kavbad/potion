@@ -8,47 +8,39 @@ import {
   type RateLimitConfig,
 } from '../src/middleware/ratelimit.js';
 
-describe('KNOWN DEFECT F18: the rate limiter is per-REPLICA in production', () => {
-  // This is NOT a test-driver gap. There is exactly one RateLimiterStore
-  // implementation and it is the one production runs (`opts.store ?? new
-  // InMemoryRateLimiterStore()`). The seam exists; nothing fills it.
+describe('F18 — CLOSED: the rate limiter is shared across replicas', () => {
+  // WAS: InMemoryRateLimiterStore was the only implementation of the store
+  // seam and it was what production ran, so with N replicas a key's rate AND
+  // daily cap were both N×, and a rollout emptied every bucket — a client
+  // could lift its own limit by inducing one. docs/HA.md called the BYOK
+  // cache "the only cross-request in-memory state that matters for
+  // correctness", which the token buckets falsified.
   //
-  // docs/HA.md says: "the only cross-request in-memory state that matters for
-  // correctness — the per-org providersForOrg BYOK cache — is kept coherent
-  // across replicas by redis pub/sub invalidation". The token buckets and the
-  // daily cap are also cross-request in-memory state that matters for
-  // correctness, and they are coherent with nothing. That sentence is a
-  // PHANTOM DECISION: a comment asserting a protection no code enforces.
+  // NOW: RedisRateLimiterStore fills the seam (refill+check+consume in one
+  // Lua script, so two replicas cannot both spend the same token), selected
+  // automatically when REDIS_URL is set — which the production compose sets.
   //
-  // Consequences with N replicas behind the nginx round-robin HA.md draws:
-  //   · effective rate and daily cap are N× the contracted number;
-  //   · a rollout resets every bucket, so a client can lift its own limit by
-  //     inducing one.
+  // The two failing expectations that used to live here are now PASSING
+  // assertions in apps/server/test/f18-shared-rate-limit.test.ts, against the
+  // shared store: one shared burst across replicas, one shared daily cap, and
+  // a bucket that survives a rollout. This block keeps only what remains
+  // true — that the in-memory store, used alone, still has the property that
+  // made it wrong for multi-replica serving. That is not a defect now; it is
+  // the reason the selection exists, and pinning it stops someone
+  // "simplifying" resolveRateLimiterStore back to a hardcoded in-memory store.
   const cfg: RateLimitConfig = { ...DEFAULT_RATE_LIMIT, rps: 100, dailyCap: 10 };
 
-  it.fails('one key\'s DAILY CAP holds across two replicas (today: 2× the cap)', () => {
+  it('in-memory buckets are STILL per-process — which is why REDIS_URL selects the shared store', () => {
     const replicaA = new InMemoryRateLimiterStore();
     const replicaB = new InMemoryRateLimiterStore();
     const now = Date.UTC(2026, 0, 15, 12, 0, 0);
     let allowed = 0;
-    // 20 requests round-robined across two replicas, cap is 10.
     for (let i = 0; i < 20; i++) {
       const store = i % 2 === 0 ? replicaA : replicaB;
-      if (store.consume('key_f18', cfg, now).allowed) allowed += 1;
+      if ((store.consume('key_f18', cfg, now) as { allowed: boolean }).allowed) allowed += 1;
     }
-    expect(allowed).toBe(10); // today: 20 — each replica counts to 10 alone
-  });
-
-  it.fails('a replica restart does not hand the key a fresh burst budget', () => {
-    const cfgB: RateLimitConfig = { ...DEFAULT_RATE_LIMIT, rps: 5, dailyCap: 1_000 };
-    const now = Date.UTC(2026, 0, 15, 12, 0, 0);
-    const before = new InMemoryRateLimiterStore();
-    let allowed = 0;
-    for (let i = 0; i < 5; i++) if (before.consume('key_f18', cfgB, now).allowed) allowed += 1;
-    expect(allowed).toBe(5); // the full burst budget, then drained
-    expect(before.consume('key_f18', cfgB, now).allowed).toBe(false);
-    // Rollout: same instant, fresh process. State should survive it.
-    const after = new InMemoryRateLimiterStore();
-    expect(after.consume('key_f18', cfgB, now).allowed).toBe(false);
+    // Two independent processes, each counting to 10 alone. Correct for what
+    // it is; wrong as a fleet-wide limit, hence the Redis store.
+    expect(allowed).toBe(20);
   });
 });

@@ -5,17 +5,21 @@ down cleanly (that part is [ROLLBACK-RUNBOOK.md](ROLLBACK-RUNBOOK.md)).
 
 > ## ⛔ STOP — DO NOT RUN MORE THAN ONE SERVER REPLICA
 >
-> `InMemoryRateLimiterStore` is the **only** implementation of the rate
-> limiter's store seam, and it is what production runs — it is not a test
-> stand-in. With N replicas a key's contracted rate **and** daily cap are both
-> N×, and a rollout resets every bucket, so a client can lift its own limit by
-> inducing one. Filed as **F18**, with a reproducing test in
-> `apps/server/test/known-defects.test.ts`.
+> **F18 is CLOSED.** `InMemoryRateLimiterStore` used to be the only
+> implementation of the rate limiter's store seam, and it was what production
+> ran: with N replicas a key's contracted rate **and** daily cap were both N×,
+> and a rollout reset every bucket, so a client could lift its own limit by
+> inducing one. `RedisRateLimiterStore` now fills the seam (atomic Lua
+> refill+check+consume) and is selected whenever `REDIS_URL` is set — which
+> this compose file sets. Tests:
+> `apps/server/test/f18-shared-rate-limit.test.ts`.
 >
-> `docker-compose.ha.yml` (2 replicas behind nginx) exists for the future and
-> **must not be used until G2.5** (shared limiter + cache) lands. Single
-> instance is a decision, not a limitation: at one replica that entire failure
-> class cannot occur. See [driver-semantics.md](driver-semantics.md) row 6 and
+> `docker-compose.ha.yml` (2 replicas behind nginx) is no longer blocked by
+> the limiter. Remaining before scaling out: the per-org **serving-latency**
+> rollup cache and the budget hard-stop memo are still per-replica 60s memos.
+> Neither multiplies a limit — both read shared database state and only
+> cache the ANSWER — so each bounds staleness by one window rather than by
+> the replica count. See [driver-semantics.md](driver-semantics.md) row 6 and
 > `docs/HA.md`.
 
 ---
@@ -243,7 +247,7 @@ mistake inside a new migration.
 
 | Limit | Consequence | Fix |
 |---|---|---|
-| One replica (F18) | no horizontal scaling; a restart empties rate-limit buckets | G2.5 |
+| ~~One replica (F18)~~ | **fixed** — shared Redis limiter; buckets survive rollouts and span replicas | done |
 | No circuit breaker / hedging (F19) | a provider outage becomes latency, not fast failure | F19 |
 | Embeddings unpriced (F13) | embedding spend meters at $0 | F13, if the partner uses embeddings |
 | No SMTP | magic links are hand-delivered (single-use, 15 min) | by design |
