@@ -3347,6 +3347,18 @@ export interface FrontierPlatformSweepResult {
    * it from a candidate count that looks reasonable.
    */
   droppedAnswerers: string[];
+  /** Candidates dropped mid-run by failure containment (runner.ts): named
+   *  with their error, so a thin frontier is legible as "these failed",
+   *  never mistaken for "these were measured and lost". */
+  failedCandidates: Array<{
+    strategyHash: string;
+    /** The single's model alias, or the strategy type for composites. */
+    alias: string | null;
+    error: string;
+    completedCells: number;
+  }>;
+  /** Spend burned on contained failures — in spendUsd, itemised here. */
+  abandonedSpendUsd: number;
   spendUsd: number;
   projectedSpendUsd: number;
   executed: number;
@@ -3564,6 +3576,10 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         budgetCapUsd: payload.capUsd,
         provider: 'live',
         resume: true,
+        // One flaky candidate must not void a 30-candidate leg's spend: a
+        // failing strategy is dropped whole (its partial rows stay cached for
+        // a cheap retry) and everything else completes. See runner.ts.
+        containStrategyFailures: true,
         judgeModelOverride: judgeEntry.alias,
         judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
@@ -3594,10 +3610,17 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // IS NULL rows only; providerMode live → the seed's SIMULATED rows at
     // the same coordinates are excluded by construction) → the platform
     // frontier chain every fallback-riding org inherits.
+    // COMPLETE strategies only. A contained failure leaves its finished
+    // cells in the db cache — aggregating those would publish a point whose
+    // quality was measured on whichever items happened to complete, which
+    // biases upward (timeouts correlate with hard items). The rows stay for
+    // a future retry to resume; this frontier does not touch them.
+    const failedHashes = new Set(summary.failedStrategies.map((f) => f.strategyHash));
+    const completeStrategies = strategies.filter((st) => !failedHashes.has(strategyHash(st)));
     const aggregates = await aggregatesFromEvalResults(
       ctx.db,
       payload.clusterId,
-      strategies,
+      completeStrategies,
       prices.version,
       { providerMode: 'live' },
     );
@@ -3625,6 +3648,17 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       frontierVersion,
       points: frontierPoints.length,
       droppedAnswerers,
+      /** Candidates contained mid-run — named, never silently absent. */
+      failedCandidates: summary.failedStrategies.map((f) => {
+        const cfg = byHash.get(f.strategyHash);
+        return {
+          strategyHash: f.strategyHash,
+          alias: cfg?.type === 'single' ? cfg.model : (cfg?.type ?? null),
+          error: f.error,
+          completedCells: f.completedCells,
+        };
+      }),
+      abandonedSpendUsd: summary.abandonedSpendUsd,
       singlesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type === 'single').length,
       compositesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type !== 'single').length,
     };

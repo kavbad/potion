@@ -57,7 +57,9 @@ function lazyLiveProvider(id: Exclude<ProviderId, 'mock'>, opts: ProviderFactory
     real ??= LIVE_FACTORIES[id]({
       apiKey,
       prices: opts.prices,
-      ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+      ...(resolveTimeoutMs(opts.timeoutMs) !== undefined
+        ? { timeoutMs: resolveTimeoutMs(opts.timeoutMs)! }
+        : {}),
       ...(opts.maxRetries !== undefined ? { maxRetries: opts.maxRetries } : {}),
     });
     return real;
@@ -98,6 +100,30 @@ export function breakerPolicyFromEnv(env: NodeJS.ProcessEnv = process.env): Brea
     cooldownMs: int(env.POTION_BREAKER_COOLDOWN_MS, DEFAULT_BREAKER.cooldownMs),
     halfOpenProbes: int(env.POTION_BREAKER_PROBES, DEFAULT_BREAKER.halfOpenProbes),
   };
+}
+
+/**
+ * Per-attempt provider timeout, with an env override.
+ *
+ * The 60s default is right for SERVING, where a request nobody is waiting on
+ * is a request that has already failed. It is wrong for an evaluation sweep:
+ * a 1600-token generation from a slow model legitimately exceeds it, and a
+ * measured campaign should be allowed to wait for an answer it is paying for.
+ *
+ * Found the hard way — the 23-model tranche sweep failed five legs on
+ * "request timed out after 60000ms" while a probe showed every model
+ * answering fine at 8 tokens. The cost of the wrong default here is a whole
+ * leg's spend for no evidence, so it is a knob rather than a constant.
+ *
+ * An explicit `opts.timeoutMs` always wins; the env var only supplies a
+ * default, so nothing that already sets it changes behaviour.
+ */
+export function resolveTimeoutMs(explicit?: number): number | undefined {
+  if (explicit !== undefined) return explicit;
+  const raw = process.env.POTION_PROVIDER_TIMEOUT_MS;
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 export function createProviders(opts: ProviderFactoryOptions): Record<ProviderId, Provider> {

@@ -62,6 +62,21 @@ export interface RunOptions {
   budgetCapUsd: number;
   provider?: 'mock' | 'live';
   resume?: boolean;
+  /**
+   * Contain a mid-run provider failure to the STRATEGY it hit, instead of
+   * failing the whole run (default false — serving-adjacent callers and every
+   * existing test keep throw-on-error semantics).
+   *
+   * WHY THE STRATEGY IS THE CONTAINMENT UNIT. Found by the tranche campaign:
+   * one slow model timing out killed entire 31-candidate legs — five legs of
+   * real spend bought zero evidence because the 29th candidate was flaky.
+   * Per-ITEM containment is the tempting alternative and it is dishonest:
+   * scoring a strategy on only the items that happened to complete biases
+   * quality upward, because timeouts correlate with hard items. So a failing
+   * strategy is dropped WHOLE — recorded in failedStrategies, partial rows
+   * left in the cache for a cheap retry, everything else proceeds.
+   */
+  containStrategyFailures?: boolean;
   /** Explicit acknowledgement required to run suites from suites/simulated/. */
   simulatedOk?: boolean;
   /** Explicit provenance override (tests). Default: detected from the
@@ -108,6 +123,14 @@ export interface RunDeps {
   suitesV2Dir?: string;
   pricesPath?: string;
   /**
+   * Provider set override — TEST SEAM. Lets a suite inject a provider that
+   * fails deterministically for one model, which is the only way to exercise
+   * containStrategyFailures without a network: an unknown alias dies at
+   * PREFLIGHT (estimate resolution), so no price-table trick can produce a
+   * mid-execution failure. No production caller passes this.
+   */
+  providers?: Record<ProviderId, Provider>;
+  /**
    * The resolved price table, when the caller already has one (S5).
    *
    * Takes precedence over `pricesPath`. The registry moved into the database,
@@ -127,6 +150,16 @@ export interface RunDeps {
 }
 
 /** An item the runner deliberately did not execute (with the reason). */
+export interface FailedStrategy {
+  strategyHash: string;
+  /** The item whose cell failed. */
+  itemId: string;
+  error: string;
+  /** Cells that had completed before the failure (their rows stay in the
+   *  content-addressed cache, so a retry resumes rather than re-pays). */
+  completedCells: number;
+}
+
 export interface SkippedItem {
   itemId: string;
   reason: string;
@@ -174,6 +207,21 @@ export interface RunSummary {
   executed: number;
   cacheHits: number;
   skipped: SkippedItem[];
+  /**
+   * Strategies dropped MID-RUN by containStrategyFailures (empty otherwise).
+   * Their partial results are excluded from `results` and `aggregates` — a
+   * strategy scored on only the items that happened to complete would carry
+   * a biased quality (timeouts correlate with hard items) — but their spend
+   * is NOT excluded: see abandonedSpendUsd.
+   */
+  failedStrategies: FailedStrategy[];
+  /**
+   * Real money spent on cells of strategies that later failed out. Folded
+   * into spendUsd, never subtracted: the belt accounts for dollars burned,
+   * not dollars that produced evidence. Hiding abandoned spend is how a
+   * campaign "under budget" costs more than its ledger says.
+   */
+  abandonedSpendUsd: number;
   results: EvalResult[];
   /** True when any suite in the run came from suites/simulated/ (mock-corpus
    * provenance). Downstream consumers MUST surface this marker — simulated
@@ -435,7 +483,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   // identity-preserving, so detectProviderMode reads the same on either set.
   // The resolver is rebuilt over the wrapped set — a resolver built over the
   // originals would route calls around the meter (the context.ts lesson).
-  const rawProviders = createRunProviders(opts.provider ?? 'mock', prices);
+  const rawProviders = deps.providers ?? createRunProviders(opts.provider ?? 'mock', prices);
   const providers = deps.spendSink
     ? meteredProviders(rawProviders, prices, deps.spendSink)
     : rawProviders;
@@ -459,9 +507,12 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
     let judgeSpendUsd = 0;
     let executedSpendUsd = 0;
 
+    const failedStrategies: FailedStrategy[] = [];
+    let abandonedSpendUsd = 0;
     for (const strategy of opts.strategies) {
       const sh = strategyHash(strategy);
       const modelVersions = modelVersionsFor(strategy, prices);
+      const strategyStartIdx = results.length;
       for (const item of runItems) {
         const cacheKey = cacheKeyOf(sh, item, item.scoring, prices, {
           ...(opts.orgId !== undefined ? { orgId: opts.orgId } : {}),
@@ -478,13 +529,36 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           results.push(cached);
           continue;
         }
-        const outcome = await execute(strategy, item.prompt, ctx);
-        const { quality, scorer, scorerUsage } = await scoreAnswer(
-          item,
-          outcome.text,
-          { providers, prices },
-          opts.judgeMaxTokens,
-        );
+        let outcome, quality, scorer, scorerUsage;
+        try {
+          outcome = await execute(strategy, item.prompt, ctx);
+          ({ quality, scorer, scorerUsage } = await scoreAnswer(
+            item,
+            outcome.text,
+            { providers, prices },
+            opts.judgeMaxTokens,
+          ));
+        } catch (err) {
+          if (!opts.containStrategyFailures) throw err;
+          // Drop the WHOLE strategy: partial aggregates are biased (see the
+          // option's doc), so its completed rows leave this run's results —
+          // but their SPEND does not leave the books. Over-counting a cached
+          // row's historical cost here is deliberate: the belt must err
+          // toward "we spent more", never "less".
+          const removed = results.splice(strategyStartIdx);
+          abandonedSpendUsd += removed.reduce((a, r) => a + r.usage.costUsd, 0);
+          failedStrategies.push({
+            strategyHash: sh,
+            itemId: item.id,
+            error: err instanceof Error ? err.message : String(err),
+            completedCells: removed.length,
+          });
+          console.warn(
+            `[harness] CONTAINED strategy ${sh.slice(0, 8)} after ${removed.length} cell(s): ` +
+              `${err instanceof Error ? err.message : String(err)} — run continues without it`,
+          );
+          break;
+        }
         // usage = strategy usage + scoring overhead (llm-judge call), summed
         // over tokens and cost — the judge call is real provider spend and
         // MUST count against budget/spend (M1b fix: it was previously
@@ -550,7 +624,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
 
     // spendUsd = Σ per-result usage.costUsd — INCLUDES judge scoring cost
     // (folded into usage above), so live budget accounting sees real spend.
-    const spendUsd = results.reduce((a, r) => a + r.usage.costUsd, 0);
+    const spendUsd = results.reduce((a, r) => a + r.usage.costUsd, 0) + abandonedSpendUsd;
     return {
       runId,
       aggregates,
@@ -561,6 +635,8 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
       executed,
       cacheHits,
       skipped,
+      failedStrategies,
+      abandonedSpendUsd,
       results,
       simulated,
       providerMode,

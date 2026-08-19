@@ -552,3 +552,97 @@ describe('runEval', () => {
     expect(agg.latencyP95).toBeGreaterThanOrEqual(agg.latencyP50);
   });
 });
+
+describe('containStrategyFailures — one flaky candidate must not void the leg', () => {
+  let handle: DbHandle;
+  beforeAll(async () => {
+    handle = await createDb('pglite://');
+  });
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  // The tranche campaign's failure, reproduced: five 31-candidate legs died
+  // whole on one model's timeout — real spend, zero evidence. The containment
+  // unit is the STRATEGY, not the item: scoring a strategy on only the items
+  // that happened to complete biases quality upward (timeouts correlate with
+  // hard items), so a failing strategy drops WHOLE and the rest proceed.
+  const flaky = (failModel: string): Record<ProviderId, Provider> => {
+    const mock = createMockProvider(loadPrices(PRICES_PATH).table);
+    const failing: Provider = {
+      id: 'mock',
+      complete: async (req) => {
+        if (req.model === failModel) throw new Error(`provider 'mock': request timed out after 60000ms`);
+        return mock.complete(req);
+      },
+      ...(mock.embed ? { embed: mock.embed.bind(mock) } : {}),
+    };
+    return { anthropic: failing, openai: failing, google: failing, openrouter: failing, mock: failing };
+  };
+
+  it('drops the failing strategy, completes the rest, and keeps the spend on the books', async () => {
+    const summary = await runEval(
+      {
+        suiteIds: ['extraction'],
+        strategies: [
+          { type: 'single', model: 'mock-frontier' },
+          { type: 'single', model: 'mock-cheap' },
+        ],
+        budgetCapUsd: 25,
+        containStrategyFailures: true,
+      },
+      { ...{ db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH }, providers: flaky('mock-cheap') },
+    );
+    // The healthy strategy's cells all completed…
+    expect(summary.results.filter((r) => r.strategyHash === strategyHash({ type: 'single', model: 'mock-frontier' })).length).toBe(2);
+    // …the flaky one is REPORTED, with zero rows in this run's results…
+    expect(summary.failedStrategies).toHaveLength(1);
+    expect(summary.failedStrategies[0]!.error).toMatch(/timed out/);
+    expect(summary.results.some((r) => r.strategyHash === strategyHash({ type: 'single', model: 'mock-cheap' }))).toBe(false);
+    // …and its aggregates are absent, so no biased point can be published.
+    expect(summary.aggregates.some((a) => a.strategyHash === strategyHash({ type: 'single', model: 'mock-cheap' }))).toBe(false);
+    expect(summary.aggregates.some((a) => a.strategyHash === strategyHash({ type: 'single', model: 'mock-frontier' }))).toBe(true);
+  });
+
+  it('default semantics unchanged: without the flag, the failure still throws', async () => {
+    await expect(
+      runEval(
+        {
+          suiteIds: ['extraction'],
+          strategies: [{ type: 'single', model: 'mock-cheap' }],
+          budgetCapUsd: 25,
+        },
+        { db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH, providers: flaky('mock-cheap') },
+      ),
+    ).rejects.toThrow(/timed out/);
+  });
+
+  it('a failure on the LAST item still voids the whole strategy — no partial aggregate', async () => {
+    // Fail only the second item's model call by making the failure stateful.
+    let calls = 0;
+    const base = createMockProvider(loadPrices(PRICES_PATH).table);
+    const failing: Provider = {
+      id: 'mock',
+      complete: async (req) => {
+        calls++;
+        if (calls > 1) throw new Error('boom on the last cell');
+        return base.complete(req);
+      },
+    };
+    const providers = { anthropic: failing, openai: failing, google: failing, openrouter: failing, mock: failing } as Record<ProviderId, Provider>;
+    const summary = await runEval(
+      {
+        suiteIds: ['extraction'],
+        strategies: [{ type: 'single', model: 'mock-frontier' }],
+        budgetCapUsd: 25,
+        containStrategyFailures: true,
+        resume: false,
+      },
+      { db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH, providers },
+    );
+    expect(summary.failedStrategies).toHaveLength(1);
+    expect(summary.failedStrategies[0]!.completedCells).toBe(1);
+    expect(summary.results).toHaveLength(0);
+    expect(summary.aggregates).toHaveLength(0);
+  });
+});
