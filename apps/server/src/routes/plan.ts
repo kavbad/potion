@@ -187,6 +187,84 @@ export function derivedLatencyBoundMs(points: FrontierPoint[]): number | null {
  * thing; the latency bound is derived per cluster — see above for why a
  * fixed default was a dial with nothing behind it.
  */
+/**
+ * One row of the measured frontier, as a surface should show it.
+ *
+ * The three policy cards this replaced could — and on real data regularly did
+ * — collapse onto the SAME point: min_cost above a floor and max_quality under
+ * a ceiling pick the same strategy whenever the frontier is short. Two cards
+ * showing identical numbers reads as a bug, and worse, it hides the actual
+ * trade-off space the measurement bought. Every non-dominated point is
+ * offered, and `selectedBy` says which priorities land on it.
+ */
+export interface FrontierRow {
+  strategyHash: string;
+  strategy: string;
+  quality: number;
+  qualityCi95: number | null;
+  costPer1K: number;
+  latencyP95: number;
+  latencyProvisional: boolean;
+  n: number | null;
+  providerMode: string;
+  savedVsBestQuality: number | null;
+  /** Which of the offered priorities selects this row today. */
+  selectedBy: Array<'cost' | 'quality' | 'speed'>;
+  /**
+   * The policy that binds THIS row — DERIVED, then VERIFIED.
+   *
+   * Deriving a rule instead of pinning a model id keeps the product's actual
+   * promise: you choose a RULE, and if something better gets measured later
+   * the rule moves you to it without a code change.
+   *
+   * The obvious derivation is min_cost at the row's own quality, and I
+   * shipped it on the reasoning that frontier points are non-dominated so
+   * nothing with quality >= this row's can cost less. That reasoning is
+   * WRONG, and a test caught it: the frontier is non-dominated in THREE
+   * dimensions. Real data — or-gpt-full (q 0.640, $0.1477) beats
+   * or-gemini-flash (q 0.620, $0.1509) on both quality and cost; flash
+   * survives only because it is faster (2110ms vs 3052ms). min_cost ignores
+   * latency, so picking the flash row would have bound a policy that serves
+   * FULL while the button said "Applied ✓" on flash.
+   *
+   * So the policy is CHECKED against the serving path's own selector, and
+   * falls back to a compound rule (quality floor AND latency bound) when
+   * min_cost cannot isolate the row. Null when neither can — an honest
+   * "cannot bind this one" beats a button that silently serves something
+   * else.
+   */
+  policy: Policy | null;
+}
+
+/**
+ * A policy that provably selects `target` on `frontier`, or null.
+ *
+ * Tries the simplest rule first and VERIFIES it with `selectPoint` — the
+ * serving path's own selector — rather than trusting an argument about what
+ * it should do. If min_cost lands elsewhere (the three-dimensional frontier
+ * case), a compound rule adds the latency bound that isolates the row.
+ */
+export function policyBinding(target: FrontierPoint, points: FrontierPoint[]): Policy | null {
+  const frontier = {
+    id: 'binding',
+    clusterId: target.clusterId,
+    version: 0,
+    parentId: null,
+    trigger: 'manual' as const,
+    points,
+    pricesVersion: 'binding',
+    createdAt: new Date(0).toISOString(),
+  };
+  const candidates: Policy[] = [
+    { type: 'min_cost', qualityFloor: target.quality },
+    { type: 'compound', qualityFloor: target.quality, p95Ms: Math.ceil(target.latencyP95) },
+  ];
+  for (const policy of candidates) {
+    if (selectPoint(policy, frontier)?.strategyHash === target.strategyHash) return policy;
+  }
+  return null;
+}
+
 /** The most expensive measured point — the "just use the best model" baseline. */
 function bestQualityCost(points: FrontierPoint[]): number | null {
   let best: FrontierPoint | null = null;
@@ -348,6 +426,8 @@ export function registerPlanRoutes(app: FastifyInstance, ctx: PotionContext): vo
     };
     const haveRows = rowCounts.evaluations > 0;
     const counts = haveRows ? rowCounts : fromPoints;
+    const options = policyOptionsFor(points, latencyEvidence);
+    const baselineForRows = bestQualityCost(points);
 
     return reply.send({
       intent: {
@@ -396,7 +476,34 @@ export function registerPlanRoutes(app: FastifyInstance, ctx: PotionContext): vo
          *  always. Per-option provenance rides on each point. */
         latencySource: bound.source,
       },
-      options: policyOptionsFor(points, latencyEvidence),
+      options,
+      /** EVERY measured strategy, not just the three a policy shape happens
+       *  to select. Sorted best-quality first; the surface re-sorts. */
+      frontier: points
+        .map((pt): FrontierRow => {
+          const lat = latencyEvidence[pt.strategyHash];
+          const selectedBy = options
+            .filter((o) => o.point?.strategyHash === pt.strategyHash)
+            .map((o) => o.priority);
+          return {
+            strategyHash: pt.strategyHash,
+            strategy: describeStrategyBrief(pt.strategyConfig as StrategyConfig),
+            quality: pt.quality,
+            qualityCi95: pt.evidence?.qualityCi95 ?? null,
+            costPer1K: pt.costPer1K,
+            latencyP95: pt.latencyP95,
+            latencyProvisional: lat?.provisional ?? true,
+            n: pt.evidence?.n ?? null,
+            providerMode: pt.providerMode ?? 'unknown',
+            savedVsBestQuality:
+              baselineForRows !== null && baselineForRows > 0 && pt.costPer1K < baselineForRows
+                ? (baselineForRows - pt.costPer1K) / baselineForRows
+                : null,
+            selectedBy,
+            policy: policyBinding(pt, points),
+          };
+        })
+        .sort((a, b) => b.quality - a.quality || a.costPer1K - b.costPer1K),
       /**
        * WHAT THESE NUMBERS ARE. Potion's own measurement of this workload
        * type across providers — not a measurement of the caller's traffic,

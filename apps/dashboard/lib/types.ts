@@ -619,6 +619,23 @@ export interface PlanResponse {
     countsAreComplete: boolean;
   };
   options: PlanPolicyOption[];
+  /** EVERY measured strategy on the frontier, not just the three a policy
+   *  shape selects. Sorted best-quality first; the surface re-sorts. */
+  frontier: Array<{
+    strategyHash: string;
+    strategy: string;
+    quality: number;
+    qualityCi95: number | null;
+    costPer1K: number;
+    latencyP95: number;
+    latencyProvisional: boolean;
+    n: number | null;
+    providerMode: string;
+    savedVsBestQuality: number | null;
+    selectedBy: Array<'cost' | 'quality' | 'speed'>;
+    /** Derived AND verified to select this row. null = cannot be isolated. */
+    policy: Policy | null;
+  }>;
   /** platform-measured = Potion's measurement of this WORKLOAD TYPE, not of
    *  the caller's own traffic, which does not exist yet. */
   basis: 'platform-measured' | 'unmeasured';

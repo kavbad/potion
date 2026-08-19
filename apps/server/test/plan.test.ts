@@ -17,6 +17,7 @@ import {
   assignmentMargin,
   derivedCostCeilingUsd,
   derivedLatencyBoundMs,
+  policyBinding,
   policyOptionsFor,
 } from '../src/routes/plan.js';
 import type { FrontierPoint } from '@potion/core';
@@ -105,6 +106,59 @@ describe('policyOptionsFor — every option carries the point it would really se
     // A point just under the quality floor must NOT be offered for 'cost'.
     const options = policyOptionsFor([pt({ quality: 0.799, costPer1K: 0.01, latencyP95: 100 })]);
     expect(options.find((o) => o.priority === 'cost')!.point).toBeNull();
+  });
+});
+
+describe('the frontier table — every measured strategy, and a row binds a POLICY', () => {
+  it('every bindable row binds to ITSELF — verified, not argued', async () => {
+    // The real multi-step-reasoning frontier, which falsified the obvious
+    // derivation: or-gpt-full (q 0.640, $0.1477) beats or-gemini-flash
+    // (q 0.620, $0.1509) on BOTH quality and cost — flash survives only on
+    // latency. So min_cost at flash's quality serves FULL, and a naive
+    // binding would have shown "Applied ✓" on a row it was not serving.
+    const { selectPoint } = await import('@potion/core');
+    const points = [
+      pt({ strategyHash: 'pro', quality: 0.98, costPer1K: 7.494, latencyP95: 12358 }),
+      pt({ strategyHash: 'full', quality: 0.64, costPer1K: 0.1477, latencyP95: 3052 }),
+      pt({ strategyHash: 'flash', quality: 0.62, costPer1K: 0.1509, latencyP95: 2110 }),
+      pt({ strategyHash: 'mini', quality: 0.46, costPer1K: 0.0718, latencyP95: 2986 }),
+    ];
+    const frontier = {
+      id: 'f', clusterId: 'code-gen', version: 1, parentId: null, trigger: 'manual' as const,
+      points, pricesVersion: 'v', createdAt: new Date(0).toISOString(),
+    };
+    for (const p of points) {
+      const policy = policyBinding(p, points);
+      if (policy === null) continue; // reported as not bindable, never mis-bound
+      expect(
+        selectPoint(policy, frontier)?.strategyHash,
+        `row ${p.strategyHash} bound a policy that serves something else`,
+      ).toBe(p.strategyHash);
+    }
+  });
+
+  it('needs a COMPOUND rule for a row that survives only on latency', () => {
+    const points = [
+      pt({ strategyHash: 'full', quality: 0.64, costPer1K: 0.1477, latencyP95: 3052 }),
+      pt({ strategyHash: 'flash', quality: 0.62, costPer1K: 0.1509, latencyP95: 2110 }),
+    ];
+    const flash = policyBinding(points[1]!, points)!;
+    expect(flash.type, 'min_cost cannot isolate a latency-only survivor').toBe('compound');
+    // …while a row min_cost CAN isolate keeps the simpler rule.
+    expect(policyBinding(points[0]!, points)!.type).toBe('min_cost');
+  });
+
+  it('the three priorities may COLLAPSE onto one row — which is why the table exists', () => {
+    // Real data from the multi-step-reasoning frontier: cheapest-above-floor
+    // and best-quality are the same strategy. Three cards showed it twice and
+    // read as a bug; the table shows one row carrying two badges.
+    const options = policyOptionsFor([
+      pt({ strategyHash: 'pro', quality: 0.98, costPer1K: 7.494, latencyP95: 12358 }),
+      pt({ strategyHash: 'flash', quality: 0.62, costPer1K: 0.1509, latencyP95: 2110 }),
+    ]);
+    const cost = options.find((o) => o.priority === 'cost')!.point!.strategyHash;
+    const quality = options.find((o) => o.priority === 'quality')!.point!.strategyHash;
+    expect(cost).toBe(quality);
   });
 });
 

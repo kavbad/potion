@@ -14,27 +14,23 @@
 //   · the CLASSIFICATION CAVEAT. One sentence is thin evidence. When the
 //     margin over the runner-up is small, this says so and offers the
 //     runner-up, instead of presenting a confident-looking pick.
-//   · the INFEASIBLE OPTIONS. A priority with no measured strategy behind it
-//     renders as unavailable WITH the reason. Hiding it would read as "we
-//     have three options for you" when we have one.
+//   · the FULL FRONTIER. Every measured strategy is shown, not the three a
+//     policy shape happens to select — those collapsed onto the same point
+//     whenever the frontier was short, which both looked like a bug and hid
+//     the trade-off the measurement paid for. See FrontierTable.
 //   · the BASIS LINE. These are Potion's measurements of this workload TYPE,
 //     not of the customer's traffic — a genuinely weaker claim than the
 //     numbers elsewhere in the product, and it says so in plain words.
 import { useState } from 'react';
 import Link from 'next/link';
 import { CopyBlock } from '@/components/copy-block';
-import type { PlanPolicyOption, PlanResponse } from '@/lib/types';
+import { FrontierTable } from '@/components/frontier-table';
+import type { PlanResponse } from '@/lib/types';
 
 /** Below this the winner is not meaningfully ahead of the runner-up. */
 const NARROW_MARGIN = 0.1;
 /** The assigner's own routing threshold — below it, serving says 'general'. */
 const CONFIDENCE_FLOOR = 0.62;
-
-const PRIORITY_COPY: Record<PlanPolicyOption['priority'], { title: string; blurb: string }> = {
-  cost: { title: 'Keep it cheap', blurb: 'Lowest cost that still holds a quality floor.' },
-  quality: { title: 'Make it good', blurb: 'Best measured quality within a cost ceiling.' },
-  speed: { title: 'Make it fast', blurb: 'Best quality that stays inside a latency budget.' },
-};
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -58,7 +54,8 @@ export function BuildPlanner() {
   const [samplesText, setSamplesText] = useState('');
   const [showSamples, setShowSamples] = useState(false);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
-  const [chosen, setChosen] = useState<PlanPolicyOption | null>(null);
+  const [chosen, setChosen] = useState<{ label: string; description: string } | null>(null);
+  const [chosenHash, setChosenHash] = useState<string | null>(null);
   const [issuedKey, setIssuedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +70,7 @@ export function BuildPlanner() {
     setBusy(true);
     setError(null);
     setChosen(null);
+    setChosenHash(null);
     setIssuedKey(null);
     try {
       setPlan(
@@ -88,15 +86,16 @@ export function BuildPlanner() {
     }
   }
 
-  async function apply(option: PlanPolicyOption) {
+  async function apply(row: { policy: PlanResponse['frontier'][number]['policy']; strategy: string; strategyHash: string; description: string }) {
     setBusy(true);
     setError(null);
     try {
       const created = await postJson<{ apiKey?: string }>('/api/policies', {
-        policy: option.policy,
+        policy: row.policy,
         createKey: true,
       });
-      setChosen(option);
+      setChosen({ label: row.strategy, description: row.description });
+      setChosenHash(row.strategyHash);
       setIssuedKey(created.apiKey ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -250,113 +249,7 @@ export function BuildPlanner() {
                 evidence.
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {plan.options.map((o) => {
-                  const copy = PRIORITY_COPY[o.priority];
-                  const available = o.point !== null;
-                  return (
-                    <div
-                      key={o.priority}
-                      className={`rounded-xl border px-5 py-5 ${
-                        chosen?.priority === o.priority
-                          ? 'border-accent bg-accent-soft'
-                          : available
-                            ? 'border-line bg-panel'
-                            : 'border-dashed border-line bg-paper'
-                      }`}
-                    >
-                      <div className="text-sm font-medium text-ink">{copy.title}</div>
-                      <p className="mt-1 text-xs text-soft">{copy.blurb}</p>
-
-                      {available ? (
-                        <>
-                          <dl className="mt-4 space-y-1 text-xs">
-                            <div className="flex justify-between">
-                              <dt className="text-faint">Serves you</dt>
-                              <dd className="text-right font-mono text-ink">{o.point!.strategy}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                              <dt className="text-faint">Quality</dt>
-                              <dd className="text-ink">
-                                {o.point!.quality.toFixed(3)}
-                                {o.point!.qualityCi95 !== null && (
-                                  <span className="text-faint"> ±{o.point!.qualityCi95.toFixed(3)}</span>
-                                )}
-                              </dd>
-                            </div>
-                            <div className="flex justify-between">
-                              {/* costPer1K is USD per 1000 REQUESTS (core
-                                  types.ts). It was labelled "Cost / 1K",
-                                  which every reader takes as per-1K-TOKENS —
-                                  a ~1000x misread of the price. */}
-                              <dt className="text-faint">Per 1,000 requests</dt>
-                              <dd className="text-ink">${o.point!.costPer1K.toFixed(4)}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                              <dt className="text-faint">Per request</dt>
-                              <dd className="text-ink">
-                                ${(o.point!.costPer1K / 1000).toFixed(6)}
-                              </dd>
-                            </div>
-                            <div className="flex justify-between">
-                              <dt className="text-faint">
-                                p95 latency
-                                {o.point!.latencyProvisional && (
-                                  <span
-                                    className="ml-1 cursor-help text-amber-700"
-                                    title="Measured during evaluation (strategy-only span), not on live serving traffic. Provisional until your own requests measure it end-to-end."
-                                  >
-                                    *
-                                  </span>
-                                )}
-                              </dt>
-                              <dd className="text-ink">{Math.round(o.point!.latencyP95)} ms</dd>
-                            </div>
-                            {o.point!.n !== null && (
-                              <div className="flex justify-between">
-                                <dt className="text-faint">Measured on</dt>
-                                <dd className="text-ink">{o.point!.n} samples</dd>
-                              </div>
-                            )}
-                          </dl>
-                          {o.point!.savedVsBestQuality !== null && o.point!.savedVsBestQuality > 0.005 && (
-                            <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-800">
-                              <span className="font-semibold">
-                                {(o.point!.savedVsBestQuality * 100).toFixed(0)}% cheaper
-                              </span>{' '}
-                              than always using the highest-quality strategy — at 100k requests/mo
-                              that is{' '}
-                              <span className="font-semibold">
-                                ${((o.point!.costPer1K / 1000) * 100_000).toFixed(0)}
-                              </span>{' '}
-                              instead of{' '}
-                              <span className="font-semibold">
-                                $
-                                {(
-                                  ((o.point!.costPer1K / (1 - o.point!.savedVsBestQuality!)) / 1000) *
-                                  100_000
-                                ).toFixed(0)}
-                              </span>
-                              .
-                            </p>
-                          )}
-                          <button
-                            onClick={() => void apply(o)}
-                            disabled={busy}
-                            className="mt-4 w-full rounded-md bg-accent px-3 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                          >
-                            {chosen?.priority === o.priority ? 'Applied ✓' : 'Use this'}
-                          </button>
-                        </>
-                      ) : (
-                        <p className="mt-4 text-xs leading-relaxed text-faint">
-                          Not available — {o.infeasible}.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <FrontierTable plan={plan} onApply={apply} busy={busy} chosenHash={chosenHash} />
             )}
 
             <p className="text-xs leading-relaxed text-faint">
@@ -391,7 +284,7 @@ export function BuildPlanner() {
           {chosen && (
             <section className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-5">
               <h2 className="text-sm font-medium text-emerald-800">
-                Done — your policy is live: {chosen.description}
+                Done — Potion will serve you {chosen.label}. {chosen.description}
               </h2>
               {issuedKey && <CopyBlock label="Your Potion API key (shown once)" text={issuedKey} />}
               <p className="text-sm text-emerald-800">
