@@ -292,9 +292,18 @@ export async function main(argv: string[]): Promise<number> {
         t.pearsonVsTruth === null
           ? 'INDETERMINATE (constant truth — harder suite or weaker answerer needed)'
           : `pearson-vs-truth = ${t.pearsonVsTruth.toFixed(3)}, spearman = ${(t.spearmanVsTruth ?? 0).toFixed(3)}`;
+      // THREE outcomes, not two. A run whose CI spans the bar established
+      // nothing, and printing OK for it is how a guarantee ends up standing on
+      // an unanswered question — the interval, not the point, is the verdict.
+      const ci = t.pearsonCi95 ? ` CI95 [${t.pearsonCi95[0].toFixed(3)}, ${t.pearsonCi95[1].toFixed(3)}]` : '';
+      const verdict = t.trustIndeterminateAtN
+        ? `INDETERMINATE AT n=${report.n} ⚠ (interval spans 0.8 — more items needed to answer)`
+        : t.flagged
+          ? 'FLAGGED ⚠'
+          : 'OK';
       console.log(
-        `  ${t.judgeModel} (${t.resolvedModel}): ${pearsonLabel}, ` +
-          `meanAbsErr = ${t.meanAbsErr.toFixed(3)} ${t.flagged ? 'FLAGGED ⚠' : 'OK'}`,
+        `  ${t.judgeModel} (${t.resolvedModel}): ${pearsonLabel}${ci}, ` +
+          `meanAbsErr = ${t.meanAbsErr.toFixed(3)} ${verdict}`,
       );
     }
     if (report.judges.length > 1) {
@@ -339,7 +348,14 @@ export async function main(argv: string[]): Promise<number> {
       await handle.close();
     }
     if (report.flagged) {
-      console.error('\nCALIBRATION FLAGGED — judge trust below 0.8; do not stand a guarantee on this judge.\n');
+      const anyStraddle = report.truth.some((t) => t.trustIndeterminateAtN);
+      console.error(
+        anyStraddle
+          ? '\nCALIBRATION INDETERMINATE — the CI95 spans the 0.8 bar, so this run did NOT ' +
+              'establish judge trust either way. Do not stand a guarantee on it; re-run with ' +
+              'more items.\n'
+          : '\nCALIBRATION FLAGGED — judge trust below 0.8; do not stand a guarantee on this judge.\n',
+      );
       return 3;
     }
   }

@@ -639,6 +639,10 @@ function assembleReport(
     );
     const pCi = correlationCi(judgeScores, truths, 'pearson', corrSeed);
     const sCi = correlationCi(judgeScores, truths, 'spearman', corrSeed);
+    // The interval spans the bar → this run cannot answer the trust question
+    // at this n. Reported, never silently rounded to a verdict.
+    const straddles =
+      pCi !== null && pCi.ci95[0] < CALIBRATION_FLAG_BELOW && pCi.ci95[1] >= CALIBRATION_FLAG_BELOW;
     return {
       judgeModel: judge,
       resolvedModel: resolvedModelOf(prices, judge),
@@ -650,10 +654,25 @@ function assembleReport(
       correlationSeed: pCi === null ? null : corrSeed,
       // The interval spans the bar → this run cannot answer the trust
       // question at this n. Reported, never silently rounded to a verdict.
-      trustIndeterminateAtN:
-        pCi !== null && pCi.ci95[0] < CALIBRATION_FLAG_BELOW && pCi.ci95[1] >= CALIBRATION_FLAG_BELOW,
+      trustIndeterminateAtN: straddles,
       indeterminate: false,
-      flagged: r < CALIBRATION_FLAG_BELOW,
+      // FAIL CLOSED ON A STRADDLE. This used to be `r < CALIBRATION_FLAG_BELOW`
+      // alone — the POINT estimate — while the field five lines up says to read
+      // the INTERVAL. So a run whose CI spanned the bar printed OK and stored
+      // flagged=false, i.e. it read as "this judge is trustworthy" when what it
+      // actually established was nothing.
+      //
+      // Measured, not hypothetical: or-sonnet on a difficulty-widened
+      // extraction corpus came back r=0.896, CI95 [0.785, 0.963] — straddling —
+      // and the tooling called it OK. A guarantee standing on that would be
+      // standing on an unanswered question.
+      //
+      // `flagged` gates "do not stand a guarantee on this judge", so an
+      // unanswered question must not clear it. Same rule the truth-constant
+      // case already follows above ("conservatively still flagged"), and the
+      // same rule as everywhere else here: unknown resolves to the weaker
+      // claim, never the reassuring one.
+      flagged: r < CALIBRATION_FLAG_BELOW || straddles,
     };
   });
 

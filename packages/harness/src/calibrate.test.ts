@@ -371,3 +371,39 @@ describe('G2.4: a LIVE-recorded calibration refuses mock aliases', () => {
     expect(report.n).toBeGreaterThan(0);
   });
 });
+
+describe('G8 — a straddling interval is NOT a pass', () => {
+  // FOUND BY MEASUREMENT, not review. A difficulty-widened extraction
+  // calibration (or-sonnet judging or-deepseek answers, n=50) came back
+  // pearson 0.896 with CI95 [0.785, 0.963]. The tooling printed "OK" and
+  // stored flagged=false — because `flagged` read the POINT estimate while
+  // the field's own documentation says to read the INTERVAL.
+  //
+  // 0.785 < 0.8 < 0.963. By the codebase's own stated rule that run answered
+  // NOTHING, and a guarantee standing on it would be standing on an
+  // unanswered question. The judge may well clear the bar; this run did not
+  // show it.
+  //
+  // `flagged` gates "do not stand a guarantee on this judge", so an
+  // unanswered question must not clear it — the same fail-closed rule the
+  // truth-constant case already followed.
+  const straddle = (lo: number, hi: number): boolean =>
+    lo < CALIBRATION_FLAG_BELOW && hi >= CALIBRATION_FLAG_BELOW;
+
+  it('recognises the measured [0.785, 0.963] interval as spanning the bar', () => {
+    expect(straddle(0.785, 0.963)).toBe(true);
+  });
+
+  it('a CI wholly ABOVE the bar is a real pass', () => {
+    expect(straddle(0.81, 0.95)).toBe(false);
+  });
+
+  it('a CI wholly BELOW the bar is a real fail', () => {
+    expect(straddle(0.41, 0.72)).toBe(false);
+  });
+
+  it('the bar itself is unchanged — the fix is the reading, not the threshold', () => {
+    // Guard against "fixing" an indeterminate verdict by lowering the bar.
+    expect(CALIBRATION_FLAG_BELOW).toBe(0.8);
+  });
+});
