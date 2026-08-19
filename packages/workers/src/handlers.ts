@@ -3293,6 +3293,17 @@ export const PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW = 0.72;
 export const PLATFORM_SWEEP_MAX_ANSWERERS = 12;
 
 /**
+ * Per-attempt provider timeout for a platform sweep (ms).
+ *
+ * Three times the 60s serving default. Serving is right to give up quickly —
+ * a request nobody is waiting on has already failed — but a campaign has
+ * paid for the tokens and can afford to wait for the answer. The tranche run
+ * lost a candidate to a 60s cutoff on a model that answers fine when given
+ * room.
+ */
+export const PLATFORM_SWEEP_TIMEOUT_MS = 180_000;
+
+/**
  * The committed platform suite for each taxonomy cluster. v1 ids resolve to
  * suites/<id>.jsonl (top level — the simulated/ fallback would throw
  * SimulatedSuiteError in runEval, a wrong mapping fails loudly); v2 ids
@@ -3580,6 +3591,11 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         // failing strategy is dropped whole (its partial rows stay cached for
         // a cheap retry) and everything else completes. See runner.ts.
         containStrategyFailures: true,
+        // Declared, not inherited from the environment: a 1600-token
+        // generation from a slow model legitimately outlives the 60s
+        // serving default, and losing a candidate to that is losing a
+        // measurement we paid for.
+        providerTimeoutMs: payload.providerTimeoutMs ?? PLATFORM_SWEEP_TIMEOUT_MS,
         judgeModelOverride: judgeEntry.alias,
         judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,

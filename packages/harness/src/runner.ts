@@ -77,6 +77,13 @@ export interface RunOptions {
    * left in the cache for a cheap retry, everything else proceeds.
    */
   containStrategyFailures?: boolean;
+  /**
+   * Per-attempt provider timeout for THIS run. Absent → the provider
+   * default (60s), which is right for serving and wrong for a long
+   * evaluation generation. Declared here rather than read from the
+   * environment so it cannot silently fail to propagate.
+   */
+  providerTimeoutMs?: number;
   /** Explicit acknowledgement required to run suites from suites/simulated/. */
   simulatedOk?: boolean;
   /** Explicit provenance override (tests). Default: detected from the
@@ -261,8 +268,17 @@ export function strategyModels(strategy: StrategyConfig): string[] {
 export function createRunProviders(
   mode: 'mock' | 'live',
   prices: PriceTable,
+  timeoutMs?: number,
 ): Record<ProviderId, Provider> {
-  if (mode === 'live') return createProviders({ prices });
+  if (mode === 'live') {
+    // EXPLICIT beats ambient. POTION_PROVIDER_TIMEOUT_MS exists as a
+    // deployment default, but a campaign that NEEDS a longer per-attempt
+    // timeout must say so in its own options rather than hope an env var
+    // survives the trip through three packages — the tranche run set the
+    // variable, the transport still used the 60s default, and no amount of
+    // reading the chain explained it. A declared value cannot go missing.
+    return createProviders({ prices, ...(timeoutMs !== undefined ? { timeoutMs } : {}) });
+  }
   const mock = createMockProvider(prices);
   return { anthropic: mock, openai: mock, google: mock, openrouter: mock, mock };
 }
@@ -483,7 +499,8 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   // identity-preserving, so detectProviderMode reads the same on either set.
   // The resolver is rebuilt over the wrapped set — a resolver built over the
   // originals would route calls around the meter (the context.ts lesson).
-  const rawProviders = deps.providers ?? createRunProviders(opts.provider ?? 'mock', prices);
+  const rawProviders =
+    deps.providers ?? createRunProviders(opts.provider ?? 'mock', prices, opts.providerTimeoutMs);
   const providers = deps.spendSink
     ? meteredProviders(rawProviders, prices, deps.spendSink)
     : rawProviders;

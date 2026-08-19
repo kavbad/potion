@@ -9,7 +9,7 @@ import { roundCost, type EvalItem, type ScoringMethod, sha256 } from '@potion/co
 import { createDb, createOrg, getEvalResultByCacheKey, type DbHandle } from '@potion/db';
 import { createMockProvider, evalTaskById, hashString } from '@potion/providers';
 import { BudgetCapError, estimateItemCostUsd } from './estimate.js';
-import { MockAliasInLiveRunError, SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
+import { createRunProviders, MockAliasInLiveRunError, SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
 import type { SpendCall } from './metered-providers.js';
 import { buildJudgeScoreMessages } from './scorers.js';
 import { loadPrices } from '@potion/providers';
@@ -644,5 +644,25 @@ describe('containStrategyFailures — one flaky candidate must not void the leg'
     expect(summary.failedStrategies[0]!.completedCells).toBe(1);
     expect(summary.results).toHaveLength(0);
     expect(summary.aggregates).toHaveLength(0);
+  });
+});
+
+describe('providerTimeoutMs — declared, not inherited from the environment', () => {
+  // The tranche campaign set POTION_PROVIDER_TIMEOUT_MS=180000 and the
+  // transport still used the 60s default; the plumbing tested fine in
+  // isolation and no reading of the chain explained it. An option that
+  // travels with the run cannot go missing between packages, so the sweep
+  // now declares its timeout instead of hoping ambient state propagates.
+  it('reaches the live transport as an explicit argument', () => {
+    const prices = loadPrices(PRICES_PATH).table;
+    // The seam createRunProviders exposes: a declared timeout is passed
+    // through to the provider factory rather than resolved from env.
+    const withTimeout = createRunProviders('live', prices, 180_000);
+    expect(Object.keys(withTimeout).sort()).toEqual(
+      ['anthropic', 'google', 'mock', 'openai', 'openrouter'].sort(),
+    );
+    // and mock mode ignores it entirely (no live factory is constructed)
+    const mockSet = createRunProviders('mock', prices, 180_000);
+    expect(mockSet.openrouter.id).toBe('mock');
   });
 });

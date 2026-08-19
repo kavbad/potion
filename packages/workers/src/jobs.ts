@@ -397,6 +397,8 @@ export interface FrontierPlatformSweepPayload {
    * reports any it dropped rather than silently measuring less.
    */
   maxAnswerers?: number;
+  /** Per-attempt provider timeout (ms). Absent → PLATFORM_SWEEP_TIMEOUT_MS. */
+  providerTimeoutMs?: number;
 }
 
 /**
