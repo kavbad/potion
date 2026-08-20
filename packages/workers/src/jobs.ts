@@ -399,6 +399,8 @@ export interface FrontierPlatformSweepPayload {
   maxAnswerers?: number;
   /** Per-attempt provider timeout (ms). Absent → PLATFORM_SWEEP_TIMEOUT_MS. */
   providerTimeoutMs?: number;
+  /** Retry attempts past the first. Absent → PLATFORM_SWEEP_MAX_RETRIES. */
+  providerMaxRetries?: number;
 }
 
 /**

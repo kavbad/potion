@@ -3304,6 +3304,17 @@ export const PLATFORM_SWEEP_MAX_ANSWERERS = 12;
 export const PLATFORM_SWEEP_TIMEOUT_MS = 180_000;
 
 /**
+ * Retry attempts for a platform sweep, past the provider default of 3.
+ *
+ * Serving's budget is latency a user is waiting through. A campaign's is not:
+ * the tokens are already bought, nobody is waiting, and abandoning a
+ * candidate over a transient blip throws away its entire measurement. Eight
+ * attempts with the existing exponential backoff spans ~30s of retrying —
+ * cheap against a leg that costs hours.
+ */
+export const PLATFORM_SWEEP_MAX_RETRIES = 8;
+
+/**
  * The committed platform suite for each taxonomy cluster. v1 ids resolve to
  * suites/<id>.jsonl (top level — the simulated/ fallback would throw
  * SimulatedSuiteError in runEval, a wrong mapping fails loudly); v2 ids
@@ -3335,7 +3346,10 @@ export type PlatformSweepRefusalReason =
   | 'class-unrepresented'
   /** More reachable answerers than the width ceiling: cheapest-first would
    *  pick a subset nobody chose. Operator must name maxAnswerers. */
-  | 'pool-exceeds-ceiling';
+  | 'pool-exceeds-ceiling'
+  /** The new frontier would drop a model the previous version routes to —
+   *  a campaign that degrades a cluster while reporting success. */
+  | 'frontier-regression';
 
 /** Typed refusal, all pre-spend: the reason is machine-checkable so tests
  * pin fails-for-the-RIGHT-reason, never just "it threw". */
@@ -3358,6 +3372,9 @@ export interface FrontierPlatformSweepResult {
    * it from a candidate count that looks reasonable.
    */
   droppedAnswerers: string[];
+  /** The saved frontier points in full — so the caller can persist the leg
+   *  immediately and stop treating the database as the only copy. */
+  frontierPointsFull: FrontierPoint[];
   /** Candidates dropped mid-run by failure containment (runner.ts): named
    *  with their error, so a thin frontier is legible as "these failed",
    *  never mistaken for "these were measured and lost". */
@@ -3596,6 +3613,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         // serving default, and losing a candidate to that is losing a
         // measurement we paid for.
         providerTimeoutMs: payload.providerTimeoutMs ?? PLATFORM_SWEEP_TIMEOUT_MS,
+        providerMaxRetries: payload.providerMaxRetries ?? PLATFORM_SWEEP_MAX_RETRIES,
         judgeModelOverride: judgeEntry.alias,
         judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
@@ -3640,11 +3658,49 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       prices.version,
       { providerMode: 'live' },
     );
+    // REGRESSION GUARD. A sweep publishes a NEW frontier version; if a
+    // candidate failed this run, aggregatesFromEvalResults simply does not
+    // see it (its rows carry the previous prices version), so the new
+    // version silently drops a model the customer already had. The tranche
+    // run hit this exactly: or-sonnet is on the committed extraction
+    // frontier and failed after 0 cells, so extraction was about to be
+    // republished WITHOUT it — a campaign that makes a cluster worse while
+    // reporting success.
+    //
+    // Containment protects the LEG from one bad candidate. It does not
+    // protect the FRONTIER, and those are different promises.
+    //
+    // Refusing costs this leg's publish, not its spend: every executed cell
+    // stays in the content-addressed cache, so a retry resumes at $0 for
+    // everything that worked and only re-runs what failed.
+    const previous = await loadCurrentFrontier(ctx.db, payload.clusterId, undefined);
+    const modelsOf = (pts: FrontierPoint[]): Set<string> => {
+      const out = new Set<string>();
+      for (const p of pts) {
+        const cfg = p.strategyConfig as StrategyConfig;
+        if (cfg.type === 'single') out.add(cfg.model);
+      }
+      return out;
+    };
     let frontierId: string | null = null;
     let frontierVersion: number | null = null;
     let frontierPoints: FrontierPoint[] = [];
     if (aggregates.length > 0) {
       const computed = computeFrontier(aggregates);
+      if (previous !== null && previous.points.length > 0) {
+        const had = modelsOf(previous.points);
+        const has = modelsOf(computed as unknown as FrontierPoint[]);
+        const lost = [...had].filter((m) => !has.has(m));
+        if (lost.length > 0) {
+          throw new PlatformSweepRefusalError(
+            'frontier-regression',
+            `refusing to publish: v${previous.version} routes to ${lost.join(', ')} and this run ` +
+              `produced no measurement for ${lost.length === 1 ? 'it' : 'them'} ` +
+              `(contained: ${summary.failedStrategies.map((f) => f.strategyHash.slice(0, 8)).join(', ') || 'none'}). ` +
+              `Executed cells are cached — retry resumes at $0 for what succeeded.`,
+          );
+        }
+      }
       const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
         provenance: { suiteId: mapped.suiteId, suiteContentHash: contentHash },
       });
@@ -3664,6 +3720,17 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       frontierVersion,
       points: frontierPoints.length,
       droppedAnswerers,
+      /**
+       * The saved points IN FULL, so a caller can persist this leg the
+       * moment it lands.
+       *
+       * Two campaigns died because completed legs existed only inside a
+       * PGlite directory: an interrupted process corrupts the directory, and
+       * hours of paid measurement go with it. Returning the points lets the
+       * caller write them somewhere durable per leg, which makes the database
+       * a cache rather than the only copy.
+       */
+      frontierPointsFull: frontierPoints,
       /** Candidates contained mid-run — named, never silently absent. */
       failedCandidates: summary.failedStrategies.map((f) => {
         const cfg = byHash.get(f.strategyHash);

@@ -84,6 +84,23 @@ export interface RunOptions {
    * environment so it cannot silently fail to propagate.
    */
   providerTimeoutMs?: number;
+  /**
+   * Retry attempts after the first, for THIS run. Absent → the provider
+   * default (3).
+   *
+   * The default is tuned for serving, where a retry budget is latency a user
+   * is waiting through: 3 attempts over roughly 1.75s of backoff. A campaign
+   * has the opposite economics — it has already bought the tokens, nobody is
+   * waiting, and giving up on a transient connection blip throws away a
+   * candidate's whole measurement.
+   *
+   * Measured: the tranche run lost three candidates to
+   * "network error after 3 retries: fetch failed", two of them on the FIRST
+   * call. Execution is strictly sequential here, so those were not a
+   * concurrency storm — just an impatient retry budget meeting a flaky
+   * moment.
+   */
+  providerMaxRetries?: number;
   /** Explicit acknowledgement required to run suites from suites/simulated/. */
   simulatedOk?: boolean;
   /** Explicit provenance override (tests). Default: detected from the
@@ -269,6 +286,7 @@ export function createRunProviders(
   mode: 'mock' | 'live',
   prices: PriceTable,
   timeoutMs?: number,
+  maxRetries?: number,
 ): Record<ProviderId, Provider> {
   if (mode === 'live') {
     // EXPLICIT beats ambient. POTION_PROVIDER_TIMEOUT_MS exists as a
@@ -277,7 +295,11 @@ export function createRunProviders(
     // survives the trip through three packages — the tranche run set the
     // variable, the transport still used the 60s default, and no amount of
     // reading the chain explained it. A declared value cannot go missing.
-    return createProviders({ prices, ...(timeoutMs !== undefined ? { timeoutMs } : {}) });
+    return createProviders({
+      prices,
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(maxRetries !== undefined ? { maxRetries } : {}),
+    });
   }
   const mock = createMockProvider(prices);
   return { anthropic: mock, openai: mock, google: mock, openrouter: mock, mock };
@@ -500,7 +522,8 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   // The resolver is rebuilt over the wrapped set — a resolver built over the
   // originals would route calls around the meter (the context.ts lesson).
   const rawProviders =
-    deps.providers ?? createRunProviders(opts.provider ?? 'mock', prices, opts.providerTimeoutMs);
+    deps.providers ??
+    createRunProviders(opts.provider ?? 'mock', prices, opts.providerTimeoutMs, opts.providerMaxRetries);
   const providers = deps.spendSink
     ? meteredProviders(rawProviders, prices, deps.spendSink)
     : rawProviders;

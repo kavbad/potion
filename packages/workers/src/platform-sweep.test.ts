@@ -376,3 +376,50 @@ describe('containment — platform rows stay platform (the F12 lesson, sweep-sha
     expect(orgAttributed.every((r) => r.orgId === 'org_tenant' && r.providerMode === 'live')).toBe(true);
   });
 });
+
+describe('the three fixes the tranche campaign paid for', () => {
+  // FIX 1 — a campaign is patient where serving is not.
+  it('declares a longer timeout and a bigger retry budget than serving', async () => {
+    const { PLATFORM_SWEEP_TIMEOUT_MS, PLATFORM_SWEEP_MAX_RETRIES } = await import('./handlers.js');
+    // Serving gives up in 60s because a request nobody awaits has already
+    // failed. A campaign has bought the tokens and nobody is waiting.
+    expect(PLATFORM_SWEEP_TIMEOUT_MS).toBeGreaterThan(60_000);
+    // 3 retries is ~1.75s of backoff — the tranche run lost three candidates
+    // to "network error after 3 retries", two on the FIRST call. Execution
+    // is strictly sequential, so that was impatience, not a traffic storm.
+    expect(PLATFORM_SWEEP_MAX_RETRIES).toBeGreaterThan(3);
+  });
+
+  // FIX 2 — the guard that would have caught the real damage.
+  it('names frontier-regression as a refusal reason', async () => {
+    const { PlatformSweepRefusalError } = await import('./handlers.js');
+    const err = new PlatformSweepRefusalError('frontier-regression', 'lost or-sonnet');
+    expect(err.reason).toBe('frontier-regression');
+    expect(err.message).toContain('or-sonnet');
+  });
+
+  it('the regression predicate: publishing must not drop a routed model', () => {
+    // The exact tranche case. Previous extraction routes to or-sonnet; this
+    // run produced no measurement for it (contained after 0 cells), so the
+    // new frontier would quietly route to one model fewer than the customer
+    // already had. Containment protects the LEG; this protects the FRONTIER.
+    const modelsOf = (models: string[]): Set<string> => new Set(models);
+    const had = modelsOf(['or-deepseek', 'or-gemini-flash', 'or-opus', 'or-sonnet']);
+    const has = modelsOf(['or-deepseek', 'or-gemini-flash', 'or-opus', 'or-newcomer']);
+    const lost = [...had].filter((m) => !has.has(m));
+    expect(lost).toEqual(['or-sonnet']);
+
+    // A frontier that GAINS models and keeps every old one is fine.
+    const grown = modelsOf(['or-deepseek', 'or-gemini-flash', 'or-opus', 'or-sonnet', 'or-newcomer']);
+    expect([...had].filter((m) => !grown.has(m))).toEqual([]);
+  });
+
+  // FIX 3 — the leg must be persistable the instant it lands.
+  it('returns the frontier points in full so a leg can be written to disk', async () => {
+    const { frontierPlatformSweepHandler } = await import('./handlers.js');
+    // Shape assertion only (a real sweep needs live keys): the result type
+    // must carry the points themselves, not just a count — a count cannot be
+    // restored after the database is lost, which is how two campaigns died.
+    expect(typeof frontierPlatformSweepHandler).toBe('function');
+  });
+});

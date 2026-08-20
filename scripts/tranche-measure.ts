@@ -12,7 +12,7 @@
 //
 // Runs against the Step 5 campaign database so the 8 already-measured models
 // cache-hit and only the 23 new ones cost anything.
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
@@ -63,6 +63,13 @@ const LEG_CAP: Record<string, number> = {
   'rewrite-edit': 21, 'code-review': 21, creative: 21,
 };
 
+// PER-LEG DURABILITY. Two campaigns lost completed legs because the only
+// copy lived in a PGlite directory that an interrupted process corrupts.
+// Each leg is now written to its own file the instant it lands, so the
+// database is a cache and the files are the record.
+const LEGS_DIR = `${REPO}/.tranche/legs`;
+mkdirSync(LEGS_DIR, { recursive: true });
+
 let cumulative = 0;
 for (const clusterId of Object.keys(PLATFORM_SUITE_BY_CLUSTER)) {
   if (cumulative >= CAMPAIGN_BELT_USD) {
@@ -76,6 +83,26 @@ for (const clusterId of Object.keys(PLATFORM_SUITE_BY_CLUSTER)) {
       { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never,
     );
     cumulative += res.spendUsd;
+    // Write BEFORE logging: if anything kills this process in the next
+    // millisecond, the leg is already on disk.
+    writeFileSync(
+      `${LEGS_DIR}/${clusterId}.json`,
+      JSON.stringify(
+        {
+          clusterId,
+          frontierId: res.frontierId,
+          frontierVersion: res.frontierVersion,
+          pricesVersion: JSON.parse(readFileSync(process.env.POTION_PRICES_PATH!, 'utf8')).version,
+          spendUsd: res.spendUsd,
+          candidates: res.candidates,
+          failedCandidates: res.failedCandidates,
+          points: res.frontierPointsFull,
+          capturedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ) + '\n',
+    );
     console.log(
       `  ${clusterId.padEnd(22)} cand=${String(res.candidates.length).padStart(2)} ` +
       `exec=${String(res.executed).padStart(4)} cached=${String(res.cacheHits).padStart(3)} ` +
