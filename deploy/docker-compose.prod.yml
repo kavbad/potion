@@ -231,6 +231,7 @@ services:
       POTION_API_URL: http://server:3000
       POTION_SELF_KEY: ${POTION_SELF_KEY:-}
       FRONTIER_NOTES_POLICY: ${FRONTIER_NOTES_POLICY:-frontier-notes-writer}
+      FRONTIER_NOTES_CLUSTER: ${FRONTIER_NOTES_CLUSTER:-creative}
       NODE_ENV: production
     volumes:
       - /opt/potion/research:/research

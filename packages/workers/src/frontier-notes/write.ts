@@ -223,6 +223,9 @@ export interface PotionWriterOptions {
   model?: string;
   /** Per-request policy override by name (x-potion-policy): the writer asks for quality on this one call. */
   policy?: string;
+  /** Tell Potion the kind of work (x-potion-cluster). A JSON-heavy prompt reads as
+   * 'classification' to the classifier; this is a writing job. */
+  cluster?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -244,7 +247,7 @@ export async function potionDraft(
   try {
     const res = await fetchImpl(`${o.url.replace(/\/$/, '')}/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}`, ...(o.policy ? { 'x-potion-policy': o.policy } : {}) },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}`, ...(o.policy ? { 'x-potion-policy': o.policy } : {}), ...(o.cluster ? { 'x-potion-cluster': o.cluster } : {}) },
       body: JSON.stringify({
         model: o.model ?? 'potion-auto',
         temperature: 0.3,

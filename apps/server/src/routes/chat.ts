@@ -39,7 +39,7 @@ import {
   type ToolCall,
   type Usage,
 } from '@potion/core';
-import { DEFAULT_ORG_ID, getClusterByIdForOrg, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
+import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
@@ -663,7 +663,16 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // G1.2: ownership-checked — platform clusters resolve for everyone,
       // tenant clusters only for their owner. Cross-org ids get the SAME
       // 400 as unknown ids (never a 403 existence oracle).
-      const clusterRow = await getClusterByIdForOrg(ctx.db.db, clusterHintRaw.trim(), auth.org.orgId);
+      const hint = clusterHintRaw.trim();
+      // A hint names a kind of work. It is valid if the org (or the platform)
+      // has a cluster row by that id — OR if a platform frontier exists for
+      // it, which is what routing actually serves from. Production never
+      // seeds cluster rows from the taxonomy, so without the second test the
+      // documented header 400'd for every customer (found 2026-08-22 by
+      // using the product ourselves).
+      const clusterRow =
+        (await getClusterByIdForOrg(ctx.db.db, hint, auth.org.orgId)) ??
+        ((await getLatestFrontier(ctx.db.db, hint, null)) ? { id: hint } : null);
       if (!clusterRow) {
         await logRequest({ ...logBase, status: 'cluster_not_found', latencyMs: elapsed() });
         return reply

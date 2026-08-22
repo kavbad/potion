@@ -18,7 +18,7 @@ export interface FrontierNotesOptions {
   /** Omit to use the deterministic writer only. */
   writer?: { provider: Provider; model: string };
   /** Preferred: write THROUGH Potion's own API (the dogfood path). Falls back to `writer`, then deterministic. */
-  potion?: { url: string; apiKey: string; model?: string; policy?: string };
+  potion?: { url: string; apiKey: string; model?: string; policy?: string; cluster?: string };
   byline?: string;
   gate?: boolean;
   extraNeverName?: readonly string[];

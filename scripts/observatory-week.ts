@@ -217,7 +217,7 @@ if (!DRY) {
     const byline = process.env.FRONTIER_NOTES_BYLINE;
     // Dogfood: the issue is written THROUGH Potion's own API when a serving
     // key is present (POTION_SELF_KEY); the provider writer is the fallback.
-    const potion = process.env.POTION_SELF_KEY ? { url: process.env.POTION_API_URL ?? 'http://server:3000', apiKey: process.env.POTION_SELF_KEY, policy: process.env.FRONTIER_NOTES_POLICY ?? 'frontier-notes-writer' } : undefined;
+    const potion = process.env.POTION_SELF_KEY ? { url: process.env.POTION_API_URL ?? 'http://server:3000', apiKey: process.env.POTION_SELF_KEY, policy: process.env.FRONTIER_NOTES_POLICY ?? 'frontier-notes-writer', cluster: process.env.FRONTIER_NOTES_CLUSTER ?? 'creative' } : undefined;
     const notes = await runFrontierNotes({
       run: run as never,
       ...(potion ? { potion } : {}),

@@ -510,3 +510,26 @@ describe('dashboard API', () => {
     expect(bad.statusCode).toBe(400);
   });
 });
+
+describe('X-Potion-Cluster hint resolves against platform frontiers (found 2026-08-22 by using the product)', () => {
+  it('accepts a hint for a cluster that has a platform frontier but no clusters row', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: `Bearer ${KEY_A}`, 'content-type': 'application/json', 'x-potion-cluster': 'code-gen' },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: CODE_PROMPT }] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-frontier-trace']).toContain('cluster=code-gen');
+  });
+  it('still refuses a hint nothing knows about', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: `Bearer ${KEY_A}`, 'content-type': 'application/json', 'x-potion-cluster': 'no-such-cluster' },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: CODE_PROMPT }] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('cluster_not_found');
+  });
+});
