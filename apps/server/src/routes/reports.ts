@@ -97,6 +97,8 @@ export function describeStrategyBrief(config: StrategyConfig): string {
       return `decompose · ${config.decomposerModel}`;
     case 'composite':
       return `composite · ${config.startModel}→${config.upgradeModel}`;
+    case 'program':
+      return `program · ${config.name}`;
   }
 }
 

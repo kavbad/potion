@@ -118,6 +118,7 @@ import {
   generateCandidatesExplained,
   type ItemPair,
 } from '@potion/researcher';
+import { programModels } from '@potion/core';
 // ---- M5 #36 agent workloads (SPEC §14) ----
 import { createHash, randomUUID } from 'node:crypto';
 import { SUITES_V2_DIR } from '@potion/harness';
@@ -3363,6 +3364,7 @@ export function strategyModelAliases(cfg: StrategyConfig): string[] {
     case 'ensemble': return [...cfg.models];
     case 'composite': return [cfg.startModel, cfg.upgradeModel];
     case 'decompose': return [cfg.decomposerModel, ...Object.values(cfg.routing)];
+    case 'program': return programModels(cfg.body);
   }
 }
 

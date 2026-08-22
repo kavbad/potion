@@ -104,7 +104,37 @@ export type StrategyConfig =
   // M3 #23 composite streaming (SPEC §12.6): stream startModel; when the first
   // token-batch confidence falls below upgradeIf.confidenceBelow, restart from
   // upgradeModel with the already-generated prefix as context.
-  | { type: 'composite'; startModel: string; upgradeModel: string; upgradeIf: { confidenceBelow: number } };
+  | { type: 'composite'; startModel: string; upgradeModel: string; upgradeIf: { confidenceBelow: number } }
+  /**
+   * MIXING PROGRAM rung 3 (2026-08-22): a mechanism as DATA. A small grammar —
+   * call / check / if / vote / pick — run by one audited interpreter
+   * (packages/strategies program.ts). New mechanisms are new programs, never
+   * new code in production: static call and cost bounds are computed from
+   * the tree before it runs, and the receipt names the program's hash.
+   */
+  | { type: 'program'; name: string; body: ProgramNode };
+
+/** Program grammar. Every leaf `call` names a model, so the boot-time
+ *  frontier↔registry check (which walks `model` keys) covers programs too. */
+export type ProgramNode =
+  /** One model call on the request; yields text + confidence (when exposed). */
+  | { op: 'call'; model: string }
+  /** Branch on a check over previously computed nodes. */
+  | { op: 'if'; check: ProgramCheck; then: ProgramNode; else: ProgramNode }
+  /** Majority over normalized answers of ≥3 nodes; ties → the first. */
+  | { op: 'vote'; of: ProgramNode[] }
+  /** Pick among nodes: by confidence (highest), or by a judge model's choice. */
+  | { op: 'pick'; of: ProgramNode[]; by: { kind: 'confidence' } | { kind: 'judge'; model: string } };
+
+export type ProgramCheck =
+  /** The first two `of` nodes agree (normalized text equality). */
+  | { kind: 'agree'; of: [ProgramNode, ProgramNode] }
+  /** The node's confidence is at least `min` (false when no confidence). */
+  | { kind: 'confidence'; of: ProgramNode; min: number }
+  /** The node's text matches the pattern. */
+  | { kind: 'regex'; of: ProgramNode; pattern: string }
+  /** The node's text parses as JSON and, if given, has these top-level keys. */
+  | { kind: 'json'; of: ProgramNode; requiredKeys?: string[] };
 
 // ---- eval ----
 export type ScoringMethod =

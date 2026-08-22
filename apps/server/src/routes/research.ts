@@ -58,6 +58,8 @@ export function strategyLabel(config: StrategyConfig): string {
       return `composite · ${config.startModel} ⇢ ${config.upgradeModel}`;
     case 'draft-verify':
       return `draft-verify · ${config.draftModel} + verify ${config.verifierModel}`;
+    case 'program':
+      return `program · ${config.name}`;
     case 'best-of-n':
       return `best-of-${config.n} · ${config.model} (judge ${config.judge.model})`;
     case 'ensemble':

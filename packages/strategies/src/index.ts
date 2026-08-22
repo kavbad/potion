@@ -22,3 +22,4 @@ export {
   callModel,
   baseSeedOf,
 } from './helpers.js';
+export * from './program.js';

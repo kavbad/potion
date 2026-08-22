@@ -31,6 +31,7 @@ import { getStrategyConfigs, insertShadowResult } from '@potion/db';
 import { normalizeText } from '@potion/harness';
 import { execute } from '@potion/strategies';
 import type { OrgProviders, PotionContext } from './context.js';
+import { programModels } from '@potion/core';
 
 /** Hard cap on candidate executions per sampled request (spend discipline —
  * see the file header for why this replaces a proportional cost cap). */
@@ -154,6 +155,8 @@ export function candidateModelOf(config: StrategyConfig): string {
       return config.decomposerModel;
     case 'composite':
       return `${config.startModel}→${config.upgradeModel}`;
+    case 'program':
+      return programModels(config.body).join('+');
   }
 }
 

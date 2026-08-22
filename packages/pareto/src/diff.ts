@@ -23,6 +23,8 @@ export function describeStrategy(cfg: StrategyConfig): string {
       return `decompose(${cfg.decomposerModel})`;
     case 'composite': // M3 #23 (SPEC §12.6)
       return `composite(${cfg.startModel}→${cfg.upgradeModel}@<${cfg.upgradeIf.confidenceBelow})`;
+    case 'program':
+      return `program(${cfg.name})`;
   }
 }
 

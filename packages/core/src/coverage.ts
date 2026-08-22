@@ -18,7 +18,7 @@
 //   capability is treated as uncovered, because the alternative is routing
 //   a 60k-token prompt at a model nobody checked can hold it.
 import { charBucketMax, parseShapeClass } from './shape.js';
-import type { StrategyConfig } from './types.js';
+import type { StrategyConfig, ProgramNode, ProgramCheck } from './types.js';
 
 /** Measured points a cluster needs before its evidence stops being thin. */
 export const MIN_MEASURED_POINTS = 3;
@@ -127,6 +127,49 @@ export function assessCoverage(
  * those questions needs the members enumerated, so this is the one place
  * that knows how each strategy shape names them.
  */
+/** Every model a program can call (leaf calls + judge models), in order, deduplicated. */
+export function programModels(node: ProgramNode): string[] {
+  const out: string[] = [];
+  const add = (m: string) => { if (!out.includes(m)) out.push(m); };
+  const walkCheck = (c: ProgramCheck): void => {
+    if (c.kind === 'agree') { walk(c.of[0]); walk(c.of[1]); } else walk(c.of);
+  };
+  const walk = (n: ProgramNode): void => {
+    switch (n.op) {
+      case 'call': add(n.model); return;
+      case 'if': walkCheck(n.check); walk(n.then); walk(n.else); return;
+      case 'vote': n.of.forEach(walk); return;
+      case 'pick': n.of.forEach(walk); if (n.by.kind === 'judge') add(n.by.model); return;
+    }
+  };
+  walk(node);
+  return out;
+}
+
+/** Static call bound: the number of DISTINCT call nodes (by identity) plus
+ *  judge picks — exactly what a worst-case execution pays for, because the
+ *  interpreter memoizes per node (a call referenced from a check and again
+ *  from a branch executes once). */
+export function programCallCount(node: ProgramNode): number {
+  const seen = new Set<ProgramNode>();
+  let judges = 0;
+  const walkCheck = (c: ProgramCheck): void => {
+    if (c.kind === 'agree') { walk(c.of[0]); walk(c.of[1]); } else walk(c.of);
+  };
+  const walk = (x: ProgramNode): void => {
+    if (seen.has(x)) return;
+    seen.add(x);
+    switch (x.op) {
+      case 'call': return;
+      case 'if': walkCheck(x.check); walk(x.then); walk(x.else); return;
+      case 'vote': x.of.forEach(walk); return;
+      case 'pick': x.of.forEach(walk); if (x.by.kind === 'judge') judges++; return;
+    }
+  };
+  walk(node);
+  return [...seen].filter((n) => n.op === 'call').length + judges;
+}
+
 export function strategyModels(config: StrategyConfig): string[] {
   switch (config.type) {
     case 'single':
@@ -143,5 +186,7 @@ export function strategyModels(config: StrategyConfig): string[] {
       return [config.decomposerModel, ...Object.values(config.routing)];
     case 'composite':
       return [config.startModel, config.upgradeModel];
+    case 'program':
+      return programModels(config.body);
   }
 }

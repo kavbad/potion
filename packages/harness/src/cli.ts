@@ -33,6 +33,8 @@ export function strategyLabel(cfg: StrategyConfig): string {
       return `decompose:${cfg.decomposerModel}`;
     case 'composite': // M3 #23 (SPEC §12.6)
       return `composite:${cfg.startModel}→${cfg.upgradeModel}`;
+    case 'program':
+      return `program:${cfg.name}`;
   }
 }
 

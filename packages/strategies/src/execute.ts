@@ -10,6 +10,7 @@ import { runDraftVerify } from './draft-verify.js';
 import { runEnsemble } from './ensemble.js';
 import { runSingle } from './single.js';
 import type { ExecContext, StrategyResult } from './types.js';
+import { runProgram } from './program.js';
 
 export async function execute(
   strategy: StrategyConfig,
@@ -29,6 +30,8 @@ export async function execute(
       return runEnsemble(strategy, messages, ctx);
     case 'decompose':
       return runDecompose(strategy, messages, ctx);
+    case 'program':
+      return runProgram(strategy.name, strategy.body, messages, ctx);
     case 'composite':
       return runComposite(strategy, messages, ctx);
   }

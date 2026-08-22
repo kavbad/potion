@@ -31,7 +31,7 @@
 //
 // Cost per call = (input·inputPer1M + output·outputPer1M) / 1e6 with the
 // call's model price entry.
-import type { ChatMessage, EvalItem, PriceEntry, PriceTable, StrategyConfig } from '@potion/core';
+import type { ChatMessage, EvalItem, PriceEntry, PriceTable, ProgramCheck, ProgramNode, StrategyConfig } from '@potion/core';
 import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import { DEFAULT_MAX_TOKENS } from '@potion/providers';
 import { MAX_SUBTASKS } from '@potion/strategies';
@@ -167,6 +167,25 @@ export function estimateCalls(
           outputTokens: PROTOCOL_OUTPUT_TOKENS,
         });
       }
+      return calls;
+    }
+    case 'program': {
+      // Worst case: every call node fires once at the answer ceiling (the
+      // interpreter memoizes per node, so never more); a judge pick costs one
+      // judge call over the candidates' texts.
+      const calls: CallEstimate[] = [];
+      const walkCheck = (c: ProgramCheck): void => {
+        if (c.kind === 'agree') { walk(c.of[0]); walk(c.of[1]); } else walk(c.of);
+      };
+      const walk = (n: ProgramNode): void => {
+        switch (n.op) {
+          case 'call': calls.push({ model: n.model, inputTokens: baseInputTokens, outputTokens: OUT }); return;
+          case 'if': walkCheck(n.check); walk(n.then); walk(n.else); return;
+          case 'vote': n.of.forEach(walk); return;
+          case 'pick': n.of.forEach(walk); if (n.by.kind === 'judge') calls.push({ model: n.by.model, inputTokens: baseInputTokens + n.of.length * OUT, outputTokens: 64 }); return;
+        }
+      };
+      walk(strategy.body);
       return calls;
     }
     case 'composite': {

@@ -32,6 +32,7 @@ import { crossCheckItem, type SuiteManifest } from './ingest/manifest.js';
 import { meteredProviders, type SpendSink } from './metered-providers.js';
 import { scoreAnswer } from './scorers.js';
 import { loadSuiteFile, resolveSuite } from './suites.js';
+import { programModels } from '@potion/core';
 
 /**
  * Thrown by runEval when a suite resolves under suites/simulated/ without an
@@ -279,6 +280,8 @@ export function strategyModels(strategy: StrategyConfig): string[] {
       ];
     case 'composite': // M3 #23 (SPEC §12.6)
       return [strategy.startModel, strategy.upgradeModel];
+    case 'program':
+      return programModels(strategy.body);
   }
 }
 
