@@ -15,6 +15,8 @@
 import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, Inter } from 'next/font/google';
 import './globals.css';
+import { ChromeSwitch } from '@/components/chrome-switch';
+import { sessionCookieHeader } from '@/lib/api';
 
 const sans = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const mono = IBM_Plex_Mono({
@@ -35,15 +37,16 @@ export const metadata: Metadata = {
     'Potion reads each prompt, works out what kind of work it is, and serves it from the strategy measured best for that work under a policy you set. OpenAI-compatible.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // The app-shell-or-bare decision lives in app/template.tsx, NOT here: a
-  // layout persists across client-side navigations, so a decision made on a
-  // public page (/research, /docs) would be frozen when the reader then
-  // clicked into the app — or the reverse — and the page arrived wearing the
-  // wrong chrome. A template re-renders on every navigation.
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Cookie PRESENCE only — the API re-validates every forwarded call. The
+  // per-route chrome decision is made on the client by ChromeSwitch (see
+  // its header for why it cannot be made here).
+  const signedIn = (await sessionCookieHeader()) !== undefined;
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-screen font-sans">
+        <ChromeSwitch signedIn={signedIn}>{children}</ChromeSwitch>
+      </body>
     </html>
   );
 }
