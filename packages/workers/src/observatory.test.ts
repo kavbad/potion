@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FrontierPoint, PriceEntry } from '@potion/core';
 import {
   AUDITIONS_PER_WEEK,
-  CANARY_CAP_USD,
+  CANARY_EXPECTED_USD,
   canaryTarget,
   digestLine,
   driftVerdict,
@@ -47,16 +47,16 @@ describe('envelope + lane plan — canaries first, then auditions, belt is a bel
     const spent: LedgerRow[] = [{ at: '2026-08-20T06:00:00Z', week: '2026-W34', lane: 'audition', spendUsd: 47 }];
     const plan = planLanes(envelopeFor(spent, new Date('2026-08-24T06:00:00Z')), ['a', 'b', 'c', 'd']);
     expect(plan.canaryClusters).toEqual(['a', 'b', 'c', 'd']);
-    expect(plan.auditions).toBe(1); // $3 left − $0.60 canaries = $2.40 → one $2 audition
+    expect(plan.auditions).toBe(1); // $3 left − $0.80 canaries = $2.20 → one $2 audition
     expect(plan.notes.join(' ')).toMatch(/affords 1\/3 auditions/);
   });
   it('belt exhausted: even canaries are rationed, never silently', () => {
     const spent: LedgerRow[] = [{ at: '2026-08-20T06:00:00Z', week: '2026-W34', lane: 'audition', spendUsd: 49.8 }];
     const plan = planLanes(envelopeFor(spent, new Date('2026-08-24T06:00:00Z')), ['a', 'b', 'c']);
-    expect(plan.canaryClusters).toEqual(['a']); // $0.20 affords one $0.15 canary
+    expect(plan.canaryClusters).toEqual(['a']); // $0.20 affords one $0.20 canary
     expect(plan.auditions).toBe(0);
     expect(plan.notes[0]).toMatch(/affords 1\/3 canaries/);
-    expect(plan.canaryBudgetUsd).toBeCloseTo(CANARY_CAP_USD);
+    expect(plan.canaryBudgetUsd).toBeCloseTo(CANARY_EXPECTED_USD);
   });
 });
 

@@ -35,10 +35,19 @@ export interface LedgerRow {
 }
 
 export const OBSERVATORY_ENVELOPE_USD = 50;
-/** Canaries are fixed and first; this is the ceiling per cluster per week. */
-export const CANARY_CAP_USD = 0.15;
-/** One audition = one candidate on one cluster, full suite, under this cap. */
-export const AUDITION_CAP_USD = 2;
+/**
+ * Two numbers per lane, deliberately different (first live week, 2026-08-22):
+ * the harness preflight refuses on a PESSIMISTIC projection (max answer +
+ * judge tokens × judge price — a 4-item canary projected $0.19–$2.50), so the
+ * per-run CAP is a ceiling the projection must clear, while planning and the
+ * envelope work on EXPECTED actuals. Actual spend is ledgered after each run
+ * and the ops org's hard-stop belt sits at the envelope remainder, so a run
+ * that costs more than expected is caught by the money, not by a guess.
+ */
+export const CANARY_CAP_USD = 3;
+export const CANARY_EXPECTED_USD = 0.2;
+export const AUDITION_CAP_USD = 4;
+export const AUDITION_EXPECTED_USD = 2;
 /** Auditions per week — breadth at a manageable rate. */
 export const AUDITIONS_PER_WEEK = 3;
 /** Items per canary — enough to notice a collapse, cheap enough to run weekly. */
@@ -73,24 +82,24 @@ export interface LanePlan {
 /** Canaries first, then auditions, inside what is left of the envelope. */
 export function planLanes(envelope: Envelope, clusters: string[]): LanePlan {
   const notes: string[] = [];
-  const canaryNeed = clusters.length * CANARY_CAP_USD;
+  const canaryNeed = clusters.length * CANARY_EXPECTED_USD;
   let remaining = envelope.remainingUsd;
   let canaryClusters = clusters;
   if (remaining < canaryNeed) {
-    const afford = Math.floor(remaining / CANARY_CAP_USD);
+    const afford = Math.floor(remaining / CANARY_EXPECTED_USD);
     canaryClusters = clusters.slice(0, afford);
     notes.push(
       `envelope remainder $${remaining.toFixed(2)} affords ${afford}/${clusters.length} canaries — ` +
         `${clusters.slice(afford).join(', ') || 'none'} skipped this week`,
     );
   }
-  const canaryBudgetUsd = canaryClusters.length * CANARY_CAP_USD;
+  const canaryBudgetUsd = canaryClusters.length * CANARY_EXPECTED_USD;
   remaining -= canaryBudgetUsd;
-  const auditions = Math.min(AUDITIONS_PER_WEEK, Math.floor(remaining / AUDITION_CAP_USD));
+  const auditions = Math.min(AUDITIONS_PER_WEEK, Math.floor(remaining / AUDITION_EXPECTED_USD));
   if (auditions < AUDITIONS_PER_WEEK) {
     notes.push(`envelope remainder $${remaining.toFixed(2)} affords ${auditions}/${AUDITIONS_PER_WEEK} auditions`);
   }
-  return { canaryClusters, canaryBudgetUsd, auditions, auditionBudgetUsd: auditions * AUDITION_CAP_USD, notes };
+  return { canaryClusters, canaryBudgetUsd, auditions, auditionBudgetUsd: auditions * AUDITION_EXPECTED_USD, notes };
 }
 
 // ---------------------------------------------------------------------------

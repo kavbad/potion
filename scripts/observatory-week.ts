@@ -38,7 +38,7 @@ const STORE = process.env.OBSERVATORY_DB ?? `${REPO}/.pglite/platform-sweep-step
 const ART = process.env.OBSERVATORY_ARTIFACTS ?? `${REPO}/artifacts/observatory`;
 mkdirSync(`${ART}/runs`, { recursive: true });
 
-const { createDb, migrate, upsertBudget, mtdSpendUsd, orgs, getLatestFrontier, addScannedModels } =
+const { createDb, migrate, upsertBudget, mtdSpendUsd, orgs, getLatestFrontier, addScannedModels, seedModelRegistry } =
   await import('@potion/db');
 const { loadPrices, fetchOpenRouterModels, diffModelListings } = await import('@potion/providers');
 const W = await import('@potion/workers');
@@ -75,9 +75,11 @@ const handle = await createDb(`pglite://${STORE}`);
 await migrate(handle.db);
 await handle.db.insert(orgs).values({ id: PLATFORM_OPS_ORG_ID, name: 'platform ops' }).onConflictDoNothing();
 const opsBefore = await mtdSpendUsd(handle.db, PLATFORM_OPS_ORG_ID, NOW);
-const allowance = plan.canaryBudgetUsd + plan.auditionBudgetUsd;
+// The belt is the ENVELOPE remainder — the real monthly limit — not the sum of
+// expected lane costs: per-run caps are pessimistic ceilings, actuals are
+// ledgered, and this hard stop is what makes the envelope a belt.
 if (!DRY) {
-  await upsertBudget(handle.db, { orgId: PLATFORM_OPS_ORG_ID, monthlyCapUsd: opsBefore + allowance, hardStop: true, warnPct: 80 });
+  await upsertBudget(handle.db, { orgId: PLATFORM_OPS_ORG_ID, monthlyCapUsd: opsBefore + envelopeBefore.remainingUsd, hardStop: true, warnPct: 80 });
 }
 const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never;
 const { table: prices } = loadPrices(process.env.POTION_PRICES_PATH!);
@@ -141,6 +143,11 @@ try {
     console.log(`  audition ${r.entry.alias.padEnd(34)} → ${r.clusterId.padEnd(20)} ${r.why}`);
     if (DRY) continue;
     try {
+      // The research store's registry may be EMPTY (the sweep then reads the
+      // price file). Inserting a lone candidate would make the db registry
+      // consist of one model and fail class representation — seed from the
+      // table first so the candidate JOINS the roster (first live week, 2026-08-22).
+      await seedModelRegistry(handle.db, prices);
       await addScannedModels(handle.db, [r.entry] as never, `${prices.version}+obs-${week}`);
       const res = await frontierPlatformSweepHandler(
         { clusterId: r.clusterId, capUsd: AUDITION_CAP_USD, maxAnswerers: 1, auditionModels: [r.entry.alias] },
