@@ -226,3 +226,4 @@ export {
 } from './handlers.js';
 export * from './observatory.js';
 export * from './notion-sink.js';
+export * from './replay.js';
