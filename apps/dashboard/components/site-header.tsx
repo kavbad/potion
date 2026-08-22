@@ -10,11 +10,12 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
     <>
       {/* exa-style announcement bar — ours carries the masked discovery */}
       <div className="bg-accent px-4 py-2 text-center text-xs text-white">
-        This week we measured a model at{' '}
+        <span className="hidden sm:inline">Code generation, 30 tasks scored by running the code: </span>
+        <span className="sm:hidden">Code generation: </span>
         <Link href="/home#evidence" className="font-medium text-white underline decoration-white/60 underline-offset-2 hover:decoration-white">
-          1/270th the price of the best — at 99% of its quality
+          a model at 1/270th the price of the best scorer, at 99% of its quality
         </Link>
-        .
+        <span className="hidden md:inline"> ($0.02 vs $6.26 per 1,000 requests)</span>.
       </div>
       <header className="sticky top-0 z-40 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:py-4">

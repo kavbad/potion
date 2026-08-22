@@ -1,105 +1,112 @@
-// THE DRIFT — exa's hero has loose columns of small artwork tiles floating
-// down both edges of the first viewport. Ours are measurement artifacts
-// instead of artwork: micro frontier charts, price fragments, interval
-// notation — the things the product actually produces, at thumbnail scale.
-// Every number is one the page already says (270×, the routed pick's price,
-// the 0.95 floor); nothing here leaks inventory or identity.
+// THE MARGINS — small measurement artifacts at the edges of the first
+// viewport. Each card is a complete statement on its own (a reader who looks
+// at only one should still learn something true), they hold still, and they
+// use the page's paper/ink palette with the one teal accent — no gradients,
+// no motion. Every number is one the page already says (the code-generation
+// table in the evidence band); nothing here leaks inventory or identity.
 //
-// Decorative, so: aria-hidden, pointer-events-none, hidden below xl, and the
-// float animation respects prefers-reduced-motion via the global setting.
+// Decorative, so: aria-hidden, pointer-events-none, hidden below xl.
 import type { ReactNode } from 'react';
 
-const FLOAT = 'animate-[heroFloat_11s_ease-in-out_infinite_alternate]';
-
-const ART = [
-  'linear-gradient(135deg, #042f2e 0%, #0f766e 55%, #2dd4bf 100%)',
-  'linear-gradient(160deg, #0f766e 0%, #14b8a6 50%, #99f6e4 100%)',
-  'linear-gradient(200deg, #134e4a 0%, #0d9488 60%, #5eead4 100%)',
-  'linear-gradient(120deg, #2dd4bf 0%, #0f766e 60%, #042f2e 100%)',
-  'linear-gradient(145deg, #5eead4 0%, #14b8a6 45%, #115e59 100%)',
-  'linear-gradient(175deg, #0d9488 0%, #042f2e 100%)',
-];
-
-function Tile({ children, delay, art, className = '' }: { children: ReactNode; delay: string; art: number; className?: string }) {
+function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div
-      className={`w-[8.5rem] overflow-hidden rounded-lg p-3 text-white shadow-[0_12px_30px_-10px_rgba(15,118,110,0.45)] ${FLOAT} ${className}`}
-      style={{ animationDelay: delay, backgroundImage: ART[art % ART.length] }}
-    >
-      {children}
+    <div className="w-[9.5rem] rounded-lg border border-line bg-panel/90 p-3 shadow-paper">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-faint">{title}</div>
+      <div className="mt-2">{children}</div>
     </div>
   );
 }
 
-function MiniFrontier() {
+// Five models on one coding task: quality (up) against price (right). The
+// routed pick is the teal dot at the far left — nearly the top, a fraction of
+// the price.
+function QualityVsPrice() {
+  const pts = [
+    { x: 10, y: 16, pick: true },
+    { x: 30, y: 15 },
+    { x: 48, y: 13 },
+    { x: 66, y: 12 },
+    { x: 90, y: 10 },
+  ];
   return (
-    <svg viewBox="0 0 100 56" className="w-full" aria-hidden>
-      <path d="M6 46 L30 46 L30 30 L58 30 L58 12 L94 12" fill="none" stroke="#ffffff" strokeWidth="1.6" opacity="0.85" />
-      {[[6, 46], [30, 30], [58, 12]].map(([x, y]) => (
-        <circle key={`${x}`} cx={x} cy={y} r="2.6" fill="#ffffff" />
+    <svg viewBox="0 0 100 40" className="w-full" aria-hidden>
+      <line x1="4" y1="34" x2="98" y2="34" stroke="#e7e5e4" strokeWidth="1" />
+      <line x1="4" y1="4" x2="4" y2="34" stroke="#e7e5e4" strokeWidth="1" />
+      <line x1="4" y1="18.5" x2="98" y2="18.5" stroke="#0f766e" strokeWidth="0.6" strokeDasharray="2 2" opacity="0.5" />
+      {pts.map((p) => (
+        <circle key={p.x} cx={p.x} cy={p.y} r={p.pick ? 3.4 : 2.3} fill={p.pick ? '#0f766e' : '#a8a29e'} />
       ))}
-      {[[20, 20], [44, 42], [70, 38], [84, 26]].map(([x, y]) => (
-        <circle key={`${x}-${y}`} cx={x} cy={y} r="2" fill="#ffffff" opacity="0.45" />
-      ))}
+      <text x="98" y="39.5" textAnchor="end" fontSize="5.5" fill="#a8a29e" fontFamily="ui-monospace, monospace">cheap → expensive</text>
+      <text x="6" y="24" fontSize="5" fill="#0f766e" fontFamily="ui-monospace, monospace">0.95 floor</text>
     </svg>
   );
 }
 
-function MiniBars() {
+// Cost per 1,000 requests, same five models, top to bottom. The teal bar is
+// the one the 0.95 floor actually buys.
+function CostBars() {
+  const bars = [
+    { w: 92, label: '$6.26' },
+    { w: 9, label: '$0.55' },
+    { w: 4.5, label: '$0.25' },
+    { w: 3.5, label: '$0.19' },
+    { w: 1.6, label: '$0.02', pick: true },
+  ];
   return (
-    <svg viewBox="0 0 100 44" className="w-full" aria-hidden>
-      {[
-        { y: 4, w: 92, teal: false },
-        { y: 16, w: 30, teal: false },
-        { y: 28, w: 12, teal: false },
-        { y: 40, w: 4, teal: true },
-      ].map((b) => (
-        <rect key={b.y} x="0" y={b.y - 3.5} width={b.w} height="7" rx="1.5" fill={b.teal ? '#ffffff' : 'rgba(255,255,255,0.35)'} />
+    <div className="space-y-1.5">
+      {bars.map((b) => (
+        <div key={b.label} className="flex items-center gap-1.5">
+          <div className="h-2 flex-1 overflow-hidden rounded-sm bg-line/60">
+            <div className={`h-full rounded-sm ${b.pick ? 'bg-accent' : 'bg-faint/50'}`} style={{ width: `${b.w}%` }} />
+          </div>
+          <span className={`w-9 text-right font-mono text-[8px] ${b.pick ? 'text-accent' : 'text-faint'}`}>{b.label}</span>
+        </div>
       ))}
-    </svg>
+    </div>
   );
 }
 
 export function HeroDrift() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 right-0 hidden xl:block">
-      <div className="absolute inset-y-0 left-5 flex w-[8.5rem] flex-col justify-center gap-7 2xl:left-10">
-        <Tile delay="0s" art={0} className="-ml-3">
-          <MiniFrontier />
-          <div className="mt-2 font-mono text-[9px] text-white/80">the measured frontier</div>
-        </Tile>
-        <Tile delay="-4s" art={1} className="ml-4">
-          <div className="font-mono text-2xl font-medium tracking-tight text-white">270×</div>
-          <div className="mt-1 font-mono text-[9px] text-white/80">same work, price range</div>
-        </Tile>
-        <Tile delay="-8s" art={2} className="-ml-1">
-          <div className="font-mono text-[10px] leading-relaxed text-white">
-            q 0.979 <span className="text-white/70">± 0.021</span>
-            <br />
-            <span className="text-[#99f6e4]">floor ≥ 0.95 · holds</span>
+      <div className="absolute inset-y-0 left-5 flex w-[9.5rem] flex-col justify-center gap-5 2xl:left-10">
+        <Card title="one coding task · 5 models">
+          <QualityVsPrice />
+          <p className="mt-1 text-[10px] leading-snug text-soft">Quality within two points. Price apart by 270×.</p>
+        </Card>
+        <Card title="the routed pick">
+          <div className="font-mono text-xl font-medium tracking-tight text-ink">$0.0231</div>
+          <p className="mt-1 text-[10px] leading-snug text-soft">per 1,000 requests, at 99% of the best scorer&apos;s quality.</p>
+        </Card>
+        <Card title="quality floor">
+          <div className="font-mono text-[11px] text-ink">
+            0.979 <span className="text-faint">± 0.021</span>
           </div>
-        </Tile>
+          <p className="mt-1 text-[10px] leading-snug text-soft">
+            Measured above the 0.95 floor, error bars included. <span className="text-accent">Holds.</span>
+          </p>
+        </Card>
       </div>
-      <div className="absolute inset-y-0 right-5 flex w-[8.5rem] flex-col justify-center gap-7 2xl:right-10">
-        <Tile delay="-2s" art={3} className="ml-2">
-          <MiniBars />
-          <div className="mt-2 font-mono text-[9px] text-white/80">cost per 1k, five models</div>
-        </Tile>
-        <Tile delay="-6s" art={4} className="-ml-4">
-          <div className="font-mono text-2xl font-medium tracking-tight text-white">$0.0231</div>
-          <div className="mt-1 font-mono text-[9px] text-white/80">/1k · the routed pick</div>
-        </Tile>
-        <Tile delay="-9s" art={5} className="ml-1">
-          <div className="font-mono text-[10px] leading-relaxed text-white">
-            receipt
+      <div className="absolute inset-y-0 right-5 flex w-[9.5rem] flex-col justify-center gap-5 2xl:right-10">
+        <Card title="cost per 1,000 requests">
+          <CostBars />
+          <p className="mt-1.5 text-[10px] leading-snug text-soft">Same work, top to bottom. Teal is what the floor buys.</p>
+        </Card>
+        <Card title="how it is scored">
+          <p className="text-[10px] leading-snug text-soft">
+            Code is run, not judged. 30 tasks the models have never seen. Every point carries an interval.
+          </p>
+        </Card>
+        <Card title="the receipt">
+          <div className="font-mono text-[9px] leading-relaxed text-ink">
+            cluster <span className="text-faint">code-gen</span>
             <br />
-            <span className="text-white/70">what served it, and why</span>
-            <span aria-hidden className="mt-2 flex items-end">
-              <span className="h-px w-8 bg-white/80" />
-              <span className="h-[6px] w-px bg-white/80" />
-            </span>
+            strategy <span className="text-faint">220a2558</span>
+            <br />
+            cost <span className="text-faint">$0.0231 /1k</span>
           </div>
-        </Tile>
+          <p className="mt-1 text-[10px] leading-snug text-soft">Every answer says what ran, and why.</p>
+        </Card>
       </div>
     </div>
   );
