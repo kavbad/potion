@@ -253,7 +253,10 @@ export async function issueMagicLink(
   await sendEmail({
     to: email,
     subject: 'Your Potion sign-in link',
-    text: `Sign in to Potion: ${link}\n(this link is single-use and expires in 15 minutes)`,
+    text:
+      `Sign in to Potion: ${link}\n\n` +
+      `This link is single-use and expires in 15 minutes. If you did not request it, ignore this email.\n\n` +
+      `— Potion, a product by Mutiny`,
   });
   return link;
 }

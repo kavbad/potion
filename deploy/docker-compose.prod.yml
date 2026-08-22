@@ -114,6 +114,7 @@ services:
       # Magic-link delivery (apps/server/src/email.ts). Both unset → links are only logged/hand-delivered.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       POTION_EMAIL_FROM: ${POTION_EMAIL_FROM:-}
+      POTION_EMAIL_REPLY_TO: ${POTION_EMAIL_REPLY_TO:-}
       # The serving price table MUST be the one the committed baseline frontiers
       # were measured against (prices_version 2026-08-04-or2+tranche-2026-08-19);
       # the repo-root prices.json is the pre-tranche curated table and does not

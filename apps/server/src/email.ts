@@ -10,13 +10,13 @@
 import type { EmailMessage, SendEmail } from './routes/auth.js';
 import { logSendEmail } from './routes/auth.js';
 
-export function resendSendEmail(opts: { apiKey: string; from: string; fetchImpl?: typeof fetch }): SendEmail {
+export function resendSendEmail(opts: { apiKey: string; from: string; replyTo?: string; fetchImpl?: typeof fetch }): SendEmail {
   const f = opts.fetchImpl ?? fetch;
   return async (msg: EmailMessage) => {
     const res = await f('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: opts.from, to: [msg.to], subject: msg.subject, text: msg.text }),
+      body: JSON.stringify({ from: opts.from, to: [msg.to], subject: msg.subject, text: msg.text, ...(opts.replyTo ? { reply_to: opts.replyTo } : {}) }),
     });
     if (!res.ok) {
       // Never leak the link into logs on failure — only the status.
@@ -29,6 +29,7 @@ export function resendSendEmail(opts: { apiKey: string; from: string; fetchImpl?
 export function sendEmailFromEnv(env: NodeJS.ProcessEnv = process.env): { sendEmail: SendEmail; transport: 'resend' | 'log' } {
   const apiKey = env.RESEND_API_KEY?.trim();
   const from = env.POTION_EMAIL_FROM?.trim();
-  if (apiKey && from) return { sendEmail: resendSendEmail({ apiKey, from }), transport: 'resend' };
+  const replyTo = env.POTION_EMAIL_REPLY_TO?.trim();
+  if (apiKey && from) return { sendEmail: resendSendEmail({ apiKey, from, ...(replyTo ? { replyTo } : {}) }), transport: 'resend' };
   return { sendEmail: logSendEmail, transport: 'log' };
 }
