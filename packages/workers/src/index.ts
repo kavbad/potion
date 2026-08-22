@@ -224,3 +224,4 @@ export {
   type SweepRunResult,
   type SweepSuiteOutcome,
 } from './handlers.js';
+export * from './observatory.js';
