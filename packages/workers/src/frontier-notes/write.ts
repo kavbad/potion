@@ -165,7 +165,7 @@ export async function modelDraft(f: FactSheet, opts: ModelWriterOptions): Promis
         { role: 'system', content: SYSTEM },
         { role: 'user', content: `FACT SHEET:\n${JSON.stringify(f, null, 1)}\n\nA deterministic draft for reference (improve its prose; do not add facts):\n${JSON.stringify(fallback, null, 1)}` },
       ],
-      params: { temperature: 0.3, maxTokens: 1800 },
+      params: { temperature: 0.3, maxTokens: 4000 },
     });
     const costUsd =
       res.usage.providerCostUsd ??
@@ -248,7 +248,9 @@ export async function potionDraft(
       body: JSON.stringify({
         model: o.model ?? 'potion-auto',
         temperature: 0.3,
-        max_tokens: 1800,
+        // A verbose model needs room for the whole JSON draft; this bound is
+        // honored since 2026-08-22 (it was ignored before, which hid the cut).
+        max_tokens: 4000,
         messages: [
           { role: 'system', content: SYSTEM },
           { role: 'user', content: `FACT SHEET:\n${JSON.stringify(f, null, 1)}\n\nA deterministic draft for reference (improve its prose; do not add facts):\n${JSON.stringify(fallback, null, 1)}` },
@@ -264,7 +266,7 @@ export async function potionDraft(
       completionTokens: body.usage?.completion_tokens ?? 0,
     };
     const parsed = parseDraft(text, fallback);
-    if (!parsed) return { draft: fallback, receipt, fallback: `potion returned no parseable draft (${text.length} chars)` };
+    if (!parsed) return { draft: fallback, receipt, fallback: `potion returned no parseable draft (${text.length} chars, finish ${String((body as { choices?: { finish_reason?: string }[] }).choices?.[0]?.finish_reason)})` };
     return { draft: parsed, receipt, fallback: null };
   } catch (e) {
     return { draft: fallback, receipt: null, fallback: e instanceof Error ? e.message : String(e) };
