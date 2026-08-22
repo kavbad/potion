@@ -111,6 +111,7 @@ services:
       # snippets, Lab links and OAuth callbacks derive from it. Behind Caddy
       # the request Host is the container's, so this must be pinned.
       POTION_PUBLIC_URL: ${POTION_PUBLIC_URL:?set POTION_PUBLIC_URL (https://api.<domain>)}
+      POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
       # 13a spec §1.6: error reporting. Unset → the init is a no-op.
       SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: "3000"
@@ -147,6 +148,7 @@ services:
       # Server-side fetches (lib/api.ts) go over the compose network; the
       # browser never needs this value.
       POTION_API_URL: http://server:3000
+      POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
     # No ports: reachable only through Caddy, same posture as the server.
     depends_on:
       server:

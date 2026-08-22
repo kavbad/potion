@@ -101,11 +101,18 @@ export function registerOperatorRoutes(
       await createUser(db, { id: userId, email, name: email.split('@')[0] ?? soloOrgName(email) });
     }
     await createMembership(db, { orgId, userId, role: 'admin' });
+    // The link must land on the DASHBOARD, whose /api/auth/verify sets the
+    // session cookie on the host the partner actually uses. Built from the
+    // raw request it pointed at the API host over plain http (caught in the
+    // Phase D rehearsal, 2026-08-21). POTION_APP_URL is the deployed
+    // dashboard origin; without it (local dev) fall back to this host.
+    const appUrl = process.env.POTION_APP_URL?.replace(/\/$/, '');
     const proto = req.protocol || 'http';
     const host = req.headers.host ?? 'localhost:3000';
+    const linkBase = appUrl ? `${appUrl}/api` : `${proto}://${host}`;
     // The magic link is returned UNCONDITIONALLY — operator hand-delivery
     // is the partner flow; the email side effect is best-effort logging.
-    const magicLink = await issueMagicLink(db, email, orgId, `${proto}://${host}`, logSendEmail);
+    const magicLink = await issueMagicLink(db, email, orgId, linkBase, logSendEmail);
     return reply.code(201).send({ orgId, name: body.data.name, adminEmail: email, magicLink });
   });
 
