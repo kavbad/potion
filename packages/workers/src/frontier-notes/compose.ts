@@ -98,7 +98,7 @@ export function composeFactSheet(run: ObservatoryRun, replays: ClusterReplay[], 
     if (!best) continue;
     const vague = isLargeFinding(best);
     mixing.push({
-      clusterId: r.clusterId,
+      ...(vague ? {} : { clusterId: r.clusterId }),
       family: familyOf(r.clusterId),
       kind: best.cheaperAndAsGood ? 'cheaper-and-as-good' : 'frontier-candidate',
       meanQuality: round3(best.meanQuality),

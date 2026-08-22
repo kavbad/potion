@@ -8,7 +8,7 @@ import { join } from 'node:path';
 export interface IssueFaq { q: string; a: string }
 export interface ClusterFact { clusterId: string; family: string; pick: string; storedQuality: number; storedCi95: number; observedMean: number | null; n: number; verdict: 'ok' | 'drift' | 'inconclusive' }
 export interface AuditionFact { alias: string; clusterId: string; lane: string; outcome: string }
-export interface MixingFact { clusterId: string; family: string; kind: string; meanQuality: number; qualityDeltaVsBestSingle: number; costSaving: number; n: number; vague: boolean; costBand: string }
+export interface MixingFact { clusterId?: string; family: string; kind: string; meanQuality: number; qualityDeltaVsBestSingle: number; costSaving: number; n: number; vague: boolean; costBand: string }
 export interface FactSheet {
   week: string; at: string; frontier: ClusterFact[]; auditions: AuditionFact[]; mixing: MixingFact[];
   numbers: { canaries: number; clustersHeld: number; clustersMoved: number; inconclusive: number; itemsGraded: number; candidatesScreened: number; candidatesMeasured: number; spendUsd: number };

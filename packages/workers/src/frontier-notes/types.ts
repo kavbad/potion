@@ -27,7 +27,8 @@ export interface AuditionFact {
 }
 
 export interface MixingFact {
-  clusterId: string;
+  /** Absent when the finding is vague: the writer must not know which cluster. */
+  clusterId?: string;
   family: ClusterFamily;
   /** 'cheaper-and-as-good' beats or ties the best single on quality and is strictly cheaper. */
   kind: 'cheaper-and-as-good' | 'frontier-candidate';

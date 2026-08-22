@@ -123,7 +123,7 @@ export default async function IssuePage({ params }: Params) {
         {f.mixing.length > 0 && (
           <ul className="mt-3 space-y-1 font-mono text-[12px] text-soft">
             {f.mixing.map((m) => (
-              <li key={m.clusterId + m.kind}>
+              <li key={(m.clusterId ?? m.family) + m.kind}>
                 {m.vague ? `${m.family} work` : m.clusterId} · {m.kind} · quality {q3(m.meanQuality)} · {m.vague ? m.costBand : `${Math.round(m.costSaving * 100)}% cheaper`} · n={m.n}
               </li>
             ))}

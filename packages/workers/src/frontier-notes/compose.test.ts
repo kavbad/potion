@@ -52,9 +52,10 @@ describe('frontier-notes compose', () => {
 
   it('applies the breakthrough rule: large findings go vague, small ones stay specific', () => {
     const f = composeFactSheet(run, replays);
-    const ex = f.mixing.find((m) => m.clusterId === 'extraction')!;
+    const ex = f.mixing.find((m) => m.family === 'structured output')!;
     const su = f.mixing.find((m) => m.clusterId === 'summarization')!;
     expect(ex.vague).toBe(true);
+    expect(ex.clusterId).toBeUndefined();
     expect(ex.costBand).toBe('between 2× and 4× cheaper');
     expect(su.vague).toBe(false);
     expect(isLargeFinding({ cheaperAndAsGood: true, costSavingVsBestSingle: 0.1, qualityDeltaVsBestSingle: 0.01 })).toBe(false);
