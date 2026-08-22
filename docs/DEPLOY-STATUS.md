@@ -42,7 +42,10 @@ material weakness; all four are fixed and redeployed.
    `x-frontier-trace: cluster=classification;strategy=220a2558;frontier=v4;policy=min_cost;fallback=0;provenance=live`
 5. **Coverage cases**: code-gen → `200` (strategy 220a2558, 14.6 s — consistent with its measured p95); creative → `200` routed to `or-sonnet` at full price (the honest "nothing cheaper qualifies" case); a yes/no reasoning prompt classified as classification → `200`.
 6. **Metering**: `GET /api/usage/current` → 4 requests, $0.0016 cost against a $0.0313 "best model for everything" baseline (95% saving on this traffic). Daily rollups populate via `POST /api/usage/aggregate`.
-7. **Budget kill re-proof** (spec §5/§6): cap set to **$0.01, hardStop** via `PUT /api/budgets`. 16 cheap requests reached 31% of cap; full-price requests crossed it at #5 (`state: exceeded`). The next request after the verdict-cache window → **`429 budget_exceeded`**: *"monthly budget cap reached (hard stop): MTD $0.02 ≥ cap $0.01"*, one `budget_events` row. Total rehearsal spend ≈ $0.02.
+7. **Budget kill re-proof, repeated on the 5 s build**: cap raised to $0.02; full-price requests 6 s apart crossed the cap on #3 and **#4 was refused (`429`)** — one request of overshoot.
+8. **Rehearsal closed**: org deleted through `DELETE /operator/orgs/:id` (true cascade — zero rows remain), retired key → `401`, no rehearsal secrets left on the laptop.
+
+Original kill re-proof (spec §5/§6): cap set to **$0.01, hardStop** via `PUT /api/budgets`. 16 cheap requests reached 31% of cap; full-price requests crossed it at #5 (`state: exceeded`). The next request after the verdict-cache window → **`429 budget_exceeded`**: *"monthly budget cap reached (hard stop): MTD $0.02 ≥ cap $0.01"*, one `budget_events` row. Total rehearsal spend ≈ $0.02.
 
 ## What the rehearsal caught (all fixed, on `main`, redeployed)
 
