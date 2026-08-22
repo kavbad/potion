@@ -24,6 +24,7 @@ export async function runSingle(
     ...(ctx.maxOutputTokens !== undefined ? { maxTokens: ctx.maxOutputTokens } : {}),
     ...(ctx.params?.tools !== undefined ? { tools: ctx.params.tools } : {}),
     ...(ctx.params?.toolChoice !== undefined ? { tool_choice: ctx.params.toolChoice } : {}),
+    ...(ctx.captureConfidence ? { logprobs: true } : {}),
   };
   const response = await provider.complete({
     model,

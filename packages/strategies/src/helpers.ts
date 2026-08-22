@@ -71,7 +71,8 @@ export async function callModel(
   const response = await provider.complete({
     model,
     messages,
-    params: { seed, ...(maxTokens !== undefined ? { maxTokens } : {}) },
+    params: {
+      ...(ctx.captureConfidence ? { logprobs: true } : {}), seed, ...(maxTokens !== undefined ? { maxTokens } : {}) },
   });
   const usage: Usage = {
     inputTokens: response.usage.inputTokens,

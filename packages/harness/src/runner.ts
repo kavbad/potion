@@ -541,6 +541,9 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
     prices,
     resolve: createResolver(providers, prices),
     ...(opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {}),
+    // Every measured cell records the producing stage's confidence (2026-08-22):
+    // the selector-training signal and the realizability score for mixtures.
+    captureConfidence: true,
   };
 
   const ownHandle = deps.db ? null : await createDb();
@@ -632,6 +635,10 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           // Single-sample distribution: per-item latency IS the strategy's
           // aggregated usage.latencyMs; p50/p95 across items live on the aggregate.
           latencyMs: { p50: usage.latencyMs, p95: usage.latencyMs, mean: usage.latencyMs },
+          ...(() => {
+            const last = outcome.trace[outcome.trace.length - 1];
+            return last?.confidence !== undefined ? { confidence: last.confidence, confidenceMethod: 'logprob' as const } : {};
+          })(),
           modelVersions,
           pricesVersion: prices.version,
           providerMode,

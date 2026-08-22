@@ -49,6 +49,14 @@ export interface ExecContext {
    * PROTOCOL_MAX_TOKENS regardless.
    */
   maxOutputTokens?: number;
+  /**
+   * Ask providers for token logprobs on every call so each stage records a
+   * confidence (exp mean token logprob). Free where supported, undefined
+   * where not (Anthropic/Gemini). The measurement harness turns this ON for
+   * every run (2026-08-22): confidence on every cached cell is the training
+   * signal for selectors and the realizability score for mixtures.
+   */
+  captureConfidence?: boolean;
   // stream honored by 'single' and 'composite' (M3 #23, SPEC §12.6) only.
   stream?: (token: string) => void;
   /** Tool-calling passthrough (M3 #25; 'single' only): forwarded UNMODIFIED

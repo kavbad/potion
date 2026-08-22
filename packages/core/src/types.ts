@@ -130,6 +130,10 @@ export interface EvalResult {
   quality: number; // normalized 0..1
   scorer: string; // 'exact' | 'code-exec' | 'field-match' | 'llm-judge:<model>'
   judgeAgreement?: number;
+  /** The producing stage's confidence (exp mean token logprob), when the
+   *  provider exposed logprobs. The selector-training signal. */
+  confidence?: number;
+  confidenceMethod?: 'logprob';
   // Aggregated across all strategy stages PLUS scoring overhead: for
   // llm-judge items the judge call's tokens+cost are summed in (M1b — judge
   // spend is real provider spend). usage.latencyMs stays strategy-only;

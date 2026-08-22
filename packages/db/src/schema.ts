@@ -239,6 +239,9 @@ export const evalResults = pgTable('eval_results', {
   quality: doublePrecision('quality').notNull(),
   scorer: text('scorer').notNull(),
   judgeAgreement: doublePrecision('judge_agreement'),
+  /** Producing stage's confidence (exp mean token logprob) when exposed. */
+  confidence: doublePrecision('confidence'),
+  confidenceMethod: text('confidence_method'),
   usage: jsonb('usage').$type<Usage>().notNull(),
   latencyMs: jsonb('latency_ms').$type<EvalResult['latencyMs']>().notNull(),
   modelVersions: jsonb('model_versions').$type<Record<string, string>>().notNull(),

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { roundCost, type EvalItem, type ScoringMethod, sha256 } from '@potion/core';
-import { createDb, createOrg, getEvalResultByCacheKey, type DbHandle } from '@potion/db';
+import { createDb, createOrg, getEvalResultByCacheKey, migrate, type DbHandle } from '@potion/db';
 import { createMockProvider, evalTaskById, hashString } from '@potion/providers';
 import { BudgetCapError, estimateItemCostUsd } from './estimate.js';
 import { createRunProviders, MockAliasInLiveRunError, SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
@@ -88,6 +88,25 @@ describe('runEval', () => {
   });
 
   const deps = (): RunDeps => ({ db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH });
+
+  it('records the producing stage\'s confidence on every measured cell (mixing program, 2026-08-22)', async () => {
+    // Own org → own cache keys, so this run cannot pre-warm the cache for
+    // the tests below that assert on execution counts.
+    await migrate(handle.db);
+    await createOrg(handle.db, { id: 'org-confidence', name: 'confidence' });
+    const summary = await runEval(
+      { suiteIds: ['extraction'], strategies: [{ type: 'single', model: 'mock-frontier' }], budgetCapUsd: 25, orgId: 'org-confidence' },
+      deps(),
+    );
+    expect(summary.results.length).toBeGreaterThan(0);
+    for (const r of summary.results) {
+      expect(r.confidenceMethod).toBe('logprob');
+      expect(r.confidence).toBeGreaterThanOrEqual(0.5); // the mock's deterministic band
+      expect(r.confidence).toBeLessThanOrEqual(0.99);
+    }
+    const stored = await getEvalResultByCacheKey(handle.db, summary.results[0]!.cacheKey);
+    expect(stored?.confidence).toBe(summary.results[0]!.confidence);
+  });
 
   it('executes strategy × item, scores, persists, aggregates', async () => {
     const summary = await runEval(
