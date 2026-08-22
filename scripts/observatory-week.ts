@@ -118,14 +118,14 @@ for (const clusterId of clusters) {
       { clusterId, capUsd: CANARY_CAP_USD, maxAnswerers: 1, auditionModels: [model], sampleN: CANARY_SAMPLE_N, publish: false, cacheSalt: week },
       ctx,
     );
-    const observed = (res.frontierPoints ?? []).find((p) => p.strategyHash === target.strategyHash) ?? (res.frontierPoints ?? [])[0] ?? null;
-    const n = observed?.evidence?.n ?? res.itemCount;
-    const verdict = observed
-      ? driftVerdict({ quality: target.quality, qualityCi95: target.evidence?.qualityCi95 ?? 0 }, { meanQuality: observed.quality, n })
+    const sample = (res.sampled ?? []).find((x) => x.strategyHash === target.strategyHash) ?? null;
+    const n = sample?.n ?? 0;
+    const verdict = sample
+      ? driftVerdict({ quality: target.quality, qualityCi95: target.evidence?.qualityCi95 ?? 0 }, { meanQuality: sample.meanQuality, n })
       : { verdict: 'inconclusive' as const, lowerBound: Number.NaN };
-    canaries.push({ clusterId, model, strategyHash: target.strategyHash, storedQuality: target.quality, storedCi95: target.evidence?.qualityCi95 ?? 0, observedMean: observed?.quality ?? null, n, verdict: verdict.verdict, spendUsd: res.spendUsd });
+    canaries.push({ clusterId, model, strategyHash: target.strategyHash, storedQuality: target.quality, storedCi95: target.evidence?.qualityCi95 ?? 0, observedMean: sample?.meanQuality ?? null, n, verdict: verdict.verdict, spendUsd: res.spendUsd, ...(sample ? {} : { error: 'no scored cells for the target strategy' }) });
     ledgerAppend({ at: NOW.toISOString(), week, lane: 'canary', spendUsd: res.spendUsd, detail: `${clusterId}/${model}` });
-    console.log(`  canary ${clusterId.padEnd(22)} ${model.padEnd(28)} q ${observed?.quality.toFixed(3) ?? '  —  '} vs stored ${target.quality.toFixed(3)} → ${verdict.verdict.toUpperCase()}  ($${res.spendUsd.toFixed(4)}, published=${res.published})`);
+    console.log(`  canary ${clusterId.padEnd(22)} ${model.padEnd(28)} q ${sample ? sample.meanQuality.toFixed(3) : '  —  '} (n=${n}) vs stored ${target.quality.toFixed(3)} ±${(target.evidence?.qualityCi95 ?? 0).toFixed(3)} → ${verdict.verdict.toUpperCase()}  ($${res.spendUsd.toFixed(4)}, published=${res.published})`);
     if (res.published) throw new Error(`INVARIANT: a canary published a frontier on ${clusterId} — publish:false is broken`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -153,13 +153,21 @@ try {
       // consist of one model and fail class representation — seed from the
       // table first so the candidate JOINS the roster (first live week, 2026-08-22).
       await addScannedModels(handle.db, [r.entry] as never, `${prices.version}+obs-${week}`);
-      const res = await frontierPlatformSweepHandler(
-        { clusterId: r.clusterId, capUsd: AUDITION_CAP_USD, maxAnswerers: 1, auditionModels: [r.entry.alias] },
+      // Measure first WITHOUT publishing; a frontier version moves only when
+      // the candidate actually lands on it (the republish is then a \$0 cache hit).
+      let res = await frontierPlatformSweepHandler(
+        { clusterId: r.clusterId, capUsd: AUDITION_CAP_USD, maxAnswerers: 1, auditionModels: [r.entry.alias], publish: false },
         ctx,
       );
-      const pts = res.frontierPoints ?? [];
       const measured = res.candidates.length > 0 && res.executed + res.cacheHits > 0;
-      const earned = pts.some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
+      let earned = (res.frontierPoints ?? []).some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
+      if (measured && earned) {
+        res = await frontierPlatformSweepHandler(
+          { clusterId: r.clusterId, capUsd: AUDITION_CAP_USD, maxAnswerers: 1, auditionModels: [r.entry.alias] },
+          ctx,
+        );
+        earned = (res.frontierPoints ?? []).some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
+      }
       if (!measured) {
         // Contained at the first call (provider error) — the candidate is not
         // servable as listed. A published null, not a crash and not a slot.

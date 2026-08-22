@@ -3843,7 +3843,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // tool-carrying requests to single points (routes/chat.ts), so a cascade
     // measured here could never be selected for the demand that paid for it.
     const shapes =
-      payload.capabilityFilter?.tools === true ? singles : [...singles, cascade];
+      payload.capabilityFilter?.tools === true || audition !== null ? singles : [...singles, cascade];
     for (const cfg of shapes) byHash.set(strategyHash(cfg), cfg);
     // INCUMBENT CARRY-FORWARD (2026-08-20). The pool above is built from the
     // CURRENT price table's class representatives, which means a composite
@@ -4026,6 +4026,20 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       frontierVersion,
       /** False for publish:false runs (canaries, dry measurements). */
       published: frontierId !== null,
+      /**
+       * publish:false only — per-strategy mean quality over the cells this run
+       * scored. Frontier aggregation requires FULL suite coverage, so a
+       * deliberate sample (a canary) never becomes a point; this is the
+       * canary's reading. Undefined on publishing runs.
+       */
+      ...(payload.publish === false
+        ? {
+            sampled: [...new Set(summary.results.map((r) => r.strategyHash))].map((h) => {
+              const rows = summary.results.filter((r) => r.strategyHash === h);
+              return { strategyHash: h, n: rows.length, meanQuality: rows.reduce((a, r) => a + r.quality, 0) / rows.length };
+            }),
+          }
+        : {}),
       points: frontierPoints.length,
       droppedAnswerers,
       /**
