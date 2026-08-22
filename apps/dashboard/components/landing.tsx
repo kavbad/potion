@@ -84,22 +84,6 @@ function Figure({ n, caption, children, dark = false }: { n: string; caption: st
   );
 }
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  // Every section opens with the same fingerprint: the mark's graduation
-  // tick, drawn small under the eyebrow. The one gesture, systematised —
-  // a reader who notices it once starts finding it everywhere (the mark,
-  // the hero underline, the scroll rail, the section rules, these).
-  return (
-    <div>
-      <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">{children}</div>
-      <div className="mt-2.5 flex items-end" aria-hidden>
-        <span className="h-px w-7 bg-accent/60" />
-        <span className="h-[7px] w-px bg-accent/60" />
-      </div>
-    </div>
-  );
-}
-
 export function Landing() {
   return (
     <div>
