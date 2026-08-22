@@ -19,7 +19,7 @@ export interface Issue {
   slug: string; week: string; title: string; summary: string; publishedAt: string; byline: string;
   plain: string; lede: string; frontierNote: string; auditionNote: string; mixingNote: string; takeaway: string; method: string;
   faq: IssueFaq[]; facts: FactSheet; status: 'published' | 'held'; heldReason?: string;
-  writer: { model: string; costUsd: number } | null;
+  writer: { model: string; costUsd: number; receipt?: { cluster: string; strategy8: string; policy: string; provenance: string; promptTokens: number; completionTokens: number } } | null;
 }
 
 function dirs(): string[] {

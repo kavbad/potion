@@ -215,8 +215,12 @@ if (!DRY) {
       ? { provider: createProviders({ prices, apiKeys: { openrouter: key }, timeoutMs: 120_000 }).openrouter, model: process.env.FRONTIER_NOTES_WRITER ?? 'or-sonnet' }
       : undefined;
     const byline = process.env.FRONTIER_NOTES_BYLINE;
+    // Dogfood: the issue is written THROUGH Potion's own API when a serving
+    // key is present (POTION_SELF_KEY); the provider writer is the fallback.
+    const potion = process.env.POTION_SELF_KEY ? { url: process.env.POTION_API_URL ?? 'http://server:3000', apiKey: process.env.POTION_SELF_KEY } : undefined;
     const notes = await runFrontierNotes({
       run: run as never,
+      ...(potion ? { potion } : {}),
       db: handle.db as never,
       pricesVersion: prices.version,
       notesDir: `${ART}/notes`,

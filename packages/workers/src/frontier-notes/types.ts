@@ -88,5 +88,17 @@ export interface Issue {
   facts: FactSheet;
   status: 'published' | 'held';
   heldReason?: string;
-  writer: { model: string; costUsd: number } | null;
+  writer: { model: string; costUsd: number; receipt?: WriterReceipt } | null;
+}
+
+/** What Potion's own API said about the request that wrote the issue — the dogfood receipt. */
+export interface WriterReceipt {
+  /** The kind of work Potion classified the writing request as. */
+  cluster: string;
+  /** First 8 characters of the strategy hash it served. */
+  strategy8: string;
+  policy: string;
+  provenance: string;
+  promptTokens: number;
+  completionTokens: number;
 }

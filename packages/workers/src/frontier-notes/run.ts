@@ -7,7 +7,7 @@ import { composeFactSheet } from './compose.js';
 import { assembleIssue, writeIssue } from './publish.js';
 import { loadReplaysFromStore, type StoreLike } from './replay-source.js';
 import type { Issue } from './types.js';
-import { deterministicDraft, modelDraft } from './write.js';
+import { deterministicDraft, modelDraft, potionDraft } from './write.js';
 
 export interface FrontierNotesOptions {
   run: ObservatoryRun;
@@ -17,6 +17,8 @@ export interface FrontierNotesOptions {
   now: Date;
   /** Omit to use the deterministic writer only. */
   writer?: { provider: Provider; model: string };
+  /** Preferred: write THROUGH Potion's own API (the dogfood path). Falls back to `writer`, then deterministic. */
+  potion?: { url: string; apiKey: string; model?: string };
   byline?: string;
   gate?: boolean;
   extraNeverName?: readonly string[];
@@ -28,11 +30,19 @@ export async function runFrontierNotes(o: FrontierNotesOptions): Promise<{ issue
   let draft = deterministicDraft(facts);
   let writer: Issue['writer'] = null;
   let fallbackNote: string | null = null;
-  if (o.writer) {
+  if (o.potion) {
+    const r = await potionDraft(facts, o.potion);
+    fallbackNote = r.fallback;
+    if (!r.fallback) {
+      draft = r.draft;
+      writer = { model: `potion:${o.potion.model ?? 'potion-auto'}`, costUsd: 0, ...(r.receipt ? { receipt: r.receipt } : {}) };
+    }
+  }
+  if (!writer && o.writer) {
     const r = await modelDraft(facts, { provider: o.writer.provider, model: o.writer.model });
     draft = r.draft;
     writer = { model: r.fallback ? 'deterministic' : o.writer.model, costUsd: r.costUsd };
-    fallbackNote = r.fallback;
+    fallbackNote = fallbackNote ? `${fallbackNote}; ${r.fallback ?? ''}`.replace(/; $/, '') : r.fallback;
   }
   const issue = assembleIssue(facts, draft, {
     publishedAt: o.now.toISOString(),

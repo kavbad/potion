@@ -7,7 +7,7 @@
 // Either way the output goes through redact.ts before it is an issue.
 
 import type { Provider } from '@potion/providers';
-import type { FactSheet, IssueFaq } from './types.js';
+import type { FactSheet, IssueFaq, WriterReceipt } from './types.js';
 
 export interface Draft {
   title: string;
@@ -195,5 +195,65 @@ export function parseDraft(text: string): Draft | null {
     return { title, summary, plain, lede, frontierNote, auditionNote, mixingNote, takeaway, faq };
   } catch {
     return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The dogfood writer: Frontier Notes is written THROUGH Potion's own serving
+// API, as a customer would call it — one OpenAI-shaped request under the
+// org's bound policy. The receipt that comes back (x-frontier-trace) is
+// printed in the issue. If Potion is unreachable the caller falls back to
+// the deterministic draft; the issue still publishes, and says so.
+export interface PotionWriterOptions {
+  /** e.g. http://server:3000 inside compose, https://api.withpotion.com outside. */
+  url: string;
+  apiKey: string;
+  /** The model label; 'potion-auto' lets the policy choose. */
+  model?: string;
+  fetchImpl?: typeof fetch;
+}
+
+export function parseTrace(h: string | null): Omit<WriterReceipt, 'promptTokens' | 'completionTokens'> {
+  const kv: Record<string, string> = {};
+  for (const part of (h ?? '').split(';')) {
+    const [k, v] = part.split('=');
+    if (k && v !== undefined) kv[k.trim()] = v.trim();
+  }
+  return { cluster: kv.cluster ?? 'unknown', strategy8: kv.strategy ?? '', policy: kv.policy ?? '', provenance: kv.provenance ?? '' };
+}
+
+export async function potionDraft(
+  f: FactSheet,
+  o: PotionWriterOptions,
+): Promise<{ draft: Draft; receipt: WriterReceipt | null; fallback: string | null }> {
+  const fallback = deterministicDraft(f);
+  const fetchImpl = o.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(`${o.url.replace(/\/$/, '')}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}` },
+      body: JSON.stringify({
+        model: o.model ?? 'potion-auto',
+        temperature: 0.3,
+        max_tokens: 1800,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: `FACT SHEET:\n${JSON.stringify(f, null, 1)}\n\nA deterministic draft for reference (improve its prose; do not add facts):\n${JSON.stringify(fallback, null, 1)}` },
+        ],
+      }),
+    });
+    if (!res.ok) return { draft: fallback, receipt: null, fallback: `potion HTTP ${res.status}: ${(await res.text()).slice(0, 160)}` };
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+    const text = body.choices?.[0]?.message?.content ?? '';
+    const receipt: WriterReceipt = {
+      ...parseTrace(res.headers.get('x-frontier-trace')),
+      promptTokens: body.usage?.prompt_tokens ?? 0,
+      completionTokens: body.usage?.completion_tokens ?? 0,
+    };
+    const parsed = parseDraft(text);
+    if (!parsed) return { draft: fallback, receipt, fallback: 'potion returned no parseable draft' };
+    return { draft: parsed, receipt, fallback: null };
+  } catch (e) {
+    return { draft: fallback, receipt: null, fallback: e instanceof Error ? e.message : String(e) };
   }
 }

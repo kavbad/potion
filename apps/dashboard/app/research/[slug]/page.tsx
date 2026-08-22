@@ -173,6 +173,17 @@ export default async function IssuePage({ params }: Params) {
           <span className="font-medium text-ink">Glossary.</span> A <em>frontier</em> is the short list of models that are the best deal at their level of quality: nothing else is both better and cheaper. A <em>floor</em> is the lowest exam score you are willing to accept. A <em>margin</em> (or interval) is how far the true score could sit from the measured one, because an exam is a sample. A <em>canary</em> is a small weekly re-check. See the <Link href="/docs" className="text-accent underline">docs</Link> and the <Link href="/home#evidence" className="text-accent underline">evidence</Link>.
         </p>
 
+        {i.writer?.receipt && (
+          <div className="mt-10 rounded-xl border border-line bg-panel px-5 py-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Written through Potion</div>
+            <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
+              This issue was drafted by sending one request to Potion&apos;s own API, the same way a customer would. The receipt that came back: kind of work{' '}
+              <span className="font-mono text-ink">{i.writer.receipt.cluster}</span>, strategy <span className="font-mono text-ink">{i.writer.receipt.strategy8}</span>, policy{' '}
+              <span className="font-mono text-ink">{i.writer.receipt.policy}</span>, {i.writer.receipt.promptTokens + i.writer.receipt.completionTokens} tokens. We use what we sell.
+            </p>
+          </div>
+        )}
+
         <nav className="mt-14 flex justify-between border-t border-line pt-6 font-mono text-[12px]">
           <span>{older ? <Link href={`/research/${older.slug}`} className="text-accent hover:underline">← {older.week}</Link> : null}</span>
           <span>{newer ? <Link href={`/research/${newer.slug}`} className="text-accent hover:underline">{newer.week} →</Link> : null}</span>

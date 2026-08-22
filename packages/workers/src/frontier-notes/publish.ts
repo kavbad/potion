@@ -124,6 +124,14 @@ export function renderMarkdown(i: Issue): string {
     '',
     ...f.caveats.map((c) => `- ${c}`),
     '',
+    ...(i.writer?.receipt
+      ? [
+          '---',
+          '',
+          `*Written through Potion's own API. Receipt: kind of work ${i.writer.receipt.cluster} · strategy ${i.writer.receipt.strategy8} · policy ${i.writer.receipt.policy} · ${i.writer.receipt.promptTokens + i.writer.receipt.completionTokens} tokens.*`,
+          '',
+        ]
+      : []),
   ];
   return lines.join('\n');
 }

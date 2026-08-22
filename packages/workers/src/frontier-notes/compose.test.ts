@@ -99,3 +99,26 @@ describe('frontier-notes compose', () => {
     expect(publishableText({ ...assembleIssue(composeFactSheet(run, replays), deterministicDraft(composeFactSheet(run, replays)), { publishedAt: 'x', writer: null, gate: false }) })).toContain('name withheld');
   });
 });
+
+describe('frontier-notes potion writer', () => {
+  it('parses the trace header into a receipt', async () => {
+    const { parseTrace, potionDraft } = await import('./write.js');
+    expect(parseTrace('cluster=creative;strategy=07b4dc72;frontier=v3;policy=min_cost;fallback=0;provenance=live')).toEqual({
+      cluster: 'creative', strategy8: '07b4dc72', policy: 'min_cost', provenance: 'live',
+    });
+    const f = composeFactSheet(run, replays);
+    const good = JSON.stringify(deterministicDraft(f));
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: good } }], usage: { prompt_tokens: 10, completion_tokens: 20 } }), {
+        status: 200, headers: { 'x-frontier-trace': 'cluster=creative;strategy=07b4dc72;frontier=v3;policy=min_cost;fallback=0;provenance=live' },
+      })) as unknown as typeof fetch;
+    const r = await potionDraft(f, { url: 'http://x', apiKey: 'pk_test', fetchImpl });
+    expect(r.fallback).toBeNull();
+    expect(r.receipt?.cluster).toBe('creative');
+    expect(r.receipt?.completionTokens).toBe(20);
+    const bad = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch;
+    const r2 = await potionDraft(f, { url: 'http://x', apiKey: 'pk_test', fetchImpl: bad });
+    expect(r2.fallback).toMatch(/HTTP 503/);
+    expect(r2.draft.title).toBe(deterministicDraft(f).title);
+  });
+});
