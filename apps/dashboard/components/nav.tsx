@@ -17,27 +17,25 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-/** What a customer does, in the order they do it. */
+/**
+ * THE WHOLE JOB, and nothing else (operator, 2026-08-22): get the key, know
+ * how to use it, see the value. Sixteen nav items were a control panel
+ * handed to someone who wanted a key. Three remain; Docs is a link, not a
+ * destination.
+ */
 const PRIMARY = [
-  { href: '/build', label: 'Start here', hint: 'Describe what you are making' },
-  { href: '/', label: 'Connect', hint: 'Endpoint, key, and proof it routed' },
-  { href: '/policy', label: 'Policy', hint: 'What to optimise for' },
-  { href: '/usage', label: 'Usage', hint: 'Spend and requests' },
-  { href: '/settings/keys', label: 'API keys', hint: 'Tokens for your code and CI' },
+  { href: '/', label: 'Home', hint: 'Your key, the endpoint, and proof it routed' },
+  { href: '/usage', label: 'Usage & savings', hint: 'What you spent, what you would have spent' },
+  { href: '/settings/keys', label: 'Settings', hint: 'Keys, quality floor, spending cap' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
 ];
 
-/** Instrumentation. Real, and not what step one looks like. */
+/** Instruments. Real, reachable, and deliberately out of the way. */
 const ADVANCED = [
-  { href: '/frontiers', label: 'Frontiers' },
-  { href: '/workload', label: 'Your workload' },
-  { href: '/reports', label: 'Savings' },
-  { href: '/recipes', label: 'Recipe library' },
-  { href: '/traces', label: 'Traces' },
-  { href: '/playground', label: 'Playground' },
-  { href: '/rubrics', label: 'Rubrics' },
-  { href: '/leaderboard', label: 'Leaderboard' },
-  { href: '/settings/provider-keys', label: 'Provider keys' },
+  { href: '/policy', label: 'Quality floor (policy)' },
+  { href: '/build', label: 'Help me choose a policy' },
+  { href: '/reports', label: 'Savings report' },
+  { href: '/traces', label: 'Receipts (traces)' },
   { href: '/settings/audit', label: 'Audit trail' },
 ];
 
