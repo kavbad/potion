@@ -154,7 +154,12 @@ describe('F12 repair (0033): only the provable subset is touched', () => {
 
   it('resets what is provably impossible and leaves what is merely suspicious', async () => {
     await applyThrough(BASELINE_THROUGH);
-    await createOrg(h.db, { id: 'org_tenant', name: 'Tenant' });
+    // RAW insert, not createOrg: this test deliberately stages a PARTIAL
+    // migration history (through 0032), so the orgs table here is missing
+    // every column later migrations add — while the ORM's insert names all
+    // of them. Anything else makes this test fail on the next orgs column
+    // for a reason that has nothing to do with the F12 repair it exercises.
+    await h.db.execute(sql.raw("INSERT INTO orgs (id, name) VALUES ('org_tenant', 'Tenant')"));
     await h.db.insert(clusters).values({
       id: CLUSTER, name: 'c', description: 'd', orgId: 'org_tenant',
     });

@@ -3,7 +3,7 @@
 // not disturb a leg in flight (legs snapshot reads at leg start); the NEXT
 // leg sees the store as edited.
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { MemoryEntryEditor } from '@/components/lab-actions';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ interface MemoryDto {
 
 export default async function MemoryPage({ params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
-  const m = await apiFetch<MemoryDto>(`/api/lab/memory/${hash}`);
+  const m = await fetchOrRecover<MemoryDto>(`/api/lab/memory/${hash}`);
   return (
     <main style={{ padding: 16 }}>
       <p>

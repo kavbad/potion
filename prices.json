@@ -1,27 +1,27 @@
 {
-  "version": "2026-08-04-or2",
-  "updatedAt": "2026-08-04",
+  "version": "2026-08-04-or2+or-mock-nova-1+or-mock-apex-1",
+  "updatedAt": "2026-08-21",
   "entries": [
     {
       "alias": "haiku-class",
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
-      "inputPer1M": 1.0,
-      "outputPer1M": 5.0
+      "inputPer1M": 1,
+      "outputPer1M": 5
     },
     {
       "alias": "sonnet-class",
       "provider": "anthropic",
       "model": "claude-sonnet-4-5-20250929",
-      "inputPer1M": 3.0,
-      "outputPer1M": 15.0
+      "inputPer1M": 3,
+      "outputPer1M": 15
     },
     {
       "alias": "opus-class",
       "provider": "anthropic",
       "model": "claude-opus-4-1-20250805",
-      "inputPer1M": 15.0,
-      "outputPer1M": 75.0
+      "inputPer1M": 15,
+      "outputPer1M": 75
     },
     {
       "alias": "gpt-mini-class",
@@ -35,7 +35,7 @@
       "provider": "openai",
       "model": "gpt-5-2025-08-07",
       "inputPer1M": 1.25,
-      "outputPer1M": 10.0
+      "outputPer1M": 10
     },
     {
       "alias": "gemini-flash-class",
@@ -49,28 +49,28 @@
       "provider": "google",
       "model": "gemini-2.5-pro",
       "inputPer1M": 1.25,
-      "outputPer1M": 10.0
+      "outputPer1M": 10
     },
     {
       "alias": "judge-class",
       "provider": "openrouter",
       "model": "anthropic/claude-sonnet-4.5",
-      "inputPer1M": 3.0,
-      "outputPer1M": 15.0
+      "inputPer1M": 3,
+      "outputPer1M": 15
     },
     {
       "alias": "frontier-class",
       "provider": "anthropic",
       "model": "claude-opus-4-1-20250805",
-      "inputPer1M": 15.0,
-      "outputPer1M": 75.0
+      "inputPer1M": 15,
+      "outputPer1M": 75
     },
     {
       "alias": "cheap-class",
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
-      "inputPer1M": 1.0,
-      "outputPer1M": 5.0
+      "inputPer1M": 1,
+      "outputPer1M": 5
     },
     {
       "alias": "mock-cheap",
@@ -104,22 +104,22 @@
       "alias": "or-haiku",
       "provider": "openrouter",
       "model": "anthropic/claude-haiku-4.5",
-      "inputPer1M": 1.0,
-      "outputPer1M": 5.0
+      "inputPer1M": 1,
+      "outputPer1M": 5
     },
     {
       "alias": "or-sonnet",
       "provider": "openrouter",
       "model": "anthropic/claude-sonnet-4.5",
-      "inputPer1M": 3.0,
-      "outputPer1M": 15.0
+      "inputPer1M": 3,
+      "outputPer1M": 15
     },
     {
       "alias": "or-opus",
       "provider": "openrouter",
       "model": "anthropic/claude-opus-4.5",
-      "inputPer1M": 5.0,
-      "outputPer1M": 25.0
+      "inputPer1M": 5,
+      "outputPer1M": 25
     },
     {
       "alias": "or-gpt-mini",
@@ -132,8 +132,8 @@
       "alias": "or-gpt-full",
       "provider": "openrouter",
       "model": "openai/gpt-4.1",
-      "inputPer1M": 2.0,
-      "outputPer1M": 8.0
+      "inputPer1M": 2,
+      "outputPer1M": 8
     },
     {
       "alias": "or-gemini-flash",
@@ -147,14 +147,14 @@
       "provider": "openrouter",
       "model": "google/gemini-2.5-pro",
       "inputPer1M": 1.25,
-      "outputPer1M": 10.0
+      "outputPer1M": 10
     },
     {
       "alias": "or-judge",
       "provider": "openrouter",
       "model": "anthropic/claude-sonnet-4.5",
-      "inputPer1M": 3.0,
-      "outputPer1M": 15.0
+      "inputPer1M": 3,
+      "outputPer1M": 15
     },
     {
       "alias": "or-deepseek",
@@ -169,6 +169,20 @@
       "model": "gpt-4.1-nano-2025-04-14",
       "inputPer1M": 0.1,
       "outputPer1M": 0.4
+    },
+    {
+      "alias": "or-mock-nova-1",
+      "provider": "mock",
+      "model": "mock/mock-nova-1",
+      "inputPer1M": 0.19999999999999998,
+      "outputPer1M": 0.7999999999999999
+    },
+    {
+      "alias": "or-mock-apex-1",
+      "provider": "mock",
+      "model": "mock/mock-apex-1",
+      "inputPer1M": 12,
+      "outputPer1M": 60
     }
   ]
 }

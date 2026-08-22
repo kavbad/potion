@@ -10,6 +10,10 @@ import {
 import {
   addScannedModels,
   loadModelRegistry,
+  listModelCatalog,
+  insertLearningRun,
+  updateLearningRun,
+  type LearningRunStatus,
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
   certificationStateForCluster,
@@ -99,6 +103,7 @@ import {
 import {
   aggregatesFromEvalResults,
   computeFrontier,
+  describeStrategy,
   hasLiveEvidence,
   loadCurrentFrontier,
   mergePriceEntry,
@@ -129,7 +134,8 @@ import {
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
 import type { JobKind } from './jobs.js';
-import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload, GuaranteeSuiteVerifyPayload, LabRunJobPayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload, GuaranteeSuiteVerifyPayload, LabRunJobPayload, LearningProbePayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import { filterByCapability, isRefusal, learningAutonomyFromEnv, planProbe } from './learning.js';
 import {
   apiKeys,
   getLabHarness,
@@ -3324,17 +3330,73 @@ export const PLATFORM_SWEEP_MAX_RETRIES = 8;
 export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   Record<string, { kind: 'v1' | 'v2'; suiteId: string }>
 > = {
-  'code-gen': { kind: 'v2', suiteId: 'code-gen-potion-v2' },
-  extraction: { kind: 'v2', suiteId: 'extraction-potion-v2' },
-  classification: { kind: 'v1', suiteId: 'classification' },
+  // THE 2026-08-20 ADOPTION (operator decision). Four clusters sat at
+  // 0.970–1.000 across every surviving frontier point — their suites had
+  // stopped discriminating, and no sample size fixes a ceiling. The four
+  // *-hard-v1 suites replace them: retrieval-hostile code-gen, adversarial
+  // documents for extraction, rule-application classification, and
+  // code-review with no-bug controls + majority exact scoring (the old
+  // rubric literally rewarded inventing defects). CONSEQUENCE, stated at the
+  // decision: committed frontier evidence for these four clusters is now on
+  // the RETIRED instrument — quality numbers are not comparable across the
+  // boundary, and the next platform sweep per cluster re-measures from zero
+  // cache. Serving continues on the old frontiers until that sweep publishes.
+  'code-gen': { kind: 'v2', suiteId: 'code-gen-hard-v1' },
+  extraction: { kind: 'v2', suiteId: 'extraction-hard-v1' },
+  classification: { kind: 'v2', suiteId: 'classification-hard-v1' },
   'multi-step-reasoning': { kind: 'v1', suiteId: 'multi-step-reasoning' },
   'rag-answer': { kind: 'v1', suiteId: 'rag-answer' },
   'agentic-tool-use': { kind: 'v1', suiteId: 'agentic-tool-use' },
-  'code-review': { kind: 'v1', suiteId: 'code-review' },
+  'code-review': { kind: 'v2', suiteId: 'code-review-hard-v1' },
   creative: { kind: 'v1', suiteId: 'creative' },
   'rewrite-edit': { kind: 'v1', suiteId: 'rewrite-edit' },
   summarization: { kind: 'v1', suiteId: 'summarization' },
 };
+
+/** Referenced model aliases of a strategy config, every shape. */
+export function strategyModelAliases(cfg: StrategyConfig): string[] {
+  switch (cfg.type) {
+    case 'single': return [cfg.model];
+    case 'cascade': return cfg.stages.map((st) => st.model);
+    case 'best-of-n': return [cfg.model, cfg.judge.model];
+    case 'draft-verify': return [cfg.draftModel, cfg.verifierModel];
+    case 'ensemble': return [...cfg.models];
+    case 'composite': return [cfg.startModel, cfg.upgradeModel];
+    case 'decompose': return [cfg.decomposerModel, ...Object.values(cfg.routing)];
+  }
+}
+
+/**
+ * INCUMBENT CARRY-FORWARD (2026-08-20). The sweep pool is generated from the
+ * CURRENT price table's class representatives, so a composite that earned its
+ * frontier place under an earlier pool is silently never re-measured the
+ * moment the representatives move — the creative leg refused on exactly this:
+ * its committed cascade(or-deepseek→or-opus) was "never a candidate" while
+ * the rebuilt cascade rode different stages. An incumbent carries the
+ * strongest possible claim to a candidate slot — customers are routed to it
+ * TODAY — so every previous-frontier point whose referenced models are still
+ * priced joins the pool. One referencing a delisted model is left out, and
+ * the regression guard names that honestly instead of this function guessing.
+ *
+ * Returns the hashes it added (logging + tests).
+ */
+export function carryForwardIncumbents(
+  byHash: Map<string, StrategyConfig>,
+  incumbents: ReadonlyArray<{ strategyConfig: unknown }>,
+  opts: { pricedAliases: ReadonlySet<string>; singlesOnly: boolean },
+): string[] {
+  const added: string[] = [];
+  for (const pt of incumbents) {
+    const cfg = pt.strategyConfig as StrategyConfig;
+    if (opts.singlesOnly && cfg.type !== 'single') continue;
+    const hash = strategyHash(cfg);
+    if (byHash.has(hash)) continue;
+    if (!strategyModelAliases(cfg).every((m) => opts.pricedAliases.has(m))) continue;
+    byHash.set(hash, cfg);
+    added.push(hash);
+  }
+  return added;
+}
 
 export type PlatformSweepRefusalReason =
   | 'env-gate'
@@ -3347,18 +3409,35 @@ export type PlatformSweepRefusalReason =
   /** More reachable answerers than the width ceiling: cheapest-first would
    *  pick a subset nobody chose. Operator must name maxAnswerers. */
   | 'pool-exceeds-ceiling'
-  /** The new frontier would drop a model the previous version routes to —
-   *  a campaign that degrades a cluster while reporting success. */
+  /** S7 L4: a capability filter that leaves no answerer. Refusing beats
+   *  measuring models that cannot serve the demand the run exists to close. */
+  | 'capability-filter-empty'
+  /** The new frontier would drop an operating point the previous version
+   *  routes to, WITHOUT having re-measured it — a campaign that degrades a
+   *  cluster while reporting success. Identity is the strategy hash, not a
+   *  model alias: a dropped cascade is exactly as much of a regression as a
+   *  dropped single, and costs the buyer exactly as much. */
   | 'frontier-regression';
 
-/** Typed refusal, all pre-spend: the reason is machine-checkable so tests
- * pin fails-for-the-RIGHT-reason, never just "it threw". */
+/** Refusals that fire AFTER the run — the ladder is pre-spend, but the
+ *  publish guard can only run once the measurement exists. Telling an
+ *  operator "no spend occurred" at the end of an $11 leg is false, and it
+ *  contradicts the guard's own "executed cells are cached" advice. */
+const POST_SPEND_REFUSALS: ReadonlySet<PlatformSweepRefusalReason> = new Set(['frontier-regression']);
+
+/** Typed refusal: the reason is machine-checkable so tests pin
+ * fails-for-the-RIGHT-reason, never just "it threw". */
 export class PlatformSweepRefusalError extends Error {
   constructor(
     public readonly reason: PlatformSweepRefusalReason,
     detail: string,
   ) {
-    super(`platform sweep refused (${reason}): ${detail} — no spend occurred`);
+    super(
+      `platform sweep refused (${reason}): ${detail} — ` +
+        (POST_SPEND_REFUSALS.has(reason)
+          ? 'the run already spent; nothing was published'
+          : 'no spend occurred'),
+    );
     this.name = 'PlatformSweepRefusalError';
   }
 }
@@ -3401,6 +3480,163 @@ export interface FrontierPlatformSweepResult {
    * and these counts make any pruning visible per cluster, never quiet. */
   singlesOnFrontier: number;
   compositesOnFrontier: number;
+}
+
+/**
+ * Why an incumbent point is not on the newly computed frontier.
+ *
+ * The distinction is the whole point: these two outcomes look identical in a
+ * set difference and need OPPOSITE operator responses.
+ *
+ *  - `dominated` — the strategy WAS re-measured this run and lost on the
+ *    evidence. That is the frontier doing its job. Never a refusal.
+ *  - everything else — the strategy was never re-measured, so the new
+ *    version holds no verdict on it in either direction. Publishing drops a
+ *    routed operating point on the strength of a measurement nobody took.
+ *    That is evidence LOSS, and it refuses.
+ */
+export type DroppedIncumbentCause =
+  /** Re-measured and lost to domination (or collapsed onto an identical
+   *  coordinate by computeFrontier's dedupe). Legitimate. */
+  | 'dominated'
+  /** Was a candidate; containment dropped it mid-run. */
+  | 'contained'
+  /** Never a candidate — this run's pool does not contain it at all. The
+   *  code-gen case: the pool rebuilds its cascade from the CURRENT class
+   *  representatives, so an incumbent composite is not carried forward and
+   *  simply stops being measured the moment a cheaper model is ingested. */
+  | 'not-a-candidate'
+  /** A candidate that neither failed nor produced aggregable rows — every
+   *  row stale, or none at this prices version. */
+  | 'no-evidence';
+
+export interface DroppedIncumbent {
+  strategyHash: string;
+  /** Readable label, model names kept: `single(or-sonnet)`,
+   *  `cascade(or-deepseek→or-opus)`. Readability only — never identity. */
+  label: string;
+  cause: DroppedIncumbentCause;
+  /** Cells finished before containment dropped it (`contained` only). */
+  completedCells?: number;
+  /** Containment's error text (`contained` only). */
+  error?: string;
+}
+
+/**
+ * IDENTITY of a frontier point for regression comparison.
+ *
+ * The stored hash is what the point was published under; recomputing it from
+ * the config yields the same value for every point this codebase has ever
+ * written (strategyHash is sha256 over canonical JSON, so JSONB key order
+ * cannot move it). Preferring the stored hash keeps the comparison in the
+ * same currency as the candidate pool, the aggregates and the containment
+ * report — and a config that somehow failed to round-trip resolves toward
+ * refusing, which is the safe direction.
+ */
+function pointIdentity(p: { strategyHash?: string; strategyConfig: StrategyConfig }): string {
+  return typeof p.strategyHash === 'string' && p.strategyHash.length > 0
+    ? p.strategyHash
+    : strategyHash(p.strategyConfig);
+}
+
+/**
+ * Every incumbent point missing from the newly computed frontier, each
+ * classified by WHY it is missing.
+ *
+ * Compared by strategy hash — the content identity of the WHOLE config.
+ * The predecessor compared model ALIASES and only for `type === 'single'`,
+ * which made every composite invisible to it: cascade, ensemble,
+ * draft-verify, best-of-n and composite points could vanish from a
+ * republished frontier in complete silence, and one did.
+ */
+export function classifyDroppedIncumbents(args: {
+  previous: ReadonlyArray<FrontierPoint>;
+  computed: ReadonlyArray<FrontierPoint>;
+  /** Strategy hashes this run actually put in front of a provider. */
+  candidates: Iterable<string>;
+  /** Strategy hashes that produced aggregable evidence this run. */
+  measured: Iterable<string>;
+  /** Containment's casualties, with error text and completed cell count. */
+  failed: ReadonlyArray<{ strategyHash: string; error: string; completedCells: number }>;
+}): DroppedIncumbent[] {
+  const published = new Set(args.computed.map((p) => pointIdentity(p)));
+  const candidates = new Set(args.candidates);
+  const measured = new Set(args.measured);
+  const failed = new Map(args.failed.map((f) => [f.strategyHash, f]));
+
+  const out: DroppedIncumbent[] = [];
+  const seen = new Set<string>();
+  for (const p of args.previous) {
+    const hash = pointIdentity(p);
+    if (published.has(hash) || seen.has(hash)) continue;
+    seen.add(hash);
+    const label = describeStrategy(p.strategyConfig);
+    const contained = failed.get(hash);
+    if (measured.has(hash)) {
+      out.push({ strategyHash: hash, label, cause: 'dominated' });
+    } else if (contained !== undefined) {
+      out.push({
+        strategyHash: hash,
+        label,
+        cause: 'contained',
+        completedCells: contained.completedCells,
+        error: contained.error,
+      });
+    } else {
+      out.push({
+        strategyHash: hash,
+        label,
+        cause: candidates.has(hash) ? 'no-evidence' : 'not-a-candidate',
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The refusal itself, or `null` when publishing is honest.
+ *
+ * Refuses on evidence loss ONLY. An incumbent that was re-measured and lost
+ * is named in the message as context — so the operator can see the frontier
+ * legitimately moved — but never causes the refusal by itself, because
+ * refusing there would mean a frontier could never improve.
+ */
+export function frontierRegressionRefusal(args: {
+  previousVersion: number;
+  pricesVersion: string;
+  dropped: ReadonlyArray<DroppedIncumbent>;
+}): PlatformSweepRefusalError | null {
+  const lost = args.dropped.filter((d) => d.cause !== 'dominated');
+  if (lost.length === 0) return null;
+  const dominated = args.dropped.filter((d) => d.cause === 'dominated');
+  const them = lost.length === 1 ? 'it' : 'them';
+  const why = (d: DroppedIncumbent): string => {
+    switch (d.cause) {
+      case 'contained':
+        return `contained after ${d.completedCells ?? 0} cell${d.completedCells === 1 ? '' : 's'} (${d.error ?? 'no error recorded'})`;
+      case 'not-a-candidate':
+        return "never a candidate — this run's pool does not contain it";
+      case 'no-evidence':
+        return `a candidate, but produced no live rows at prices ${args.pricesVersion}`;
+      case 'dominated':
+        return 'dominated'; // unreachable: filtered out above
+    }
+  };
+  return new PlatformSweepRefusalError(
+    'frontier-regression',
+    `refusing to publish: v${args.previousVersion} routes to ${lost.length} point${lost.length === 1 ? '' : 's'} ` +
+      `this run never re-measured — ` +
+      lost.map((d) => `${d.label} [${d.strategyHash.slice(0, 8)}]: ${why(d)}`).join('; ') +
+      `. That is evidence LOSS, not a domination decision: the new frontier holds no measurement for ` +
+      `${them} in either direction, so publishing would drop a routed operating point while reporting success` +
+      (dominated.length > 0
+        ? `. (Re-measured and legitimately dominated — context, NOT the reason for this refusal: ` +
+          `${dominated.map((d) => `${d.label} [${d.strategyHash.slice(0, 8)}]`).join(', ')})`
+        : '') +
+      `. Carry ${them} into the candidate pool so ${them === 'it' ? 'it is' : 'they are'} re-measured, ` +
+      `or decide deliberately that the drop is intended. ` +
+      `Executed cells are cached — retry resumes at $0 for what succeeded.`,
+  );
 }
 
 export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-sweep'> = async (
@@ -3555,8 +3791,26 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       );
     }
 
-    const answerers = answerPool.slice(0, maxAnswerers);
-    const droppedAnswerers = answerPool.slice(maxAnswerers).map((e) => e.alias);
+    // S7 L4 — CAPABILITY NARROWING. A sweep launched to close a capability
+    // gap must measure models that HAVE the capability; class membership
+    // cannot express that. Unknown capability is excluded rather than
+    // assumed: models.supports_tools and context_length are nullable because
+    // the provider did not say, and "did not say" is not "yes".
+    let capabilityFiltered = answerPool;
+    if (payload.capabilityFilter !== undefined) {
+      const catalog = new Map((await listModelCatalog(ctx.db)).map((m) => [m.alias, m]));
+      capabilityFiltered = filterByCapability(answerPool, catalog, payload.capabilityFilter);
+      if (capabilityFiltered.length === 0) {
+        throw new PlatformSweepRefusalError(
+          'capability-filter-empty',
+          `no reachable answerer satisfies ${JSON.stringify(payload.capabilityFilter)} — ` +
+            `measuring the rest would spend money and leave the gap open`,
+        );
+      }
+    }
+
+    const answerers = capabilityFiltered.slice(0, maxAnswerers);
+    const droppedAnswerers = capabilityFiltered.slice(maxAnswerers).map((e) => e.alias);
     const singles: StrategyConfig[] = answerers.map(
       (e) => ({ type: 'single', model: e.alias }) as StrategyConfig,
     );
@@ -3569,7 +3823,30 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       confidenceMethod: 'self-report-calibrated',
     };
     const byHash = new Map<string, StrategyConfig>();
-    for (const cfg of [...singles, cascade]) byHash.set(strategyHash(cfg), cfg);
+    // A tools-gap sweep measures SINGLES ONLY. The serve path narrows
+    // tool-carrying requests to single points (routes/chat.ts), so a cascade
+    // measured here could never be selected for the demand that paid for it.
+    const shapes =
+      payload.capabilityFilter?.tools === true ? singles : [...singles, cascade];
+    for (const cfg of shapes) byHash.set(strategyHash(cfg), cfg);
+    // INCUMBENT CARRY-FORWARD (2026-08-20). The pool above is built from the
+    // CURRENT price table's class representatives, which means a composite
+    // that earned its frontier place under an earlier pool is silently never
+    // re-measured the moment the representatives move — the creative leg
+    // refused on exactly this: its committed cascade(or-deepseek→or-opus)
+    // was 'never a candidate' while the pool's rebuilt cascade rode
+    // different stages. An incumbent already carries the strongest possible
+    // claim to a candidate slot — customers are being routed to it TODAY —
+    // so every previous-frontier point whose referenced models are still in
+    // the price table joins the pool. One that references a delisted model
+    // is left out and the regression guard will say so honestly.
+    {
+      const incumbentFrontier = await loadCurrentFrontier(ctx.db, payload.clusterId, undefined);
+      carryForwardIncumbents(byHash, incumbentFrontier?.points ?? [], {
+        pricedAliases: new Set(prices.entries.map((e) => e.alias)),
+        singlesOnly: payload.capabilityFilter?.tools === true,
+      });
+    }
     const strategies = [...byHash.values()];
     for (const [hash, config] of byHash) {
       await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
@@ -3661,45 +3938,49 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // REGRESSION GUARD. A sweep publishes a NEW frontier version; if a
     // candidate failed this run, aggregatesFromEvalResults simply does not
     // see it (its rows carry the previous prices version), so the new
-    // version silently drops a model the customer already had. The tranche
-    // run hit this exactly: or-sonnet is on the committed extraction
-    // frontier and failed after 0 cells, so extraction was about to be
-    // republished WITHOUT it — a campaign that makes a cluster worse while
-    // reporting success.
+    // version silently drops an operating point the customer already had.
+    // The tranche run hit this exactly: or-sonnet is on the committed
+    // extraction frontier and failed after 0 cells, so extraction was about
+    // to be republished WITHOUT it — a campaign that makes a cluster worse
+    // while reporting success.
     //
     // Containment protects the LEG from one bad candidate. It does not
     // protect the FRONTIER, and those are different promises.
+    //
+    // IDENTITY IS THE STRATEGY HASH, NOT A MODEL ALIAS. The first version of
+    // this guard compared the set of `type === 'single'` model aliases,
+    // which made every composite invisible to it — and code-gen v3 then
+    // published without the committed v2 cascade (or-deepseek→or-opus,
+    // quality 1.0000 at $0.5955/1K) while every SINGLE incumbent survived,
+    // so `lost` was empty and the guard said nothing. The cheapest
+    // route to quality 1.0000 on that cluster went from $0.5955 to $1.3144
+    // — 2.2x, unreported. A dropped cascade costs the buyer exactly what a
+    // dropped single costs; the guard must not be able to tell them apart.
     //
     // Refusing costs this leg's publish, not its spend: every executed cell
     // stays in the content-addressed cache, so a retry resumes at $0 for
     // everything that worked and only re-runs what failed.
     const previous = await loadCurrentFrontier(ctx.db, payload.clusterId, undefined);
-    const modelsOf = (pts: FrontierPoint[]): Set<string> => {
-      const out = new Set<string>();
-      for (const p of pts) {
-        const cfg = p.strategyConfig as StrategyConfig;
-        if (cfg.type === 'single') out.add(cfg.model);
-      }
-      return out;
-    };
     let frontierId: string | null = null;
     let frontierVersion: number | null = null;
     let frontierPoints: FrontierPoint[] = [];
     if (aggregates.length > 0) {
       const computed = computeFrontier(aggregates);
       if (previous !== null && previous.points.length > 0) {
-        const had = modelsOf(previous.points);
-        const has = modelsOf(computed as unknown as FrontierPoint[]);
-        const lost = [...had].filter((m) => !has.has(m));
-        if (lost.length > 0) {
-          throw new PlatformSweepRefusalError(
-            'frontier-regression',
-            `refusing to publish: v${previous.version} routes to ${lost.join(', ')} and this run ` +
-              `produced no measurement for ${lost.length === 1 ? 'it' : 'them'} ` +
-              `(contained: ${summary.failedStrategies.map((f) => f.strategyHash.slice(0, 8)).join(', ') || 'none'}). ` +
-              `Executed cells are cached — retry resumes at $0 for what succeeded.`,
-          );
-        }
+        // Re-measured-and-dominated is the frontier working; never-re-measured
+        // is evidence loss. Only the second refuses.
+        const refusal = frontierRegressionRefusal({
+          previousVersion: previous.version,
+          pricesVersion: prices.version,
+          dropped: classifyDroppedIncumbents({
+            previous: previous.points,
+            computed,
+            candidates: byHash.keys(),
+            measured: aggregates.map((a) => a.strategyHash),
+            failed: summary.failedStrategies,
+          }),
+        });
+        if (refusal !== null) throw refusal;
       }
       const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
         provenance: { suiteId: mapped.suiteId, suiteContentHash: contentHash },
@@ -5091,6 +5372,161 @@ async function withDeliveryGuard<T>(
   return result;
 }
 
+
+// ---------------------------------------------------------------------------
+// S7 L4 — learning:probe: demand chooses the next measurement.
+// ---------------------------------------------------------------------------
+//
+// The loop's closing leg. L1 recorded how well each request fit, L2 turned
+// that into k-anonymous demand, L3 ranked demand against measured evidence;
+// this takes the worst gap a sweep can close and closes it — under a cap the
+// operator set once, with a ledger row the job writes instead of a person.
+//
+// WHAT IT NEVER DOES, and these are the load-bearing ones:
+//
+//   It never measures customer prompts. The sweep runs the COMMITTED
+//   platform suite for the cluster. Demand chooses WHICH cluster and WHICH
+//   capabilities to measure; it never supplies the content measured. That is
+//   the line that keeps L2 an aggregate rather than a laundering step.
+//
+//   It never spends without a standing authorization. Unset cap → a
+//   'refused' ledger row and no provider call.
+//
+//   It never publishes a route by itself. New points enter the platform
+//   frontier through the sweep's own path, under live provenance, exactly as
+//   an operator-launched campaign would.
+export interface LearningProbeResult {
+  runId: string;
+  status: LearningRunStatus;
+  cellKey: string | null;
+  clusterId: string | null;
+  gapReason: string | null;
+  projectedUsd: number;
+  actualUsd: number | null;
+  pointsPublished: number | null;
+  detail: string | null;
+  /** Ranked gaps a sweep cannot close, reported rather than dropped. */
+  skipped: Array<{ cellKey: string; reason: string }>;
+}
+
+export const learningProbeHandler: WorkerHandler<'learning:probe'> = async (
+  payload: LearningProbePayload,
+  ctx: JobContext,
+): Promise<LearningProbeResult> =>
+  // F10: this handler SPENDS. One delivery does the work.
+  withDeliveryGuard('learning:probe', ctx, undefined, async () => {
+    const autonomy = learningAutonomyFromEnv();
+    const decision = await planProbe(ctx.db, {
+      autonomy,
+      isSweepable: (clusterId) => PLATFORM_SUITE_BY_CLUSTER[clusterId] !== undefined,
+      ...(payload.sinceWeek !== undefined ? { sinceWeek: payload.sinceWeek } : {}),
+    });
+    const runId = `lrn-${randomUUID().slice(0, 12)}`;
+
+    if (isRefusal(decision)) {
+      // A refusal is a ROW, not a silence. When the loop looks idle, these
+      // are the rows that say whether it is unauthorized, broke, or done.
+      const detail = `${decision.refusal}: ${decision.detail}`;
+      await insertLearningRun(ctx.db, {
+        id: runId,
+        status: 'refused',
+        projectedUsd: 0,
+        detail,
+      });
+      return {
+        runId,
+        status: 'refused' as const,
+        cellKey: null,
+        clusterId: null,
+        gapReason: null,
+        projectedUsd: 0,
+        actualUsd: null,
+        pointsPublished: null,
+        detail,
+        skipped: decision.skipped,
+      };
+    }
+
+    // A payload cap may only narrow what the standing authorization allows.
+    const capUsd =
+      payload.capUsd !== undefined ? Math.min(payload.capUsd, decision.capUsd) : decision.capUsd;
+    const dryRun = payload.dryRun === true;
+
+    // THE LEDGER ROW GOES IN BEFORE THE MONEY MOVES. A run that dies
+    // mid-flight must leave a row with a projection and no actual, which is
+    // visible; a row written afterwards would leave nothing at all.
+    await insertLearningRun(ctx.db, {
+      id: runId,
+      status: dryRun ? 'planned' : 'running',
+      cellKey: decision.gap.cell.cellKey,
+      clusterId: decision.clusterId,
+      gapReason: decision.gap.reason,
+      gapScore: decision.gap.score,
+      ...(decision.capabilityFilter !== undefined
+        ? { capabilityFilter: decision.capabilityFilter }
+        : {}),
+      projectedUsd: capUsd,
+    });
+
+    if (dryRun) {
+      return {
+        runId,
+        status: 'planned' as const,
+        cellKey: decision.gap.cell.cellKey,
+        clusterId: decision.clusterId,
+        gapReason: decision.gap.reason,
+        projectedUsd: capUsd,
+        actualUsd: null,
+        pointsPublished: null,
+        detail: null,
+        skipped: decision.skipped,
+      };
+    }
+
+    try {
+      const sweep = (await frontierPlatformSweepHandler(
+        {
+          clusterId: decision.clusterId,
+          capUsd,
+          ...(decision.capabilityFilter !== undefined
+            ? { capabilityFilter: decision.capabilityFilter }
+            : {}),
+          ...(payload.maxAnswerers !== undefined ? { maxAnswerers: payload.maxAnswerers } : {}),
+        },
+        ctx,
+      )) as FrontierPlatformSweepResult;
+      await updateLearningRun(ctx.db, runId, {
+        status: 'completed',
+        finishedAt: new Date(),
+        actualUsd: sweep.spendUsd,
+        pointsPublished: sweep.points,
+      });
+      return {
+        runId,
+        status: 'completed' as const,
+        cellKey: decision.gap.cell.cellKey,
+        clusterId: decision.clusterId,
+        gapReason: decision.gap.reason,
+        projectedUsd: capUsd,
+        actualUsd: sweep.spendUsd,
+        pointsPublished: sweep.points,
+        detail: null,
+        skipped: decision.skipped,
+      };
+    } catch (err) {
+      // A failed sweep still spent whatever it spent before it failed. The
+      // row stays, with the reason, so the day's cap arithmetic keeps
+      // counting the projection rather than pretending nothing happened.
+      const detail = err instanceof Error ? err.message : String(err);
+      await updateLearningRun(ctx.db, runId, {
+        status: 'failed',
+        finishedAt: new Date(),
+        detail,
+      });
+      throw err;
+    }
+  });
+
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'eval:run': evalRunHandler,
   'sweep:run': sweepRunHandler,
@@ -5118,6 +5554,8 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
   'guarantee:suite-verify': guaranteeSuiteVerifyHandler,
   'suite:certify': suiteCertifyHandler,
+  // ---- S7 L4: the autonomous probe ----
+  'learning:probe': learningProbeHandler,
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,

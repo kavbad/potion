@@ -2,6 +2,7 @@
 // @potion/core types. One schema drives both drivers: PGlite (tests/dev) and
 // node-postgres (local/prod via docker-compose).
 import {
+  bigint,
   bigserial,
   boolean,
   check,
@@ -25,6 +26,7 @@ import type {
   EvalResult,
   FrontierPoint,
   Policy,
+  RequestShape,
   ScoringMethod,
   StrategyConfig,
   Usage,
@@ -56,6 +58,19 @@ export const orgs = pgTable('orgs', {
   /** Trace retention (M5 #36, SPEC §14.3, migration 0015): spans older than
    * N days are purged nightly; 0 = metadata only (attrs redacted). */
   traceRetentionDays: integer('trace_retention_days').notNull().default(30),
+  /**
+   * S7 L2 (migration 0042): this org's traffic is excluded from demand
+   * cells entirely — not counted, not summed, not staged. Checked at
+   * OBSERVATION, so opted-out traffic never enters an accumulator at all.
+   */
+  demandLearningOptOut: boolean('demand_learning_opt_out').notNull().default(false),
+  /**
+   * S7 L4 (migration 0043): this org's unmet demand is measured FIRST when
+   * the autonomous budget can afford one run. Ranking only — it never lowers
+   * the k-anonymity gate, never attaches an org to a published cell, and
+   * never influences routing.
+   */
+  learningPriority: boolean('learning_priority').notNull().default(false),
 });
 
 export const users = pgTable('users', {
@@ -371,6 +386,29 @@ export const requestLogs = pgTable('request_logs', {
    * choosing between at the time.
    */
   baselineCostUsd: doublePrecision('baseline_cost_usd'),
+  /**
+   * THE DEMAND SIGNAL (S7 L1, migration 0041). The assigner's own evidence
+   * for the routing label beside it: cosine to the winning centroid, the
+   * cluster that came second, and the gap between them. All three are
+   * computed by `pickBest` on every request and were previously discarded.
+   *
+   * NULL means NOT RECORDED (pre-0041 rows, hinted clusters that skipped the
+   * assigner entirely, requests that failed before classification). It must
+   * never be defaulted to 0 — a zero confidence is precisely the reading
+   * "nothing we serve fits this", which is the finding the column exists to
+   * surface.
+   */
+  clusterConfidence: doublePrecision('cluster_confidence'),
+  runnerUpCluster: text('runner_up_cluster'),
+  clusterMargin: doublePrecision('cluster_margin'),
+  /**
+   * Content-free request structure (`RequestShape`, core/shape.ts): turn
+   * count, system flag, tool count, tool_choice MODE, stream flag, the
+   * caller's declared output ceiling, and a coarse content-LENGTH bucket.
+   * No message text, no tool names, no embedding — pinned by test, because
+   * this is the field S7's cross-org aggregation reads.
+   */
+  shape: jsonb('shape').$type<RequestShape>(),
   usage: jsonb('usage').$type<Usage>(),
   latencyMs: doublePrecision('latency_ms'),
   status: text('status'),
@@ -1303,6 +1341,119 @@ export const evidenceAttributionAudit = pgTable('evidence_attribution_audit', {
   disposition: text('disposition').notNull(),
   notedAt: timestamp('noted_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * DEMAND CELLS (S7 L2, migration 0042) — served traffic, generalized and
+ * anonymized into something Potion may learn from across customers.
+ *
+ * The split into three tables IS the privacy design: staging and
+ * contributors are private accumulator state, `demandCells` is the only
+ * table anything else reads. A cell reaches the published table only after
+ * ≥K distinct orgs have fed it (core/demand.ts `isPublishable`), so a
+ * published row describes a market, never a customer.
+ */
+export const demandCellStaging = pgTable('demand_cell_staging', {
+  cellKey: text('cell_key').primaryKey(),
+  bucket: text('bucket').notNull(),
+  bucketKind: text('bucket_kind').$type<DemandBucketKind>().notNull(),
+  shapeClass: text('shape_class').notNull(),
+  weekStart: text('week_start').notNull(),
+  requests: bigint('requests', { mode: 'number' }).notNull().default(0),
+  confidenceSum: doublePrecision('confidence_sum').notNull().default(0),
+  confidenceCount: bigint('confidence_count', { mode: 'number' }).notNull().default(0),
+  confidenceMin: doublePrecision('confidence_min'),
+  /** Running SUM of embeddings — jsonb, not `vector`: a sum is not a point
+   * in the space and must not be searchable as if it were. */
+  centroidSum: jsonb('centroid_sum').$type<number[]>(),
+  centroidCount: bigint('centroid_count', { mode: 'number' }).notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Which orgs fed which cell. PRIVATE — presence only, and it never leaves
+ * the aggregator: the published row carries a COUNT. */
+export const demandCellContributors = pgTable(
+  'demand_cell_contributors',
+  {
+    cellKey: text('cell_key').notNull(),
+    orgId: text('org_id').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.cellKey, t.orgId] })],
+);
+
+export type DemandBucketKind = 'cluster' | 'unassigned';
+
+export const demandCells = pgTable(
+  'demand_cells',
+  {
+    cellKey: text('cell_key').primaryKey(),
+    /** Taxonomy cluster id, or an `lsh:xxxx` unassigned region. */
+    bucket: text('bucket').notNull(),
+    bucketKind: text('bucket_kind').$type<DemandBucketKind>().notNull(),
+    shapeClass: text('shape_class').notNull(),
+    weekStart: text('week_start').notNull(),
+    requests: bigint('requests', { mode: 'number' }).notNull(),
+    orgCount: integer('org_count').notNull(),
+    /** NULL when nothing in the cell measured a fit (all traffic arrived
+     * cluster-hinted). NULL is "not measured"; 0 would be "fits nothing we
+     * serve", which is a finding rather than an absence. */
+    confidenceMean: doublePrecision('confidence_mean'),
+    /** The WORST fit in the cell — the mean hides the tail, and the tail is
+     * where "we have never measured anything for this" shows up. */
+    confidenceMin: doublePrecision('confidence_min'),
+    /** How many of the cell's requests carried a measured fit. */
+    confidenceCount: bigint('confidence_count', { mode: 'number' }).notNull().default(0),
+    centroid: vector('centroid', { dimensions: 384 }),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('demand_cells_week_kind_idx').on(t.weekStart, t.bucketKind)],
+);
+
+export type DemandCellStagingRow = typeof demandCellStaging.$inferSelect;
+export type DemandCellRow = typeof demandCells.$inferSelect;
+
+/**
+ * AUTONOMOUS LEARNING LEDGER (S7 L4, migration 0043).
+ *
+ * The hand-written ledger row, written by the job. Every live campaign in
+ * this project is ledgered projected-vs-actual under an explicit risk
+ * acceptance; L4 replaces the per-run human with a standing daily cap, and
+ * this table is what keeps the rest of that discipline intact — including
+ * the part a hand-written row never carried: the demand that justified the
+ * spend.
+ */
+export type LearningRunStatus = 'planned' | 'running' | 'completed' | 'failed' | 'refused';
+
+export const learningRuns = pgTable(
+  'learning_runs',
+  {
+    id: text('id').primaryKey(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    status: text('status').$type<LearningRunStatus>().notNull(),
+    /** The demand cell that justified the run (demand_cells.cell_key). */
+    cellKey: text('cell_key'),
+    clusterId: text('cluster_id'),
+    /** core/coverage.ts CoverageReason. */
+    gapReason: text('gap_reason'),
+    gapScore: doublePrecision('gap_score'),
+    /** The narrowing handed to the sweep, so the candidate set is
+     * reconstructable from the ledger alone. */
+    capabilityFilter: jsonb('capability_filter').$type<{
+      tools?: boolean;
+      minContextTokens?: number;
+    }>(),
+    /** The cap this run was authorized to spend — written BEFORE it ran. */
+    projectedUsd: doublePrecision('projected_usd').notNull(),
+    /** NULL until the run lands. A row with no actual is a run that died. */
+    actualUsd: doublePrecision('actual_usd'),
+    pointsPublished: integer('points_published'),
+    detail: text('detail'),
+  },
+  (t) => [index('learning_runs_started_idx').on(t.startedAt)],
+);
+
+export type LearningRunRow = typeof learningRuns.$inferSelect;
+export type NewLearningRun = typeof learningRuns.$inferInsert;
 
 export type SchemaMigrationRow = typeof schemaMigrations.$inferSelect;
 export type EvidenceAttributionAuditRow = typeof evidenceAttributionAudit.$inferSelect;

@@ -5,6 +5,7 @@
 // each linking to its frontier.
 import { TraceClusterButton, TraceRetentionForm } from '@/components/traces-actions';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import type {
   FrontierListResponse,
   TraceRetentionResponse,
@@ -29,7 +30,7 @@ export default async function TracesPage({
 
   let data: TracesResponse;
   try {
-    data = await apiFetch<TracesResponse>('/api/traces?limit=100');
+    data = await fetchOrRecover<TracesResponse>('/api/traces?limit=100');
   } catch (e) {
     if (e instanceof ApiUnreachable) {
       return (

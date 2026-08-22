@@ -17,7 +17,13 @@ import { performance } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { strategyHash, type ChatMessage, type StrategyConfig, type Usage } from '@potion/core';
+import {
+  requestShape,
+  strategyHash,
+  type ChatMessage,
+  type StrategyConfig,
+  type Usage,
+} from '@potion/core';
 import {
   DEFAULT_ORG_ID,
   insertRequestLog,
@@ -409,10 +415,28 @@ function registerLegacyCompletionsRoute(app: FastifyInstance, ctx: PotionContext
     for (const prompt of prompts) {
       const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
       const cacheKey = assignmentCacheKey([prompt]);
-      let assignment = ctx.assignCache.get(cacheKey);
-      if (!assignment) {
-        assignment = await ctx.assigner.assign(prompt);
-        ctx.assignCache.set(cacheKey, assignment);
+      let ranked = ctx.assignCache.get(cacheKey);
+      if (!ranked) {
+        // S7 L1: one embedding, decision + ranking (see chat.ts).
+        ranked = await ctx.assigner.assignRanked(prompt);
+        ctx.assignCache.set(cacheKey, ranked);
+      }
+      const assignment = ranked.assignment;
+      // /v1/completions accepts an ARRAY of prompts under one log row, so a
+      // multi-prompt request has several classifications and one place to put
+      // them. Recording the first would misattribute the others, so the
+      // signal is written only when the row describes exactly one
+      // classification; otherwise it stays NULL, which reads as "not
+      // recorded" and is true.
+      if (prompts.length === 1) {
+        logBase.clusterConfidence = assignment.confidence;
+        const runnerUp = ranked.ranking.find((r) => r.clusterId !== assignment.clusterId);
+        if (runnerUp !== undefined) {
+          logBase.runnerUpCluster = runnerUp.clusterId;
+          logBase.clusterMargin =
+            Math.round((assignment.confidence - runnerUp.confidence) * 1e6) / 1e6;
+        }
+        logBase.shape = requestShape({ messages, max_tokens: body.max_tokens, stream: body.stream });
       }
       const loaded = await loadCurrentFrontier(ctx.db.db, assignment.clusterId, auth.org.orgId);
       const { frontier, provenance } = guardFrontierProvenance(

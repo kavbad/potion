@@ -1,16 +1,25 @@
-// /docs — the in-app reference.
+// /docs — the reference, and now a PUBLIC one.
 //
-// Written against what the server ACTUALLY does, with the base URL and the
-// reader's own policy filled in from /api/connection rather than left as a
-// placeholder — docs that say `https://api.example.com` are docs someone has
-// to translate before they can use them.
+// Two changes from the version that lived behind the auth wall.
 //
-// It states the two things that surprise people, because both are load-
-// bearing and neither is guessable: `model` is a LABEL (routing comes from
-// the prompt and your policy), and appearing in the catalogue is not the same
-// as being routable (only measured points are).
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+// PUBLIC. Docs you have to sign in to read cannot answer the question
+// someone has before they sign in. middleware.ts opens /docs, which means
+// this page must render with no session — so the /api/connection call is now
+// best-effort and every failure (401 included, not just an unreachable
+// server) falls back to the generic form. It previously caught only
+// ApiUnreachable, so a signed-out reader would have got a 500.
+//
+// PERSONALISED WHEN IT CAN BE. Signed in, the base URL and the reader's own
+// bound policy are filled in from their org, because docs that say
+// `https://api.example.com` are docs someone has to translate before they can
+// use them. Signed out, the placeholders are honest about being placeholders.
+//
+// It still states the two things that surprise people, because both are
+// load-bearing and neither is guessable: `model` is a LABEL, and appearing in
+// the catalogue is not the same as being routable.
+import { apiFetch, sessionCookieHeader } from '@/lib/api';
 import { CopyBlock } from '@/components/copy-block';
+import { SiteShell } from '@/components/site-header';
 import type { ConnectionResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -36,23 +45,79 @@ function Endpoint({ method, path, note }: { method: string; path: string; note: 
   );
 }
 
+function Row({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="whitespace-nowrap py-3 pr-6 align-top font-mono text-xs text-ink">{k}</td>
+      <td className="py-3 text-xs leading-relaxed text-soft">{v}</td>
+    </tr>
+  );
+}
+
+const CONTENTS = [
+  ['quickstart', 'Quickstart'],
+  ['auth', 'Authentication'],
+  ['model', 'The model field is a label'],
+  ['trace', 'The decision header'],
+  ['policies', 'Policies'],
+  ['workloads', 'Workload types'],
+  ['compat', 'Streaming and compatibility'],
+  ['errors', 'Errors'],
+  ['limits', 'Limits and budgets'],
+  ['api', 'API reference'],
+  ['honest', 'Things worth knowing'],
+] as const;
+
+/** The taxonomy Potion classifies into. Names mirror packages/cluster/data/taxonomy.json. */
+const WORKLOADS: [string, string][] = [
+  ['code-gen', 'Writing code to a specification'],
+  ['code-review', 'Finding defects in code and explaining their impact'],
+  ['extraction', 'Pulling structured fields out of unstructured documents'],
+  ['summarization', 'Condensing a document while preserving what matters'],
+  ['classification', 'Assigning a label from a fixed set'],
+  ['multi-step-reasoning', 'Problems needing several dependent steps'],
+  ['creative', 'Open-ended writing where there is no single right answer'],
+  ['rewrite-edit', 'Revising text to a brief without changing its meaning'],
+  ['rag-answer', 'Answering from supplied source passages'],
+  ['agentic-tool-use', 'Planning and sequencing tool calls'],
+];
+
 export default async function DocsPage() {
+  // Best-effort: this page is public, so a missing or rejected session is an
+  // ordinary state, not an error. Any failure falls through to placeholders.
   let conn: ConnectionResponse | null = null;
   try {
     conn = await apiFetch<ConnectionResponse>('/api/connection');
-  } catch (e) {
-    if (!(e instanceof ApiUnreachable)) throw e;
+  } catch {
+    conn = null;
   }
-  const base = conn?.baseUrl ?? 'https://your-potion-host';
+  const signedIn = (await sessionCookieHeader()) !== undefined;
+  const base = conn?.baseUrl ?? 'https://api.potion.dev';
 
-  return (
+  const body = (
     <div className="max-w-3xl space-y-12">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Docs</h1>
         <p className="mt-2 text-sm leading-relaxed text-soft">
           Potion speaks the OpenAI chat-completions protocol. If you already have an OpenAI client,
-          you change two lines and keep everything else.
+          you change one line and keep everything else — the request body, the response shape,
+          streaming and tool calls are unchanged.
         </p>
+        {!conn && (
+          <p className="mt-4 rounded-lg border border-line bg-panel px-4 py-3 text-xs leading-relaxed text-faint">
+            You are reading this signed out, so the base URL below is the generic one and the
+            policy section shows the four shapes rather than yours.{' '}
+            <a href="/login" className="text-accent underline">Sign in</a> and this page fills in
+            with your own endpoint and bound policy.
+          </p>
+        )}
+        <nav className="mt-6 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5 text-xs">
+          {CONTENTS.map(([id, label]) => (
+            <a key={id} href={`#${id}`} className="text-soft transition-colors hover:text-accent">
+              {label}
+            </a>
+          ))}
+        </nav>
       </div>
 
       <Section id="quickstart" title="Quickstart">
@@ -94,7 +159,28 @@ export default async function DocsPage() {
         />
       </Section>
 
-      <Section id="model" title="`model` is a label, not a choice">
+      <Section id="auth" title="Authentication">
+        <p className="text-sm leading-relaxed text-soft">
+          Every call carries a serving key as a bearer token:{' '}
+          <code className="font-mono text-xs">Authorization: Bearer $POTION_API_KEY</code>. Keys
+          come in two scopes. A <code className="font-mono text-xs">serve</code> key sends traffic
+          and reads its own state; <code className="font-mono text-xs">serve+admin</code> is
+          additionally allowed to provision — mint keys, move budgets, rebind policy.
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          A key is shown once, at creation, and stored only as a SHA-256 hash. Potion cannot show it
+          to you again and will not pretend otherwise — if it is lost, revoke it and mint another.
+          Each key carries its own policy binding, so separate keys are how you run different
+          trade-offs side by side.
+        </p>
+        <p className="text-xs leading-relaxed text-faint">
+          You do not bring provider keys. Potion serves every request from its own, across
+          providers — which is also what lets the router reach the whole catalogue rather than the
+          one account you happened to have.
+        </p>
+      </Section>
+
+      <Section id="model" title="The model field is a label, not a choice">
         <p className="text-sm leading-relaxed text-soft">
           Potion reads each request, works out which kind of work it is, and selects a strategy from
           the measured frontier under your policy. Whatever you put in <code className="font-mono text-xs">model</code>{' '}
@@ -102,21 +188,31 @@ export default async function DocsPage() {
           to that decision. <code className="font-mono text-xs">potion-auto</code> is the documented
           convention; sending a specific model id will not pin it.
         </p>
+      </Section>
+
+      <Section id="trace" title="The decision header">
         <p className="text-sm leading-relaxed text-soft">
-          Every response carries an <code className="font-mono text-xs">x-frontier-trace</code> header
-          with the decision:
+          Every response carries <code className="font-mono text-xs">x-frontier-trace</code>, which
+          is the routing decision in full. A router you cannot audit is a router you cannot trust,
+          so this ships on every request rather than behind a debug flag.
         </p>
         <CopyBlock
           label="x-frontier-trace"
           text={`cluster=code-gen;strategy=6efe8a56;frontier=v2;policy=min_cost;fallback=0;provenance=live`}
         />
-        <p className="text-xs leading-relaxed text-faint">
-          <span className="font-medium text-soft">fallback=0</span> means a measured frontier existed
-          and your policy selected a point on it. <span className="font-medium text-soft">fallback=1</span>{' '}
-          means it did not, and the request rode the default strategy.{' '}
-          <span className="font-medium text-soft">provenance=live</span> means the evidence behind the
-          choice came from real provider runs.
-        </p>
+        <div className="overflow-x-auto rounded-xl border border-line bg-panel px-6 py-2">
+          <table className="w-full">
+            <tbody>
+              <Row k="cluster" v="The workload type the prompt was classified into." />
+              <Row k="strategy" v="First 8 characters of the selected strategy hash — the exact configuration served, resolvable in Frontiers." />
+              <Row k="frontier" v="Which published frontier version the choice came from. It increments when new evidence republishes." />
+              <Row k="policy" v={<>The rule that selected the point: <code className="font-mono">min_cost</code>, <code className="font-mono">max_quality</code>, <code className="font-mono">latency_bound</code> or <code className="font-mono">compound</code>.</>} />
+              <Row k="fallback" v={<><span className="font-medium text-soft">0</span> means a measured frontier existed and your policy selected a point on it. <span className="font-medium text-soft">1</span> means it did not, and the request rode the default strategy — the honest signal that Potion has nothing measured for this work yet.</>} />
+              <Row k="provenance" v={<><span className="font-medium text-soft">live</span> means the evidence behind the choice came from real provider runs. Anything else means it did not, and should not be treated as a measurement.</>} />
+              <Row k="constrained" v={<>Present only as <code className="font-mono">constrained=tools</code>, when the request carried <code className="font-mono">tools</code> and your policy&apos;s optimum was a prompt-transforming strategy. Selection narrowed to single-model points, which the tool contract requires. Your policy&apos;s bound still held — a quality floor, cost ceiling or latency bound is never breached by narrowing, only its optimum is — so <code className="font-mono">fallback</code> stays 0.</>} />
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section id="policies" title="Policies">
@@ -130,6 +226,10 @@ export default async function DocsPage() {
           <li><code className="font-mono text-xs text-ink">latency_bound</code> — best quality inside a p95 latency budget.</li>
           <li><code className="font-mono text-xs text-ink">compound</code> — a quality floor <em>and</em> a latency bound, cheapest of the survivors.</li>
         </ul>
+        <p className="text-xs leading-relaxed text-faint">
+          Cost ceilings are expressed per <span className="font-medium text-soft">1,000 requests</span>,
+          not per 1,000 tokens. Latency bounds are p95 in milliseconds.
+        </p>
         {conn?.policy && (
           <p className="rounded-lg border border-line bg-paper px-4 py-3 text-sm text-soft">
             <span className="text-xs uppercase tracking-wide text-faint">Yours right now</span>
@@ -141,6 +241,77 @@ export default async function DocsPage() {
           label="Rebind this key's policy"
           text={`curl -X POST ${base}/v1/policies \\\n  -H "Authorization: Bearer $POTION_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"type":"min_cost","qualityFloor":0.8}'`}
         />
+      </Section>
+
+      <Section id="workloads" title="Workload types">
+        <p className="text-sm leading-relaxed text-soft">
+          Every prompt is classified into one of these before anything is selected. Each has its own
+          frontier, because the best strategy for extraction is not the best strategy for
+          multi-step reasoning — that difference is the entire reason routing pays.
+        </p>
+        <div className="overflow-x-auto rounded-xl border border-line bg-panel px-6 py-2">
+          <table className="w-full">
+            <tbody>
+              {WORKLOADS.map(([id, what]) => (
+                <Row key={id} k={id} v={what} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs leading-relaxed text-faint">
+          A prompt that matches none of them confidently is served on the default strategy, and the
+          trace says <code className="font-mono">fallback=1</code> rather than guessing.
+        </p>
+      </Section>
+
+      <Section id="compat" title="Streaming and compatibility">
+        <p className="text-sm leading-relaxed text-soft">
+          Set <code className="font-mono text-xs">stream: true</code> and you get standard
+          server-sent events terminated by <code className="font-mono text-xs">data: [DONE]</code>,
+          the same as any OpenAI-compatible client expects. The routing decision is chosen before
+          the first token, so <code className="font-mono text-xs">x-frontier-trace</code> is present
+          on the response headers even while the body is still streaming.
+        </p>
+        <ul className="space-y-2 text-sm leading-relaxed text-soft">
+          <li><span className="font-medium text-ink">Tools and function calling</span> pass through to the selected model unchanged. Because tool semantics cannot survive a strategy that rewrites or fans out the prompt, a request carrying <code className="font-mono text-xs">tools</code> is served from a single-model point; if that is not your policy&apos;s optimum, the trace says <code className="font-mono text-xs">constrained=tools</code>.</li>
+          <li><span className="font-medium text-ink">Token usage and cost</span> come back on the response, taken from the provider’s own reported figures where it reports them rather than from a modelled estimate.</li>
+          <li><span className="font-medium text-ink">Legacy completions</span> are shimmed at <code className="font-mono text-xs">/v1/completions</code>.</li>
+        </ul>
+      </Section>
+
+      <Section id="errors" title="Errors">
+        <p className="text-sm leading-relaxed text-soft">
+          Errors use the OpenAI envelope — <code className="font-mono text-xs">{'{ error: { message, type, param, code } }'}</code>{' '}
+          — so existing client error handling keeps working.
+        </p>
+        <div className="overflow-x-auto rounded-xl border border-line bg-panel px-6 py-2">
+          <table className="w-full">
+            <tbody>
+              <Row k="400 invalid_request_error" v="The body did not validate — a missing messages array, a malformed policy." />
+              <Row k="401 authentication_required" v="No bearer token was supplied." />
+              <Row k="401 invalid_api_key" v="The key is unknown, revoked or expired." />
+              <Row k="403" v={<>The key is valid but its scope does not cover this call — provisioning with a <code className="font-mono">serve</code> key rather than <code className="font-mono">serve+admin</code>.</>} />
+              <Row k="413" v="The request body exceeds the accepted size." />
+              <Row k="429 rate_limit_exceeded" v="Too many requests. Back off and retry." />
+              <Row k="429 budget_exceeded" v="Your spend cap would be crossed by this call. Refused BEFORE the provider is called, so it costs nothing." />
+              <Row k="503 service_unavailable" v="No upstream could serve the request." />
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section id="limits" title="Limits and budgets">
+        <p className="text-sm leading-relaxed text-soft">
+          A budget is a cap on spend with an optional hard stop. The check runs{' '}
+          <span className="font-medium text-ink">before</span> the upstream call, so a refused
+          request costs nothing — a cap that only notices after the money is gone is not a cap.
+          Set it on <a href="/usage" className="text-accent underline">Usage</a> or through{' '}
+          <code className="font-mono text-xs">/api/budgets</code>.
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          Rate limits are enforced per key. A limited response carries the standard retry hints;
+          treat <code className="font-mono text-xs">429</code> as backpressure rather than failure.
+        </p>
       </Section>
 
       <Section id="api" title="API reference">
@@ -172,6 +343,12 @@ export default async function DocsPage() {
             are ever selected automatically — an unmeasured model is reachable, never auto-chosen.
           </li>
           <li>
+            <span className="font-medium text-ink">Quality numbers carry intervals.</span> Every
+            measured quality ships with the confidence interval its evidence supports. Where two
+            strategies overlap inside that interval, Potion reports them as tied rather than
+            inventing a ranking — and your policy decides on cost or latency instead.
+          </li>
+          <li>
             <span className="font-medium text-ink">Latency numbers start provisional.</span> Before you
             have traffic, p95 comes from evaluation runs (the model call only). Potion switches to
             serving-grade latency, measured end to end on your own requests, once there is enough of it.
@@ -185,4 +362,8 @@ export default async function DocsPage() {
       </Section>
     </div>
   );
+
+  // Signed in, the app shell is already around this page. Signed out, it needs
+  // its own chrome — otherwise a public docs page renders as a bare column.
+  return signedIn ? body : <SiteShell current="docs"><div className="mx-auto max-w-5xl px-6 py-14">{body}</div></SiteShell>;
 }

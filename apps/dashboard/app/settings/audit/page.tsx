@@ -1,8 +1,9 @@
 // /settings/audit (M4 #34, SPEC §13.6) — unified org audit trail: custody
 // (key lifecycle), auth events (logins/invites), incidents (guarantee),
 // merged newest-first. Admin-only server-side; a 403 renders a notice, not
-// a crash. The export form downloads a bounded (≤92-day) JSONL stream.
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+// a crash (a 401 is a dead session, and recovers through /api/auth/clear). The export form downloads a bounded (≤92-day) JSONL stream.
+import { ApiUnreachable, isForbidden } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,7 @@ export default async function AuditPage({
 
   let data: AuditResponse;
   try {
-    data = await apiFetch<AuditResponse>('/api/audit');
+    data = await fetchOrRecover<AuditResponse>('/api/audit');
   } catch (e) {
     if (e instanceof ApiUnreachable) {
       return (
@@ -56,14 +57,25 @@ export default async function AuditPage({
         </PageShell>
       );
     }
-    return (
-      <PageShell>
-        <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
-          The audit trail is admin-only. Sign in as an org admin to view custody, auth, and
-          incident events — and to export the bounded JSONL archive.
-        </div>
-      </PageShell>
-    );
+    // 403 — a session that resolved fine, belonging to someone whose role is
+    // below admin. That is the notice this page has always meant to render.
+    // It is deliberately NOT the 401 case: fetchOrRecover has already turned
+    // a dead cookie into a redirect, and this catch must let that through.
+    // Which is why the arm below rethrows rather than falling into the notice
+    // as it used to — a blanket catch here would swallow Next's redirect
+    // signal and show "you are not an admin" to someone who is simply signed
+    // out, and would say the same thing about an API fault.
+    if (isForbidden(e)) {
+      return (
+        <PageShell>
+          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+            The audit trail is admin-only. Sign in as an org admin to view custody, auth, and
+            incident events — and to export the bounded JSONL archive.
+          </div>
+        </PageShell>
+      );
+    }
+    throw e;
   }
 
   return (

@@ -9,7 +9,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { suiteContentHash, type StrategyConfig } from '@potion/core';
+import {
+  strategyHash,
+  suiteContentHash,
+  type FrontierPoint,
+  type StrategyAggregate,
+  type StrategyConfig,
+} from '@potion/core';
 import {
   claimJobExecution,
   createDb,
@@ -27,6 +33,7 @@ import { loadSuite, loadSuiteV2, runEval } from '@potion/harness';
 import {
   aggregatesFromEvalResults,
   computeFrontier,
+  loadCurrentFrontier,
   saveFrontier,
 } from '@potion/pareto';
 import { loadPrices } from '@potion/providers';
@@ -34,7 +41,9 @@ import { buildRegistry, classRepresentative } from '@potion/researcher';
 import { SINGLE_ATTEMPT_KINDS } from '@potion/queue';
 import { and, eq, isNotNull } from 'drizzle-orm';
 import {
+  classifyDroppedIncumbents,
   frontierPlatformSweepHandler,
+  frontierRegressionRefusal,
   OrgBudgetRefusalError,
   PlatformSweepRefusalError,
   PLATFORM_OPS_ORG_ID,
@@ -66,6 +75,51 @@ const ENV_KEYS = [
   'ANTHROPIC_API_KEY',
   'GOOGLE_API_KEY',
 ] as const;
+
+/** Strategy shorthands for the regression-guard tests. The cascade shape is
+ *  the platform sweep's own: cheap-class stage escalating to strong-class. */
+const SINGLE = (model: string): StrategyConfig => ({ type: 'single', model });
+const CASCADE = (cheap: string, strong: string): StrategyConfig => ({
+  type: 'cascade',
+  stages: [{ model: cheap, escalateIf: { confidenceBelow: 0.72 } }, { model: strong }],
+  confidenceMethod: 'self-report-calibrated',
+});
+const hash = (cfg: StrategyConfig): string => strategyHash(cfg);
+/** A frontier point at whatever coordinates; a set-difference guard reads
+ *  only the identity, so the objectives are scenery unless a test says so. */
+function pt(cfg: StrategyConfig, over: Partial<FrontierPoint> = {}): FrontierPoint {
+  return {
+    clusterId: 'code-gen',
+    strategyHash: strategyHash(cfg),
+    strategyConfig: cfg,
+    quality: 1,
+    costPer1K: 1,
+    latencyP95: 1000,
+    providerMode: 'live',
+    ...over,
+  };
+}
+/** One measured candidate, at the objectives a run reported for it. */
+function agg(
+  cfg: StrategyConfig,
+  qualityMean: number,
+  costPer1K: number,
+  latencyP95: number,
+): StrategyAggregate {
+  return {
+    clusterId: 'code-gen',
+    strategyHash: strategyHash(cfg),
+    strategyConfig: cfg,
+    qualityMean,
+    qualityCi95: 0,
+    n: 15,
+    costPer1K,
+    latencyP50: latencyP95,
+    latencyP95,
+    pricesVersion: 'test-prices',
+    providerMode: 'live',
+  };
+}
 
 let root: string;
 let pricesPath: string;
@@ -398,20 +452,33 @@ describe('the three fixes the tranche campaign paid for', () => {
     expect(err.message).toContain('or-sonnet');
   });
 
-  it('the regression predicate: publishing must not drop a routed model', () => {
+  it('the regression predicate: publishing must not drop a routed point', () => {
     // The exact tranche case. Previous extraction routes to or-sonnet; this
     // run produced no measurement for it (contained after 0 cells), so the
-    // new frontier would quietly route to one model fewer than the customer
+    // new frontier would quietly route to one point fewer than the customer
     // already had. Containment protects the LEG; this protects the FRONTIER.
-    const modelsOf = (models: string[]): Set<string> => new Set(models);
-    const had = modelsOf(['or-deepseek', 'or-gemini-flash', 'or-opus', 'or-sonnet']);
-    const has = modelsOf(['or-deepseek', 'or-gemini-flash', 'or-opus', 'or-newcomer']);
-    const lost = [...had].filter((m) => !has.has(m));
-    expect(lost).toEqual(['or-sonnet']);
+    const dropped = classifyDroppedIncumbents({
+      previous: [pt(SINGLE('or-deepseek')), pt(SINGLE('or-sonnet'))],
+      computed: [pt(SINGLE('or-deepseek')), pt(SINGLE('or-newcomer'))],
+      candidates: [hash(SINGLE('or-deepseek')), hash(SINGLE('or-sonnet')), hash(SINGLE('or-newcomer'))],
+      measured: [hash(SINGLE('or-deepseek')), hash(SINGLE('or-newcomer'))],
+      failed: [{ strategyHash: hash(SINGLE('or-sonnet')), error: 'network error', completedCells: 0 }],
+    });
+    expect(dropped.map((d) => [d.label, d.cause])).toEqual([['single(or-sonnet)', 'contained']]);
+    expect(
+      frontierRegressionRefusal({ previousVersion: 2, pricesVersion: 'p', dropped })?.reason,
+    ).toBe('frontier-regression');
 
-    // A frontier that GAINS models and keeps every old one is fine.
-    const grown = modelsOf(['or-deepseek', 'or-gemini-flash', 'or-opus', 'or-sonnet', 'or-newcomer']);
-    expect([...had].filter((m) => !grown.has(m))).toEqual([]);
+    // A frontier that GAINS points and keeps every old one is fine.
+    expect(
+      classifyDroppedIncumbents({
+        previous: [pt(SINGLE('or-deepseek')), pt(SINGLE('or-sonnet'))],
+        computed: [pt(SINGLE('or-deepseek')), pt(SINGLE('or-sonnet')), pt(SINGLE('or-newcomer'))],
+        candidates: [],
+        measured: [],
+        failed: [],
+      }),
+    ).toEqual([]);
   });
 
   // FIX 3 — the leg must be persistable the instant it lands.
@@ -421,5 +488,264 @@ describe('the three fixes the tranche campaign paid for', () => {
     // must carry the points themselves, not just a count — a count cannot be
     // restored after the database is lost, which is how two campaigns died.
     expect(typeof frontierPlatformSweepHandler).toBe('function');
+  });
+});
+
+describe('frontier-regression — the code-gen v3 blind spot, by strategy hash', () => {
+  const CLUSTER = 'code-gen';
+  /** The cascade committed on code-gen v2 — the point that actually vanished. */
+  const INCUMBENT_CASCADE_REAL = CASCADE('or-deepseek', 'or-opus');
+  /** Shorthand incumbent for the cause-classification cases below. */
+  const INCUMBENT_CASCADE = CASCADE('mock-cheap', 'mock-frontier');
+
+  /** The publish decision, run exactly as the handler runs it. */
+  function decide(previous: FrontierPoint[], computed: FrontierPoint[], opts: {
+    candidates: StrategyConfig[];
+    measured: string[];
+    failed?: Array<{ strategyHash: string; error: string; completedCells: number }>;
+  }): PlatformSweepRefusalError | null {
+    return frontierRegressionRefusal({
+      previousVersion: 2,
+      pricesVersion: 'test-prices',
+      dropped: classifyDroppedIncumbents({
+        previous,
+        computed,
+        candidates: opts.candidates.map(hash),
+        measured: opts.measured,
+        failed: opts.failed ?? [],
+      }),
+    });
+  }
+
+  it('REFUSES when a run re-measures only the singles and the incumbent cascade vanishes', async () => {
+    // THE REAL LEG, reproduced with its real numbers. Committed code-gen v2
+    // (packages/db/baseline/platform-frontiers.json): four singles plus the
+    // cascade, which is the ONLY point reaching quality 1.0000 and does it
+    // at $0.5955/1K.
+    // [config, quality, $/1K, p95 ms] — verbatim from the committed baseline.
+    const V2: Array<[StrategyConfig, number, number, number]> = [
+      [SINGLE('or-deepseek'), 0.9833, 0.1630, 12105],
+      [SINGLE('or-gpt-mini'), 0.9979, 0.2282, 5617],
+      [SINGLE('or-gemini-flash'), 0.9924, 0.4729, 2084],
+      [CASCADE('or-deepseek', 'or-opus'), 1.0, 0.5955, 19915],
+      [SINGLE('or-gpt-full'), 0.9976, 1.1800, 3053],
+    ];
+    // The identity is the config's content hash — pinned against the real
+    // committed hash so this test is anchored to the leg that actually
+    // regressed, not to a shape that merely resembles it.
+    expect(hash(CASCADE('or-deepseek', 'or-opus')).slice(0, 8)).toBe('57f69a06');
+
+    const saved = await saveFrontier(
+      db.db,
+      CLUSTER,
+      V2.map(([cfg, quality, costPer1K, latencyP95]) => pt(cfg, { quality, costPer1K, latencyP95 })),
+      'recompute',
+      'baseline-prices',
+    );
+    // Read back through the handler's own load — a composite config must
+    // survive the JSONB round-trip intact, or its identity moves and the
+    // guard is comparing something else.
+    const previous = await loadCurrentFrontier(db.db, CLUSTER, undefined);
+    expect(previous!.version).toBe(saved.version);
+    const incumbent = previous!.points.find((pnt) => pnt.strategyHash === hash(INCUMBENT_CASCADE_REAL));
+    expect(incumbent, 'the cascade must be ON the previous frontier for this test to mean anything')
+      .toBeDefined();
+    expect(strategyHash(incumbent!.strategyConfig)).toBe(incumbent!.strategyHash);
+
+    // v3's run: the pool rebuilt its cascade from the CURRENT class
+    // representatives (a different config, hence a different hash), and that
+    // rebuilt cascade then failed containment after 0 cells. So the ONLY
+    // strategies with evidence this run are singles — the incumbent cascade
+    // was never in front of a provider at all.
+    // The eight points v3 actually published (.tranche/legs/code-gen.json),
+    // every one of them a single.
+    const V3_MEASURED: Array<[StrategyConfig, number, number, number]> = [
+      [SINGLE('or-solar-pro4'), 0.9944, 0.0209, 15351],
+      [SINGLE('or-ling-3.0-flash'), 0.7306, 0.0957, 4457],
+      [SINGLE('or-deepseek'), 0.9839, 0.1691, 13906],
+      [SINGLE('or-gpt-mini'), 0.9976, 0.2285, 4383],
+      [SINGLE('or-gemini-flash'), 0.9955, 0.4772, 1743],
+      [SINGLE('or-gpt-full'), 0.9976, 1.1545, 2255],
+      [SINGLE('or-gemini-3.7-flash'), 1.0, 1.3144, 8238],
+      [SINGLE('or-claude-opus-5-fast'), 1.0, 15.8835, 5809],
+    ];
+    const rebuiltCascade = CASCADE('or-ling-3.0-flash', 'or-opus');
+    expect(hash(rebuiltCascade).slice(0, 8)).toBe('99dca2f8'); // the pool's, not the incumbent's
+    const aggregates = V3_MEASURED.map(([cfg, q, c, l]) => agg(cfg, q, c, l));
+    const computed = computeFrontier(aggregates);
+    expect(computed).toHaveLength(V3_MEASURED.length); // the published v3, reproduced
+    expect(computed.some((pnt) => pnt.strategyHash === hash(INCUMBENT_CASCADE_REAL))).toBe(false);
+
+    // 1. The guard refuses, and NAMES the cascade with its cause.
+    const refusal = decide(previous!.points, computed, {
+      candidates: [...V3_MEASURED.map(([cfg]) => cfg), rebuiltCascade],
+      measured: aggregates.map((a) => a.strategyHash),
+      failed: [{ strategyHash: hash(rebuiltCascade), error: "provider 'openrouter': request failed", completedCells: 0 }],
+    });
+    expect(refusal).toBeInstanceOf(PlatformSweepRefusalError);
+    expect(refusal!.reason).toBe('frontier-regression');
+    expect(refusal!.message).toContain('cascade(or-deepseek→or-opus)');
+    expect(refusal!.message).toContain('57f69a06');
+    expect(refusal!.message).toContain('never a candidate');
+    // A post-run refusal must not claim the pre-spend ladder's tail: this
+    // leg spent $11.76 before it got here.
+    expect(refusal!.message).toContain('the run already spent; nothing was published');
+    expect(refusal!.message).not.toContain('no spend occurred');
+    // The rebuilt cascade's containment is a DIFFERENT candidate's failure
+    // and must not be reported as the incumbent's cause.
+    expect(refusal!.message).not.toContain('99dca2f8');
+
+    // 2. THE BLIND SPOT, as an assertion. The alias-only predicate the guard
+    //    used to run sees nothing wrong: every single incumbent survived,
+    //    and a cascade has no `.model` for it to look at.
+    const aliasesOf = (pts: FrontierPoint[]): Set<string> =>
+      new Set(pts.flatMap((x) => (x.strategyConfig.type === 'single' ? [x.strategyConfig.model] : [])));
+    const had = aliasesOf(previous!.points);
+    const has = aliasesOf(computed);
+    expect([...had].filter((m) => !has.has(m))).toEqual([]);
+
+    // 3. THE DAMAGE the silence let through: the cheapest route to the
+    //    frontier's top measured quality goes from $0.5955 to $1.3144.
+    const cheapestAtTopQuality = (pts: FrontierPoint[]): number => {
+      const best = Math.max(...pts.map((x) => x.quality));
+      return Math.min(...pts.filter((x) => x.quality >= best).map((x) => x.costPer1K));
+    };
+    expect(cheapestAtTopQuality(previous!.points)).toBeCloseTo(0.5955, 4);
+    expect(cheapestAtTopQuality(computed)).toBeCloseTo(1.3144, 4);
+  });
+
+  it('does NOT refuse when the incumbent was re-measured and lost to domination', () => {
+    // Same missing point, opposite cause: it WAS a candidate and it DID
+    // produce evidence — domination is then a verdict, not a gap. Refusing
+    // here would mean a frontier can never improve.
+    const previous = [pt(SINGLE('mock-cheap')), pt(INCUMBENT_CASCADE)];
+    const computed = [pt(SINGLE('mock-cheap'))];
+    const dropped = classifyDroppedIncumbents({
+      previous,
+      computed,
+      candidates: [SINGLE('mock-cheap'), INCUMBENT_CASCADE].map(hash),
+      measured: [SINGLE('mock-cheap'), INCUMBENT_CASCADE].map(hash),
+      failed: [],
+    });
+    expect(dropped.map((d) => d.cause)).toEqual(['dominated']);
+    expect(decide(previous, computed, {
+      candidates: [SINGLE('mock-cheap'), INCUMBENT_CASCADE],
+      measured: [SINGLE('mock-cheap'), INCUMBENT_CASCADE].map(hash),
+    })).toBeNull();
+  });
+
+  it('separates the causes in one message: evidence loss refuses, domination is context', () => {
+    const previous = [
+      pt(SINGLE('mock-cheap')),
+      pt(SINGLE('mock-mid')),
+      pt(INCUMBENT_CASCADE),
+    ];
+    const computed = [pt(SINGLE('mock-cheap'))];
+    const refusal = decide(previous, computed, {
+      // mock-mid was measured and lost; the cascade was contained mid-run.
+      candidates: [SINGLE('mock-cheap'), SINGLE('mock-mid'), INCUMBENT_CASCADE],
+      measured: [hash(SINGLE('mock-cheap')), hash(SINGLE('mock-mid'))],
+      failed: [{ strategyHash: hash(INCUMBENT_CASCADE), error: 'provider returned error', completedCells: 0 }],
+    });
+    expect(refusal!.reason).toBe('frontier-regression');
+    // The cascade is the REASON: named as evidence loss, with its cause.
+    expect(refusal!.message).toContain('contained after 0 cells');
+    expect(refusal!.message).toContain('evidence LOSS');
+    // The dominated single is CONTEXT: named, and explicitly not the reason.
+    expect(refusal!.message).toContain('NOT the reason for this refusal');
+    expect(refusal!.message).toContain('single(mock-mid)');
+    // One point lost, not two — the dominated one is not counted as loss.
+    expect(refusal!.message).toContain('routes to 1 point');
+  });
+
+  it('catches every composite shape, not just cascade', () => {
+    const composites: StrategyConfig[] = [
+      CASCADE('mock-cheap', 'mock-frontier'),
+      { type: 'ensemble', models: ['mock-cheap', 'mock-mid'], fusion: { method: 'majority-vote' } },
+      { type: 'draft-verify', draftModel: 'mock-cheap', verifierModel: 'mock-frontier' },
+      { type: 'best-of-n', model: 'mock-mid', n: 3, judge: { model: 'mock-judge' } },
+      { type: 'composite', startModel: 'mock-cheap', upgradeModel: 'mock-frontier', upgradeIf: { confidenceBelow: 0.5 } },
+    ];
+    const dropped = classifyDroppedIncumbents({
+      previous: composites.map((c) => pt(c)),
+      computed: [pt(SINGLE('mock-cheap'))],
+      candidates: [],
+      measured: [],
+      failed: [],
+    });
+    expect(dropped).toHaveLength(composites.length);
+    expect(dropped.every((d) => d.cause === 'not-a-candidate')).toBe(true);
+    // Model names survive into the message for readability — identity does
+    // not depend on them.
+    expect(dropped.map((d) => d.label)).toEqual([
+      'cascade(mock-cheap→mock-frontier)',
+      'ensemble(mock-cheap+mock-mid)',
+      'draft-verify(mock-cheap→mock-frontier)',
+      'best-of-n(mock-mid×3, judge mock-judge)',
+      'composite(mock-cheap→mock-frontier@<0.5)',
+    ]);
+  });
+
+  it('a candidate that ran but produced no rows is evidence loss, not domination', () => {
+    const previous = [pt(SINGLE('mock-cheap'))];
+    const refusal = decide(previous, [], {
+      candidates: [SINGLE('mock-cheap')],
+      measured: [],
+    });
+    expect(refusal!.reason).toBe('frontier-regression');
+    expect(refusal!.message).toContain('produced no live rows at prices test-prices');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Incumbent carry-forward (2026-08-20) — the creative leg's refusal, turned
+// into a pin. The pool rebuilds its composite from CURRENT class reps, so a
+// committed cascade whose stages moved out of representative position was
+// never re-measured and the (correct) guard refused evidence loss. Now every
+// still-priced incumbent joins the pool by right.
+import { carryForwardIncumbents, strategyModelAliases } from './handlers.js';
+import { strategyHash as sh2, type StrategyConfig as SC2 } from '@potion/core';
+
+describe('incumbent carry-forward into the sweep pool', () => {
+  const CASCADE: SC2 = {
+    type: 'cascade',
+    stages: [{ model: 'or-deepseek', escalateIf: { confidenceBelow: 0.7 } }, { model: 'or-opus' }],
+    confidenceMethod: 'self-report-calibrated',
+  } as SC2;
+  const SINGLE: SC2 = { type: 'single', model: 'or-haiku' };
+  const priced = new Set(['or-deepseek', 'or-opus', 'or-haiku', 'or-new-1']);
+
+  it('the creative case: a committed cascade absent from the pool is carried forward', () => {
+    const pool = new Map<string, SC2>([[sh2({ type: 'single', model: 'or-new-1' }), { type: 'single', model: 'or-new-1' }]]);
+    const added = carryForwardIncumbents(pool, [{ strategyConfig: CASCADE }], { pricedAliases: priced, singlesOnly: false });
+    expect(added).toEqual([sh2(CASCADE)]);
+    expect(pool.get(sh2(CASCADE))).toEqual(CASCADE);
+  });
+
+  it('an incumbent already in the pool is not duplicated', () => {
+    const pool = new Map<string, SC2>([[sh2(SINGLE), SINGLE]]);
+    const added = carryForwardIncumbents(pool, [{ strategyConfig: SINGLE }], { pricedAliases: priced, singlesOnly: false });
+    expect(added).toEqual([]);
+    expect(pool.size).toBe(1);
+  });
+
+  it('an incumbent referencing a DELISTED model is left out — the guard reports it, this function never guesses', () => {
+    const pool = new Map<string, SC2>();
+    const gone: SC2 = { type: 'single', model: 'or-retired-model' };
+    const added = carryForwardIncumbents(pool, [{ strategyConfig: gone }], { pricedAliases: priced, singlesOnly: false });
+    expect(added).toEqual([]);
+    expect(pool.size).toBe(0);
+  });
+
+  it('a tools-only sweep carries forward only single incumbents', () => {
+    const pool = new Map<string, SC2>();
+    const added = carryForwardIncumbents(pool, [{ strategyConfig: CASCADE }, { strategyConfig: SINGLE }], { pricedAliases: priced, singlesOnly: true });
+    expect(added).toEqual([sh2(SINGLE)]);
+  });
+
+  it('alias extraction covers every strategy shape', () => {
+    expect(strategyModelAliases(CASCADE).sort()).toEqual(['or-deepseek', 'or-opus']);
+    expect(strategyModelAliases({ type: 'ensemble', models: ['a', 'b'], fusion: { kind: 'judge-pick', judge: { model: 'j' } } } as never)).toEqual(['a', 'b']);
+    expect(strategyModelAliases({ type: 'draft-verify', draftModel: 'd', verifierModel: 'v' } as never).sort()).toEqual(['d', 'v']);
   });
 });

@@ -213,3 +213,62 @@ describe('rank — every cluster scored, so a wrong pick is visible', () => {
     expect(a).toEqual(b);
   });
 });
+
+// ---- S7 L1: the decision and its evidence, off one embedding ----
+describe('assignRanked (S7 L1)', () => {
+  it('returns exactly what assign returns, plus the ranking rank() returns', async () => {
+    const assigner = await makeAssigner();
+    const text = 'Write a Python function that reverses a string';
+
+    const [decision, ranking, combined] = await Promise.all([
+      assigner.assign(text),
+      assigner.rank(text),
+      assigner.assignRanked(text),
+    ]);
+
+    expect(combined.assignment).toEqual(decision);
+    expect(combined.ranking).toEqual(ranking);
+  });
+
+  it('embeds ONCE — the demand signal is free, or it is not worth taking', async () => {
+    const centroids = await centroidsFromTaxonomy(TEST_TAXONOMY, mockEmbedder);
+    let calls = 0;
+    const counted: Embedder = {
+      embed: async (texts) => {
+        calls++;
+        return mockEmbedder.embed(texts);
+      },
+    };
+    const assigner = createAssigner(counted, centroids);
+    await assigner.assignRanked('Summarize this article in three bullet points');
+    expect(calls).toBe(1);
+  });
+
+  it('keeps the raw best in the ranking when the decision falls back to general', async () => {
+    // Threshold above every achievable cosine: every decision is 'general',
+    // and the ranking must still say what it nearly was.
+    const assigner = await makeAssigner(1.1);
+    const { assignment, ranking } = await assigner.assignRanked('Write a Python function');
+    expect(assignment.clusterId).toBe('general');
+    expect(ranking[0]!.confidence).toBeGreaterThan(assignment.confidence - 1e-9);
+    expect(ranking.length).toBeGreaterThan(1);
+  });
+});
+
+describe('assignRanked: fellBack (S7 L2)', () => {
+  it('distinguishes a real general match from "nothing fits"', async () => {
+    // 'general' is a taxonomy cluster AND the below-threshold fallback, so a
+    // clusterId of 'general' cannot answer this on its own.
+    const matched = await (await makeAssigner(0)).assignRanked('Write a Python function');
+    expect(matched.fellBack).toBe(false);
+
+    const nothing = await (await makeAssigner(1.1)).assignRanked('Write a Python function');
+    expect(nothing.assignment.clusterId).toBe('general');
+    expect(nothing.fellBack).toBe(true);
+  });
+
+  it('returns the embedding for in-process aggregation, at canonical width', async () => {
+    const { embedding } = await (await makeAssigner()).assignRanked('Summarize this article');
+    expect(embedding).toHaveLength(384);
+  });
+});

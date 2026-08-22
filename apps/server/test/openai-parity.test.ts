@@ -382,11 +382,20 @@ describe('tool calling passthrough', () => {
     expect(chunks[2]!.choices[0].finish_reason).toBe('tool_calls');
   });
 
-  it('tools + non-single strategy → 400 invalid_request_error (param tools)', async () => {
+  // WAS: 'tools + non-single strategy → 400'. That behaviour was the defect,
+  // not the contract. A policy whose optimum is a composite point used to make
+  // every tool-carrying request fail — discoverable only in production, with
+  // no remedy but changing policy. Selection now narrows to single-model
+  // points when tools are present and labels it `constrained=tools`; the 400
+  // survives only as a fail-closed backstop for a post-selection override.
+  // See test/tools-single-narrowing.test.ts for the full behaviour.
+  it('tools + composite-optimum policy → narrowed to the single point, not refused', async () => {
     const res = await chat(KEY_COMPOSITE, { tools: TOOLS });
-    expect(res.statusCode).toBe(400);
-    expectErrorShape(res.json(), { type: 'invalid_request_error', code: 'invalid_request_error', param: 'tools' });
-    expect(res.json().error.message).toContain('best-of-n');
+    expect(res.statusCode).not.toBe(400);
+    const raw = String(res.headers['x-frontier-trace'] ?? '');
+    expect(raw).toContain('constrained=tools');
+    // The frontier's only single point is the cheap one — it must be what served.
+    expect(raw).toContain(`strategy=${strategyHash(CFG_CHEAP).slice(0, 8)}`);
   });
 
   it('tool_choice without tools → 400 invalid_request_error (param tool_choice)', async () => {

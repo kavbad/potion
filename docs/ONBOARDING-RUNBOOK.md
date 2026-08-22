@@ -52,11 +52,15 @@ sweeps) require a **`serve+admin`** key — mint one deliberately via
 `POST /api/api-keys {"name": "...", "scopes": "serve+admin"}` when the partner's
 automation genuinely needs it. Unknown scope values fail closed to serve-only.
 
-## 3. BYOK provider key (optional, 1 min)
+## 3. Provider keys: there is nothing for the partner to bring
 
-If the partner brings their own provider key, they POST it to `/api/keys` (custody:
-envelope-encrypted at rest, every decrypt audited). Otherwise serving uses platform
-env keys and their usage is invoiced.
+**BYOK is not offered (operator decision, 2026-08-17; step removed from this
+runbook 2026-08-20, deploy plan D3).** Every org is served from the platform's
+provider keys — which is also what lets routing reach the whole catalogue
+rather than one account's corner of it. The safety that replaces the old
+step: the org's budget row (`hardStop: true`) created in step 2, plus the
+platform per-org cap (`POTION_PLATFORM_ORG_CAP_USD`, default $10/month)
+which bounds any org that somehow lacks one. Usage is invoiced.
 
 ## 3b. Ingest the partner's real traffic (G2.8)
 

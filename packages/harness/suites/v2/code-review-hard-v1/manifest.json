@@ -1,0 +1,18 @@
+{
+  "suiteId": "code-review-hard-v1",
+  "clusterId": "code-review",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored code review with no-bug controls (28 items: 16 exact-scored defect-localisation items and 12 judge-scored prose reviews; 9 items are correct code, and judge rubrics subtract for each asserted defect that is not present)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "exact",
+      "llm-judge"
+    ]
+  },
+  "createdAt": "2026-08-19T12:00:00.000-07:00"
+}

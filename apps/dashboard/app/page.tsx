@@ -22,7 +22,10 @@
 // JSON shown once during setup, and whether the auto-switch had done any work
 // was knowable only by catching a response header live.
 import Link from 'next/link';
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { ApiUnreachable, apiFetch, isSessionExpired, sessionCookieHeader } from '@/lib/api';
+import { recoverSession } from '@/lib/recover';
+import { Landing } from '@/components/landing';
+import { SiteShell } from '@/components/site-header';
 import { CopyBlock } from '@/components/copy-block';
 import { RoutingProof } from '@/components/routing-proof';
 import { ServingKeys } from '@/components/serving-keys';
@@ -30,13 +33,47 @@ import type { ConnectionResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ConnectPage() {
+export default async function ConnectPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const alreadyCleared = (await searchParams).cleared === '1';
+  // '/' is the only route that serves two different pages. Signed out it is
+  // the landing page (middleware.ts opens this path, and ONLY this path, by
+  // exact match); signed in it is the connect surface below. The landing page
+  // makes no API calls, so nothing here can leak to an anonymous visitor even
+  // if this check were wrong — /api/connection 401s without a session.
+  if ((await sessionCookieHeader()) === undefined) {
+    return (
+      <SiteShell>
+        <Landing />
+      </SiteShell>
+    );
+  }
+
   let conn: ConnectionResponse | null = null;
   let unreachable = false;
   try {
     conn = await apiFetch<ConnectionResponse>('/api/connection');
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
+    // A cookie the API no longer honours — expired, revoked, or from a reset
+    // database. middleware.ts checks PRESENCE only (deliberately: the API is
+    // the authority), so a stale cookie gets this far and used to crash the
+    // front door with a 401 instead of offering a way back in. Send it to be
+    // cleared and come straight back, so the dead cookie is gone instead of
+    // poisoning every later navigation.
+    //
+    // '/' is the one route that can answer this without needing the visitor
+    // signed in again: signed out it IS the landing page, so once the cookie
+    // is gone there is something to render. That is why the `cleared` guard
+    // renders here instead of redirecting on to /login the way
+    // recoverSession does for every other page.
+    else if (isSessionExpired(e)) {
+      if (alreadyCleared) return <SiteShell><Landing /></SiteShell>;
+      await recoverSession();
+    }
     else throw e;
   }
 

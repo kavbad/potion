@@ -25,3 +25,6 @@ invoices/
 # ignored — reproducible, and the ledger carries their numbers.
 !/artifacts/g28-parameters.md
 !/artifacts/g28-capstone-live.json
+
+# campaign run logs are records, not source
+.tranche/*.log

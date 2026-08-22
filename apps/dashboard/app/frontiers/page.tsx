@@ -7,6 +7,7 @@ import { FrontierChart } from '@/components/frontier-chart';
 import { GuaranteeBadge } from '@/components/guarantee-badge';
 import { SharePanel } from '@/components/share-panel';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { describeStrategy } from '@/lib/frontier-chart';
 import { activeBreachForCluster } from '@/lib/guarantee';
 import {
@@ -33,7 +34,7 @@ export default async function FrontiersPage({
 
   let list: FrontierListResponse;
   try {
-    list = await apiFetch<FrontierListResponse>('/api/frontiers');
+    list = await fetchOrRecover<FrontierListResponse>('/api/frontiers');
   } catch (e) {
     if (e instanceof ApiUnreachable) {
       return (
@@ -64,7 +65,7 @@ export default async function FrontiersPage({
     ? cluster!
     : list.clusters[0]!.clusterId;
   const selectedCluster = list.clusters.find((c) => c.clusterId === selected)!;
-  const data = await apiFetch<FrontierResponse>(`/api/frontiers/${encodeURIComponent(selected)}`);
+  const data = await fetchOrRecover<FrontierResponse>(`/api/frontiers/${encodeURIComponent(selected)}`);
 
   // M3 #22 guarantee: an unresolved breach for the viewed cluster gets an
   // amber badge. Tolerant read — a guarantee-API hiccup must never take the

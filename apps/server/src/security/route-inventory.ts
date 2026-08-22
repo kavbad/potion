@@ -140,6 +140,10 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/reports/savings.csv', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/reports/guarantee', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'incident', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/research/cycles', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  // Recently-promoted recipes (the pull half of "how do I hear about a
+  // breakthrough"). Platform-scoped research output — recipe hashes/configs,
+  // no per-org rows — readable by any authenticated viewer.
+  { method: 'GET', path: '/api/research/promotions', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'shared-global', crossOrgProbe: { expect: 'skip', skipReason: "platform research promotions — a shared asset by design, no org dimension in the response" } },
   { method: 'GET', path: '/api/recipes', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'shared-global', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/rubrics', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'rubric', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/certifications', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'certification', crossOrgProbe: { expect: 'org-list-absent' } },

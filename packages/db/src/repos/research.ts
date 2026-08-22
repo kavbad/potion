@@ -2,7 +2,7 @@
 // Both tables are platform-GLOBAL (no org scoping — the autoresearcher is a
 // platform capability: recipes it verifies publish frontier versions all orgs
 // inherit; per-org private research is a documented follow-up in SPEC §15).
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   clusters,
@@ -124,6 +124,36 @@ export async function listRecipeStatusByStatus(
   status: RecipeStatusRow['status'],
 ): Promise<RecipeStatusRow[]> {
   return db.select().from(recipeStatus).where(eq(recipeStatus.status, status));
+}
+
+/**
+ * Recipes promoted to the frontier within the last `sinceDays`.
+ *
+ * THE GAP THIS FILLS. A promotion is the autoresearcher's whole output — the
+ * moment a recipe clears the paired-bootstrap gate and starts serving real
+ * traffic. Until now the only way to learn about one was an alert rule:
+ * `emitPromotionAlerts` fans out to orgs subscribed to `recipe_promoted`, and
+ * `dispatchAlertEvent` matches rules and delivers. With no rule configured —
+ * the state of every deployment that has not set up a webhook — a promotion
+ * was recorded nowhere and announced to nobody. The status row changed and
+ * that was all.
+ *
+ * `recipe_status.updated_at` already dates every transition, so the record
+ * existed; nothing read it. Ordered newest first because the question this
+ * answers is "what changed since I last looked".
+ */
+export async function listRecentlyPromoted(
+  db: PotionDb,
+  sinceDays = 30,
+  limit = 50,
+): Promise<RecipeStatusRow[]> {
+  const since = new Date(Date.now() - sinceDays * 86_400_000);
+  return db
+    .select()
+    .from(recipeStatus)
+    .where(and(eq(recipeStatus.status, 'frontier'), gte(recipeStatus.updatedAt, since)))
+    .orderBy(desc(recipeStatus.updatedAt))
+    .limit(limit);
 }
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,47 @@ export class ApiUnreachable extends Error {
   }
 }
 
+/**
+ * A non-2xx response from the API, carrying the status so callers can branch
+ * on it. Previously every failure was a bare Error whose only distinguishing
+ * feature was a message string — so the one case a page genuinely must treat
+ * differently, a 401 from a cookie the server no longer honours, was
+ * indistinguishable from a real fault and crashed the page instead.
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(`API ${status}: ${message}`);
+    this.name = 'ApiError';
+  }
+}
+
+/**
+ * A session the API will not honour — the case a page recovers from by
+ * clearing the cookie and sending the visitor back through sign-in.
+ *
+ * 401 and ONLY 401. The two statuses look alike and mean opposite things
+ * here: apps/server answers 401 when it could resolve no auth context at all
+ * (auth.ts dashboardAuthHook — an expired, revoked, or reset-database
+ * cookie), and 403 when it resolved the session fine and the caller's role or
+ * api-key scope is simply below what the route wants (auth.ts requireRole).
+ * Clearing the cookie on a 403 would sign out a perfectly valid session
+ * because a member opened an admin-only page — so the recovery path must not
+ * treat the two the same. Use isForbidden for that case; it is a message to
+ * render, not a credential to throw away.
+ */
+export function isSessionExpired(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 401;
+}
+
+/** Signed in, but this role or api-key scope may not have it. Never a reason
+ * to clear the cookie — see isSessionExpired. */
+export function isForbidden(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 403;
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${apiUrl()}${path}`;
   const cookie = await sessionCookieHeader();
@@ -53,7 +94,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       body && typeof body === 'object' && 'error' in body
         ? String((body as { error: { message?: string } }).error?.message ?? res.statusText)
         : res.statusText;
-    throw new Error(`API ${res.status}: ${message}`);
+    throw new ApiError(res.status, message);
   }
   return body as T;
 }

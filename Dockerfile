@@ -5,7 +5,10 @@ FROM node:20-slim AS build
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 COPY . .
-RUN pnpm install --frozen-lockfile && pnpm build
+# Build in RUNTIME-dependency order, not pnpm's dev-inclusive order: the Lab
+# packages devDepend on the server for their tests, which makes `pnpm -r build`
+# see a cycle and build lab-dial before its deps exist in a clean tree.
+RUN pnpm install --frozen-lockfile && node scripts/build-ordered.mjs
 
 # Runtime: same tree (workspace symlinks resolve in place). NODE_ENV=production
 # flips the server out of dev-auth bypass — real sessions/api keys required.

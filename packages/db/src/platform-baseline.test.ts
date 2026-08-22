@@ -64,7 +64,7 @@ describe('platform baseline import', () => {
     // measured evidence, so a single mock row would make it a lie.
     expect(points.every((p) => p.provider_mode === 'live')).toBe(true);
     // And it carries its own provenance, so the origin is legible.
-    expect(baseline!.source).toMatch(/Step 5/);
+    expect(baseline!.source).toMatch(/Tranche campaign #2/);
   });
 
   it('a fresh database gets live platform frontiers for every baseline cluster', async () => {

@@ -1,7 +1,8 @@
 // /lab (Step 8) — the novice entry: the four-question interview + the org's
 // harness catalog. Ugly on purpose; every number and badge is data-typed.
 import Link from 'next/link';
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { ApiUnreachable } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { InterviewForm } from '@/components/lab-actions';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export default async function LabPage() {
   let harnesses: HarnessRow[] = [];
   let unreachable = false;
   try {
-    const res = await apiFetch<{ harnesses: HarnessRow[] }>('/api/lab/harnesses');
+    const res = await fetchOrRecover<{ harnesses: HarnessRow[] }>('/api/lab/harnesses');
     harnesses = res.harnesses;
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;

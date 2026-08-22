@@ -104,6 +104,15 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # 13a spec §2 gap 1: lab:run THROWS without it; loopback because the
+      # worker is in-process with the server.
+      POTION_SERVING_URL: ${POTION_SERVING_URL:-http://localhost:3000}
+      # 13a spec §2 gap 2 + deploy plan D2: the public API origin — docs
+      # snippets, Lab links and OAuth callbacks derive from it. Behind Caddy
+      # the request Host is the container's, so this must be pinned.
+      POTION_PUBLIC_URL: ${POTION_PUBLIC_URL:?set POTION_PUBLIC_URL (https://api.<domain>)}
+      # 13a spec §1.6: error reporting. Unset → the init is a no-op.
+      SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: "3000"
     # NOTE: no `ports:` — the server is reachable ONLY through Caddy. This is
     # what makes /metrics network-restricted in fact rather than by assertion
@@ -121,6 +130,38 @@ services:
       retries: 6
       start_period: 40s
 
+  dashboard:
+    # Deploy plan D1. SAME IMAGE as the server — the build stage compiles the
+    # whole pnpm workspace, `next build` included — with the command swapped
+    # to Next's production server. Every partner-facing surface (landing,
+    # docs, keys UI, usage, /build) lives here; without this service the
+    # deploy has an API and no product.
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /app/apps/dashboard
+    command: ["sh", "-c", "./node_modules/.bin/next start -p 3001"]
+    environment:
+      NODE_ENV: production
+      # Server-side fetches (lib/api.ts) go over the compose network; the
+      # browser never needs this value.
+      POTION_API_URL: http://server:3000
+    # No ports: reachable only through Caddy, same posture as the server.
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      # /home is the public landing page: session-free, no API dependency —
+      # exactly the surface that must never 500 for an anonymous visitor.
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://localhost:3001/home').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -128,13 +169,19 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      POTION_SITE: ${POTION_SITE:?set POTION_SITE (hostname, or :443 for the local rehearsal)}
+      # Deploy plan D2: two vhosts. Local rehearsal values: api.localhost /
+      # app.localhost (Caddy issues internal certs for *.localhost).
+      POTION_API_SITE: ${POTION_API_SITE:?set POTION_API_SITE (api.<domain>)}
+      POTION_APP_SITE: ${POTION_APP_SITE:?set POTION_APP_SITE (app.<domain>)}
+      POTION_ROOT_SITE: ${POTION_ROOT_SITE:?set POTION_ROOT_SITE (<domain>, bare)}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
       - caddyconfig:/config
     depends_on:
       server:
+        condition: service_started
+      dashboard:
         condition: service_started
 
 volumes:

@@ -9,3 +9,7 @@ export * from './schemas.js';
 export * from './safety.js';
 export * from './stats.js';
 export * from './redact.js';
+export * from './shape.js';
+export * from './lsh.js';
+export * from './demand.js';
+export * from './coverage.js';

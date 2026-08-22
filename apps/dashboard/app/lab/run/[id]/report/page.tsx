@@ -2,7 +2,7 @@
 // (est vs metered LABELED, never blended), where it struggled (typed
 // evidence), and exactly ONE evidence-chosen upgrade. No model advice in v1.
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { SimulatedBadge } from '@/components/lab-actions';
 
 export const dynamic = 'force-dynamic';
@@ -45,7 +45,7 @@ function struggleDetail(s: Struggle): string {
 
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const r = await apiFetch<ReportDto>(`/api/lab/runs/${id}/report`);
+  const r = await fetchOrRecover<ReportDto>(`/api/lab/runs/${id}/report`);
   return (
     <main style={{ padding: 16 }}>
       <p>

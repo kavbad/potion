@@ -3,7 +3,8 @@
 // requests/day by cluster, per-cluster cost table, invoice download, and a
 // native POST button that triggers the idempotent usage rollup.
 import { UsageChart } from '@/components/usage-chart';
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { ApiUnreachable } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { formatInt, formatUsd } from '@/lib/usage-chart';
 import type {
   UsageByClusterResponse,
@@ -35,9 +36,9 @@ export default async function UsagePage({
   let current: UsageCurrentResponse;
   try {
     [byDay, byCluster, current] = await Promise.all([
-      apiFetch<UsageByDayResponse>(`/api/usage?${qs}&group_by=day`),
-      apiFetch<UsageByClusterResponse>(`/api/usage?${qs}&group_by=cluster`),
-      apiFetch<UsageCurrentResponse>(`/api/usage/current`),
+      fetchOrRecover<UsageByDayResponse>(`/api/usage?${qs}&group_by=day`),
+      fetchOrRecover<UsageByClusterResponse>(`/api/usage?${qs}&group_by=cluster`),
+      fetchOrRecover<UsageCurrentResponse>(`/api/usage/current`),
     ]);
   } catch (e) {
     if (e instanceof ApiUnreachable) {

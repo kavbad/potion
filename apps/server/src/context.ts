@@ -7,7 +7,7 @@
 // when the matching *_API_KEY env vars are present.
 import { fileURLToPath } from 'node:url';
 import type { PriceTable, ProviderId, ProviderMode, StrategyConfig } from '@potion/core';
-import { sha256 } from '@potion/core';
+import { DemandAccumulator, sha256 } from '@potion/core';
 import {
   CANONICAL_EMBED_DIMS,
   createAssigner,
@@ -15,8 +15,8 @@ import {
   centroidsFromTaxonomy,
   loadTaxonomy,
   resolveEmbedder,
-  type Assignment,
   type ClusterAssigner,
+  type RankedAssignment,
   type Embedder,
   type EmbedderMode,
   type ResolvedEmbedder,
@@ -157,8 +157,30 @@ export interface PotionContext {
    * canonical 384-dim space) — exposed for POST /v1/embeddings (M3 #25). */
   embedder: Embedder;
   /** Assignment cache: sha256(first 512 chars of concatenated user content)
-   * → Assignment (SPEC §8). Unbounded in the MVP (process-lifetime Map). */
-  assignCache: Map<string, Assignment>;
+   * → the routing decision AND the ranking behind it (SPEC §8; widened by
+   * S7 L1 from `Assignment` to `RankedAssignment` so a cache HIT records the
+   * same demand signal a miss does — otherwise the signal would be present
+   * only on the first request of each repeated prompt, which is exactly
+   * backwards: repetition is what makes a demand cell). Unbounded in the MVP
+   * (process-lifetime Map). */
+  assignCache: Map<string, RankedAssignment>;
+  /**
+   * S7 L2 — the in-process demand accumulator. The serve path pays a Map
+   * update per request; a timer drains it into the database (server.ts).
+   * Vectors are summed here and never persisted individually.
+   */
+  demand: DemandAccumulator;
+  /**
+   * Orgs excluded from demand learning (orgs.demand_learning_opt_out),
+   * cached so the serve path never pays a query for it. Refreshed on every
+   * flush, so an opt-out takes effect within one flush interval — and the
+   * data it would have joined is an aggregate that is not published below
+   * the k-gate anyway.
+   */
+  demandOptOut: Set<string>;
+  /** S7 L2 kill switch (POTION_DEMAND_LEARNING=0): when false the serve path
+   * observes nothing at all, so no aggregate can form. */
+  demandEnabled: boolean;
   embedderKind: EmbedderKind;
   embedderInfo: EmbedderInfo;
   providerMode: 'mock' | 'live';
@@ -525,7 +547,10 @@ export async function buildContext(opts: ContextOptions = {}): Promise<PotionCon
     ...(orgFactory !== undefined ? { providerFactory: orgFactory } : {}),
     assigner,
     embedder: caching,
-    assignCache: new Map<string, Assignment>(),
+    assignCache: new Map<string, RankedAssignment>(),
+    demand: new DemandAccumulator(),
+    demandOptOut: new Set<string>(),
+    demandEnabled: process.env.POTION_DEMAND_LEARNING !== '0',
     embedderKind: info.mode,
     embedderInfo: info,
     providerMode: mode,

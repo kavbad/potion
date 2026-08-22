@@ -53,6 +53,7 @@
     "@potion/queue": "workspace:^",
     "@potion/strategies": "workspace:*",
     "@potion/workers": "workspace:^",
+    "@sentry/node": "^8",
     "fastify": "^5.0.0",
     "ioredis": "^5.4.1",
     "zod": "^3.23.8"

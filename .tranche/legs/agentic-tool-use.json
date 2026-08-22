@@ -1,0 +1,300 @@
+{
+  "clusterId": "agentic-tool-use",
+  "frontierId": "fr-f2f27f55-048c-4142-8a01-4ecdc511398d",
+  "frontierVersion": 3,
+  "pricesVersion": "2026-08-04-or2+tranche-2026-08-19",
+  "spendUsd": 9.887029999999998,
+  "candidates": [
+    "e4263e18305c42ec02f7972deb7b3a5a7cf7e7f114d362a299af35cda2ddf166",
+    "220a2558cd71293772687a74cf084a475a23e8ded3d887617bdf581766e91e0b",
+    "238db164081c2eea27dae0af4bb992ef70a31d2f0aea1fca5eae832b98f83426",
+    "2e70d6e233b6655e6c3be81e135b2b7127ebd9a848b08da4a50773e84568e693",
+    "1fd419ee3f167ee3436d46359f7e0fd179ebdace11394a6acd6ca686e3852936",
+    "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+    "41a39732ad857cad90ca953327966938ce79d8d58c8ec9c2118ee37a196dcd62",
+    "bc1c7102b31183575dc3cc811715abc02cfafcca2da29a55a63d4f397e476e96",
+    "ffe46bc931ac4a901d433bd3d539637078b65187fcbe07bcb8fd069a280fde7a",
+    "4e2fc86091471b8978e509790746f8f64c2585013e8e7a4994a2f3cff819d7b4",
+    "07c9d6a7556e19f0c4c8485a0d0b21c156ece314acaffba7bf0568bc82736f25",
+    "5c673aa6315d6621c709e41840ce38b3f8514acce2e1ce5fdef19e292fd292fe",
+    "85f6cdbd9140a6c43902c1584db69230ed9c13c807d3c3f59e1767b9587d8842",
+    "88ed8b9c25b3424d2d99010fefb8f06d8404f46e5e7d089b6ba58fc77fe42cdb",
+    "ece89b8f9cf5657b4983c2fd00298705e5cac4c8a1a09492f6518b9aef61c713",
+    "1afeece2dc9358093be0ea5753505f8d8a9b3127d1830c1f33ce42e9841abeaf",
+    "8ad63a4ee0135ab05e0409e058ed4ab78a85a7b0161c317984238ea147b39289",
+    "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+    "74b939b57c69ae63ff04b8c1ba5767d048b428864cdcb78518be4f109bb0a480",
+    "649924cae50d8d0a3994d1d43414d2d3f788c4d2589238c04053cc81da6f8f72",
+    "819f1ab8ca283c9e90edf0172c2ef2f0c24f1359e73f87026fb89e0c3f6fa93b",
+    "e0a2f5547df4672e191dfec5165665dec7fe79402b4a9991c4647509b3e026cc",
+    "16a7d54565542efa088819acaf8d225dd21f32b635ad51ee6a5c19c991bbf713",
+    "7b918ab8215a98356233fd6e9ffd0ec83600d7250e38461188f504e10fea38e4",
+    "07b4dc7260b35fb02ce4b4eccd97b5244e17e5c6ebac87573c66d120fd5003e0",
+    "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+    "5f44761051ed515e80b902223d7ae7bd42e4d301ba400bc88f9a82748e92a14c",
+    "c4550c6edcf3f4be50b8f7b8f05146ea3bfb07ee4cee5586450a13202e926079",
+    "99dca2f843b73c033c2708d32522acfbfe45a3016957058351d694a73fb899fd"
+  ],
+  "failedCandidates": [],
+  "points": [
+    {
+      "clusterId": "agentic-tool-use",
+      "strategyHash": "41a39732ad857cad90ca953327966938ce79d8d58c8ec9c2118ee37a196dcd62",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gemini-flash"
+      },
+      "quality": 0.8928571428571429,
+      "costPer1K": 6.4323571428571436,
+      "latencyP95": 5160,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "0a3f36b47f60b84fb99cea4ab1e974fc562fba6fdfe530462f2e6471c53cc917",
+          "f81f18fe6ff54354145515a2b5ce71bda83dfdecea07b85094c54e36947247c2",
+          "62fb9a9ca2587c71a31746a1942d63341fb6e63f89d8763079085badfdee5f15",
+          "968747d93db94a2484438888f96f6ef6f28f5eada48876d5fa726bdaf731e71c",
+          "d4bf26b73633e5be5f056afb3d63ee8277c921d88777a21b0e02edc61ba693a1",
+          "4522d977f82c4419d3015813ae5dc2ea711193311a9ad80794f3d83dce4537e0",
+          "411f8f3ffb8652b1b1d203b292765b9aa42f87d4afa6fde0404a14a03576d7d3",
+          "2c5630518cb6a9b28a801d44371779319fc88fd671bc17a0a70528bcaf5bd4c6",
+          "023944ed767bb9d7aa0f686829b8297fe66fada6e41c61028a2997663a2b6e0f",
+          "ebaa6cdf4f112684af42d0787a9eb26ec40b0c9d701b1000cf12c4df1270fe7e",
+          "8365d1d79048c06a90bb7553483a158bc54a819c371594626f75aaa2c36a91a4",
+          "2e00e2282824c24aaf756fdc67d4f183bb6c8f46004f56f1ac587053e34c9b8a",
+          "6ddf0eeee07cead42da2fe299ca2e2a8f2e6386fc165167bce8c28d689e2d519",
+          "f31dd6125728804e6379a4a654cf9f5295325d4166406f69f5459d011b6155ba"
+        ],
+        "runIds": [
+          "run-cc9c085d"
+        ],
+        "n": 14,
+        "qualityCi95": 0.09519049726328133,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          3143,
+          5160
+        ],
+        "latencySeed": 2192170875,
+        "suiteId": "agentic-tool-use",
+        "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      }
+    },
+    {
+      "clusterId": "agentic-tool-use",
+      "strategyHash": "4e2fc86091471b8978e509790746f8f64c2585013e8e7a4994a2f3cff819d7b4",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gpt-mini"
+      },
+      "quality": 0.9071428571428573,
+      "costPer1K": 6.568928571428571,
+      "latencyP95": 15054,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "fdcf083cf84b4830460d88d0c3e8352702b42430d1d065922983fbb2e7342968",
+          "59038efc74eacd0a07f45da6deb52fccdb15a07dc17df59bfa62b0a6fba79fc7",
+          "dfdf1a3364a8722ab79290836c6054eebe6f029b3d2d9162639b873749ead065",
+          "a7dfbdcd228200d66f9c6e6bac732ef028e5f7bf69ab706aa37ddbcc0ccce9bd",
+          "882527529c701acc3d4037c6d2ddf3990ce64fac0a83cf49aae05ac36ef3df19",
+          "c76deb888cb7935cbe0ed71c1d1d2da67f21f6a6eeefb76efe8b8848fb23bc87",
+          "dbcd4e9bbebd1204c768f14f63636e4f1fb799f5ed2d66efa0aa1d36623478e8",
+          "b7ad5e70a4a2376c424050a7e9924fc7ba5fed43eb384b7a34eb78b25a9fbea6",
+          "c75145a468bc96de06158a782eabe8053a1ef4a919cccba517ac9366b1a880b1",
+          "45f834ccedd8d98b042263b67dccb00009d4e1b451fa8c47905726e2cdf6a5c4",
+          "c482a27328bbe7ee76243161efecb38d333fc2ac0bbd47139676c9d6aa25255e",
+          "2381cbf35c15a89b28bccc9a7e18704e2ac76c28b9e506250247b20e0927d986",
+          "f9c379b933a53ba2ce494777a88293411b5d304ab8c30a9c13407fc634fa75cb",
+          "e5341017636e0bbdaeab2fe3b310d2b60a660cba424400b00158ce7e29f4382d"
+        ],
+        "runIds": [
+          "run-cc9c085d"
+        ],
+        "n": 14,
+        "qualityCi95": 0.06646456545813313,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          6783,
+          15054
+        ],
+        "latencySeed": 3147191515,
+        "suiteId": "agentic-tool-use",
+        "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      }
+    },
+    {
+      "clusterId": "agentic-tool-use",
+      "strategyHash": "220a2558cd71293772687a74cf084a475a23e8ded3d887617bdf581766e91e0b",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-solar-pro4"
+      },
+      "quality": 0.9428571428571428,
+      "costPer1K": 7.194357142857142,
+      "latencyP95": 34912,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "0077e5c8266dde17cc4f52e84363a6b8e6bf33a31f88d924b505a387ccec04c9",
+          "285f8d9f0b2cbc23e46c5d60b25f26f4cc0cfe1324085750077e80c8729330e4",
+          "5f9bb37d9f5bd4eee363bc4815f36e454e25a08e793d24529243a4a6e85ccb51",
+          "d6cd9bdd181b1eb530dc96ef0e431449b020587e717df5f5379be5a257c1ac76",
+          "6824569573ccf6f61cfbf028c63cc3c72cae3e7d53fc66dfcf5b19e137e99553",
+          "a2ac9e277e46a298f68fc6a96a565518cf3d5a9601657ea2b04d616c6cd20cbe",
+          "ad0bf894ab4e4a07be5c981fea014149f17e229246c56fddd4173c84ab3f4ef7",
+          "6862d09af0d73a97e5b7b9b7060cef78e19ea15d5291f5df7d9315813d36aeac",
+          "8fcfad8053e4e5dc706ffe8fa3136d77a1b3c946a0d0710ae96c8da45ab95924",
+          "b3ea27032b66f63ac2271fcab7164562c37e024419ca4839b86f8cd648c2b396",
+          "7d2d38703d17138a96f7046f1c725f04e3806498c1d341aa3c3edde0415f30ff",
+          "2f94067f5fa4d8858de7ab1540f7968bf734def73ca45bde84bdda40ade50591",
+          "646e0af249480e7870078a7bd2069249fa964448b1dc693b89bdeacf58566365",
+          "8506e913e6c88b2549a60792adf5a75d4f0d4214d1391a4b31152ed45616c086"
+        ],
+        "runIds": [
+          "run-cc9c085d"
+        ],
+        "n": 14,
+        "qualityCi95": 0.06065285838910836,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          26432,
+          34912
+        ],
+        "latencySeed": 2674941269,
+        "suiteId": "agentic-tool-use",
+        "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      }
+    },
+    {
+      "clusterId": "agentic-tool-use",
+      "strategyHash": "ffe46bc931ac4a901d433bd3d539637078b65187fcbe07bcb8fd069a280fde7a",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gemini-3.7-flash"
+      },
+      "quality": 0.9571428571428572,
+      "costPer1K": 11.715357142857142,
+      "latencyP95": 12489,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "8ac30d073655fb4f88402cb4c8bfa8d0498b170e804ca02ec84c3f17a8f254ad",
+          "960c15644becee3bce37765b4ce8a764e5a2316b615a7effad4de4ba50f3bad1",
+          "5bc2d8419837d28740181b81874aae12be3c85265b450912d282c0336d38b345",
+          "7ce04dfa76803f05e812b01d1e8db38079e123040af7b9ebd2c76615073e3c30",
+          "075efe3e52b6621c1230d332f66cfa17921741764b87d68c5cbb7079278080df",
+          "1631fbbf3883b1cad422f06a828756de152d1c2037c2680f1d81ed7cf7df4318",
+          "c3e1b6e255c5c40bd4242abfae9b83e774de5fdebc08323a6a20a1f540e2ff33",
+          "4753d32615f19b0f791b43ced0533a7b3ca4afd44f39b74742a5943ed2f81b37",
+          "6cbee8f239d46f9b93481c83174d68b72aaeca845b30c1973ede1adffc69ea97",
+          "3a62006321cccfb5b1672f1b9ad0501427ece7798ed6e58c93c3a9b506559990",
+          "532904e1635bbf26785c9188b21765e167348c7a3e5f285e05e3582917dfd0c4",
+          "7bb2afd27605b97187bae7fca00e04358a2d76eb58e001f6dc33d5978147269f",
+          "22437856dcb7aa811adae02eb1b9f225926a56574f4bf9b3671144f91680fddd",
+          "a23fc8e015827578f98e04dc9455afa9f76261a062d14ae22741266d40708c9c"
+        ],
+        "runIds": [
+          "run-cc9c085d"
+        ],
+        "n": 14,
+        "qualityCi95": 0.04461114038167873,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          11224,
+          12489
+        ],
+        "latencySeed": 3425720658,
+        "suiteId": "agentic-tool-use",
+        "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      }
+    },
+    {
+      "clusterId": "agentic-tool-use",
+      "strategyHash": "819f1ab8ca283c9e90edf0172c2ef2f0c24f1359e73f87026fb89e0c3f6fa93b",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gpt-full"
+      },
+      "quality": 0.9571428571428572,
+      "costPer1K": 13.796500000000002,
+      "latencyP95": 10669,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "5c5cea6fb6fbb4e5ccd86de8e6c2292feae1626c5675750dab51b8704a618cb4",
+          "772bb93f6531f0db020179aaa31b82e72c70cb0de223bd3197614e35588ed1ad",
+          "4e1d429807ea9694a9976050dd96862b96ec17fe1dd25e6c9b94c1e0a1c4f571",
+          "664b6612c408b7f07f50aa9ed6e7b0f247c757b0646ad94b9a30b3618875cc01",
+          "e96e9efc26e4556fbaced070dcd079ef74363fd1e7e62d503b84cf9e0b87822d",
+          "9aeb20ef66870cdae6e8fd8d0bf437062a38295b4a1ca7fcaf79aa1bbcc23f3f",
+          "71c5395d93ef418ff7ce6b5a9fd6dd39908d5ab1a3aa87a6bdbd885fb818ebf2",
+          "29d2ad1f35c4719d2631f98398b15763650864a3370cd0d462676b47132a9630",
+          "6e6fc3e58bfc18f3eb6839836eaf5a3a5b1fc1c1ea3e6ce38d6b2f55d2dfa73e",
+          "68e7a0301f9062c860f20d380445522a94ff813f6cdfa18390dfa792f371b226",
+          "19e6ffd3fddafe0031997d1dc7daa522e8bd35b5d83c40bfb24065805038cd0f",
+          "3514ad7cefcff97504c2f20895521921926fe6e89456cc223f8f8001ea0190a9",
+          "2e40e742f526c5fd164f7a967d5a1d6543b3dcafece6920cd59ee1a3a6feaa41",
+          "d3daab4c1508999e1d2968498f38282a7a2d29e9394e727fd4b124b7a5db994d"
+        ],
+        "runIds": [
+          "run-cc9c085d"
+        ],
+        "n": 14,
+        "qualityCi95": 0.039597979746446646,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          8332,
+          10669
+        ],
+        "latencySeed": 2588176195,
+        "suiteId": "agentic-tool-use",
+        "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      }
+    },
+    {
+      "clusterId": "agentic-tool-use",
+      "strategyHash": "649924cae50d8d0a3994d1d43414d2d3f788c4d2589238c04053cc81da6f8f72",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gpt-5.6-terra-pro"
+      },
+      "quality": 0.9714285714285714,
+      "costPer1K": 45.40764285714286,
+      "latencyP95": 34671,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "88e5149aa4f8e12826704bc50e29e7dae23394e56b31d5c994a5a282c61b98cb",
+          "0fdba8501479be67ddffaa9263ba4498bbe113024ffea9a48868c9a0ac24abb6",
+          "492d9e9925e24e1dee37f63bbfede803815a98d7cc96dd18c928721b63891534",
+          "97eecd48304259202eda3ad8827dbace01fb589ef39c569e9968ce48b2aea3f0",
+          "67370bc171cec915d214ab0d4f25ef0c23f1347498c0cc447e73add8de83a081",
+          "65ac6d1f4246d925dc7da631f37227de260d35399b4a425854bedc44ff0168e0",
+          "2f04b2eae0b99fb88e29171002befda55bf310047f43dcd7f7c3a1c86397f2f3",
+          "ccfc3f4a0ee476f5dd373eb8af8125cc881634a15c0475e0830bbfd35613a950",
+          "20bed0f308dd7513ca6481e92931fe061c672cb0ccccaa763a727930604499a2",
+          "6d8870e547b90b4c7bf163876520cd73be664b5f3ddb8f414fed132c704b9bd6",
+          "ea2eac65d4f76edc6e62027e5ccdfd3cccf2cdebe874576772e9249b34d14afe",
+          "73889a254f02b7fd6030e383c0539346a939ffeffeb8203769e042f6b99c20ec",
+          "469e58bb94a4de5eed5afc7200e7a177daccbea0f4ac45e7f86b5533ef5dbca9",
+          "e2bb4d62890775035a67bd0a85762eb89a18913c7adc502402aa625eab738e2d"
+        ],
+        "runIds": [
+          "run-cc9c085d"
+        ],
+        "n": 14,
+        "qualityCi95": 0.0380445083472584,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          23761,
+          34671
+        ],
+        "latencySeed": 2918192347,
+        "suiteId": "agentic-tool-use",
+        "suiteContentHash": "537183a3a711e851c613784cc91484f081cb9629ad1cecadc196f69457d83b08"
+      }
+    }
+  ],
+  "capturedAt": "2026-08-20T20:49:32.736Z"
+}

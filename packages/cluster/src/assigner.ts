@@ -29,6 +29,48 @@ export interface ClusterAssigner {
    * routing decision, not a fact about the text, so it does not belong here.
    */
   rank(text: string): Promise<Assignment[]>;
+  /**
+   * The routing decision AND the ranking it came from, off ONE embedding
+   * (S7 L1).
+   *
+   * Serving needs the decision; learning needs to know how good it was.
+   * Calling `assign` then `rank` would embed the same text twice — on the
+   * serve path, for a number we already computed and threw away. `pickBest`
+   * scores every centroid on every request; this returns what it saw.
+   *
+   * `assignment` is byte-identical to what `assign` would have returned,
+   * threshold and 'general' fallback included; `ranking` is the raw,
+   * unthresholded ordering `rank` would have returned.
+   */
+  assignRanked(text: string): Promise<RankedAssignment>;
+}
+
+/** A routing decision plus the evidence behind it. */
+export interface RankedAssignment {
+  /** What `assign` returns: thresholded, 'general' on a weak best. */
+  assignment: Assignment;
+  /** Every cluster scored, best first — the losers `assign` discards. */
+  ranking: Assignment[];
+  /**
+   * TRUE when the best centroid was below threshold, so the decision is the
+   * 'general' fallback rather than a match.
+   *
+   * Not derivable by the caller: 'general' is also a real taxonomy cluster,
+   * so a decision of 'general' is ambiguous between "this genuinely is
+   * general-purpose work" and "nothing we have measured fits this". S7's
+   * demand cells split precisely on that distinction, so the assigner —
+   * which is the only place the threshold lives — reports it.
+   */
+  fellBack: boolean;
+  /**
+   * The request embedding, for in-process aggregation only (S7 L2).
+   *
+   * It is returned rather than stored: the accumulator adds it into a
+   * running sum and drops it, and nothing persists a per-request vector.
+   * Anything that keeps one is outside the privacy posture this was built
+   * under (S7 §4 D1(b)).
+   */
+  embedding: number[];
 }
 
 export interface Embedder {
@@ -114,6 +156,25 @@ export function createAssigner(
     return best;
   };
 
+  const embedOne = async (text: string): Promise<number[]> => {
+    const [embedding] = await embedder.embed([text]);
+    if (!embedding) throw new Error('embedder returned no embedding');
+    assertCanonicalDims(embedding, 'createAssigner: request embedding');
+    return embedding;
+  };
+
+  const rankEmbedding = (embedding: number[]): Assignment[] => {
+    const scored: Assignment[] = [];
+    for (const [id, centroid] of centroids) {
+      scored.push({ clusterId: id, confidence: cosine(embedding, centroid) });
+    }
+    // Ties break on cluster id so the ranking is TOTAL and reproducible —
+    // two centroids at an identical cosine must not reorder between calls,
+    // or "your runner-up" becomes a coin flip the user cannot see.
+    scored.sort((a, b) => b.confidence - a.confidence || a.clusterId.localeCompare(b.clusterId));
+    return scored;
+  };
+
   return {
     async assign(text: string): Promise<Assignment> {
       const [embedding] = await embedder.embed([text]);
@@ -121,18 +182,21 @@ export function createAssigner(
       return toAssignment(embedding);
     },
     async rank(text: string): Promise<Assignment[]> {
-      const [embedding] = await embedder.embed([text]);
-      if (!embedding) throw new Error('embedder returned no embedding');
-      assertCanonicalDims(embedding, 'createAssigner: request embedding');
-      const scored: Assignment[] = [];
-      for (const [id, centroid] of centroids) {
-        scored.push({ clusterId: id, confidence: cosine(embedding, centroid) });
-      }
-      // Ties break on cluster id so the ranking is TOTAL and reproducible —
-      // two centroids at an identical cosine must not reorder between calls,
-      // or "your runner-up" becomes a coin flip the user cannot see.
-      scored.sort((a, b) => b.confidence - a.confidence || a.clusterId.localeCompare(b.clusterId));
-      return scored;
+      return rankEmbedding(await embedOne(text));
+    },
+    async assignRanked(text: string): Promise<RankedAssignment> {
+      const embedding = await embedOne(text);
+      // The decision comes from toAssignment, NOT from ranking[0]: pickBest
+      // breaks ties in centroid-map order and the ranking breaks them on
+      // cluster id, so deriving one from the other could disagree with what
+      // `assign` would have routed. Serving's answer stays serving's answer.
+      const assignment = toAssignment(embedding);
+      return {
+        assignment,
+        ranking: rankEmbedding(embedding),
+        fellBack: assignment.confidence < threshold,
+        embedding,
+      };
     },
     async assignBatch(texts: string[]): Promise<Assignment[]> {
       if (texts.length === 0) return [];

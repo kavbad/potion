@@ -88,9 +88,12 @@ first request. **Pick one:**
 - **Recommended: disable scale-to-zero** on the Neon compute for this
   deployment. A partner-facing instance that sleeps is trading a real failure
   mode for a small bill.
-- Or keep autosuspend and raise `READYZ_DB_TIMEOUT_MS` above the observed cold
-  start — but note the healthcheck then hides a genuinely slow database, which
-  is exactly the signal `/readyz` exists to give.
+- ~~Or keep autosuspend and raise `READYZ_DB_TIMEOUT_MS`~~ — **this option
+  does not exist** (corrected 2026-08-20, 13a spec §2): the value is a
+  hardcoded constant in `apps/server/src/readiness.ts`, not an environment
+  variable; it is overridable only in tests. With autosuspend the only real
+  mitigation is disabling scale-to-zero — which is the recommendation above,
+  and also §1.1 of the 13a spec's argument for an always-on Postgres instead.
 
 This is written from reading the code, **not** from watching it happen: it is
 an UNEXECUTED interaction, and the first idle-then-wake cycle on the real host

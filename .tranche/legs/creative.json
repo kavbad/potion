@@ -1,0 +1,430 @@
+{
+  "clusterId": "creative",
+  "frontierId": "fr-bc55a4f3-fc94-409a-b1b9-a68aa6776c95",
+  "frontierVersion": 3,
+  "pricesVersion": "2026-08-04-or2+tranche-2026-08-19",
+  "spendUsd": 5.975526,
+  "candidates": [
+    "e4263e18305c42ec02f7972deb7b3a5a7cf7e7f114d362a299af35cda2ddf166",
+    "220a2558cd71293772687a74cf084a475a23e8ded3d887617bdf581766e91e0b",
+    "238db164081c2eea27dae0af4bb992ef70a31d2f0aea1fca5eae832b98f83426",
+    "2e70d6e233b6655e6c3be81e135b2b7127ebd9a848b08da4a50773e84568e693",
+    "1fd419ee3f167ee3436d46359f7e0fd179ebdace11394a6acd6ca686e3852936",
+    "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+    "41a39732ad857cad90ca953327966938ce79d8d58c8ec9c2118ee37a196dcd62",
+    "bc1c7102b31183575dc3cc811715abc02cfafcca2da29a55a63d4f397e476e96",
+    "ffe46bc931ac4a901d433bd3d539637078b65187fcbe07bcb8fd069a280fde7a",
+    "4e2fc86091471b8978e509790746f8f64c2585013e8e7a4994a2f3cff819d7b4",
+    "07c9d6a7556e19f0c4c8485a0d0b21c156ece314acaffba7bf0568bc82736f25",
+    "5c673aa6315d6621c709e41840ce38b3f8514acce2e1ce5fdef19e292fd292fe",
+    "85f6cdbd9140a6c43902c1584db69230ed9c13c807d3c3f59e1767b9587d8842",
+    "88ed8b9c25b3424d2d99010fefb8f06d8404f46e5e7d089b6ba58fc77fe42cdb",
+    "ece89b8f9cf5657b4983c2fd00298705e5cac4c8a1a09492f6518b9aef61c713",
+    "1afeece2dc9358093be0ea5753505f8d8a9b3127d1830c1f33ce42e9841abeaf",
+    "8ad63a4ee0135ab05e0409e058ed4ab78a85a7b0161c317984238ea147b39289",
+    "8fe33bc4bf34767da4018f0118da96261a377cee8faec4deca512e496431ca8a",
+    "74b939b57c69ae63ff04b8c1ba5767d048b428864cdcb78518be4f109bb0a480",
+    "649924cae50d8d0a3994d1d43414d2d3f788c4d2589238c04053cc81da6f8f72",
+    "819f1ab8ca283c9e90edf0172c2ef2f0c24f1359e73f87026fb89e0c3f6fa93b",
+    "e0a2f5547df4672e191dfec5165665dec7fe79402b4a9991c4647509b3e026cc",
+    "16a7d54565542efa088819acaf8d225dd21f32b635ad51ee6a5c19c991bbf713",
+    "7b918ab8215a98356233fd6e9ffd0ec83600d7250e38461188f504e10fea38e4",
+    "07b4dc7260b35fb02ce4b4eccd97b5244e17e5c6ebac87573c66d120fd5003e0",
+    "10b2d0523064af9a8a8fe2b256bd0404d716694f39868975850a5c890ef0fe3f",
+    "5f44761051ed515e80b902223d7ae7bd42e4d301ba400bc88f9a82748e92a14c",
+    "c4550c6edcf3f4be50b8f7b8f05146ea3bfb07ee4cee5586450a13202e926079",
+    "99dca2f843b73c033c2708d32522acfbfe45a3016957058351d694a73fb899fd",
+    "57f69a06f83abb501df80a676443613a3a96b7ad6902fbabca08df0dc60b056e"
+  ],
+  "failedCandidates": [],
+  "points": [
+    {
+      "clusterId": "creative",
+      "strategyHash": "e4263e18305c42ec02f7972deb7b3a5a7cf7e7f114d362a299af35cda2ddf166",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-ling-3.0-flash"
+      },
+      "quality": 0.42857142857142855,
+      "costPer1K": 3.8958571428571442,
+      "latencyP95": 43146,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "fec5634a519bdb13eede31a49298f1d458d18adc41f1381779bb7a26541a4565",
+          "a39383a925295ce10dcc6ab540a1ab436bd4796e976154701871918c09883326",
+          "abbea0a7ca58eabd4a98a0004d34fc5e492f2fb36949f266de275246c7c94e4b",
+          "4fc1b76e7fc4a4ee14460f67ca141971b6200e017d296830e400c83d296da7a0",
+          "f69bb9d68c4d67bc5c046850cef5837588ca213881454df094ae53e94dca074b",
+          "d834c23d0d5f981313192dad8462e02d34d8a7d7d6f8d9c47ab57e3eb174c893",
+          "4a89a2600ef28be450fd027e00b5eb0286d4a75d7004262e77912d21c13fe557",
+          "1cb9a93db4333b3e37ab9107d382b4dc072c26302905b1caa284d4ec305c32da",
+          "f86a3addc2358bcd86772212a9d14dd7fc8eba7a716109985e88d1c2ad6d22a7",
+          "8a7275bf1877fa90c4c97c2e92972b9db780ad912100df6937b68456ccbd96b4",
+          "afdfc55ede0a3a2791ef0c6f6999654861beb21d005231544a4424e94db02e54",
+          "8c81ab50a8b535cc1a684ac303f6119c0983b2fc7452be6fc44e3d7b5c87e772",
+          "e300812cb4114d29771423a725ef3ec9699b8a54faaf071fc0e8bb8829bb03ec",
+          "6bbfa0c904a6d6decdff737ec3883ed21a59cad9a8d29d5c9b61d53d306b17cb"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.22359578914433278,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          35656,
+          43146
+        ],
+        "latencySeed": 3468565303,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "2e70d6e233b6655e6c3be81e135b2b7127ebd9a848b08da4a50773e84568e693",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-laguna-s-2.1"
+      },
+      "quality": 0.5571428571428572,
+      "costPer1K": 3.9706428571428574,
+      "latencyP95": 23248,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "32810d726c30c04b5df86f8b512abe90ac2dab610ac2372e1dbdefa077dc3234",
+          "81cecf6f0c65176f45528163ebff772e3c1e35af9552f8f1b75bdffde0df8eaf",
+          "b008b219e960e5cb963cdffc18998dabb4217cf6db3acc1429c04a4fff888bd0",
+          "4821b4135b341955269de5b6ac5a5702dc6f9e10c5256356a6e103b54e1edba6",
+          "5cf3839a9a6daeb2e4cc90c1567256b2f5300c9fad56391722c8b770ab101d23",
+          "314462d3d18a326798bdeed73562fe4b03e30994377d50c7a3aa023986891384",
+          "30b3d0df7b1a958f9a0b9d7b60eeb2a173caee40622b3dc8d5939b82b8b6e6d8",
+          "001838fc173d4b0fdf94775804ce299d69c52ceb77ff0c1c1f2082a5e84bfbf9",
+          "6b3147aca6287a6c42032b969fbf8b3ebc3884b35dbc9a91b88706f468a74db7",
+          "c9d8eacb7421df9590fa1a64fea7502ed61dcb3aebc3ea3967530ecb17e005be",
+          "8eb6c6ad783536bcc92740a19777a39768ab99a3c6959917c3e092e0c7edb2ea",
+          "86e1aeb929f36a0e5bb922353788e2ef6d83cd524beb065f7b18c5c47cd95690",
+          "c8fddd587975740034b5b74f5ed2f4d59089b901626c1f0382c5f32132dfba84",
+          "11b965fdc4c144e6075d6c4356a77e5d5c73dba79070bc286cc703635e6ae975"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.16907349335080932,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          15710,
+          23248
+        ],
+        "latencySeed": 234339749,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "6efe8a5690640d89fc901eb53513024a401acc9b847f1db0dde7b137c98be3a8",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-deepseek"
+      },
+      "quality": 0.8214285714285715,
+      "costPer1K": 4.0105,
+      "latencyP95": 22494,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "b238384f003cdef7ecf69f394e698efc5a2d1aab51f1ecfb16a3e49c81427029",
+          "ebae539366834132eb35fdc9005205168488e71244cc37289f6bf5d5a5299af6",
+          "ea2330e0a69487eb83459c51f6a4523c8752a49cf06e265d2a94b44cbb201938",
+          "c0109e6c871b718a94e1718eff94d9fe14a3e1f84f1eaec7f5ffc95205e6c997",
+          "e06d64c82ec581a9c2f3f5a46c8d9d7e764447bb324b7972197c628af7cb7484",
+          "25d131d93ffa5c8bbae76864a2a27040b94968ec36fd14d978c8cf376a305c4f",
+          "318251adc4efa0785dc8492d9df83aca0975801ba1ca7e49e7a9065ddb7af681",
+          "313523afd1ed599eb7f8e93ad4e7afbff18b679dac96ee9a9735cf8f95316e59",
+          "34f4c67013d912388fb7ba2946867d4706a31bc8018e69949efca4d9493733d9",
+          "b4cadea94e9dc0d1de50f69294a99639767e7ca84ee6b283242414ce1d546a5d",
+          "c3e2b79731b11c75f12049ecd7d206ddd50370fc67dff095ec4514cd812db2d8",
+          "d4d089795afdc408f04d9a424710d7f11f17fba943847746dc9e9c0e77a090cc",
+          "766e2e7d45b517bdcbaca1eeb488a14dcb76010496f73245eb24b36440473971",
+          "1d09a586c203ca607b93768bab302532d57bc3b17dc564ebfdd0d83b9f4c63f6"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.08515867542417507,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          9475,
+          22494
+        ],
+        "latencySeed": 1099827141,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "238db164081c2eea27dae0af4bb992ef70a31d2f0aea1fca5eae832b98f83426",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-nemotron-3.5-lightning"
+      },
+      "quality": 0.42857142857142855,
+      "costPer1K": 4.071857142857143,
+      "latencyP95": 15060,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "e63099a3d1b2eb553ee99755a1f34ec48bf0315d5107ce039e86287d917f4286",
+          "d37e270186132895d8b56ce18d14423510a10e1233771cee5f2ee4ea80854d9b",
+          "a952f3ab4e878bc83044bca0e5af36fe160849511f7915c4785f6e2e72f34ab7",
+          "fcb5a31fd9e8998554abcce8110f1826e2cc2fb10c93fcedbbbe77e6e7e5fca2",
+          "ad48975ad58239b6336c988946e9e22f1f44f03a85ea821dad9df13d3ec3b924",
+          "e5371add7b0000196b5e4b0069105a7f5405bdbc32d435fba84b698a4b17822c",
+          "a61b24063d5dbcc8384a1337538b76d5177f46be95bab144d7dd0430d2c0c140",
+          "30bf026fbd9b9b7f98fc761a8666bc6b6c7a322c2c4b256388f972d3d9423436",
+          "8989e378f314dcd8442bdd623e81ae2a5b6c3a73aea27e16ed57a77d7b54a506",
+          "df88a75a2011aff873786cfe896a079fb8374771e8741d847c9473221a9b8b0b",
+          "16f27263addf6187fd07dc8fe60c76a89801a299f4e753d7a733a7f28398b66b",
+          "3cd7eb815b072b1d9df9a4d1f544ebf26a49115598544035fefdbd9c5b085acc",
+          "65ce94380e43bd33339e7c839fe6148beb3b4e85f81b4aa436630eb62b064525",
+          "9dd8ab67e1a4cf61845da2e3d57b4a4d7825307bb594d100fd73d8bf53bc2fd7"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.18540599940504787,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          4555,
+          15060
+        ],
+        "latencySeed": 2300663194,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "88ed8b9c25b3424d2d99010fefb8f06d8404f46e5e7d089b6ba58fc77fe42cdb",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-haiku"
+      },
+      "quality": 0.7428571428571429,
+      "costPer1K": 4.902428571428572,
+      "latencyP95": 7786,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "295f5f732834865a5f30980751542121e32133446989c140b1fc2518abcf3b87",
+          "dfaba725fbc71b7b3bb0f6a1fb717483fa9eb20126489b2c58774432196b904e",
+          "ee59ef0918727cc782756967908bdc44e2a6e60207ae6863411773eb3050efb9",
+          "c2178258e4dd22e1ccf4fb163e7991be7c9cab66904e9825a69a399ecbb7ee3e",
+          "e3d36fb501f1edfebe1b2e7309242acd5111ba718dd2709271bfb0f0510f4ff8",
+          "330039e8da68b5767baf3715f627a2bea76f856c4961a4cfd8376336a0a16518",
+          "f03a8123ef1547d346817919bd50976153834bf5be8baf3ae7f04e389536ca31",
+          "b43c1532deb92070e6c599d56c2a249c9aa8172751a41bb6a45fedaad17b50de",
+          "ba38c48c8f13fcfa91e46296bcf94bdb6bf78b233774c824a02e30cc1928cb4a",
+          "4b4695f6e6143bb3b7f2cb3a6f74e461271565cc97acd34bbb91ccd62de15584",
+          "a3a3f79e78eb87ea238a84eff6d195de956a5feae43c7c43b118829517f0980d",
+          "327da88bf0c7a4a4cbd0a6f512ba7fe17cf0adf92a9b1ea82e31389139dc802e",
+          "3ff5c631c2875d610610bab23e165918dadf6b5ff3de97b0abe92a9bc15fbae9",
+          "2aea23131cc1a89e40d4932606bd4435113d02a565f7e9042d453e3c6b51e614"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.12784124770739927,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          3199,
+          7786
+        ],
+        "latencySeed": 320309920,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "41a39732ad857cad90ca953327966938ce79d8d58c8ec9c2118ee37a196dcd62",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gemini-flash"
+      },
+      "quality": 0.7857142857142858,
+      "costPer1K": 5.225357142857143,
+      "latencyP95": 3156,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "f2af96d001ce6caf703c03cac2e924133a9351c42f991f9ae6f8771542a0bef4",
+          "40f89438bea0ccf9b802a705e46b64dd80a73d2bb389f6687d388ef4a2c27a75",
+          "3f928782c9706c4d51414ddf1f928ec0233537976247b719204fe1747efa9770",
+          "699267c8f4ad7a1ad17085725bcec39c99cf09da4ee6841f450076253866c77a",
+          "165fc14495592895909f57f5cf44895a3dc5f4be58282642bef1b5c5d96942b1",
+          "f4a57c2b250e9a4ebbe8b1e931231f01590ecbd32089daada9ad55a1103c85c4",
+          "11885ea07ff0b680f7e74ca3674699509d4b87d5086b60190c6b4fb62ce0f0b3",
+          "3e147f4c940e19248e468156096a267019fd4f4198f41cddc4ed1d1e78abe309",
+          "1408bf830cf1dc160e56469092a29c185a30f8d2a0849dda6e35a019d48fb2bf",
+          "65348ef170f95b9d7808c60f6e20e8beba29d7209ec906bc4b79ea141e256392",
+          "355223bc860663d17c5ed8d9b97e3828ddde281a3dd19d7504f17c5cd169a8a0",
+          "245743d585a273d81e40d25caeabb23ca044ddcb2323dbd50fc45be062b30777",
+          "979a86b0ad5485a902e1e82c98b82a36322158f63a7589b258ec026ffe5ece50",
+          "c092e02b7c9ea4289dde98df796cb7048e5cc6f5e08b896335da816acb8273ab"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.11413352504177526,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          2100,
+          3156
+        ],
+        "latencySeed": 2467945762,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "819f1ab8ca283c9e90edf0172c2ef2f0c24f1359e73f87026fb89e0c3f6fa93b",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gpt-full"
+      },
+      "quality": 0.8285714285714286,
+      "costPer1K": 5.5725,
+      "latencyP95": 6012,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "439cde66b77756f0be8792194fbc4770c023e800ab8d936f77a6f021a6e52daf",
+          "5f98787ae77bcdca1789e0530903c8b81e73f9d21fe2d325d07df443541c2470",
+          "3b34c5aadfd5a913b2ef1ee53de8c8d29599af37e08ea2b13618ab8f219d2d2f",
+          "c786631e52607a41d57c93119cd21c25a08cf141f33f062b522cbebcf75d3843",
+          "7521e409fd3c072fe2d3abc7081f29c821d27b3deffb53154bcc8d578dc2825e",
+          "ff58622b0d8b768bbd5cdab9448ef7a232de196725498be185af84fc59497f8a",
+          "105de109e5d672217022db8c705bf7f82fd988f9c36131f96e878892fe5e9cef",
+          "a263aabd787ab9c45501b02cceae3ed1e480caa6581e2a4071b3584e706d02af",
+          "6574f91ad43be54df8ab803f304b59c6c369875fa19ede8b7c012acccb653001",
+          "13d46d603c5dd26b48332485b608457d8e8fbe4ab0430b379e9f06006a2fbd4c",
+          "96726d98cdc163a1161dcbb8ac02fefd81b70f55cdffd0d696086010b55d2117",
+          "9f0a0bd909252aa6ce837c6fb016960472d582873a33374257637e38acfa2738",
+          "228f20b6e0cd1eaa846e0d9138f256e33175ae35f9ff0be0ea07ee03ef691f6b",
+          "ecdef7dec4386c9e5eef4a47181f77eb69f4b7d4655dec843741cbf3b8eddee2"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.10155104817093413,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          3588,
+          6012
+        ],
+        "latencySeed": 2450519778,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "4e2fc86091471b8978e509790746f8f64c2585013e8e7a4994a2f3cff819d7b4",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-gpt-mini"
+      },
+      "quality": 0.7928571428571429,
+      "costPer1K": 5.703214285714286,
+      "latencyP95": 4978,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "e69f2d438bd37bf394ecdbf0ab2d1ee7b81c550c2d036c4c93bb41a50cfa71b9",
+          "6c2374ecafc400842b1e5669f334507e73b8b6f45b6c0ab342c8da11db96437b",
+          "372dc8042e4a9694481375d581221a60d262a2d54e37f17ac8bc58ac11c69abb",
+          "61fcb03082e4b32234fae0e0a2f18718b8098c0d572b6890eeeeb388483df6b8",
+          "d82c60fb4dead566ef15215d24dae8d594bec19ab0c08e71c60c3da282289437",
+          "67027b326bc33f409e8d912fb1b8c7baab87ac854d41c1f3541f7a0ed3bed871",
+          "0e25d95c589f14a19b54763f001da85303fdfe59dd0cc225223af0efdf61de77",
+          "f3d9ed5e60a4c5ac7faf3ae18b626779765b911594a6e26a2a88f2c09a42f0fd",
+          "6a2c217a0434730525206ddacfb73d11494b75cc40731b6d26f94bc7e8e5a2c7",
+          "e23443f94d8a334f6842cb83cb386ce698b08e60a4fd75ca71753b24076a702c",
+          "10a092aac0c64ea229f4932932106cfc5363ccd0789ea182bfaf014361d17318",
+          "2f69c27bcf2acbab1804774adb8308501c538a08e69607e9bfc5950dbe9bafa7",
+          "af73ddb13b577915564197f32414b129bd72408eaf108f2860769c446944f7b2",
+          "fdc6789d9eefe440c7ddeb66858bb05242c9a7aef23aaa3c554cc27ee7a17f92"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.09064724528038941,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          3169,
+          4978
+        ],
+        "latencySeed": 4145114302,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    },
+    {
+      "clusterId": "creative",
+      "strategyHash": "07b4dc7260b35fb02ce4b4eccd97b5244e17e5c6ebac87573c66d120fd5003e0",
+      "strategyConfig": {
+        "type": "single",
+        "model": "or-sonnet"
+      },
+      "quality": 0.9071428571428574,
+      "costPer1K": 7.56,
+      "latencyP95": 9464,
+      "providerMode": "live",
+      "evidence": {
+        "cacheKeys": [
+          "44c28c7e8249fe2f7e6841fe0cf953931241b3ba7a164a918ad975f8bab033b3",
+          "3bdd4f0dcd6ed3374fef50081da43bb49bfec3d035ff653e4133e5d1a17b147a",
+          "d19385dc22e787ffe5b0fd3190eecd3b78a0727cd2639eb8779ad8d551fb398e",
+          "6432d0ec2756cb683b27865033e1dbccf70a3ff7405eb350e79e068d8b3f33eb",
+          "4f5fd418cf9ccdac1492c2075f3d035b0c2cc30dc2f59d36041731e835f79dd1",
+          "16ff681ad5f78f3b05f80242561e2f840edd9edcfa4303725dfa3ea25ea1fe5b",
+          "b6aa0fc41b6b9171ae23a2ebbc75fb06a89a4069ac8275b8c19b18fe5b0a9c61",
+          "5c584cd92f59d9327e7ff2ca91d595c6a4b4ea369a8ca6b2d423494f31916f5d",
+          "d05365a66f28e0d11a433829968e57cef0db91b569bf8ed863ccaac124592d6e",
+          "b9e0ca716bc0fda8f982824fe9498a70fba66daf4f88bf51083437be09ffea7a",
+          "8d2aa4c83945618a4a2cb824f4b8a48f920a1daad8c6bb4f0168d6575d53b9c5",
+          "c3906dff570ab9ad6f1b00dd07dfd1249ac89b22832414fc1af78c3fbecde4ad",
+          "6bf786980ad81f227e0ce2cba64e5a02687ba9f017339244e6cba07ccf0026b4",
+          "3ee7eb6e1b20d997aa2eac40fda6db3eb82117e9dc51bb81bfc62ab434253f41"
+        ],
+        "runIds": [
+          "run-ee44e88a"
+        ],
+        "n": 14,
+        "qualityCi95": 0.03225380120710877,
+        "latencyN": 14,
+        "latencyP95Ci95": [
+          7515,
+          9464
+        ],
+        "latencySeed": 181246658,
+        "suiteId": "creative",
+        "suiteContentHash": "e023bcbef902c32792145434890499bc52d3b57762c810838b0514319221b66f"
+      }
+    }
+  ],
+  "capturedAt": "2026-08-21T08:44:49.990Z"
+}

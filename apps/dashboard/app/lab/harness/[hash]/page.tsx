@@ -3,7 +3,7 @@
 // the form's own anatomy, edited through its mid-zoom panels over the real
 // routes. The old tables live on inside those panels' plain language.
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { LabFormView } from '@/components/lab-form-view';
 import { ConnectorPanel } from '@/components/lab-actions';
 import type { HarnessDto, MemoryDto } from '@potion/lab-form';
@@ -21,10 +21,10 @@ interface RunsResponse {
 export default async function HarnessPage({ params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
   const [harness, memory, runs, me] = await Promise.all([
-    apiFetch<HarnessDto>(`/api/lab/harnesses/${hash}`),
-    apiFetch<MemoryDto>(`/api/lab/memory/${hash}`),
-    apiFetch<RunsResponse>(`/api/lab/harnesses/${hash}/runs`),
-    apiFetch<MeResponse>('/auth/me'),
+    fetchOrRecover<HarnessDto>(`/api/lab/harnesses/${hash}`),
+    fetchOrRecover<MemoryDto>(`/api/lab/memory/${hash}`),
+    fetchOrRecover<RunsResponse>(`/api/lab/harnesses/${hash}/runs`),
+    fetchOrRecover<MeResponse>('/auth/me'),
   ]);
   const latest = runs.runs[0] ?? null;
   return (

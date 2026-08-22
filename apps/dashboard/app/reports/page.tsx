@@ -7,6 +7,7 @@ import { IncidentsTable } from '@/components/incidents-table';
 import { SavingsChart } from '@/components/savings-chart';
 import { SharePanel } from '@/components/share-panel';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { collectIncidents } from '@/lib/guarantee';
 import { confidenceHint } from '@/lib/savings-chart';
 import { formatUsd } from '@/lib/usage-chart';
@@ -39,7 +40,7 @@ export default async function ReportsPage({
 
   let report: SavingsReportDto;
   try {
-    report = await apiFetch<SavingsReportDto>(`/api/reports/savings?${qs}`);
+    report = await fetchOrRecover<SavingsReportDto>(`/api/reports/savings?${qs}`);
   } catch (e) {
     if (e instanceof ApiUnreachable) {
       return (

@@ -5,7 +5,8 @@
 // provisioning script) could get past a 403. See ApiKeysManager for the
 // scope reasoning.
 import { ApiKeysManager } from '@/components/api-keys-manager';
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { ApiUnreachable } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import type { ConnectionResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export default async function ApiKeysPage() {
   let conn: ConnectionResponse | null = null;
   try {
-    conn = await apiFetch<ConnectionResponse>('/api/connection');
+    conn = await fetchOrRecover<ConnectionResponse>('/api/connection');
   } catch (e) {
     if (!(e instanceof ApiUnreachable)) throw e;
   }

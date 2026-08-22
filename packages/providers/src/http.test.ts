@@ -142,6 +142,42 @@ describe('postJsonWithRetry', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it('retries a 200 whose body fails JSON parsing, then succeeds on a clean body', async () => {
+    // Live capture 2026-08-20: an OpenRouter gemini-2.5-pro 200 carried a raw
+    // control character, which strict JSON parsing rejects. Previously this
+    // returned json=undefined and callers threw an untyped TypeError.
+    const corrupt = new Response('{"choices":[{"message":{"content":"ab', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+    fetchMock.mockResolvedValueOnce(corrupt).mockResolvedValueOnce(jsonResponse(200, OK_BODY));
+    const { sleep, delays } = sleepRecorder();
+    const res = await postJsonWithRetry('openrouter', REQ, { sleep, rand: () => 0.5 });
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual(OK_BODY);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([250]);
+  });
+
+  it('unparseable 200 body on every attempt → typed ProviderError, never undefined json', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response('not json at all', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    const { sleep } = sleepRecorder();
+    const err = await postJsonWithRetry('openrouter', REQ, { sleep, rand: () => 0.5 }).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ProviderError);
+    expect((err as Error).message).toMatch(/body failed JSON parsing/);
+    expect((err as ProviderError).kind).toBe('network');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it('honors a custom maxRetries (0 → exactly one attempt)', async () => {
     fetchMock.mockResolvedValue(jsonResponse(500, {}));
     const { sleep, delays } = sleepRecorder();

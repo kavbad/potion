@@ -1,8 +1,10 @@
 // /playground (M4 #31, SPEC §13.3). Server component: fetches the frontier
 // list + the selected cluster's frontier, then hands off to the client
 // Playground (SSE chat + compare). Empty states mirror the frontiers page.
+import { FrontierLens } from '@/components/frontier-lens';
 import { Playground } from '@/components/playground';
-import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { ApiUnreachable } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import type { FrontierListResponse, FrontierResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +18,7 @@ export default async function PlaygroundPage({
 
   let list: FrontierListResponse;
   try {
-    list = await apiFetch<FrontierListResponse>('/api/frontiers');
+    list = await fetchOrRecover<FrontierListResponse>('/api/frontiers');
   } catch (e) {
     if (e instanceof ApiUnreachable) {
       return (
@@ -45,12 +47,13 @@ export default async function PlaygroundPage({
   const selected = list.clusters.some((c) => c.clusterId === cluster)
     ? cluster!
     : list.clusters[0]!.clusterId;
-  const data = await apiFetch<FrontierResponse>(
+  const data = await fetchOrRecover<FrontierResponse>(
     `/api/frontiers/${encodeURIComponent(selected)}`,
   );
 
   return (
     <PageShell>
+      <FrontierLens />
       <Playground
         clusters={list.clusters.map((c) => ({ clusterId: c.clusterId, version: c.version }))}
         selected={selected}

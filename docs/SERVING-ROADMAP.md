@@ -136,6 +136,23 @@ Named here so "measured routing" is not read as more than it is.
 
 ---
 
+### G9 — Serving learns nothing that outlives the request
+*(S7, L1–L4 DONE 2026-08-19 — spec: `docs/specs/s7-demand-learning.md`.)*
+Every served request is classified and the classification's own evidence is
+discarded: `chat.ts:694` keeps the winning cluster id and drops the
+confidence, the runner-up, and the margin that `pickBest`
+(`cluster/assigner.ts:69-82`) already computed for free. Nothing records the
+request's *shape* (tools present, context length, JSON mode), so a cluster can
+be fully measured and still wrong for half its traffic. `traces:cluster`
+learns from real usage but is org-scoped by design, so there is no
+platform-scope picture of demand — and therefore no way to say which
+unmeasured thing is costing customers the most, or to schedule a measurement
+for it. Two operator decisions gate the fix: the privacy posture for
+cross-org aggregates (`PRIVACY_POLICY.md` §2 still carries the placeholder)
+and whether live spend may be authorized standing rather than per run.
+
+---
+
 ## 4. Roadmap
 
 Phases are dependency-ordered. Each has a **done-when** that is provable, and
@@ -319,12 +336,63 @@ under `KEY_RISK_ACCEPTED`; scales with how much breadth is wanted.
 
 ---
 
+### S7 — Demand learning — **L1–L4 DONE 2026-08-19, L5 open**
+**Fixes G9. Spec: `docs/specs/s7-demand-learning.md` (§8 = build status).**
+Serving becomes the sensor: keep the confidence/runner-up/margin already
+computed per request plus a content-free shape record (L1, $0); aggregate
+them into k-anonymous demand cells that never persist a per-request embedding
+and never move customer text across the org fence (L2); rank demand against
+measured evidence so "we have not tested for this" is a scored row with a
+named reason (L3); let the top gap schedule its own capped live sweep against
+*synthesized* items — never customer prompts — and enter the platform frontier
+through the existing provenance path (L4); and let a dense unassigned region
+raise a reviewed taxonomy-cluster proposal with its held-out accuracy delta
+attached (L5).
+
+**Done when:** a demand cell no existing frontier point can serve is
+discovered from traffic alone, measured without a human noticing it, and
+routed to on the next matching request — with the ledger row to prove what it
+cost. **Spend:** L1-L3 $0; L4 is bounded by
+`POTION_AUTONOMOUS_LEARNING_DAILY_USD`, which defaults to 0 (discovers and
+proposes, cannot buy) until the operator sets it.
+
+**Both decisions answered 2026-08-19.** D1(b): cross-org learning may use
+k-anonymous aggregates — a running centroid published only after ≥5 distinct
+orgs, no prompt text and no per-request embedding ever persisted, org opt-out
+at observation. D2(a): a standing daily cap the operator switches on and off
+(`POTION_AUTONOMOUS_LEARNING_DAILY_USD`, **default 0**), plus a per-org
+`learning_priority` entitlement that buys ORDER — measured first — and
+nothing else.
+
+**Shipped.** L1 takes the confidence/runner-up/margin `pickBest` already
+computed (`assignRanked`: one embedding, decision unchanged) plus a
+content-free `shape`. L2 accumulates in-process and flushes into a THREE-table
+split where the k-gate is a write gate — staging and contributors are private,
+`demand_cells` is the only table feature code reads, and a cell below the gate
+is not written rather than written-and-hidden. L3 ranks demand against LIVE
+evidence with the reason as data (`no_tool_capable_point`,
+`context_too_short`, …), refusing to read unknown capability as coverage. L4
+turns the top gap into a capped platform sweep whose candidate pool is
+narrowed by that reason, ledgered projected-before / actual-after by the job
+itself — including refusals, so an idle loop is legible.
+
+**The line that holds it up:** demand chooses WHICH cluster and WHICH
+capability to measure; the sweep still runs the committed platform suite.
+Customer content never becomes a test item.
+
+**Open:** L5 (dense unassigned regions → reviewed taxonomy proposals; today
+they are reported as skips), the surfaces for demand/coverage/ledger and the
+two org flags, the `PRIVACY_POLICY §2` placeholder, and a first live probe
+under a non-zero cap.
+
+---
+
 ## 5. Sequencing
 
 ```
 S1 (visible) ─┬─> S2 (from-scratch door)
               └─> S3 (billing truth) ──> S4 (safety) ──> [13b payments, later]
-S5 (breadth) ─────────────────────────> S6 (measure it)
+S5 (breadth) ─────────────────────────> S6 (measure it) ──> S7 (demand learning)
 ```
 
 - **S1 → S2** is the fastest path to a product the operator can sit down and
@@ -348,6 +416,65 @@ S5 (breadth) ──────────────────────�
   and after, under an explicit risk acceptance.
 - **Honest stubs** — an unbuilt path throws or self-labels; never a silent
   fallback.
+
+## S7 — Coverage ranking: which uncovered model earns measurement next
+
+**Status: proposed 2026-08-20 (operator-accepted), not started. $0 to build —
+it is a computation over artifacts we already have, plus cheap probes.**
+
+The catalogue holds ~40 measured-or-ingested entries; the provider lists
+hundreds more. Two mechanisms exist for growing coverage and neither answers
+*which model next*:
+
+- the research heartbeat's scan treats "new to our registry" as "new", so its
+  first run would flood the price table with the entire backlog and then
+  explore it **in listing order, three cycles per tick** — an order nobody
+  chose, at a pace nobody planned;
+- the tranche pipeline curates well (servability probes, class balance, a
+  belt) but its selection was hand-picked breadth, not computed impact.
+
+S7 is the missing selector: **rank every uncovered listing by expected
+frontier impact**, so the next campaign's candidate list — and the cap on
+what a heartbeat scan may admit into the registry — is an argument from
+evidence rather than a scroll through a catalogue.
+
+### Scoring signals, all computable today
+
+1. **Price-gap headroom (the solar-pro4 pattern).** For each cluster, the
+   cost band *below* the current frontier's cheapest point. An uncovered
+   model priced inside that band could dominate outright — the highest-value
+   win we know of, because it is exactly how or-solar-pro4 took two frontiers
+   its first day. Score: distance below the cheapest surviving point, summed
+   over clusters where the model's price class undercuts it.
+2. **Quality headroom (the Track B signal).** Clusters where the best
+   measured quality sits below saturation on the hardened suites and the
+   candidate is a frontier-class release: capability upside, priced by the
+   gap.
+3. **Vendor decorrelation.** A vendor family absent from our corpus brings
+   failure modes uncorrelated with what we hold — worth extra, because
+   complementarity mining (MIXING-ROADMAP S1) feeds on exactly that
+   decorrelation, and an oracle-fusion ceiling is only interesting between
+   models that fail differently.
+4. **Servability**, probed before a dollar of measurement (the tranche
+   pipeline's probe, reused).
+5. **Projected leg cost** per candidate (token prices x suite profile), so
+   the ranked list carries its own price tags and a belt slices it honestly.
+
+### What it gates
+
+- **Tranche #2 selection** — `select-tranche` consumes the ranking instead of
+  a hand list.
+- **Heartbeat admission** — a scan may admit at most N backlog models per
+  tick *by rank*, replacing listing-order `slice(0, 3)`; genuinely new
+  releases keep their fast path untouched.
+
+### Exit criteria
+
+A `rank-catalogue` script that reads (scan listings, committed frontiers,
+price table), emits a ranked candidate list with per-model rationale and
+projected cost, and is consumed by both `select-tranche` and the scan's
+admission cap. The ranking is an artifact (JSON, committed with the campaign
+plan) so every campaign can say *why these models, in this order*.
 
 ## 7. Not in this track
 

@@ -34,7 +34,9 @@ export type JobKind =
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
   | 'guarantee:suite-verify'
   // ---- Post-capstone item 3: suite-validity certification (Decision 2) ----
-  | 'suite:certify';
+  | 'suite:certify'
+  // ---- S7 L4: the autonomous probe (demand → capped measurement) ----
+  | 'learning:probe';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -57,6 +59,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'org:delete',
   'guarantee:suite-verify',
   'suite:certify',
+  'learning:probe',
 ] as const;
 
 export interface EvalRunPayload {
@@ -129,6 +132,29 @@ export interface JobPayloads {
   'org:delete': OrgDeletePayload;
   'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
   'suite:certify': SuiteCertifyPayload;
+  'learning:probe': LearningProbePayload;
+}
+
+/**
+ * S7 L4 — measure the demand nobody has measured yet.
+ *
+ * Ranks published demand cells against live measured evidence, takes the
+ * worst gap a platform sweep can close, and runs that sweep under a cap
+ * drawn from the operator's standing daily authorization. Every run writes
+ * its own ledger row (projected before, actual after), including refusals.
+ *
+ * With `POTION_AUTONOMOUS_LEARNING_DAILY_USD` unset the job still runs and
+ * still plans; it refuses to spend. That is the "propose, don't buy" mode.
+ */
+export interface LearningProbePayload {
+  /** Plan and ledger it as 'planned', but do not execute. */
+  dryRun?: boolean;
+  /** Override the per-run cap DOWNWARD only; the daily cap still binds. */
+  capUsd?: number;
+  /** Passed through to the sweep when the pool exceeds its width ceiling. */
+  maxAnswerers?: number;
+  /** Only consider demand at or after this ISO week start. */
+  sinceWeek?: string;
 }
 
 /**
@@ -397,6 +423,26 @@ export interface FrontierPlatformSweepPayload {
    * reports any it dropped rather than silently measuring less.
    */
   maxAnswerers?: number;
+  /**
+   * S7 L4: restrict the answerer pool to models that can actually serve the
+   * demand this sweep is closing.
+   *
+   * Class membership answers "how good and how expensive"; it says nothing
+   * about whether a model can take a tool definition or hold a 60k prompt.
+   * A sweep launched to close a `no_tool_capable_point` gap that measured
+   * tool-incapable models would spend real money and leave the gap exactly
+   * where it was — while reporting new measured points, which is worse than
+   * not running.
+   *
+   * UNKNOWN CAPABILITY IS EXCLUDED, never assumed: models.supports_tools and
+   * context_length are nullable because a provider may not report them.
+   */
+  capabilityFilter?: {
+    /** Keep only models KNOWN to support tool calling. */
+    tools?: boolean;
+    /** Keep only models whose KNOWN context window is at least this. */
+    minContextTokens?: number;
+  };
   /** Per-attempt provider timeout (ms). Absent → PLATFORM_SWEEP_TIMEOUT_MS. */
   providerTimeoutMs?: number;
   /** Retry attempts past the first. Absent → PLATFORM_SWEEP_MAX_RETRIES. */

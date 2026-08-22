@@ -52,6 +52,12 @@ export interface HttpJsonResponse<T> {
   json: T;
 }
 
+/** Sentinel distinguishing "body failed to parse" from every legal JSON
+ * value (JSON encodes null but never undefined; a symbol collides with
+ * neither). Error-path parsing keeps flowing undefined into
+ * errorBodyMessage, byte-compatible with the previous behavior. */
+const PARSE_FAILED: unique symbol = Symbol('json-parse-failed');
+
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BASE_DELAY_MS = 250;
@@ -151,8 +157,23 @@ export async function postJsonWithRetry<T = unknown>(
       req.signal?.removeEventListener('abort', onCallerAbort);
     }
 
-    const json = (await res.json().catch(() => undefined)) as T;
-    if (res.ok) return { status: res.status, json };
+    const parsed: unknown = await res.json().catch(() => PARSE_FAILED);
+    if (res.ok) {
+      if (parsed !== PARSE_FAILED) return { status: res.status, json: parsed as T };
+      // 2xx whose body strict JSON parsing rejects (seen live 2026-08-20: an
+      // OpenRouter gemini-2.5-pro body carrying a RAW control character).
+      // Returning undefined here made the transport's caller throw an untyped
+      // TypeError on `json.choices` — one corrupt byte read as a code bug.
+      // The body is corrupt in transit-or-serialization terms, so it retries
+      // like a network fault and surfaces typed when it persists.
+      if (attempt < maxRetries) continue;
+      throw new ProviderError(
+        provider,
+        `provider '${provider}': HTTP ${res.status} body failed JSON parsing after ${maxRetries} retries`,
+        { status: res.status, kind: 'network' },
+      );
+    }
+    const json = (parsed === PARSE_FAILED ? undefined : parsed) as T;
 
     const detail = errorBodyMessage(json);
     const suffix = detail ? `: ${detail}` : ` (HTTP ${res.status})`;

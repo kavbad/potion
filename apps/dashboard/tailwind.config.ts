@@ -10,17 +10,27 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        paper: '#faf9f6', // warm off-white page background
+        // exa re-skin: the ground goes clean white; warmth now lives in the
+        // artifacts (receipt, band, ticks), not the page itself.
+        paper: '#ffffff',
         ink: '#292524', // stone-800 — primary text
         soft: '#57534e', // stone-600 — secondary text
         faint: '#a8a29e', // stone-400 — captions/ticks
-        line: '#e7e2da', // warm hairline borders / grid
+        line: '#e7e5e4', // cool hairline borders / grid
         panel: '#ffffff',
         accent: {
           DEFAULT: '#0f766e', // teal-700 — the one accent
           soft: '#ccfbf1', // teal-100 — accent wash
         },
         warn: '#b45309', // amber-700 — alerts
+      },
+      boxShadow: {
+        /* The glaze's single elevation: every raised artefact wears exactly
+           this — a tight contact shadow plus a soft long one, both drawn
+           from ink, never grey. One shadow = one light source = one object. */
+        paper: '0 1px 2px rgba(41,37,36,0.05), 0 12px 32px -16px rgba(41,37,36,0.14)',
+        /* the hover tier of the same light source — used only by .lift */
+        'paper-lift': '0 2px 4px rgba(41,37,36,0.06), 0 20px 44px -18px rgba(41,37,36,0.20)',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],

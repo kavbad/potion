@@ -1,0 +1,17 @@
+{
+  "suiteId": "code-gen-hard-v1",
+  "clusterId": "code-gen",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored retrieval-hostile code generation (30 items: 8 altered-clause variants of canonical problems, 12 composed specifications, 10 precision/edge contracts; >=8 tests per item, every reference self-pass gated)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "code-exec"
+    ]
+  },
+  "createdAt": "2026-08-19T12:00:00.000-07:00"
+}

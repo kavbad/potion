@@ -10,6 +10,7 @@
 import { CertifyButton, RubricGenerateButton, RubricReviewButtons } from '@/components/rubric-actions';
 import { certificationBadge } from '@/lib/cert-badge';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import type { FrontierListResponse } from '@/lib/types';
 import Link from 'next/link';
 
@@ -85,7 +86,7 @@ function fmt(x: number | null): string {
 export default async function RubricsPage() {
   let data: RubricsResponse;
   try {
-    data = await apiFetch<RubricsResponse>('/api/rubrics');
+    data = await fetchOrRecover<RubricsResponse>('/api/rubrics');
   } catch (e) {
     if (e instanceof ApiUnreachable) {
       return (

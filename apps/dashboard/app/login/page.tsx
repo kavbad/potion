@@ -17,6 +17,7 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { SiteHeader } from '@/components/site-header';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -142,9 +143,18 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  // The root layout draws the app sidebar only when a session cookie exists,
+  // which by definition it does not here — so the sign-in page brings the
+  // public header itself. Without it this route renders as a bare form on an
+  // empty page, with no mark and no way back to the landing page.
   return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
+    <div className="min-h-screen">
+      <SiteHeader />
+      <div className="mx-auto max-w-5xl px-6 py-20">
+        <Suspense>
+          <LoginForm />
+        </Suspense>
+      </div>
+    </div>
   );
 }

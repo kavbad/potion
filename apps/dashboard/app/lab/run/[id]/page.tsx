@@ -3,7 +3,7 @@
 // remains available via the report; the answer/kill/report controls ride
 // the form's overlay through the same real routes as Step 8.
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import { LabFormView } from '@/components/lab-form-view';
 import type { HarnessDto, MemoryDto, RunDto } from '@potion/lab-form';
 
@@ -15,11 +15,11 @@ interface MeResponse {
 
 export default async function RunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const run = await apiFetch<RunDto>(`/api/lab/runs/${id}`);
+  const run = await fetchOrRecover<RunDto>(`/api/lab/runs/${id}`);
   const [harness, memory, me] = await Promise.all([
-    apiFetch<HarnessDto>(`/api/lab/harnesses/${run.harnessHash}`),
-    apiFetch<MemoryDto>(`/api/lab/memory/${run.harnessHash}`),
-    apiFetch<MeResponse>('/auth/me'),
+    fetchOrRecover<HarnessDto>(`/api/lab/harnesses/${run.harnessHash}`),
+    fetchOrRecover<MemoryDto>(`/api/lab/memory/${run.harnessHash}`),
+    fetchOrRecover<MeResponse>('/auth/me'),
   ]);
   return (
     <main style={{ padding: 16 }}>

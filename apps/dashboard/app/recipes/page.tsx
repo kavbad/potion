@@ -6,6 +6,7 @@
 // LIVE; mock/mixed/unknown badge SIMULATED.
 import { RecipeEvaluateButton, ResearchScanButton } from '@/components/recipe-actions';
 import { ApiUnreachable, apiFetch } from '@/lib/api';
+import { fetchOrRecover } from '@/lib/recover';
 import type {
   RecipeDto,
   RecipeProvenance,
@@ -40,7 +41,7 @@ export default async function RecipesPage({
 
   let data: RecipesResponse;
   try {
-    data = await apiFetch<RecipesResponse>(
+    data = await fetchOrRecover<RecipesResponse>(
       `/api/recipes${activeStatus !== undefined ? `?status=${activeStatus}` : ''}`,
     );
   } catch (e) {

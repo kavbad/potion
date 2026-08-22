@@ -1,19 +1,20 @@
-# Potion single-instance TLS front door.
+# Potion single-instance TLS front door — TWO vhosts (deploy plan D2).
 #
-# POTION_SITE is the hostname in production (Caddy provisions a Let's Encrypt
-# certificate automatically) or `:443` for the local rehearsal, where Caddy
-# issues its own internal cert instead.
-{$POTION_SITE} {
+# api.<domain>  → apps/server   (SDK traffic: Bearer keys, /v1 + server /api)
+# app.<domain>  → apps/dashboard (browser traffic: session cookie; the
+#                dashboard's own /api/* route handlers proxy to the server
+#                over the compose network, cookie attached)
+#
+# The split is load-bearing, not cosmetic: the two /api/* namespaces are
+# DIFFERENT SURFACES (Bearer-authed Fastify vs cookie-proxying Next), and
+# path-routing one hostname would interleave them.
+{$POTION_API_SITE} {
 	encode gzip
 
 	# /metrics is classified `public` in apps/server/src/security/route-inventory.ts
 	# with the justification "the surface is network-restricted by deployment
 	# posture". THIS BLOCK IS THAT POSTURE. Without it the justification is a
 	# phantom decision — a comment asserting a protection nothing enforces.
-	#
-	# Org labels are hashed (G2.4), but the series still expose request volumes,
-	# spend and breaker state. Scrape over the private network instead: reach
-	# the container directly on the compose network, never through this listener.
 	@metrics path /metrics /metrics/*
 	respond @metrics "not available on the public listener" 403
 
@@ -21,4 +22,16 @@
 		health_uri /readyz
 		health_interval 10s
 	}
+}
+
+{$POTION_APP_SITE} {
+	encode gzip
+	reverse_proxy dashboard:3001
+}
+
+# The bare domain and www: a person typing withpotion.com lands on the
+# landing page rather than a refused connection. Redirect (not a third
+# copy of the app) so there is exactly one canonical host for cookies.
+{$POTION_ROOT_SITE}, www.{$POTION_ROOT_SITE} {
+	redir https://{$POTION_APP_SITE}/home permanent
 }

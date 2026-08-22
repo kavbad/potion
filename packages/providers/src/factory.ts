@@ -139,7 +139,25 @@ export function createProviders(opts: ProviderFactoryOptions): Record<ProviderId
   // keep paying for the loser at the provider. Turning it on is a spend
   // decision, not a resilience default, and stays filed.
   const breaker = opts.breaker === undefined ? breakerPolicyFromEnv() : (opts.breaker ?? undefined);
-  const policy = breaker === undefined ? {} : { breaker };
+  // THE 60s CLAMP NOBODY DECLARED — the timeout bug's second instance, and
+  // the subtler one. resolveTimeoutMs correctly threads the declared timeout
+  // into the HTTP transport, but `resilient` wraps that transport with its
+  // OWN per-attempt timeout, and this policy never carried one — so the
+  // wrapper clamped every attempt at its 60_000 default while the transport
+  // underneath was honestly configured for 180s. The original live probe
+  // (1200ms) "proved" the plumbing precisely because 1200 < 60000: the inner
+  // timeout fired first and masked the outer clamp. Any attempt needing
+  // 60–180s died at 60 with a message blaming the provider.
+  //
+  // The wrapper's timeout gets the declared value PLUS headroom, so the
+  // transport's abort — the layer that accounts the attempt correctly — is
+  // always the one that fires; the resilience timeout returns to being what
+  // it was meant to be, a backstop against a hung transport.
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs);
+  const policy = {
+    ...(breaker === undefined ? {} : { breaker }),
+    ...(timeoutMs !== undefined ? { timeoutMs: timeoutMs + 5_000 } : {}),
+  };
   return {
     mock: resilient(createMockProvider(opts.prices), policy),
     anthropic: resilient(lazyLiveProvider('anthropic', opts), policy),

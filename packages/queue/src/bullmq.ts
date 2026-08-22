@@ -38,6 +38,10 @@ export const SINGLE_ATTEMPT_KINDS: ReadonlySet<string> = new Set([
   'lab:run',
   'research:cycle',
   'rubric:generate',
+  // S7 L4: the autonomous probe launches a platform sweep. A blind retry
+  // would re-enter the day's cap arithmetic with a second ledger row for the
+  // same decision — and it is the one job here with no human watching it.
+  'learning:probe',
 ]);
 export const DEFAULT_BACKOFF_MS = 250;
 

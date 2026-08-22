@@ -1,0 +1,17 @@
+{
+  "suiteId": "classification-hard-v1",
+  "clusterId": "classification",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored rule-application classification (30 items in 6 families: override routing, stated-tie-break sentiment, near-miss intent, literal numeric severity bands, opinion attribution, moderation with an inverting exception; label sets balanced so a constant guesser scores at most 0.40)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "exact"
+    ]
+  },
+  "createdAt": "2026-08-19T12:00:00.000-07:00"
+}

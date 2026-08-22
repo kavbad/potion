@@ -11,6 +11,7 @@ export {
   type Assignment,
   type ClusterAssigner,
   type Embedder,
+  type RankedAssignment,
 } from './assigner.js';
 
 export {

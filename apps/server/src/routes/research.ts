@@ -26,6 +26,7 @@ import {
   listClusters,
   listEvalLineageRows,
   listLeaderboardAdopters,
+  listRecentlyPromoted,
   listResearchCycles,
   getClusterByIdForOrg,
   RECIPE_STATUSES,
@@ -125,6 +126,59 @@ export function registerResearchRoutes(
         createdAt: c.createdAt,
         completedAt: c.completedAt,
       })),
+    });
+  });
+
+  // ---- GET /api/research/promotions (viewer+) ----
+  // "How do I find out when the researcher discovers something?"
+  //
+  // Until now the only answer was an alert rule: a promotion fans out to orgs
+  // subscribed to `recipe_promoted` over webhook or Slack. That is the right
+  // PUSH channel and it stays — but with no rule configured, which is every
+  // deployment that has not wired one, a promotion was announced to nobody
+  // and recorded in no feed. The status row moved and that was the entire
+  // event. This is the PULL half: the same finding, always available,
+  // requiring no external configuration to be seen.
+  //
+  // A promotion is not a routine state change. It means a recipe cleared a
+  // paired bootstrap over held-out items — 1000 resamples, and the CI LOWER
+  // bound had to beat the incumbent — so anything listed here is a strategy
+  // the evidence says is genuinely better, and is already serving traffic.
+  app.get('/api/research/promotions', async (req: FastifyRequest, reply) => {
+    const { sinceDays: rawDays, limit: rawLimit } = req.query as {
+      sinceDays?: string;
+      limit?: string;
+    };
+    const parsedDays = Number(rawDays);
+    const sinceDays = Number.isFinite(parsedDays)
+      ? Math.min(Math.max(Math.trunc(parsedDays), 1), 365)
+      : 30;
+    const parsedLimit = Number(rawLimit);
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 200)
+      : 50;
+
+    const promoted = await listRecentlyPromoted(db, sinceDays, limit);
+    // Join the config so a reader sees WHAT was promoted — a mixture reads as
+    // 'cascade(a→b)', not as a hash nobody can interpret.
+    const configs = new Map(
+      (await listAllStrategyConfigs(db)).map((c) => [c.hash, c.config as StrategyConfig]),
+    );
+    return reply.send({
+      sinceDays,
+      promotions: promoted.map((p) => {
+        const config = configs.get(p.strategyHash) ?? null;
+        return {
+          strategyHash: p.strategyHash,
+          strategyHash8: p.strategyHash.slice(0, 8),
+          config,
+          /** true when the promoted recipe combines models — the finding
+           *  class that cannot be reached by picking from a catalogue. */
+          isMixture: config !== null && config.type !== 'single',
+          firstCycleId: p.firstCycleId,
+          promotedAt: p.updatedAt,
+        };
+      }),
     });
   });
 

@@ -9,8 +9,15 @@ import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { dashboardAuthHook } from './auth.js';
 import { buildContext, type ContextOptions, type PotionContext } from './context.js';
+import { initSentry } from './sentry.js';
 // M2 Wave 2 metering (ROADMAP #17/#18) — appended imports (append-only block).
 import { registerRateLimiting } from './middleware/ratelimit.js';
+import {
+  DEMAND_FLUSH_INTERVAL_MS,
+  demandLearningEnabled,
+  flushDemand,
+  refreshDemandOptOut,
+} from './demand.js';
 import { registerUsageRoutes } from './routes/usage.js';
 // M2 Wave 2 key custody + lifecycle (ROADMAP #15/#16) — appended import.
 import { registerKeyRoutes } from './routes/keys.js';
@@ -71,6 +78,15 @@ import { createBudgetEvaluateHandler } from '@potion/workers';
 export const BUDGET_EVALUATE_INTERVAL_MS = 24 * 3600 * 1000;
 /** M4b #37: nightly new-model scan (SPEC §15.2 schedule trigger). */
 export const RESEARCH_SCAN_INTERVAL_MS = 24 * 3600 * 1000;
+/**
+ * S7 L4: nightly autonomous probe — demand picks the next measurement.
+ *
+ * Enqueued whether or not spending is authorized. With the daily cap unset
+ * the job writes a 'refused' ledger row and stops, which is how the loop
+ * stays VISIBLE while it is switched off: an idle learning table would
+ * otherwise be indistinguishable from a broken one.
+ */
+export const LEARNING_PROBE_INTERVAL_MS = 24 * 3600 * 1000;
 // ---- M5 #36 agent workloads ----
 /** Nightly agent-session clustering (SPEC §14.2). */
 export const TRACES_CLUSTER_INTERVAL_MS = 24 * 3600 * 1000;
@@ -93,6 +109,10 @@ export interface BuildServerOptions extends ContextOptions {
 }
 
 export async function buildServer(opts: BuildServerOptions = {}): Promise<FastifyInstance> {
+  // 13a §1.6: error reporting, one wiring point for server + in-process
+  // worker. No-op without SENTRY_DSN — see sentry.ts.
+  await initSentry();
+
   // ---- M3 #26 observability (m3-observability) ----
   // Env-gated: POTION_METRICS=0|false disables the meter + /metrics (default
   // ON); OTEL_EXPORTER_OTLP_ENDPOINT unset → OTel fully off (lazy import,
@@ -374,6 +394,49 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
     clearInterval(tracesPurge);
   });
   // ---- end M5 #36 ----
+  // ---- S7 L2: demand learning ----
+  // The serve path accumulates in memory; this drains it. On close it drains
+  // one last time, so a graceful shutdown does not throw away the window.
+  if (demandLearningEnabled()) {
+    void refreshDemandOptOut(ctx).catch((err: unknown) => {
+      app.log.warn(err, 'demand opt-out load failed — swallowed');
+    });
+    const demandFlush = setInterval(() => {
+      void flushDemand(ctx)
+        .then((report) => {
+          if (report.dropped > 0) {
+            // The cell cap turned observations away: this window UNDER-counts
+            // demand. Said out loud, because a bound nobody can see reads as
+            // "that demand never happened".
+            app.log.warn(
+              { dropped: report.dropped },
+              'demand accumulator hit its cell cap — window under-counts',
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          app.log.warn(err, 'demand flush failed — window dropped');
+        });
+    }, DEMAND_FLUSH_INTERVAL_MS);
+    demandFlush.unref();
+    app.addHook('onClose', async () => {
+      clearInterval(demandFlush);
+      await flushDemand(ctx).catch((err: unknown) => {
+        app.log.warn(err, 'final demand flush failed — window dropped');
+      });
+    });
+
+    const learningProbe = setInterval(() => {
+      queue.enqueue('learning:probe', {}).catch((err: unknown) => {
+        app.log.warn(err, 'learning probe enqueue failed — swallowed');
+      });
+    }, LEARNING_PROBE_INTERVAL_MS);
+    learningProbe.unref();
+    app.addHook('onClose', () => {
+      clearInterval(learningProbe);
+    });
+  }
+  // ---- end S7 L2/L4 ----
   const budgetSweep = setInterval(() => {
     queue.enqueue('budget:evaluate', {}).catch((err: unknown) => {
       app.log.warn(err, 'budget sweep enqueue failed — swallowed');

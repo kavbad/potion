@@ -11,6 +11,7 @@ import {
   type WorkerHandler,
 } from './handlers.js';
 import { JOB_KINDS, type JobKind, type JobPayloads } from './jobs.js';
+import { startResearchSchedule } from './schedule.js';
 
 /** Accepts a full DbHandle (server context, tests) or a bare PotionDb. */
 export type WorkerDb = DbHandle | PotionDb;
@@ -35,6 +36,13 @@ export interface RunWorkerOptions {
   /** M5 #36: platform embedder for traces:cluster (the server passes its
    * own dimension-guarded instance; tests inject a deterministic fake). */
   embedder?: { embed(t: string[]): Promise<number[][]> };
+  /**
+   * Hours between autoresearcher scans. Omit to read
+   * POTION_RESEARCH_SCAN_INTERVAL_HOURS; unset or 0 leaves the heartbeat OFF.
+   * See schedule.ts — a scan is free, so the cost of a heartbeat is bounded
+   * by the cycles a genuinely new model triggers.
+   */
+  researchScanIntervalHours?: number;
   /** M5 #36: suite v2 dir for synthesized agent replay suites (default:
    * POTION_SUITES_V2_DIR env, else the harness repo suites dir — the
    * prices.json precedent; tests/walkthrough override to a tmp copy). */
@@ -44,6 +52,10 @@ export interface RunWorkerOptions {
 export interface WorkerHandle {
   /** The job kinds this worker consumes. */
   kinds: readonly JobKind[];
+  /** Autoresearcher heartbeat cadence, or null when it is off. Surfaced so a
+   *  deployment can assert its research programme is actually running rather
+   *  than assuming it. */
+  researchScanIntervalHours: number | null;
   /** The queue the worker is registered on (caller keeps ownership). */
   queue: PotionQueue;
   /** Stop consuming: closes the queue (memory: drains first; bullmq: drains
@@ -74,6 +86,16 @@ export async function runWorker(opts: RunWorkerOptions): Promise<WorkerHandle> {
     // guarantee breach / budget events) enqueue on this queue when present.
     queue: opts.queue,
   };
+  // The autoresearcher's heartbeat. Off unless an interval is named — see
+  // schedule.ts for why a timer is safe here (a scan spends nothing; only a
+  // genuinely new model causes a capped, budget-gated cycle).
+  const research = startResearchSchedule({
+    queue: opts.queue,
+    ...(opts.researchScanIntervalHours !== undefined
+      ? { intervalHours: opts.researchScanIntervalHours }
+      : {}),
+  });
+
   const handlers = { ...defaultHandlers, ...(opts.handlers ?? {}) };
   for (const kind of JOB_KINDS) {
     const handler = handlers[kind] as WorkerHandler;
@@ -88,13 +110,21 @@ export async function runWorker(opts: RunWorkerOptions): Promise<WorkerHandle> {
   return {
     kinds: JOB_KINDS,
     queue: opts.queue,
+    researchScanIntervalHours: research.intervalHours,
     close: async () => {
+      research.stop();
       await opts.queue.close();
     },
   };
 }
 
 export * from './jobs.js';
+export {
+  startResearchSchedule,
+  RESEARCH_SCAN_INTERVAL_ENV,
+  type ResearchSchedule,
+  type ResearchScheduleOptions,
+} from './schedule.js';
 export { createOrgDeleteHandler, orgDeleteHandler, type OrgDeleteHandlerOpts } from './org-delete.js';
 export {
   defaultHandlers,

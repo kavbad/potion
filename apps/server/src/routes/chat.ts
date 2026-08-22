@@ -27,6 +27,9 @@ import {
   fastestQualityQualifyingPoint,
   highestQualityPoint,
   latencyPremium,
+  lshBucket,
+  requestShape,
+  shapeClass,
   selectPoint,
   strategyHash,
   type ChatMessage,
@@ -37,6 +40,7 @@ import {
   type Usage,
 } from '@potion/core';
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
+import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
@@ -134,6 +138,28 @@ export interface OperatingPoint {
    * DTO, the playground response, and a standing policy condition.
    */
   latencyViolation?: LatencyViolation;
+  /**
+   * Set ONLY when a request carried `tools` and the policy's optimum was a
+   * prompt-transforming strategy, so selection was narrowed to single-model
+   * points. Same discipline as latencyViolation: the substitution is real, so
+   * it is labelled rather than hidden.
+   *
+   * Note what is and is not given up. Restricting to single points can never
+   * BREACH a policy's stated bound — a quality floor still holds, a cost
+   * ceiling still holds, a latency bound still holds, because the restricted
+   * set is a subset of the qualifying set. It costs optimality only. That is
+   * why `fallback` stays 0 when a single point still satisfies the policy:
+   * the request genuinely was routed on measured evidence.
+   */
+  toolConstraint?: ToolConstraint;
+}
+
+/** The labelled consequence of tools forcing a single-model point. */
+export interface ToolConstraint {
+  /** The strategy type the policy would have selected without tools. */
+  wouldHaveServedType: string;
+  /** Its hash, so the substitution is auditable against the frontier. */
+  wouldHaveServedHash: string;
 }
 
 /** The labeled consequence of an unmeetable latency bound (G2.6). */
@@ -168,7 +194,38 @@ export function resolveOperatingPoint(
   policy: Policy,
   frontier: Frontier | null,
   fallbackStrategy: StrategyConfig | null = DEFAULT_STRATEGY,
+  opts: { toolCapableOnly?: boolean } = {},
 ): OperatingPoint {
+  // TOOL-CAPABLE NARROWING. A request carrying `tools` cannot be served by a
+  // strategy that rewrites or fans out the prompt — cascade/ensemble/
+  // draft-verify transform what the model sees, and tool-call semantics
+  // cannot be guaranteed through that. This used to be a hard 400, which
+  // meant a customer whose policy happened to select a cascade discovered it
+  // in production and had no route through: the refusal named the problem and
+  // offered only "choose a different policy".
+  //
+  // Instead: resolve normally, and if the optimum is not single, re-resolve
+  // over the single-only subset and LABEL the substitution. 41 of the 44
+  // points on the committed platform frontier are single, so this almost
+  // always finds a measured answer, and both last-resort fallbacks
+  // (DEFAULT_STRATEGY, liveDefaultStrategy) are single by construction.
+  if (opts.toolCapableOnly) {
+    const unrestricted = resolveOperatingPoint(policy, frontier, fallbackStrategy);
+    if (unrestricted.config?.type === 'single' || unrestricted.config === null) return unrestricted;
+    const singles = frontier ? frontier.points.filter((p) => p.strategyConfig.type === 'single') : [];
+    const narrowed: Frontier | null =
+      frontier && singles.length > 0 ? { ...frontier, points: singles } : null;
+    const restricted = resolveOperatingPoint(policy, narrowed, fallbackStrategy);
+    return {
+      ...restricted,
+      // A narrowed frontier still reports its real version; only an absent
+      // one falls to 0, which resolveOperatingPoint already handles.
+      toolConstraint: {
+        wouldHaveServedType: unrestricted.config.type,
+        wouldHaveServedHash: strategyHash(unrestricted.config),
+      },
+    };
+  }
   if (!frontier || frontier.points.length === 0) {
     return { config: fallbackStrategy, fallback: 1, frontierVersion: 0, frontier };
   }
@@ -305,11 +362,16 @@ export function traceHeaderValue(op: {
   policyType: string;
   fallback: 0 | 1;
   provenance: 'live' | 'mock' | 'blocked';
+  /** Present only when tools narrowed selection — see ToolConstraint. */
+  constrained?: 'tools';
 }): string {
   return (
     `cluster=${op.clusterId};strategy=${op.strategyHash8};` +
     `frontier=v${op.frontierVersion};policy=${op.policyType};fallback=${op.fallback};` +
-    `provenance=${op.provenance}`
+    `provenance=${op.provenance}` +
+    // Appended only when it actually fired, so ordinary traffic's trace is
+    // byte-identical to before this change.
+    (op.constrained ? `;constrained=${op.constrained}` : '')
   );
 }
 
@@ -321,6 +383,8 @@ export interface ParsedTrace {
   policyType: string | null;
   /** null when the token is absent or unrecognised — never silently 0. */
   fallback: 0 | 1 | null;
+  /** 'tools' when tools narrowed selection to a single-model point. */
+  constrained: 'tools' | null;
   provenance: 'live' | 'mock' | 'blocked' | null;
   /** Every other token verbatim (upgraded, policy_override, latency fields). */
   extra: Record<string, string>;
@@ -345,6 +409,7 @@ export function parseTraceHeader(trace: string | null | undefined): ParsedTrace 
     frontierVersion: null,
     policyType: null,
     fallback: null,
+    constrained: null,
     provenance: null,
     extra: {},
   };
@@ -368,6 +433,9 @@ export function parseTraceHeader(trace: string | null | undefined): ParsedTrace 
       }
       case 'policy':
         out.policyType = value;
+        break;
+      case 'constrained':
+        out.constrained = value === 'tools' ? 'tools' : null;
         break;
       case 'fallback':
         out.fallback = value === '0' ? 0 : value === '1' ? 1 : null;
@@ -615,6 +683,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
 
     // ---- 3. cluster assign (<30ms target; cached by content hash) ----
     let clusterId: string;
+    // Hoisted: the demand observation below needs the ranking, and a hinted
+    // request has none — `undefined` there means "the customer told us",
+    // which is a different fact from a weak match.
+    let ranked: RankedAssignment | undefined;
     if (hintedClusterId !== null) {
       // M5 #36: hint wins; the embedder/assigner is skipped entirely.
       clusterId = hintedClusterId;
@@ -622,14 +694,58 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const userContents = body.messages.filter((m) => m.role === 'user').map((m) => m.content);
       const contents = userContents.length > 0 ? userContents : body.messages.map((m) => m.content);
       const cacheKey = assignmentCacheKey(contents);
-      let assignment = ctx.assignCache.get(cacheKey);
-      if (!assignment) {
-        assignment = await ctx.assigner.assign(contents.join('\n'));
-        ctx.assignCache.set(cacheKey, assignment);
+      ranked = ctx.assignCache.get(cacheKey);
+      if (!ranked) {
+        // S7 L1: assignRanked, not assign — ONE embedding, and it returns the
+        // per-cluster cosines pickBest already computed instead of throwing
+        // all but one away. The decision is unchanged (same threshold, same
+        // 'general' fallback); what is new is that the row can now say how
+        // well this request fit anything we have measured.
+        ranked = await ctx.assigner.assignRanked(contents.join('\n'));
+        ctx.assignCache.set(cacheKey, ranked);
       }
-      clusterId = assignment.clusterId;
+      clusterId = ranked.assignment.clusterId;
+      logBase.clusterConfidence = ranked.assignment.confidence;
+      // The runner-up is read from the RANKING, not from the decision: when
+      // the decision fell back to 'general' the best match is still the most
+      // informative thing we know about the request.
+      const runnerUp = ranked.ranking.find((r) => r.clusterId !== clusterId);
+      if (runnerUp !== undefined) {
+        logBase.runnerUpCluster = runnerUp.clusterId;
+        logBase.clusterMargin =
+          Math.round((ranked.assignment.confidence - runnerUp.confidence) * 1e6) / 1e6;
+      }
     }
     logBase.clusterId = clusterId;
+    // Content-free request structure (S7 L1). Recorded for hinted clusters
+    // too — the hint skips classification, not the shape, and agent traffic
+    // is the most tool-carrying traffic there is.
+    const shape = requestShape(body);
+    logBase.shape = shape;
+
+    // ---- S7 L2: contribute to the demand aggregate ----
+    // In-process only: a Map update, no query, no write. What leaves this
+    // process is a SUM over many requests from many orgs, and only once the
+    // k-gate opens (repos/demand.ts). An opted-out org is skipped HERE, so
+    // its traffic never enters an accumulator at all.
+    if (ctx.demandEnabled && !ctx.demandOptOut.has(auth.org.orgId)) {
+      // An unassigned request is bucketed by its embedding's LSH label, not
+      // by 'general' — 'general' is where every unlike thing piles up, and
+      // the whole point is to tell those things apart. A hinted cluster has
+      // no embedding and is counted under its own id with no centroid.
+      const bucket =
+        ranked !== undefined && ranked.fellBack ? lshBucket(ranked.embedding) : clusterId;
+      ctx.demand.observe({
+        bucket,
+        shapeClass: shapeClass(shape),
+        at: new Date(),
+        orgId: auth.org.orgId,
+        // Absent for a hinted request: nothing measured the fit, and a 1.0
+        // would be a fabricated certainty inside the cell's mean.
+        ...(ranked !== undefined ? { confidence: ranked.assignment.confidence } : {}),
+        ...(ranked !== undefined ? { embedding: ranked.embedding } : {}),
+      });
+    }
 
     // ---- 4. frontier → provenance guard → selectPoint(policy) → NULL fallback ----
     // G1.6 retracts the old "NEVER org-scoped" contract: the read is
@@ -661,6 +777,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       policy,
       latency.frontier,
       fallbackStrategyFor(ctx.providerMode, ctx.prices),
+      // A request carrying tools can only be served by a single-model point;
+      // narrowing happens HERE, at selection, rather than as a refusal after
+      // the fact. See the note in resolveOperatingPoint.
+      { toolCapableOnly: body.tools !== undefined },
     );
     // ---- M3 #22 guarantee (m3-guarantee) — rollback operating-point override ----
     // The LATEST UNRESOLVED kind='rollback' incident for (org, cluster) IS the
@@ -696,6 +816,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         policyType: policy.type,
         fallback: op.fallback,
         provenance,
+        ...(op.toolConstraint ? { constrained: 'tools' as const } : {}),
       }) +
       (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
@@ -794,15 +915,24 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           ),
         );
     }
+    // FAIL-CLOSED BACKSTOP. Selection above already narrows to single-model
+    // points when tools are present, and both last-resort fallbacks are single
+    // by construction — so reaching here means a guarantee rollback override
+    // (below) swapped in a transforming strategy after selection. Serving
+    // tools through one would silently drop them, which is the failure this
+    // guard exists to prevent. It is no longer the ordinary path: a customer
+    // whose policy prefers a cascade now gets the best measured SINGLE point
+    // instead of a 400.
     if (body.tools !== undefined && op.config.type !== 'single') {
       await logRequest({ ...logBase, status: 'invalid_request', latencyMs: elapsed() });
       return reply
         .code(400)
         .send(
           openAiError(
-            `tools/tool_choice are only supported on 'single' strategies — the operating ` +
-              `point resolved to '${op.config.type}', which transforms prompts and cannot ` +
-              `guarantee tool semantics (choose a policy whose frontier point is 'single')`,
+            `tools/tool_choice cannot be served by a '${op.config.type}' strategy, which ` +
+              `transforms prompts and cannot guarantee tool semantics. The operating point ` +
+              `was overridden after selection (guarantee rollback) — resolve the incident ` +
+              `or send this request without tools`,
             'invalid_request_error',
             'invalid_request_error',
             'tools',

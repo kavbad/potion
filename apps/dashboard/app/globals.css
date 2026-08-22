@@ -3,7 +3,129 @@
 @tailwind utilities;
 
 @layer base {
+  /* THE GLAZE (v1000). One continuous finish over every surface, all of it
+     base-layer so every route inherits the same coat. The moves, in order:
+     the page is one sheet of PAPER WITH TOOTH (an SVG-noise grain fixed
+     behind all content — panels cover it, so raised surfaces stay clean the
+     way varnished panels sit on stained wood); selection is a teal wash;
+     keyboard focus is branded, not browser-blue; display type balances its
+     own rag; and anchor jumps glide. None of it is a new colour or a
+     gradient — a stain deepens what is already there. */
   html {
     @apply bg-paper text-ink antialiased;
+    scroll-behavior: smooth;
   }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  body {
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+  }
+  /* the grain: fixed, behind everything, over html's paper only */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    mix-blend-mode: multiply;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* THE GLAZE, take three — not colour, not type (both operator-reverted):
+     RESPONSE. One motion grammar for the whole site, so everything answers
+     the cursor the same way: raised artefacts breathe up 2px into a deeper
+     tier of the same shadow, buttons carry press-weight, links draw their
+     underlines in. Nothing moves on its own; everything answers. */
+  a, button {
+    transition-property: color, background-color, border-color, text-decoration-color, opacity, box-shadow, transform;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.2, 0.6, 0.3, 1);
+  }
+  .lift {
+    transition: transform 220ms cubic-bezier(0.2, 0.6, 0.3, 1), box-shadow 220ms cubic-bezier(0.2, 0.6, 0.3, 1);
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-2px);
+      @apply shadow-paper-lift;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lift, .lift:hover { transform: none; }
+  }
+
+  ::selection {
+    background: #99f6e4;
+    color: #134e4a;
+  }
+  :focus-visible {
+    outline: 2px solid #0f766e;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer utilities {
+  /* A settle, not a slide: content rises a short distance and eases to rest
+     on a curve with no overshoot, so the page reads as composed rather than
+     animated. The blur is 2px and lifts within the first third — enough to
+     register as focus arriving, never enough to be seen as an effect. */
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(14px); filter: blur(2px); }
+    60% { filter: blur(0); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+  }
+  .reveal-init { opacity: 0; }
+  .reveal-in { animation: rise-in 0.72s cubic-bezier(0.16, 0.84, 0.28, 1) forwards; }
+  /* The routing tape: a continuous instrument feed. Content is duplicated
+     once in the DOM; the track slides exactly half its own width and loops,
+     so the seam is invisible. Hover pauses; reduced motion gets a static,
+     scrollable strip. */
+  @keyframes tape-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .tape-track {
+    display: flex;
+    width: max-content;
+    animation: tape-scroll 48s linear infinite;
+  }
+  .tape:hover .tape-track { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) {
+    .tape-track { animation: none; }
+    .tape { overflow-x: auto; }
+  }
+
+  @keyframes caret-blink { 50% { opacity: 0; } }
+  .type-caret::after {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: currentColor;
+    animation: caret-blink 1s steps(1) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-init { opacity: 1; }
+    .reveal-in { animation: none; }
+    .type-caret::after { animation: none; }
+  }
+}
+
+@keyframes heroFloat {
+  from { transform: translateY(-7px); }
+  to { transform: translateY(9px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*='heroFloat'] { animation: none; }
 }
