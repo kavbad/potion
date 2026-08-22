@@ -29,9 +29,9 @@ export function EvidenceBand() {
   // the right. No shared container, no rounded box; the seam IS the design.
   return (
     <section id="evidence" className="grid border-y border-line lg:grid-cols-[2fr_3fr]">
-      <div className="bg-[#292524] px-6 py-20 text-[#faf9f6] sm:px-12 lg:py-28">
+      <div className="bg-[linear-gradient(160deg,#042f2e_0%,#0f766e_100%)] px-6 py-20 text-white sm:px-12 lg:py-28">
         <div className="lg:ml-auto lg:max-w-md">
-          <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#a8a29e]">
+          <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#99f6e4]">
             Measured, not claimed
           </div>
           <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
@@ -39,16 +39,16 @@ export function EvidenceBand() {
             <br />
             A 270× price range.
           </h2>
-          <p className="mt-6 text-sm leading-relaxed text-[#d6d3d1]">
+          <p className="mt-6 text-sm leading-relaxed text-white/85">
             Five models writing code to specification — scored by running their code, not by
             opinion. The quality difference across this table is two points in a hundred. The price
-            difference is <span className="font-medium text-[#ccfbf1]">two hundred and seventy fold</span>.
+            difference is <span className="font-medium text-[#99f6e4]">two hundred and seventy fold</span>.
           </p>
-          <p className="mt-4 text-sm leading-relaxed text-[#d6d3d1]">
+          <p className="mt-4 text-sm leading-relaxed text-white/85">
             This is why routing pays: most requests deserve the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
-          <p className="mt-6 font-mono text-[11px] leading-relaxed text-[#a8a29e]">
+          <p className="mt-6 font-mono text-[11px] leading-relaxed text-[#99f6e4]/80">
             measured 2026-08-20 · retrieval-hostile suite · scored by execution · error bars on the
             full table in the docs
           </p>
@@ -75,7 +75,7 @@ export function EvidenceBand() {
                 </div>
                 <div className="mt-1.5 h-5 overflow-hidden rounded-sm bg-line/60">
                   <div
-                    className={`h-full rounded-sm ${star ? 'bg-accent' : 'bg-[#a8a29e]'}`}
+                    className={`h-full rounded-sm ${star ? 'bg-[linear-gradient(90deg,#0f766e,#2dd4bf)]' : 'bg-[#99f6e4]'}`}
                     style={{ width: `${w}%` }}
                   />
                 </div>

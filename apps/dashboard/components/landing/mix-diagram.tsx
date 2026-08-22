@@ -23,7 +23,7 @@ export function MixDiagram() {
         <line x1="8" y1="56" x2="60" y2="56" stroke="#e7e2da" strokeWidth="1" />
 
         {/* cheap model */}
-        <rect x="60" y="33" width={boxW} height={boxH} rx="7" fill="#faf9f6" stroke="#e7e2da" />
+        <rect x="60" y="33" width={boxW} height={boxH} rx="7" fill="#ccfbf1" stroke="#5eead4" />
         <text x={60 + boxW / 2} y="52" textAnchor="middle" fontSize="12" fill="#292524">a cheap model</text>
         <text x={60 + boxW / 2} y="67" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#a8a29e">
           answers first
@@ -31,14 +31,14 @@ export function MixDiagram() {
 
         {/* confidence gate */}
         <line x1={60 + boxW} y1="56" x2="238" y2="56" stroke="#e7e2da" strokeWidth="1" />
-        <circle cx="248" cy="56" r="10" fill="#faf9f6" stroke="#0f766e" strokeWidth="1.2" />
-        <text x="248" y="60" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#0f766e">?</text>
+        <circle cx="248" cy="56" r="10" fill="#0f766e" stroke="#0f766e" strokeWidth="1.2" />
+        <text x="248" y="60" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#ffffff">?</text>
         <text x="248" y="30" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#a8a29e">
           sure enough?
         </text>
 
         {/* yes → done */}
-        <line x1="258" y1="56" x2="330" y2="56" stroke="#0f766e" strokeWidth="1.4" />
+        <line x1="258" y1="56" x2="330" y2="56" stroke="#14b8a6" strokeWidth="2" />
         <text x="294" y="47" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#0f766e">yes</text>
         <text x="336" y="60" fontSize="11" fill="#292524">done</text>
 
@@ -47,9 +47,9 @@ export function MixDiagram() {
         <text x="262" y="94" fontSize="10" fontFamily="monospace" fill="#a8a29e">no</text>
 
         {/* strong model */}
-        <rect x="60" y="133" width={boxW} height={boxH} rx="7" fill="#faf9f6" stroke="#e7e2da" />
-        <text x={60 + boxW / 2} y="152" textAnchor="middle" fontSize="12" fill="#292524">a stronger model</text>
-        <text x={60 + boxW / 2} y="167" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#a8a29e">
+        <rect x="60" y="133" width={boxW} height={boxH} rx="7" fill="#0f766e" stroke="#0f766e" />
+        <text x={60 + boxW / 2} y="152" textAnchor="middle" fontSize="12" fill="#ffffff">a stronger model</text>
+        <text x={60 + boxW / 2} y="167" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#99f6e4">
           only when needed
         </text>
         <line x1={60 + boxW} y1="156" x2="330" y2="156" stroke="#e7e2da" strokeWidth="1" />

@@ -149,7 +149,8 @@ export function Landing() {
           The differentiation is JUDGMENT — per-request selection backed by
           held-out measurement, a quality floor, and a receipt — and the table
           only claims that. */}
-      <section id="vs-gateways" className="mx-auto max-w-6xl px-6 py-24">
+      <section id="vs-gateways" className="bg-[#ecfdf5]">
+        <div className="mx-auto max-w-6xl px-6 py-24">
         <Reveal>
           <Eyebrow>The obvious question</Eyebrow>
           <h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
@@ -170,8 +171,8 @@ export function Landing() {
                   mark, so the eye picks its side before reading a word */}
               <div className="bg-panel px-5 py-4" />
               <div className="bg-panel px-5 py-4 text-sm font-medium text-soft">A model gateway</div>
-              <div className="flex items-center gap-2 bg-[#f2f9f7] px-5 py-4 text-sm font-medium text-accent">
-                <Mark className="h-4 w-4" />
+              <div className="flex items-center gap-2 bg-accent px-5 py-4 text-sm font-medium text-white">
+                <Mark className="h-4 w-4 text-white" />
                 Potion
               </div>
               {[
@@ -187,7 +188,7 @@ export function Landing() {
                     {k}
                   </div>
                   <div className="bg-panel px-5 py-4 text-sm leading-relaxed text-soft">{a}</div>
-                  <div className="flex items-start gap-2.5 bg-[#f2f9f7] px-5 py-4 text-sm leading-relaxed text-ink">
+                  <div className="flex items-start gap-2.5 bg-[#ccfbf1] px-5 py-4 text-sm leading-relaxed text-ink">
                     <span aria-hidden className="mt-[9px] flex shrink-0 items-end">
                       <span className="h-px w-3 bg-accent/70" />
                       <span className="h-[5px] w-px bg-accent/70" />
@@ -221,12 +222,13 @@ export function Landing() {
               ))}
             </div>
           </div>
-          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-faint">
+          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-soft">
             Access stopped being scarce the day gateways shipped. Judgment — measured per kind of
             work, stated with its error bars, enforced as a floor — is the scarce layer. That layer
             is Potion, and it works the same over any gateway or provider underneath.
           </p>
         </Reveal>
+        </div>
       </section>
 
       {/* ---------------- the evidence band (exa lesson: one dark, named-bars section) ---------------- */}
@@ -249,8 +251,8 @@ export function Landing() {
           one. The closing line is the only place the page looks past what is
           already measured, which is why it is phrased as an admission (almost
           none of it has been measured) rather than a promise. */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <div className="grid items-center gap-14 lg:grid-cols-2">
+      <section className="bg-[#f0fdfa]">
+        <div className="mx-auto grid max-w-6xl items-center gap-14 px-6 py-24 lg:grid-cols-2">
           <Reveal>
             <Eyebrow>Sometimes the answer is not one model</Eyebrow>
             <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
@@ -268,7 +270,7 @@ export function Landing() {
               stay above this quality, stay under this cost — and if a combination is the best way
               to honour it, that is what serves your request. The receipt names whatever answered.
             </p>
-            <p className="mt-6 border-l-2 border-accent/30 pl-5 text-base leading-relaxed text-ink">
+            <p className="mt-6 border-l-[3px] border-accent pl-5 text-base font-medium leading-relaxed text-accent">
               There are far more useful combinations than there are models, and almost none of them
               have been measured by anyone. That is the dimension this company is named for.
             </p>
@@ -302,7 +304,7 @@ export function Landing() {
       {/* ---------------- business model ---------------- */}
       {/* exa's enterprise-security composition: a full-bleed dark band, the
           headline top-left, and the concrete promises as outlined tiles. */}
-      <section className="bg-[#292524] text-[#faf9f6]">
+      <section className="bg-[linear-gradient(160deg,#042f2e_0%,#0f3d3a_55%,#134e4a_100%)] text-[#f0fdfa]">
         <div className="mx-auto max-w-6xl px-6 py-28">
           <Reveal>
             <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#a8a29e]">
@@ -361,7 +363,7 @@ export function Landing() {
               ].map((t) => (
                 <div
                   key={t.h}
-                  className="rounded-lg border border-[#44403c] px-6 py-6 transition-colors hover:border-[#2dd4bf]/50"
+                  className="rounded-lg border border-white/15 bg-white/[0.04] px-6 py-6 transition-colors hover:border-[#2dd4bf]/70 hover:bg-white/[0.07]"
                 >
                   <svg viewBox="0 0 24 24" className="h-8 w-8 text-[#2dd4bf]" aria-hidden>
                     {t.glyph}
@@ -376,36 +378,36 @@ export function Landing() {
       </section>
 
       {/* ---------------- close ---------------- */}
-      <section className="border-t border-line bg-panel">
-        <div className="mx-auto max-w-6xl px-6 py-24 text-center">
+      <section className="bg-[linear-gradient(135deg,#0f766e_0%,#14b8a6_60%,#2dd4bf_100%)] text-white">
+        <div className="mx-auto max-w-6xl px-6 py-28 text-center">
           <Reveal>
             <div className="flex items-center justify-center gap-6" aria-hidden>
               <span className="flex items-end">
-                <span className="h-px w-24 bg-line" />
-                <span className="h-2 w-px bg-line" />
+                <span className="h-px w-24 bg-white/50" />
+                <span className="h-2 w-px bg-white/50" />
               </span>
-              <Mark className="h-9 w-9 text-accent" />
+              <Mark className="h-9 w-9 text-white" />
               <span className="flex items-end" style={{ transform: 'scaleX(-1)' }}>
-                <span className="h-px w-24 bg-line" />
-                <span className="h-2 w-px bg-line" />
+                <span className="h-px w-24 bg-white/50" />
+                <span className="h-2 w-px bg-white/50" />
               </span>
             </div>
-            <h2 className="mx-auto mt-6 max-w-xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
+            <h2 className="mx-auto mt-6 max-w-xl text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-[2.75rem]">
               Change one line. Keep the receipts.
             </h2>
-            <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-soft">
+            <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/85">
               Point a client at Potion and watch the routing decisions arrive with the answers.
             </p>
             <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
               <Link
                 href="/login"
-                className="rounded-md bg-ink px-5 py-2.5 text-sm font-medium text-white hover:opacity-85 active:translate-y-px active:scale-[0.99]"
+                className="rounded-md bg-white px-5 py-2.5 text-sm font-medium text-accent hover:bg-[#f0fdfa] active:translate-y-px active:scale-[0.99]"
               >
                 Get an API key
               </Link>
               <Link
                 href="/docs"
-                className="rounded-md bg-paper px-4 py-2.5 text-sm font-medium text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink"
+                className="rounded-md px-4 py-2.5 text-sm font-medium text-white ring-1 ring-white/50 transition-colors hover:bg-white/10"
               >
                 Read the docs →
               </Link>

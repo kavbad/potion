@@ -69,6 +69,14 @@ function select(kind: PolicyKind, v: number): LandingPoint | null {
 /** Label placement, computed from position and clamped to the canvas —
  * hand-placed offset tables strand on every republish (one crashed, one
  * collided) and are gone for good. */
+/** Dot fill by measured quality: grey at the bottom of the range, teal at the top —
+ * the eye reads "better" before it reads the axis. */
+function qualityTint(q: number): string {
+  const t = Math.max(0, Math.min(1, (q - 0.5) / 0.5));
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return `rgb(${mix(214, 45)}, ${mix(211, 212)}, ${mix(209, 191)})`;
+}
+
 function labelPlacement(px: number, py: number): { dx: number; dy: number; anchor: 'start' | 'end' } {
   const anchor = px > W - MR - 150 ? 'end' : 'start';
   const dx = anchor === 'start' ? 10 : -10;
@@ -220,7 +228,8 @@ export function FrontierExplorer() {
                 strokeWidth="1" strokeLinecap="round" opacity={sel ? 0.55 : 0.3} />
               {sel && <circle cx={x(p.costPer1K)} cy={y(p.quality)} r="10" fill="#0f766e" opacity="0.12" />}
               <circle cx={x(p.costPer1K)} cy={y(p.quality)} r="4.5"
-                fill={sel ? '#0f766e' : '#e7e2da'} stroke={sel ? '#0f766e' : '#a8a29e'} strokeWidth="1" />
+                fill={sel ? '#0f766e' : qualityTint(p.quality)} stroke={sel ? '#0f766e' : '#0f766e'} strokeWidth="1"
+                strokeOpacity={sel ? 1 : 0.35} />
               <text x={x(p.costPer1K) + dx} y={y(p.quality) + dy} textAnchor={anchor} fontSize="10.5"
                 fontFamily="monospace" fill={sel ? '#0f766e' : '#57534e'} fontWeight={sel ? '600' : '400'}
                 stroke="#ffffff" strokeWidth="3.5" style={{ paintOrder: 'stroke' }}

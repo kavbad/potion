@@ -9,9 +9,9 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
   return (
     <>
       {/* exa-style announcement bar — ours carries the masked discovery */}
-      <div className="border-b border-line bg-accent-soft/50 px-4 py-2 text-center text-xs text-ink">
+      <div className="bg-accent px-4 py-2 text-center text-xs text-white">
         This week we measured a model at{' '}
-        <Link href="/home#evidence" className="font-medium underline underline-offset-2">
+        <Link href="/home#evidence" className="font-medium text-white underline decoration-white/60 underline-offset-2 hover:decoration-white">
           1/270th the price of the best — at 99% of its quality
         </Link>
         . The name is the product.
