@@ -43,29 +43,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
-import { TOO_CLOSE_EXAMPLE } from '@/lib/evidence';
 import { Reveal } from '@/components/landing/reveal';
 import { ScrollRail } from '@/components/landing/scroll-rail';
 import { RouteTape } from '@/components/landing/route-tape';
 import { RouteConsole } from '@/components/landing/route-console';
 import { HeroDrift } from '@/components/landing/hero-drift';
 import { EvidenceBand } from '@/components/landing/evidence-band';
-import { StatCards } from '@/components/landing/stat-cards';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
-import { CiOverlap } from '@/components/landing/ci-overlap';
 import { MixDiagram } from '@/components/landing/mix-diagram';
-import { SavingsModel } from '@/components/landing/savings-model';
-import { PriceSpread } from '@/components/landing/price-spread';
-
-function Rule() {
-  return (
-    <div className="flex items-center" aria-hidden>
-      <div className="h-px flex-1 bg-line" />
-      <div className="h-2.5 w-px bg-line" />
-      <div className="h-px w-10 bg-line" />
-    </div>
-  );
-}
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   // Every section opens with the same fingerprint: the mark's graduation
@@ -83,78 +68,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Technical detail, demoted but not apologetic.
- *
- * The first version was a thin left rule and grey text, which read as an
- * afterthought someone forgot to delete rather than as the proof it is. A
- * tinted panel with a mono label says "this is a different register, on
- * purpose" — the non-technical reader skips it cleanly, and the engineer
- * finds it without hunting.
- */
-function ForEngineers({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-6 rounded-lg bg-paper px-4 py-3.5">
-      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
-        for engineers
-      </div>
-      <div className="text-xs leading-relaxed text-soft">{children}</div>
-    </div>
-  );
-}
-
-/**
- * A claim card anchored by a figure.
- *
- * Three columns of body text have no hierarchy — the eye has nowhere to land
- * and every card looks equally important, which means none of them are. A
- * large figure at the top gives each card a handle, sets a rhythm across the
- * row, and reuses the page's existing vocabulary (the evidence strip's mono
- * numerals). `mt-auto` pins the technical note to the bottom so the notes
- * align across cards even when the prose above them runs to different
- * lengths — the specific thing that made the old row look broken.
- */
-function ClaimCard({
-  figure,
-  figureLabel,
-  heading,
-  children,
-  note,
-}: {
-  figure: string;
-  figureLabel: string;
-  heading: string;
-  children: React.ReactNode;
-  note: string;
-}) {
-  return (
-    <div className="group relative flex h-full flex-col bg-panel px-8 py-9 transition-colors hover:bg-accent-soft/15">
-      <span
-        aria-hidden
-        className="absolute right-6 top-7 font-mono text-sm text-faint/0 transition-colors group-hover:text-accent"
-      >
-        ↗
-      </span>
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-accent/40 bg-accent-soft/20 font-mono text-2xl font-medium leading-none text-accent transition-colors group-hover:bg-accent-soft/50">
-        {figure}
-      </div>
-      <div className="mt-3 text-xs uppercase tracking-wide text-faint">{figureLabel}</div>
-      <h3 className="mt-6 text-base font-medium text-ink">{heading}</h3>
-      <p className="mt-2.5 text-sm leading-relaxed text-soft">{children}</p>
-      <div className="mt-auto pt-6">
-        <div className="border-t border-line pt-3 font-mono text-[11px] leading-relaxed text-faint">
-          {note}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function Landing() {
-  const { strong, cheap } = TOO_CLOSE_EXAMPLE;
-  const cheaperPct = Math.round((1 - cheap.costPer1K / strong.costPer1K) * 100);
-  const fasterX = (strong.p95Ms / cheap.p95Ms).toFixed(1);
-
   return (
     <div>
       <ScrollRail />
@@ -315,182 +229,8 @@ export function Landing() {
         </Reveal>
       </section>
 
-      {/* ---------------- method strip ---------------- */}
-      {/* This was four big counts — workload types, strategies, graded
-          answers, models. Inventory numbers date badly, hand a competitor the
-          size of the job, and read cold they make a serious corpus sound
-          small. Method survives all three problems: it is what a sceptic
-          actually wants to know, and it stays true as the corpus grows. */}
-      <section className="border-y border-line bg-panel">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px bg-line px-6 sm:grid-cols-4">
-          {[
-            {
-              n: '01',
-              h: 'Held-out sets',
-              p: 'Graded on items the models never see in advance.',
-              glyph: (
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden>
-                  {[5, 12, 19].map((y) =>
-                    [5, 12, 19].map((x) => (
-                      <circle key={`${x}${y}`} cx={x} cy={y} r="1.4" fill="currentColor" opacity={x === 19 && y === 5 ? 0 : 0.55} />
-                    )),
-                  )}
-                  <circle cx="19" cy="5" r="3.2" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-              ),
-            },
-            {
-              n: '02',
-              h: 'Known answers',
-              p: 'Scored against a reference, or by running the code.',
-              glyph: (
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden>
-                  <path d="M5 13l4.5 4.5L19 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ),
-            },
-            {
-              n: '03',
-              h: 'Stated uncertainty',
-              p: 'Every score carries the interval its evidence supports.',
-              glyph: (
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden>
-                  <path d="M12 4v16M8 4h8M8 20h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                  <circle cx="12" cy="12" r="2.4" fill="currentColor" />
-                </svg>
-              ),
-            },
-            {
-              n: '04',
-              h: 'Re-measured on release',
-              p: 'A new model is tested before it is ever routed to.',
-              glyph: (
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden>
-                  <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M19.8 3.6v3.6h-3.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ),
-            },
-          ].map((m) => (
-            <div key={m.h} className="group relative bg-paper px-7 py-9 transition-colors hover:bg-accent-soft/20">
-              <span className="absolute right-6 top-8 font-mono text-[11px] text-faint/70">{m.n}</span>
-              <div className="text-accent">{m.glyph}</div>
-              <div className="mt-4 text-sm font-medium text-ink">{m.h}</div>
-              <div className="mt-1.5 text-xs leading-relaxed text-faint">{m.p}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ---------------- the evidence band (exa lesson: one dark, named-bars section) ---------------- */}
       <EvidenceBand />
-
-      {/* ---------------- the numbers, at exa scale ---------------- */}
-      <StatCards />
-
-
-      {/* ---------------- the problem, in money ---------------- */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <div className="grid items-start gap-14 lg:grid-cols-2">
-          <Reveal>
-            <Eyebrow>The problem</Eyebrow>
-            <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
-              The same job can cost 170 times as much, for no benefit.
-            </h2>
-            <p className="mt-6 text-base leading-relaxed text-soft">
-              There are hundreds of AI models. They differ enormously in price and only sometimes in
-              quality — and which one is best changes every few weeks as new ones ship.
-            </p>
-            <p className="mt-4 text-base leading-relaxed text-soft">
-              Almost nobody re-checks. A team picks a model once, wires it in, and keeps paying that
-              price on every request forever — including the thousands of easy ones a model costing
-              a fraction as much would answer just as well.
-            </p>
-            <ForEngineers>
-              The chart is the measured extraction frontier: quality is a graded score over 74
-              held-out items, cost is USD per 1,000 requests at each strategy&apos;s measured token
-              profile.
-            </ForEngineers>
-          </Reveal>
-          <Reveal delayMs={120}>
-            <PriceSpread />
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ---------------- the savings model: the VC artefact ---------------- */}
-      <section className="border-y border-line bg-panel">
-        <div className="mx-auto max-w-6xl px-6 py-24">
-          <Reveal>
-            <Eyebrow>What it is worth</Eyebrow>
-            <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
-              Set how good the answers have to be. See what routing saves.
-            </h2>
-            <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
-              This is not a marketing calculator. It runs Potion&apos;s real selection rule over
-              Potion&apos;s real measurements, live, as you drag. Raise the quality bar and watch
-              categories drop out — including the ones we would refuse to take money for.
-            </p>
-          </Reveal>
-          <Reveal delayMs={120} className="mt-10">
-            <SavingsModel />
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ---------------- the moat ---------------- */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <Reveal>
-          <Eyebrow>Why this is hard to copy</Eyebrow>
-          <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
-            Anyone can call a cheaper model. Knowing when that is safe is the asset.
-          </h2>
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
-            The router is a week of engineering. The evidence it routes on is not — and it is the
-            half that compounds.
-          </p>
-        </Reveal>
-        <div className="mt-12 grid items-stretch gap-px overflow-hidden rounded-2xl border border-line bg-line md:grid-cols-3">
-          {[
-            {
-              figure: '∫',
-              figureLabel: 'the corpus accumulates',
-              h: 'The measurements compound',
-              p: 'Every model, on every kind of work, graded against known answers — and re-graded when a new one ships. That corpus is the product, and it is worth more every week than it was the week before.',
-              note: 'Content-addressed: re-measuring an unchanged pair costs nothing, so the corpus only ever pays for what is genuinely new.',
-            },
-            {
-              figure: 'σ',
-              figureLabel: 'uncertainty is carried, not dropped',
-              h: 'Benchmarks are the wrong instrument',
-              p: 'Public leaderboards rank models on average, across work you do not do. Potion measures each model on each kind of job, and keeps the error bars — the only comparison that can tell you what to send where.',
-              note: 'A separate quality/cost/latency frontier per kind of work. Selection is always per-workload, never global.',
-            },
-            {
-              figure: '↗',
-              figureLabel: 'it improves in place',
-              h: 'It gets better the longer you run it',
-              p: 'You start on measurements of your kind of work. As your own traffic accumulates, the routing retunes to it specifically — so the saving grows without you changing a line or paying more attention.',
-              note: 'Shared measurements serve from day one; measurements of your own traffic take over as they accrue.',
-            },
-          ].map((c, i) => (
-            <Reveal key={c.h} delayMs={i * 110} className="h-full">
-              <ClaimCard
-                figure={c.figure}
-                figureLabel={c.figureLabel}
-                heading={c.h}
-                note={c.note}
-              >
-                {c.p}
-              </ClaimCard>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      <div className="mx-auto max-w-6xl px-6">
-        <Rule />
-      </div>
 
       {/* ---------------- how it works, plainly ---------------- */}
       <section className="mx-auto max-w-6xl px-6 py-24">
@@ -594,11 +334,6 @@ export function Landing() {
               strong model.
             </p>
             <p className="mt-4 text-base leading-relaxed text-soft">
-              Potion measures those combinations exactly the way it measures single models: the
-              same held-out items, the same known answers, the same error bars. A mixture earns a
-              place on the map or it does not appear on it.
-            </p>
-            <p className="mt-4 text-base leading-relaxed text-soft">
               There is nothing for you to assemble. You set the same rule you would set anyway —
               stay above this quality, stay under this cost — and if a combination is the best way
               to honour it, that is what serves your request. The receipt names whatever answered.
@@ -607,12 +342,6 @@ export function Landing() {
               There are far more useful combinations than there are models, and almost none of them
               have been measured by anyone. That is the dimension this company is named for.
             </p>
-            <ForEngineers>
-              Cascade, ensemble, draft-verify, best-of-n and staged-upgrade composites are all
-              first-class strategies with their own executors, generated against the model registry
-              and promoted only on a paired bootstrap over held-out items — the same gate a single
-              model faces.
-            </ForEngineers>
           </Reveal>
           <Reveal delayMs={120}>
             <MixDiagram />
@@ -620,61 +349,21 @@ export function Landing() {
         </div>
       </section>
 
-      {/* ---------------- proof ---------------- */}
+      {/* ---------------- proof: the map ---------------- */}
       <section className="border-y border-line bg-panel">
         <div className="mx-auto max-w-6xl px-6 py-24">
           <Reveal>
             <Eyebrow>How you know we are not making this up</Eyebrow>
             <h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
-              It tells you when it cannot tell.
+              The actual map. Drive it yourself.
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
-              Every quality score Potion reports comes with a margin of error, the way a poll does.
-              When two models are close enough that the measurement cannot separate them, Potion
-              says they are tied instead of inventing a winner — and then picks the cheaper one.
+              Measured options for one kind of work, error bars included. Pick a rule, drag the
+              slider, and you are running the same selection the router runs in production —
+              including its refusal to answer when nothing measured qualifies.
             </p>
           </Reveal>
-
           <Reveal delayMs={120} className="mt-10">
-            <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-paper">
-              <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-                <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-accent/70" />
-                two real points · error bars overlapping · reported as a tie
-              </div>
-              <div className="px-6 py-6">
-                <CiOverlap />
-              </div>
-            </div>
-            <div className="mt-6 max-w-2xl rounded-lg border border-accent/25 bg-accent-soft/40 px-5 py-4">
-              <p className="text-sm leading-relaxed text-ink">
-                <span className="font-medium">Too close to call.</span> Those two bars overlap
-                almost completely, so the quality difference is not real evidence — while the
-                cheaper one costs{' '}
-                <span className="font-medium">{cheaperPct}% less</span> and answers{' '}
-                <span className="font-medium">{fasterX}× faster</span>. A leaderboard would rank
-                them and let you overpay for the gap.
-              </p>
-            </div>
-            <ForEngineers>
-              Two real points on the {TOO_CLOSE_EXAMPLE.cluster} frontier: {strong.label} at{' '}
-              {strong.quality.toFixed(3)} ±{strong.ci.toFixed(3)} against {cheap.label} at{' '}
-              {cheap.quality.toFixed(3)} ±{cheap.ci.toFixed(3)}. The rule underneath is that no
-              dial is exposed without a measurement beneath it — an unmeasured model stays
-              reachable and is never auto-selected.
-            </ForEngineers>
-          </Reveal>
-
-          <Reveal delayMs={160} className="mt-16">
-            <h3 className="text-base font-medium text-ink">
-              The actual map, if you want to drive it yourself
-            </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-soft">
-              Measured options for one kind of work, spanning a hundredfold price range. Pick a
-              rule, drag the slider, and you are running the same selection the router runs in
-              production — including its refusal to answer when nothing measured qualifies.
-            </p>
-          </Reveal>
-          <Reveal delayMs={200} className="mt-8">
             <FrontierExplorer />
           </Reveal>
         </div>
