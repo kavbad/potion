@@ -3409,6 +3409,8 @@ export type PlatformSweepRefusalReason =
   /** More reachable answerers than the width ceiling: cheapest-first would
    *  pick a subset nobody chose. Operator must name maxAnswerers. */
   | 'pool-exceeds-ceiling'
+  /** Audition named models none of which is a reachable answerer. */
+  | 'audition-pool-empty'
   /** S7 L4: a capability filter that leaves no answerer. Refusing beats
    *  measuring models that cannot serve the demand the run exists to close. */
   | 'capability-filter-empty'
@@ -3762,11 +3764,25 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // grows to hundreds cannot silently turn one job into a five-figure
     // sweep — it truncates by the same deterministic price order, and the
     // result reports what it dropped rather than quietly measuring less.
-    const answerPool = [
+    const fullPool = [
       ...classMembers(registry, 'cheap'),
       ...classMembers(registry, 'mid'),
       ...classMembers(registry, 'strong'),
     ];
+    // Audition mode: pay only for the named candidates. Incumbents are NOT
+    // added here — carry-forward brings them in by right further down, from
+    // cache, so the comparison is against the real frontier at $0.
+    const audition = payload.auditionModels && payload.auditionModels.length > 0
+      ? new Set(payload.auditionModels)
+      : null;
+    const answerPool = audition ? fullPool.filter((m) => audition.has(m.alias)) : fullPool;
+    if (audition && answerPool.length === 0) {
+      throw new PlatformSweepRefusalError(
+        'audition-pool-empty',
+        `audition named ${[...audition].join(', ')} but none is a reachable answerer on this registry ` +
+          `(${fullPool.length} reachable) — nothing would be measured, so nothing is reported as measured`,
+      );
+    }
     const maxAnswerers = payload.maxAnswerers ?? PLATFORM_SWEEP_MAX_ANSWERERS;
 
     // REFUSE A POOL THIS CEILING CANNOT HONESTLY REPRESENT.

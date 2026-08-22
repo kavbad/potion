@@ -666,3 +666,17 @@ describe('providerTimeoutMs — declared, not inherited from the environment', (
     expect(mockSet.openrouter.id).toBe('mock');
   });
 });
+
+describe('cacheKeyOf — Observatory canary salt', () => {
+  it('an unsalted key is unchanged, a salted key differs, and different salts differ', () => {
+    const item = { id: 'it-1', prompt: 'p', reference: 'r', scoring: { kind: 'exact' } } as never;
+    const prices = { version: 'v-test', updatedAt: '2026-01-01', entries: [] } as never;
+    const base = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live' });
+    const again = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live', cacheSalt: '' });
+    const w1 = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live', cacheSalt: '2026-W35' });
+    const w2 = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live', cacheSalt: '2026-W36' });
+    expect(again).toBe(base);
+    expect(w1).not.toBe(base);
+    expect(w2).not.toBe(w1);
+  });
+});

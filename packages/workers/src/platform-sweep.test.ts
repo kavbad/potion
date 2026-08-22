@@ -297,6 +297,17 @@ describe('refusal ladder — each refuses BEFORE any spend, for its named reason
     process.env.GOOGLE_API_KEY = 'fake-key-never-used';
     await expectRefusal({ clusterId: 'summarization', capUsd: 6 }, 'class-unrepresented');
   });
+
+  it('audition gate: naming models none of which is a reachable answerer refuses — never a silent no-op', async () => {
+    await armThrough('keys');
+    // One OpenRouter key represents every class (see the coverage test above),
+    // so the ladder reaches the pool step; the refusal fires before any call.
+    process.env.OPENROUTER_API_KEY = 'fake-key-never-used';
+    await expectRefusal(
+      { clusterId: 'summarization', capUsd: 6, auditionModels: ['or-not-a-real-model'] },
+      'audition-pool-empty',
+    );
+  });
 });
 
 describe('F10: spend-bearing job discipline', () => {

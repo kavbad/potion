@@ -84,6 +84,9 @@ export interface RunOptions {
    * environment so it cannot silently fail to propagate.
    */
   providerTimeoutMs?: number;
+  /** Observatory canaries: forces fresh execution by salting the cache key
+   *  (see cacheKeyOf). Unset = normal content-addressed resume. */
+  cacheSalt?: string;
   /**
    * Retry attempts after the first, for THIS run. Absent → the provider
    * default (3).
@@ -359,12 +362,17 @@ export function cacheKeyOf(
   item: EvalItem,
   scoring: ScoringMethod,
   prices: PriceTable,
-  opts: { orgId?: string; providerMode?: ProviderMode } = {},
+  opts: { orgId?: string; providerMode?: ProviderMode; cacheSalt?: string } = {},
 ): string {
   const orgPart = opts.orgId !== undefined ? `|org:${opts.orgId}` : '';
   const livePart = opts.providerMode === 'live' ? '|live' : '';
+  // Observatory canaries (OBSERVATORY.md §1): a sentinel must EXECUTE, or a
+  // content-addressed hit would "re-verify" a model that has silently changed.
+  // The salt (e.g. the ISO week) makes the cell new on purpose; unsalted keys
+  // are byte-identical to before, so every other run keeps its $0 resume.
+  const saltPart = opts.cacheSalt !== undefined && opts.cacheSalt !== '' ? `|salt:${opts.cacheSalt}` : '';
   return sha256(
-    `${sh}|${item.id}|${judgeVersionOf(scoring, prices)}|${prices.version}${orgPart}${livePart}`,
+    `${sh}|${item.id}|${judgeVersionOf(scoring, prices)}|${prices.version}${orgPart}${livePart}${saltPart}`,
   );
 }
 
@@ -556,6 +564,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
       for (const item of runItems) {
         const cacheKey = cacheKeyOf(sh, item, item.scoring, prices, {
           ...(opts.orgId !== undefined ? { orgId: opts.orgId } : {}),
+          ...(opts.cacheSalt !== undefined ? { cacheSalt: opts.cacheSalt } : {}),
           providerMode,
         });
         // Content-addressed cache: resume reuses hits; without resume we

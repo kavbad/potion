@@ -443,6 +443,15 @@ export interface FrontierPlatformSweepPayload {
     /** Keep only models whose KNOWN context window is at least this. */
     minContextTokens?: number;
   };
+  /**
+   * Observatory AUDITION (OBSERVATORY.md §2, rung 3): measure ONLY these
+   * answerer aliases on this cluster. The previous frontier's incumbents still
+   * join by right (carry-forward), re-aggregating from cache at $0, so the
+   * candidate is compared against the real frontier — but nothing else is
+   * paid for. Empty intersection with the reachable pool → refusal, never a
+   * silent no-op that reports success.
+   */
+  auditionModels?: string[];
   /** Per-attempt provider timeout (ms). Absent → PLATFORM_SWEEP_TIMEOUT_MS. */
   providerTimeoutMs?: number;
   /** Retry attempts past the first. Absent → PLATFORM_SWEEP_MAX_RETRIES. */
