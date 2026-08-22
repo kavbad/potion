@@ -36,7 +36,7 @@ const writer = key
   ? { provider: createProviders({ prices, apiKeys: { openrouter: key }, timeoutMs: 120_000 }).openrouter, model: process.env.FRONTIER_NOTES_WRITER ?? 'or-sonnet' }
   : undefined;
 
-const potion = process.env.POTION_SELF_KEY ? { url: process.env.POTION_API_URL ?? 'https://api.withpotion.com', apiKey: process.env.POTION_SELF_KEY } : undefined;
+const potion = process.env.POTION_SELF_KEY ? { url: process.env.POTION_API_URL ?? 'https://api.withpotion.com', apiKey: process.env.POTION_SELF_KEY, policy: process.env.FRONTIER_NOTES_POLICY ?? 'frontier-notes-writer' } : undefined;
 const { issue, files, digest } = await runFrontierNotes({
   run,
   ...(potion ? { potion } : {}),

@@ -93,6 +93,12 @@ describe('frontier-notes compose', () => {
 
   it('parses a model draft strictly', () => {
     expect(parseDraft('nope')).toBeNull();
+    const ref = deterministicDraft(composeFactSheet(run, replays));
+    const drift = parseDraft(JSON.stringify({ title: 'A finding.', plain: 'Plain words.', lede: 'l', faq: [{ q: 'x', a: 'y' }, { q: 'z', a: 'w' }] }), ref);
+    expect(drift?.title).toBe('A finding.');
+    expect(drift?.frontierNote).toBe(ref.frontierNote);
+    expect(drift?.faq).toHaveLength(3);
+    expect(parseDraft(JSON.stringify({ lede: 'no title' }), ref)).toBeNull();
     const ok = parseDraft(JSON.stringify({ title: 't.', summary: 's', plain: 'p', lede: 'l', frontierNote: 'f', auditionNote: 'a', mixingNote: 'm', takeaway: 't', faq: [{ q: '1', a: 'a' }, { q: '2', a: 'b' }, { q: '3', a: 'c' }] }));
     expect(ok?.title).toBe('t.');
     expect(issueSlug('2026-W34', 'All 10 routing frontiers held this week; a combination matched.')).toBe('2026-w34-all-10-routing-frontiers-held-combination-matched');

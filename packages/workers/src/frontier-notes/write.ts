@@ -172,7 +172,7 @@ export async function modelDraft(f: FactSheet, opts: ModelWriterOptions): Promis
       (opts.costPer1KTokens
         ? (res.usage.inputTokens * opts.costPer1KTokens.input + res.usage.outputTokens * opts.costPer1KTokens.output) / 1000
         : 0);
-    const parsed = parseDraft(res.text);
+    const parsed = parseDraft(res.text, fallback);
     if (!parsed) return { draft: fallback, costUsd, fallback: 'writer returned no parseable draft' };
     return { draft: parsed, costUsd, fallback: null };
   } catch (e) {
@@ -180,17 +180,28 @@ export async function modelDraft(f: FactSheet, opts: ModelWriterOptions): Promis
   }
 }
 
-export function parseDraft(text: string): Draft | null {
+/**
+ * Parse a model's draft. With a `reference` draft, small shape drift is
+ * tolerated — a missing secondary field or a FAQ list of 2 or 4 — and filled
+ * from the reference; the title and the plain-words opening must be the
+ * model's own. Without a reference the shape must be exact.
+ */
+export function parseDraft(text: string, reference?: Draft): Draft | null {
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
     const o = JSON.parse(m[0]) as Partial<Draft>;
     const s = (k: keyof Draft) => (typeof o[k] === 'string' && (o[k] as string).trim() ? (o[k] as string).trim() : null);
-    const title = s('title'), summary = s('summary'), plain = s('plain'), lede = s('lede'), frontierNote = s('frontierNote'), auditionNote = s('auditionNote'), mixingNote = s('mixingNote'), takeaway = s('takeaway');
-    if (!title || !summary || !plain || !lede || !frontierNote || !auditionNote || !mixingNote || !takeaway) return null;
-    const faq = Array.isArray(o.faq)
-      ? o.faq.filter((x): x is IssueFaq => !!x && typeof x.q === 'string' && typeof x.a === 'string').slice(0, 3)
+    const title = s('title'), plain = s('plain');
+    if (!title || !plain) return null;
+    const pick = (k: Exclude<keyof Draft, 'faq'>) => s(k) ?? reference?.[k] ?? null;
+    const summary = pick('summary'), lede = pick('lede'), frontierNote = pick('frontierNote'), auditionNote = pick('auditionNote'), mixingNote = pick('mixingNote'), takeaway = pick('takeaway');
+    if (!summary || !lede || !frontierNote || !auditionNote || !mixingNote || !takeaway) return null;
+    let faq = Array.isArray(o.faq)
+      ? o.faq.filter((x): x is IssueFaq => !!x && typeof x.q === 'string' && typeof x.a === 'string' && x.q.trim() !== '' && x.a.trim() !== '')
       : [];
+    if (reference && faq.length > 0 && faq.length < 3) faq = [...faq, ...reference.faq.filter((r) => !faq.some((x) => x.q === r.q))];
+    faq = faq.slice(0, 3);
     if (faq.length !== 3) return null;
     return { title, summary, plain, lede, frontierNote, auditionNote, mixingNote, takeaway, faq };
   } catch {
@@ -210,6 +221,8 @@ export interface PotionWriterOptions {
   apiKey: string;
   /** The model label; 'potion-auto' lets the policy choose. */
   model?: string;
+  /** Per-request policy override by name (x-potion-policy): the writer asks for quality on this one call. */
+  policy?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -231,7 +244,7 @@ export async function potionDraft(
   try {
     const res = await fetchImpl(`${o.url.replace(/\/$/, '')}/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}` },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}`, ...(o.policy ? { 'x-potion-policy': o.policy } : {}) },
       body: JSON.stringify({
         model: o.model ?? 'potion-auto',
         temperature: 0.3,
@@ -250,8 +263,8 @@ export async function potionDraft(
       promptTokens: body.usage?.prompt_tokens ?? 0,
       completionTokens: body.usage?.completion_tokens ?? 0,
     };
-    const parsed = parseDraft(text);
-    if (!parsed) return { draft: fallback, receipt, fallback: 'potion returned no parseable draft' };
+    const parsed = parseDraft(text, fallback);
+    if (!parsed) return { draft: fallback, receipt, fallback: `potion returned no parseable draft (${text.length} chars)` };
     return { draft: parsed, receipt, fallback: null };
   } catch (e) {
     return { draft: fallback, receipt: null, fallback: e instanceof Error ? e.message : String(e) };

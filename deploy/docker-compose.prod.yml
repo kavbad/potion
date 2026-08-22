@@ -230,6 +230,7 @@ services:
       # Dogfood: Frontier Notes is written through Potion's own serving API
       POTION_API_URL: http://server:3000
       POTION_SELF_KEY: ${POTION_SELF_KEY:-}
+      FRONTIER_NOTES_POLICY: ${FRONTIER_NOTES_POLICY:-frontier-notes-writer}
       NODE_ENV: production
     volumes:
       - /opt/potion/research:/research
