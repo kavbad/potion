@@ -14,7 +14,7 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
         <Link href="/home#evidence" className="font-medium text-white underline decoration-white/60 underline-offset-2 hover:decoration-white">
           1/270th the price of the best — at 99% of its quality
         </Link>
-        . The name is the product.
+        .
       </div>
       <header className="sticky top-0 z-40 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:py-4">
