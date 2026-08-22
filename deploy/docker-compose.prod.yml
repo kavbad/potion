@@ -111,6 +111,11 @@ services:
       # snippets, Lab links and OAuth callbacks derive from it. Behind Caddy
       # the request Host is the container's, so this must be pinned.
       POTION_PUBLIC_URL: ${POTION_PUBLIC_URL:?set POTION_PUBLIC_URL (https://api.<domain>)}
+      # The serving price table MUST be the one the committed baseline frontiers
+      # were measured against (prices_version 2026-08-04-or2+tranche-2026-08-19);
+      # the repo-root prices.json is the pre-tranche curated table and does not
+      # know the measured roster — caught in the Phase D rehearsal (503 on route).
+      POTION_PRICES_PATH: /app/.tranche/prices.json
       POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
       # 13a spec §1.6: error reporting. Unset → the init is a no-op.
       SENTRY_DSN: ${SENTRY_DSN:-}
