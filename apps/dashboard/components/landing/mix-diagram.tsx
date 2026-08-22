@@ -1,59 +1,88 @@
-// A cascade, drawn. Server-rendered SVG, no client JS.
+// Figure 4 — a cascade, drawn as a figure rather than a UI.
+//
+// One stroke weight, an 8-unit grid, orthogonal routing, hairline nodes,
+// labels in small mono caps set off their lines with leaders that never
+// touch data. The only colour is the path most requests take. Server-
+// rendered SVG, no client JS.
 //
 // The mechanism is the whole argument and it is easy to miss in prose: a
-// cheap model answers, reports how sure it is, and only when that confidence
+// cheap model answers and reports how sure it is; only when that confidence
 // falls below a measured threshold does the request escalate. Most traffic
-// never reaches the expensive model at all — which is why a mixture can sit
-// at the top of a quality range while costing a fraction of holding the
-// strong model on every request.
+// never reaches the expensive model, which is why a mixture can sit at the
+// top of a quality range while costing a fraction of the strong model.
+const INK = '#1c1a17';
+const RULE = '#b8b3a6';
+const FAINT = '#8a857a';
+const ACCENT = '#0f766e';
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+
 export function MixDiagram() {
-  const boxW = 132;
-  const boxH = 46;
   return (
     <div className="bg-[#fbfaf7]">
-      <div className="flex items-center gap-2 border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-        a cascade · measured as one strategy
+      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+        a cascade · one strategy · measured as a unit
       </div>
-      <div className="px-6 py-7">
-      <svg viewBox="0 0 420 190" className="w-full" role="img"
-        aria-label="A request answered by a cheap model, escalating to a strong model only when confidence is low">
-        {/* request */}
-        <text x="8" y="46" fontSize="11" fontFamily="monospace" fill="#a8a29e">request</text>
-        <line x1="8" y1="56" x2="60" y2="56" stroke="#e7e2da" strokeWidth="1" />
+      <div className="px-5 py-6 sm:px-7">
+        <svg
+          viewBox="0 0 480 232"
+          className="w-full"
+          role="img"
+          aria-label="A request answered by a cheap model, escalating to a strong model only when its confidence is below a measured threshold"
+          fontFamily={MONO}
+        >
+          <defs>
+            <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0.5 L7 4 L0 7.5" fill="none" stroke={INK} strokeWidth="1" />
+            </marker>
+            <marker id="arrA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0.5 L7 4 L0 7.5" fill="none" stroke={ACCENT} strokeWidth="1" />
+            </marker>
+          </defs>
 
-        {/* cheap model */}
-        <rect x="60" y="33" width={boxW} height={boxH} rx="7" fill="#ccfbf1" stroke="#5eead4" />
-        <text x={60 + boxW / 2} y="52" textAnchor="middle" fontSize="12" fill="#292524">a cheap model</text>
-        <text x={60 + boxW / 2} y="67" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#a8a29e">
-          answers first
-        </text>
+          {/* entry */}
+          <text x="16" y="74" fontSize="9.5" fill={FAINT} letterSpacing="0.12em">REQUEST</text>
+          <line x1="16" y1="80" x2="80" y2="80" stroke={INK} strokeWidth="1" markerEnd="url(#arr)" />
 
-        {/* confidence gate */}
-        <line x1={60 + boxW} y1="56" x2="238" y2="56" stroke="#e7e2da" strokeWidth="1" />
-        <circle cx="248" cy="56" r="10" fill="#0f766e" stroke="#0f766e" strokeWidth="1.2" />
-        <text x="248" y="60" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#ffffff">?</text>
-        <text x="248" y="30" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#a8a29e">
-          sure enough?
-        </text>
+          {/* node A: cheap model */}
+          <rect x="88" y="58" width="176" height="44" fill="none" stroke={INK} strokeWidth="1" />
+          <text x="176" y="77" textAnchor="middle" fontSize="12" fill={INK} fontFamily="inherit">cheap model</text>
+          <text x="176" y="92" textAnchor="middle" fontSize="8" fill={FAINT} letterSpacing="0.06em">ANSWERS · REPORTS CONFIDENCE c</text>
 
-        {/* yes → done */}
-        <line x1="258" y1="56" x2="330" y2="56" stroke="#14b8a6" strokeWidth="2" />
-        <text x="294" y="47" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#0f766e">yes</text>
-        <text x="336" y="60" fontSize="11" fill="#292524">done</text>
+          {/* A → gate */}
+          <line x1="264" y1="80" x2="300" y2="80" stroke={INK} strokeWidth="1" />
 
-        {/* no → escalate */}
-        <path d="M248 66 L248 116 L60 116 L60 133" fill="none" stroke="#a8a29e" strokeWidth="1" strokeDasharray="3 3" />
-        <text x="262" y="94" fontSize="10" fontFamily="monospace" fill="#a8a29e">no</text>
+          {/* gate: a diamond */}
+          <path d="M320 62 L340 80 L320 98 L300 80 Z" fill="#fbfaf7" stroke={INK} strokeWidth="1" />
+          <text x="320" y="83.5" textAnchor="middle" fontSize="9" fill={INK}>c ≥ t</text>
+          <line x1="320" y1="62" x2="320" y2="44" stroke={RULE} strokeWidth="1" />
+          <text x="320" y="38" textAnchor="middle" fontSize="8.5" fill={FAINT} letterSpacing="0.08em">CONFIDENT ENOUGH? (t IS MEASURED)</text>
 
-        {/* strong model */}
-        <rect x="60" y="133" width={boxW} height={boxH} rx="7" fill="#0f766e" stroke="#0f766e" />
-        <text x={60 + boxW / 2} y="152" textAnchor="middle" fontSize="12" fill="#ffffff">a stronger model</text>
-        <text x={60 + boxW / 2} y="167" textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#99f6e4">
-          only when needed
-        </text>
-        <line x1={60 + boxW} y1="156" x2="330" y2="156" stroke="#e7e2da" strokeWidth="1" />
-        <text x="336" y="160" fontSize="11" fill="#292524">done</text>
-      </svg>
+          {/* yes → answer: the common path, in the accent */}
+          <line x1="340" y1="80" x2="412" y2="80" stroke={ACCENT} strokeWidth="1.25" markerEnd="url(#arrA)" />
+          <text x="376" y="71" textAnchor="middle" fontSize="8.5" fill={ACCENT} letterSpacing="0.08em">YES · MOST</text>
+          <text x="422" y="84" fontSize="11" fill={INK} fontFamily="inherit">answer</text>
+
+          {/* no → escalate: straight down into the second node */}
+          <path d="M320 98 L320 132 L176 132 L176 156" fill="none" stroke={INK} strokeWidth="1" markerEnd="url(#arr)" />
+          <text x="328" y="118" fontSize="8.5" fill={FAINT} letterSpacing="0.08em">NO · THE REST</text>
+
+          {/* node B: stronger model */}
+          <rect x="88" y="158" width="176" height="44" fill="none" stroke={INK} strokeWidth="1" />
+          <text x="176" y="177" textAnchor="middle" fontSize="12" fill={INK} fontFamily="inherit">stronger model</text>
+          <text x="176" y="192" textAnchor="middle" fontSize="8.5" fill={FAINT} letterSpacing="0.08em">ONLY WHEN NEEDED</text>
+
+          {/* B → answer */}
+          <line x1="264" y1="180" x2="412" y2="180" stroke={INK} strokeWidth="1" markerEnd="url(#arr)" />
+          <text x="422" y="184" fontSize="11" fill={INK} fontFamily="inherit">answer</text>
+
+          {/* footnote rule */}
+          <line x1="16" y1="226" x2="464" y2="226" stroke={RULE} strokeWidth="1" />
+        </svg>
+        <div className="mt-3 grid gap-1 font-mono text-[10px] leading-relaxed text-faint sm:grid-cols-3">
+          <div><span className="text-ink">t</span> · the threshold, chosen by measurement per kind of work</div>
+          <div><span className="text-ink">c</span> · the cheap model&apos;s reported confidence on this request</div>
+          <div><span className="text-ink">one hash</span> · the whole cascade is measured, priced and served as a unit</div>
+        </div>
       </div>
     </div>
   );

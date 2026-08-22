@@ -31,12 +31,12 @@ const W = 640;
 const H = 330;
 const ML = 46;
 const MR = 18;
-const MT = 22;
+const MT = 30;
 const MB = 40;
 const COST_MIN = 0.005;
 const COST_MAX = 3;
 const Q_MIN = 0.35;
-const Q_MAX = 1.0;
+const Q_MAX = 1.02;
 
 function x(cost: number): number {
   const t = (Math.log10(cost) - Math.log10(COST_MIN)) / (Math.log10(COST_MAX) - Math.log10(COST_MIN));
@@ -66,29 +66,18 @@ function select(kind: PolicyKind, v: number): LandingPoint | null {
   );
 }
 
-/** Label placement, computed from position and clamped to the canvas —
- * hand-placed offset tables strand on every republish (one crashed, one
- * collided) and are gone for good. */
-/** Dot fill by measured quality: grey at the bottom of the range, teal at the top —
- * the eye reads "better" before it reads the axis. */
-function qualityTint(q: number): string {
-  const t = Math.max(0, Math.min(1, (q - 0.5) / 0.5));
-  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
-  return `rgb(${mix(214, 45)}, ${mix(211, 212)}, ${mix(209, 191)})`;
-}
 
-function labelPlacement(px: number, py: number): { dx: number; dy: number; anchor: 'start' | 'end' } {
-  const anchor = px > W - MR - 150 ? 'end' : 'start';
-  const dx = anchor === 'start' ? 10 : -10;
-  const dy = py < MT + 26 ? 22 : -11;
-  return { dx, dy, anchor };
-}
+const INK = '#1c1a17';
+const FAINT = '#8a857a';
+const ACCENT = '#0f766e';
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
 export function FrontierExplorer() {
   const [kind, setKind] = useState<PolicyKind>('min_cost');
   const [floor, setFloor] = useState(0.6);
   const [ceilT, setCeilT] = useState(0.45); // 0..1 log-mapped ceiling
   const [p95, setP95] = useState(4000);
+  const [hover, setHover] = useState<string | null>(null);
 
   const ceiling = useMemo(
     () => Math.pow(10, Math.log10(COST_MIN) + ceilT * (Math.log10(COST_MAX) - Math.log10(COST_MIN))),
@@ -101,15 +90,12 @@ export function FrontierExplorer() {
     ? `cluster=${EXPLORER.cluster};strategy=${chosen.hash8};frontier=v${EXPLORER.frontierVersion};policy=${kind};fallback=0;provenance=live`
     : `cluster=${EXPLORER.cluster};strategy=default;frontier=v${EXPLORER.frontierVersion};policy=${kind};fallback=1;provenance=live`;
 
-  // 2D-pareto subset for the guide line — DERIVED from the data rather than
-  // named, so a republished frontier can never strand a stale label here
-  // (that exact crash shipped once: three hardcoded v2 labels outlived v2).
-  const staircase: (typeof EXPLORER.points)[number][] = [];
+  // 2D-pareto subset for the step edge — DERIVED from the data, never named.
+  const staircase: LandingPoint[] = [];
   for (const p of [...EXPLORER.points].sort((a, b) => a.costPer1K - b.costPer1K)) {
-    if (staircase.length === 0 || p.quality > staircase[staircase.length - 1]!.quality) {
-      staircase.push(p);
-    }
+    if (staircase.length === 0 || p.quality > staircase[staircase.length - 1]!.quality) staircase.push(p);
   }
+  const onEdge = new Set(staircase.map((p) => p.label));
   let steps = '';
   staircase.forEach((p, i) => {
     const px = x(p.costPer1K).toFixed(1);
@@ -117,154 +103,183 @@ export function FrontierExplorer() {
     steps += i === 0 ? `M ${px} ${py}` : ` H ${px} V ${py}`;
   });
 
-  const qTicks = [0.4, 0.6, 0.8, 1.0];
-  const cTicks = [0.01, 0.1, 1];
+  const qTicks = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+  const cMajor = [0.01, 0.1, 1];
+  const cMinor = [0.005, 0.02, 0.03, 0.05, 0.2, 0.3, 0.5, 2, 3];
+  const labelled = hover ? EXPLORER.points.find((p) => p.label === hover) ?? chosen : chosen;
+
+  // Callout: a short leader to a label set clear of the data, clamped to the plot.
+  const callout = (() => {
+    if (!labelled) return null;
+    const px = x(labelled.costPer1K);
+    const py = y(labelled.quality);
+    const right = px < W - MR - 170;
+    const lx = right ? px + 22 : px - 22;
+    const ly = py < MT + 34 ? py + 26 : py - 18;
+    return { px, py, lx, ly, anchor: right ? ('start' as const) : ('end' as const) };
+  })();
+
+  const qualifies = (p: LandingPoint) =>
+    kind === 'min_cost' ? p.quality >= floor : kind === 'max_quality' ? p.costPer1K <= ceiling : p.p95Ms <= p95;
 
   return (
-    <div className="bg-[#fbfaf7]">
-      <div className="flex items-center gap-2 border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-        the measured map · one kind of work · selection runs as you drag
-      </div>
-      <div className="flex flex-wrap items-center gap-2 border-b border-[#d9d5cb] px-5 py-3">
-        {POLICIES.map((p) => (
-          <button
-            key={p.kind}
-            onClick={() => setKind(p.kind)}
-            className={`rounded-md px-3 py-1.5 font-mono text-xs transition-colors ${
-              kind === p.kind ? 'bg-ink text-[#f4f2ec]' : 'bg-[#ece9df] text-soft hover:text-ink'
-            }`}
-          >
-            {p.kind}
-          </button>
-        ))}
-        <span className="ml-auto hidden text-xs text-faint sm:block">
-          {POLICIES.find((p) => p.kind === kind)!.blurb}
-        </span>
+    <div className="bg-[#fbfaf7] font-mono">
+      {/* title row */}
+      <div className="flex items-center justify-between border-b border-[#d9d5cb] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-faint">
+        <span>{EXPLORER.cluster} · v{EXPLORER.frontierVersion} · n = {EXPLORER.items} per point</span>
+        <span className="hidden sm:inline">{POLICIES.find((p) => p.kind === kind)!.blurb}</span>
       </div>
 
-      <div className="px-5 pt-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <label className="flex min-w-[16rem] flex-1 items-center gap-3">
-            <span className="w-28 shrink-0 font-mono text-faint">
-              {kind === 'min_cost' && `floor ${floor.toFixed(2)}`}
-              {kind === 'max_quality' && `ceiling ${usd(ceiling)}`}
-              {kind === 'latency_bound' && `p95 ≤ ${p95.toLocaleString()} ms`}
-            </span>
-            {kind === 'min_cost' && (
-              <input type="range" min={0.4} max={1} step={0.01} value={floor}
-                onChange={(e) => setFloor(Number(e.target.value))} className="flex-1 accent-[#0f766e]" />
-            )}
-            {kind === 'max_quality' && (
-              <input type="range" min={0} max={1} step={0.01} value={ceilT}
-                onChange={(e) => setCeilT(Number(e.target.value))} className="flex-1 accent-[#0f766e]" />
-            )}
-            {kind === 'latency_bound' && (
-              <input type="range" min={1000} max={15000} step={250} value={p95}
-                onChange={(e) => setP95(Number(e.target.value))} className="flex-1 accent-[#0f766e]" />
-            )}
-          </label>
+      {/* controls: a segmented rule, not buttons; a hairline slider with a square thumb */}
+      <div className="grid gap-x-8 gap-y-3 border-b border-[#d9d5cb] px-4 py-3 text-[12px] sm:grid-cols-[auto_1fr] sm:items-center">
+        <div className="flex divide-x divide-[#d9d5cb] border border-[#d9d5cb]">
+          {POLICIES.map((p) => (
+            <button
+              key={p.kind}
+              onClick={() => setKind(p.kind)}
+              className={`px-3 py-1.5 transition-colors ${kind === p.kind ? 'bg-ink text-[#f4f2ec]' : 'text-soft hover:text-ink'}`}
+            >
+              {p.kind}
+            </button>
+          ))}
         </div>
+        <label className="flex w-full items-center gap-4">
+          <span className="w-36 shrink-0 text-faint">
+            {kind === 'min_cost' && <>floor <span className="text-ink">{floor.toFixed(2)}</span></>}
+            {kind === 'max_quality' && <>ceiling <span className="text-ink">{usd(ceiling)}</span></>}
+            {kind === 'latency_bound' && <>p95 ≤ <span className="text-ink">{p95.toLocaleString()} ms</span></>}
+          </span>
+          {kind === 'min_cost' && (
+            <input type="range" min={0.4} max={1} step={0.01} value={floor} onChange={(e) => setFloor(Number(e.target.value))} className="lab-range flex-1" />
+          )}
+          {kind === 'max_quality' && (
+            <input type="range" min={0} max={1} step={0.01} value={ceilT} onChange={(e) => setCeilT(Number(e.target.value))} className="lab-range flex-1" />
+          )}
+          {kind === 'latency_bound' && (
+            <input type="range" min={1000} max={15000} step={250} value={p95} onChange={(e) => setP95(Number(e.target.value))} className="lab-range flex-1" />
+          )}
+        </label>
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img"
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" fontFamily={MONO}
         aria-label="Measured quality against cost for the multi-step-reasoning frontier">
+        {/* grid + axes */}
         {qTicks.map((q) => (
           <g key={q}>
-            <line x1={ML} x2={W - MR} y1={y(q)} y2={y(q)} stroke="#e7e2da" strokeWidth="1" />
-            <text x={ML - 8} y={y(q) + 3} textAnchor="end" fontSize="10" fill="#a8a29e" fontFamily="monospace">
-              {q.toFixed(1)}
-            </text>
+            <line x1={ML} x2={W - MR} y1={y(q)} y2={y(q)} stroke="#ebe8e0" strokeWidth="1" />
+            <line x1={ML - 4} x2={ML} y1={y(q)} y2={y(q)} stroke={INK} strokeWidth="1" />
+            <text x={ML - 8} y={y(q) + 3} textAnchor="end" fontSize="9.5" fill={FAINT}>{q.toFixed(1)}</text>
           </g>
         ))}
-        {cTicks.map((c) => (
-          <text key={c} x={x(c)} y={H - MB + 16} textAnchor="middle" fontSize="10" fill="#a8a29e" fontFamily="monospace">
-            {`$${c}`}
-          </text>
+        {cMinor.map((c) => (
+          <line key={c} x1={x(c)} x2={x(c)} y1={H - MB} y2={H - MB + 3} stroke={INK} strokeWidth="1" />
         ))}
-        <text x={(ML + W - MR) / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="#a8a29e">
-          cost per 1,000 requests (log)
-        </text>
-        <text x={12} y={(MT + H - MB) / 2} textAnchor="middle" fontSize="10" fill="#a8a29e"
-          transform={`rotate(-90 12 ${(MT + H - MB) / 2})`}>
-          measured quality
-        </text>
+        {cMajor.map((c) => (
+          <g key={c}>
+            <line x1={x(c)} x2={x(c)} y1={H - MB} y2={H - MB + 5} stroke={INK} strokeWidth="1" />
+            <text x={x(c)} y={H - MB + 16} textAnchor="middle" fontSize="9.5" fill={FAINT}>{`$${c}`}</text>
+          </g>
+        ))}
+        <line x1={ML} x2={ML} y1={MT} y2={H - MB} stroke={INK} strokeWidth="1" />
+        <line x1={ML} x2={W - MR} y1={H - MB} y2={H - MB} stroke={INK} strokeWidth="1" />
+        <text x={W - MR} y={H - 6} textAnchor="end" fontSize="9.5" fill={FAINT} letterSpacing="0.08em">COST PER 1,000 REQUESTS · LOG</text>
+        <text x={11} y={MT} textAnchor="end" fontSize="9.5" fill={FAINT} letterSpacing="0.08em" transform={`rotate(-90 11 ${MT})`}>MEASURED QUALITY</text>
 
-        {/* the frontier's step edge — solid, quiet, beneath the points */}
-        <path d={steps} fill="none" stroke="#e7e2da" strokeWidth="1.5" />
+        {/* the frontier's step edge */}
+        <path d={steps} fill="none" stroke={INK} strokeWidth="1" opacity="0.45" />
 
-        {/* the constraint, drawn: the slider IS this line */}
+        {/* the constraint: the slider IS this line */}
         {kind === 'min_cost' && (
           <g>
-            <line x1={ML} x2={W - MR} y1={y(floor)} y2={y(floor)} stroke="#0f766e" strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
-            <text x={W - MR} y={y(floor) - 5} textAnchor="end" fontSize="9.5" fontFamily="monospace" fill="#0f766e" opacity="0.75">
-              floor {floor.toFixed(2)}
-            </text>
+            <line x1={ML} x2={W - MR} y1={y(floor)} y2={y(floor)} stroke={ACCENT} strokeWidth="1" strokeDasharray="3 4" />
+            <text x={W - MR - 4} y={y(floor) - 5} textAnchor="end" fontSize="9.5" fill={ACCENT}>floor {floor.toFixed(2)}</text>
           </g>
         )}
         {kind === 'max_quality' && (
           <g>
-            <line x1={x(ceiling)} x2={x(ceiling)} y1={MT} y2={H - MB} stroke="#0f766e" strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
-            <text x={x(ceiling) + 5} y={MT + 10} textAnchor="start" fontSize="9.5" fontFamily="monospace" fill="#0f766e" opacity="0.75">
-              ceiling {usd(ceiling)}
+            <line x1={x(ceiling)} x2={x(ceiling)} y1={MT} y2={H - MB} stroke={ACCENT} strokeWidth="1" strokeDasharray="3 4" />
+            <text x={x(ceiling) + 6} y={MT + 10} textAnchor="start" fontSize="9.5" fill={ACCENT}>ceiling {usd(ceiling)}</text>
+          </g>
+        )}
+
+        {/* intervals, then points: frontier members filled, dominated hollow; selected in the accent */}
+        {EXPLORER.points.map((p) => {
+          const sel = chosen?.label === p.label;
+          const ok = qualifies(p);
+          const px = x(p.costPer1K);
+          const py = y(p.quality);
+          return (
+            <g key={p.label} opacity={ok ? 1 : 0.35} style={{ transition: 'opacity 200ms' }}
+              onMouseEnter={() => setHover(p.label)} onMouseLeave={() => setHover(null)}>
+              <title>{`${p.label} — q ${p.quality.toFixed(2)} ±${p.ci.toFixed(2)} · ${usd(p.costPer1K)}/1k · p95 ${p.p95Ms.toLocaleString()} ms`}</title>
+              <line x1={px} x2={px} y1={y(Math.min(Q_MAX, p.quality + p.ci))} y2={y(Math.max(Q_MIN, p.quality - p.ci))}
+                stroke={sel ? ACCENT : INK} strokeWidth="1" opacity={sel ? 0.9 : 0.45} />
+              <line x1={px - 3} x2={px + 3} y1={y(Math.min(Q_MAX, p.quality + p.ci))} y2={y(Math.min(Q_MAX, p.quality + p.ci))} stroke={sel ? ACCENT : INK} strokeWidth="1" opacity={sel ? 0.9 : 0.45} />
+              <line x1={px - 3} x2={px + 3} y1={y(Math.max(Q_MIN, p.quality - p.ci))} y2={y(Math.max(Q_MIN, p.quality - p.ci))} stroke={sel ? ACCENT : INK} strokeWidth="1" opacity={sel ? 0.9 : 0.45} />
+              {sel ? (
+                <>
+                  <circle cx={px} cy={py} r="7" fill="none" stroke={ACCENT} strokeWidth="1" />
+                  <circle cx={px} cy={py} r="3.5" fill={ACCENT} />
+                </>
+              ) : onEdge.has(p.label) ? (
+                <circle cx={px} cy={py} r="3.5" fill={INK} />
+              ) : (
+                <circle cx={px} cy={py} r="3.5" fill="#fbfaf7" stroke={INK} strokeWidth="1" />
+              )}
+              <circle cx={px} cy={py} r="14" fill="transparent" />
+            </g>
+          );
+        })}
+
+        {/* one callout, by leader, clear of the data */}
+        {callout && labelled && (
+          <g pointerEvents="none">
+            <line x1={callout.px + (callout.anchor === 'start' ? 6 : -6)} y1={callout.py + (callout.ly > callout.py ? 6 : -6)}
+              x2={callout.lx - (callout.anchor === 'start' ? 4 : -4)} y2={callout.ly - 3} stroke={INK} strokeWidth="0.75" />
+            <text x={callout.lx} y={callout.ly} textAnchor={callout.anchor} fontSize="10.5" fill={INK}
+              stroke="#fbfaf7" strokeWidth="4" style={{ paintOrder: 'stroke' }}>
+              {labelled.label}
+            </text>
+            <text x={callout.lx} y={callout.ly + 12} textAnchor={callout.anchor} fontSize="9" fill={FAINT}
+              stroke="#fbfaf7" strokeWidth="4" style={{ paintOrder: 'stroke' }}>
+              {labelled.quality.toFixed(2)} ± {labelled.ci.toFixed(2)} · {usd(labelled.costPer1K)}/1k · p95 {labelled.p95Ms.toLocaleString()} ms
             </text>
           </g>
         )}
 
-        {EXPLORER.points.map((p) => {
-          const sel = chosen?.label === p.label;
-          const qualifies =
-            kind === 'min_cost' ? p.quality >= floor :
-            kind === 'max_quality' ? p.costPer1K <= ceiling :
-            p.p95Ms <= p95;
-          const dim = qualifies ? 1 : 0.3;
-          const { dx, dy, anchor } = labelPlacement(x(p.costPer1K), y(p.quality));
-          return (
-            <g key={p.label} className="group" opacity={dim} style={{ transition: 'opacity 200ms' }}>
-              <title>{`${p.label} — q ${p.quality.toFixed(2)} ±${p.ci.toFixed(2)} · ${usd(p.costPer1K)}/1k · p95 ${p.p95Ms.toLocaleString()} ms`}</title>
-              {/* CI as a capless hairline — present, never shouting */}
-              <line x1={x(p.costPer1K)} x2={x(p.costPer1K)} y1={y(Math.min(Q_MAX, p.quality + p.ci))}
-                y2={y(Math.max(Q_MIN, p.quality - p.ci))} stroke={sel ? '#0f766e' : '#a8a29e'}
-                strokeWidth="1" strokeLinecap="round" opacity={sel ? 0.55 : 0.3} />
-              {sel && <circle cx={x(p.costPer1K)} cy={y(p.quality)} r="10" fill="#0f766e" opacity="0.12" />}
-              <circle cx={x(p.costPer1K)} cy={y(p.quality)} r="4.5"
-                fill={sel ? '#0f766e' : qualityTint(p.quality)} stroke={sel ? '#0f766e' : '#0f766e'} strokeWidth="1"
-                strokeOpacity={sel ? 1 : 0.35} />
-              <text x={x(p.costPer1K) + dx} y={y(p.quality) + dy} textAnchor={anchor} fontSize="10.5"
-                fontFamily="monospace" fill={sel ? '#0f766e' : '#57534e'} fontWeight={sel ? '600' : '400'}
-                stroke="#ffffff" strokeWidth="3.5" style={{ paintOrder: 'stroke' }}
-                className={sel ? '' : 'pointer-events-none opacity-0 transition-opacity group-hover:opacity-100'}>
-                {p.label}
-              </text>
-              {/* invisible fat hit-area so hovering a 4.5px dot is not a dexterity test */}
-              <circle cx={x(p.costPer1K)} cy={y(p.quality)} r="14" fill="transparent" />
-            </g>
-          );
-        })}
+        {/* legend: lower right, clear of the data */}
+        <g fontSize="9" fill={FAINT}>
+          <circle cx={W - MR - 246} cy={H - MB - 14} r="3" fill={INK} />
+          <text x={W - MR - 238} y={H - MB - 11}>on the frontier</text>
+          <circle cx={W - MR - 146} cy={H - MB - 14} r="3" fill="#fbfaf7" stroke={INK} strokeWidth="1" />
+          <text x={W - MR - 138} y={H - MB - 11}>dominated</text>
+          <line x1={W - MR - 74} x2={W - MR - 74} y1={H - MB - 19} y2={H - MB - 9} stroke={INK} strokeWidth="1" opacity="0.6" />
+          <line x1={W - MR - 77} x2={W - MR - 71} y1={H - MB - 19} y2={H - MB - 19} stroke={INK} strokeWidth="1" opacity="0.6" />
+          <line x1={W - MR - 77} x2={W - MR - 71} y1={H - MB - 9} y2={H - MB - 9} stroke={INK} strokeWidth="1" opacity="0.6" />
+          <text x={W - MR - 66} y={H - MB - 11}>95% interval</text>
+        </g>
       </svg>
 
-      <div className="border-t border-line px-5 py-4">
+      {/* readout: a typeset row, then the trace as a hairline box */}
+      <div className="border-t border-[#d9d5cb] px-4 py-3 text-[12px]">
         {chosen ? (
-          <p className="text-sm leading-relaxed text-soft">
-            <span className="font-mono font-medium text-ink">{chosen.label}</span> — quality{' '}
-            <span className="font-mono text-ink">{chosen.quality.toFixed(2)}</span>
-            <span className="font-mono text-faint"> ±{chosen.ci.toFixed(2)}</span>, {usd(chosen.costPer1K)} per
-            1k requests, p95 {chosen.p95Ms.toLocaleString()} ms.
-          </p>
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-[auto_auto_auto_auto]">
+            <span><span className="text-faint">selected </span><span className="text-ink">{chosen.label}</span></span>
+            <span><span className="text-faint">quality </span><span className="text-ink">{chosen.quality.toFixed(2)}</span><span className="text-faint"> ± {chosen.ci.toFixed(2)}</span></span>
+            <span><span className="text-faint">cost </span><span className="text-ink">{usd(chosen.costPer1K)}</span><span className="text-faint"> / 1k</span></span>
+            <span><span className="text-faint">p95 </span><span className="text-ink">{chosen.p95Ms.toLocaleString()} ms</span></span>
+          </div>
         ) : (
-          <p className="text-sm leading-relaxed text-soft">
-            <span className="font-medium text-warn">Nothing measured qualifies.</span> Potion refuses to
-            invent a number — the request rides the default strategy and the trace says so.
-          </p>
+          <div><span className="text-ink">Nothing measured qualifies.</span> <span className="text-soft">Potion refuses to invent a number; the request rides the default strategy and the trace says so.</span></div>
         )}
-        <div className="mt-3 overflow-x-auto bg-[#1c1a17] px-3 py-2 font-mono text-[11px] leading-relaxed text-[#e7e2da]">
-          <span className="text-[#a8a29e]">x-frontier-trace:</span> {trace}
+        <div className="mt-2.5 overflow-x-auto border border-[#d9d5cb] px-3 py-1.5 text-[11px] text-soft">
+          <span className="text-faint">x-frontier-trace:</span> {trace}
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-faint">
-          Real measured points, quoted from the committed frontier — hover any dot for its name and
+        <p className="mt-2.5 font-sans text-[12px] leading-relaxed text-faint">
+          Real measured points, quoted from the committed frontier; hover any point for its name and
           numbers. The cheapest row costs under a cent per 1k and measures 0.50, a coin flip, which
-          is exactly why the router will not send reasoning work there: cheap only wins where the
-          measurement clears your floor. Try <span className="font-mono">latency_bound</span> at
-          2,500 ms — the answer changes.
+          is why the router will not send reasoning work there: cheap only wins where the measurement
+          clears your floor. Try <span className="font-mono">latency_bound</span> at 2,500 ms; the answer changes.
         </p>
       </div>
     </div>
