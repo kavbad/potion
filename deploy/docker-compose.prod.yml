@@ -211,6 +211,8 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY}
       # The operator's standing grant (2026-08-22): $50/month, ledgered.
       KEY_RISK_ACCEPTED: "2026-08-22"
+      NOTION_API_KEY: ${NOTION_API_KEY:-}
+      NOTION_PAGE_ID: ${NOTION_PAGE_ID:-}
       NODE_ENV: production
     volumes:
       - /opt/potion/research:/research

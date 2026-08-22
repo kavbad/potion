@@ -44,7 +44,7 @@ const { loadPrices, fetchOpenRouterModels, diffModelListings } = await import('@
 const W = await import('@potion/workers');
 const {
   frontierPlatformSweepHandler, PLATFORM_OPS_ORG_ID, PLATFORM_SUITE_BY_CLUSTER,
-  isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, rankCandidates, digestLine, isFreeTier,
+  isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, rankCandidates, digestLine, isFreeTier, postObservatoryEntry,
   CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, OBSERVATORY_ENVELOPE_USD,
 } = W;
 type LedgerRow = W.LedgerRow;
@@ -171,4 +171,7 @@ if (!DRY) {
   appendFileSync(`${ART}/digest.md`, `- ${digestLine(run)}\n`);
 }
 console.log(`\n${digestLine(run)}`);
+if (!DRY && process.env.NOTION_API_KEY && process.env.NOTION_PAGE_ID) {
+  console.log(await postObservatoryEntry({ token: process.env.NOTION_API_KEY, pageId: process.env.NOTION_PAGE_ID }, run));
+}
 await handle.close();

@@ -225,3 +225,4 @@ export {
   type SweepSuiteOutcome,
 } from './handlers.js';
 export * from './observatory.js';
+export * from './notion-sink.js';
