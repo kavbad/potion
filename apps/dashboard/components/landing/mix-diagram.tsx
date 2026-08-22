@@ -10,9 +10,8 @@ export function MixDiagram() {
   const boxW = 132;
   const boxH = 46;
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-paper">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-        <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-accent/70" />
+    <div className="bg-[#fbfaf7]">
+      <div className="flex items-center gap-2 border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
         a cascade · measured as one strategy
       </div>
       <div className="px-6 py-7">

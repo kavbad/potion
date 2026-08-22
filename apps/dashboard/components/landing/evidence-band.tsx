@@ -28,34 +28,34 @@ export function EvidenceBand() {
   // ink panel carrying the argument on the left, a white measurement field on
   // the right. No shared container, no rounded box; the seam IS the design.
   return (
-    <section id="evidence" className="grid border-y border-line lg:grid-cols-[2fr_3fr]">
-      <div className="bg-[linear-gradient(160deg,#042f2e_0%,#0f766e_100%)] px-6 py-20 text-white sm:px-12 lg:py-28">
+    <section id="evidence" className="grid lg:grid-cols-[2fr_3fr]">
+      <div className="bg-[#1c1a17] px-6 py-20 text-[#efece4] sm:px-12 lg:py-28">
         <div className="lg:ml-auto lg:max-w-md">
-          <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#99f6e4]">
-            Measured, not claimed
+          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#a8a29e]">
+            <span className="text-[#efece4]">02</span> · Measured, not claimed
           </div>
-          <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
+          <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
             The same work.
             <br />
             A 270× price range.
           </h2>
-          <p className="mt-6 text-sm leading-relaxed text-white/85">
+          <p className="mt-6 text-sm leading-relaxed text-[#d6d3cb]">
             Five models writing code to specification — scored by running their code, not by
             opinion. The quality difference across this table is two points in a hundred. The price
-            difference is <span className="font-medium text-[#99f6e4]">two hundred and seventy fold</span>.
+            difference is <span className="font-medium text-[#efece4]">two hundred and seventy fold</span>.
           </p>
-          <p className="mt-4 text-sm leading-relaxed text-white/85">
+          <p className="mt-4 text-sm leading-relaxed text-[#d6d3cb]">
             This is why routing pays: most requests deserve the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
-          <p className="mt-6 font-mono text-[11px] leading-relaxed text-[#99f6e4]/80">
+          <p className="mt-6 font-mono text-[11px] leading-relaxed text-[#a8a29e]">
             measured 2026-08-20 · retrieval-hostile suite · scored by execution · error bars on the
             full table in the docs
           </p>
         </div>
       </div>
 
-      <div className="bg-paper px-6 py-20 sm:px-12 lg:py-28">
+      <div className="bg-[#f4f2ec] px-6 py-20 sm:px-12 lg:py-28">
         <div className="max-w-2xl space-y-5 lg:mt-6">
           {ROWS.map((r) => {
             const w = Math.max(1.2, (r.cost / MAX_COST) * 100);
@@ -73,9 +73,9 @@ export function EvidenceBand() {
                     quality {r.q.toFixed(3)} · ${r.cost.toFixed(4)}/1k
                   </span>
                 </div>
-                <div className="mt-1.5 h-5 overflow-hidden rounded-sm bg-line/60">
+                <div className="mt-1.5 h-5 overflow-hidden rounded-sm bg-[#e4e0d6]">
                   <div
-                    className={`h-full rounded-sm ${star ? 'bg-[linear-gradient(90deg,#0f766e,#2dd4bf)]' : 'bg-[#99f6e4]'}`}
+                    className={`h-full rounded-sm ${star ? 'bg-accent' : 'bg-[#b8b3a6]'}`}
                     style={{ width: `${w}%` }}
                   />
                 </div>
@@ -89,7 +89,7 @@ export function EvidenceBand() {
             );
           })}
           <p className="pt-1 font-mono text-[11px] text-faint">
-            bars show cost per 1,000 requests · <span className="text-accent">teal</span> = what
+            <span className="text-ink">Figure 3.</span> The code-gen-hard frontier, measured 2026-08-20, 30 items scored by execution. Bars show cost per 1,000 requests · <span className="text-accent">teal</span> = what
             a 0.95 quality floor actually buys
           </p>
         </div>

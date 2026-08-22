@@ -121,18 +121,17 @@ export function FrontierExplorer() {
   const cTicks = [0.01, 0.1, 1];
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-paper">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-        <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-accent/70" />
+    <div className="bg-[#fbfaf7]">
+      <div className="flex items-center gap-2 border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
         the measured map · one kind of work · selection runs as you drag
       </div>
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#d9d5cb] px-5 py-3">
         {POLICIES.map((p) => (
           <button
             key={p.kind}
             onClick={() => setKind(p.kind)}
             className={`rounded-md px-3 py-1.5 font-mono text-xs transition-colors ${
-              kind === p.kind ? 'bg-accent text-white' : 'bg-paper text-soft hover:text-ink'
+              kind === p.kind ? 'bg-ink text-[#f4f2ec]' : 'bg-[#ece9df] text-soft hover:text-ink'
             }`}
           >
             {p.kind}
@@ -257,7 +256,7 @@ export function FrontierExplorer() {
             invent a number — the request rides the default strategy and the trace says so.
           </p>
         )}
-        <div className="mt-3 overflow-x-auto rounded bg-[#292524] px-3 py-2 font-mono text-[11px] leading-relaxed text-[#e7e2da]">
+        <div className="mt-3 overflow-x-auto bg-[#1c1a17] px-3 py-2 font-mono text-[11px] leading-relaxed text-[#e7e2da]">
           <span className="text-[#a8a29e]">x-frontier-trace:</span> {trace}
         </div>
         <p className="mt-3 text-xs leading-relaxed text-faint">

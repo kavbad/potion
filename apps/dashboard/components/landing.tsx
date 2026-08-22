@@ -44,12 +44,45 @@ import React from 'react';
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
 import { Reveal } from '@/components/landing/reveal';
-import { ScrollRail } from '@/components/landing/scroll-rail';
-import { RouteTape } from '@/components/landing/route-tape';
 import { ReceiptReel } from '@/components/landing/receipt-reel';
 import { EvidenceBand } from '@/components/landing/evidence-band';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
 import { MixDiagram } from '@/components/landing/mix-diagram';
+
+// THE LAB LOOK (operator, 2026-08-22: "design the landing page as if you are
+// Dario Amodei … i want to look like this is the frontier"). The page reads
+// as a frontier lab's published work, not a product page: warm paper, ink,
+// hairlines instead of cards, numbered sections with their label in the
+// margin, every artifact a captioned figure, measurements stated with their
+// intervals and dates, one restrained accent, no washes, no pills, no glow.
+// The CONTENT is v7's, untouched; only its presentation changed.
+const PAPER = 'bg-[#f4f2ec]';
+const INK_BAND = 'bg-[#1c1a17] text-[#efece4]';
+
+function LabSection({ n, label, id, children, dark = false }: { n: string; label: string; id?: string; children: React.ReactNode; dark?: boolean }) {
+  return (
+    <section id={id} className={`${dark ? INK_BAND : PAPER} ${dark ? '' : 'border-t border-[#d9d5cb]'}`}>
+      <div className="mx-auto grid max-w-6xl gap-8 px-6 py-20 sm:py-28 lg:grid-cols-[10rem_1fr] lg:gap-12">
+        <div className={`font-mono text-[11px] uppercase tracking-[0.18em] ${dark ? 'text-[#a8a29e]' : 'text-faint'}`}>
+          <div className={dark ? 'text-[#efece4]' : 'text-ink'}>{n}</div>
+          <div className="mt-1.5 leading-relaxed">{label}</div>
+        </div>
+        <div className="min-w-0">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function Figure({ n, caption, children, dark = false }: { n: string; caption: string; children: React.ReactNode; dark?: boolean }) {
+  return (
+    <figure>
+      <div className={`overflow-hidden border ${dark ? 'border-[#3f3b35]' : 'border-[#d9d5cb]'}`}>{children}</div>
+      <figcaption className={`mt-3 font-mono text-[11px] leading-relaxed ${dark ? 'text-[#a8a29e]' : 'text-faint'}`}>
+        <span className={dark ? 'text-[#efece4]' : 'text-ink'}>Figure {n}.</span> {caption}
+      </figcaption>
+    </figure>
+  );
+}
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   // Every section opens with the same fingerprint: the mark's graduation
@@ -70,7 +103,6 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 export function Landing() {
   return (
     <div>
-      <ScrollRail />
       {/* ---------------- hero ---------------- */}
       {/* v7, and the first actual RE-composition. Six versions kept one
           layout — headline left, artefact box right — and swapped the box.
@@ -79,12 +111,12 @@ export function Landing() {
           operator-endorsed), and the routing evidence as a full-bleed
           instrument tape forming the section's bottom edge — an EDGE, not a
           box. Scale carries the confidence; the tape carries the proof. */}
-      <section className="relative flex min-h-[calc(100vh-73px)] flex-col">
+      <section className="relative flex min-h-[calc(100vh-73px)] flex-col bg-[#f4f2ec]">
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
           <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
             Measured model routing
           </div>
-          <h1 className="mt-8 text-[3.4rem] font-semibold leading-[1.02] tracking-[-0.035em] text-ink sm:text-[4.5rem] lg:text-[5.5rem]">
+          <h1 className="mt-8 text-[3.2rem] font-medium leading-[1.02] tracking-[-0.035em] text-ink sm:text-[4.25rem] lg:text-[5.25rem]">
             Cut your AI bill{' '}
             <span className="relative inline-block">
               in half.
@@ -96,14 +128,14 @@ export function Landing() {
               </span>
             </span>
           </h1>
-          <p className="mt-6 text-[1.55rem] font-medium leading-snug tracking-[-0.01em] text-soft sm:text-[1.9rem]">
+          <p className="mt-6 text-[1.45rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.75rem]">
             The right model(s) for every request.
           </p>
 
           <div className="mt-8">
             <Link
               href="/login"
-              className="rounded-md bg-accent px-6 py-3 text-sm font-medium text-white hover:opacity-90 active:translate-y-px active:scale-[0.99]"
+              className="bg-ink px-6 py-3 text-sm font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
             >
               Get an API key
             </Link>
@@ -128,13 +160,13 @@ export function Landing() {
 
           {/* exa's first page, whole: the product runs in the hero. Real
               measured routes streaming into the table, receipt alongside. */}
-          <div className="mt-12 w-full max-w-4xl text-left">
-            <ReceiptReel />
+          <div className="mt-14 w-full max-w-3xl text-left">
+            <Figure n="1" caption="Six real requests and the decision each one received. Every routed point is a committed measurement; the receipt comes back with every answer.">
+              <ReceiptReel />
+            </Figure>
           </div>
         </div>
 
-        {/* the instrument hum: five real routes, streaming */}
-        <RouteTape />
       </section>
 
       {/* ---------------- the obvious question ---------------- */}
@@ -147,11 +179,9 @@ export function Landing() {
           The differentiation is JUDGMENT — per-request selection backed by
           held-out measurement, a quality floor, and a receipt — and the table
           only claims that. */}
-      <section id="vs-gateways" className="bg-[#ecfdf5]">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+      <LabSection n="01" label="The obvious question" id="vs-gateways">
         <Reveal>
-          <Eyebrow>The obvious question</Eyebrow>
-          <h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
+          <h2 className="mt-4 max-w-2xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
             Isn&apos;t this what OpenRouter does?
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
@@ -163,14 +193,14 @@ export function Landing() {
         </Reveal>
 
         <Reveal delayMs={120} className="mt-12">
-          <div className="overflow-hidden rounded-2xl border border-line shadow-paper">
-            <div className="hidden grid-cols-[1fr_1.1fr_1.15fr] gap-px bg-line sm:grid">
+          <Figure n="2" caption="What a gateway answers and what Potion answers, row by row. The gateway column is factual about what gateways do well; the difference is judgment per request, backed by held-out measurement.">
+            <div className="hidden grid-cols-[1fr_1.1fr_1.15fr] gap-px bg-[#d9d5cb] sm:grid">
               {/* header row — the Potion column is washed and carried by the
                   mark, so the eye picks its side before reading a word */}
               <div className="bg-panel px-5 py-4" />
               <div className="bg-panel px-5 py-4 text-sm font-medium text-soft">A model gateway</div>
-              <div className="flex items-center gap-2 bg-accent px-5 py-4 text-sm font-medium text-white">
-                <Mark className="h-4 w-4 text-white" />
+              <div className="flex items-center gap-2 bg-ink px-5 py-4 text-sm font-medium text-[#f4f2ec]">
+                <Mark className="h-4 w-4 text-[#f4f2ec]" />
                 Potion
               </div>
               {[
@@ -186,7 +216,7 @@ export function Landing() {
                     {k}
                   </div>
                   <div className="bg-panel px-5 py-4 text-sm leading-relaxed text-soft">{a}</div>
-                  <div className="flex items-start gap-2.5 bg-[#ccfbf1] px-5 py-4 text-sm leading-relaxed text-ink">
+                  <div className="flex items-start gap-2.5 bg-[#ece9df] px-5 py-4 text-sm leading-relaxed text-ink">
                     <span aria-hidden className="mt-[9px] flex shrink-0 items-end">
                       <span className="h-px w-3 bg-accent/70" />
                       <span className="h-[5px] w-px bg-accent/70" />
@@ -197,7 +227,7 @@ export function Landing() {
               ))}
             </div>
             {/* phones: the same six rows, stacked */}
-            <div className="divide-y divide-line sm:hidden">
+            <div className="divide-y divide-[#d9d5cb] sm:hidden">
               {[
                 ['You get', 'Every model, one API', 'The right model for each request'],
                 ['Who chooses', 'You do, once per app', 'The measurements do, per request'],
@@ -219,15 +249,14 @@ export function Landing() {
                 </div>
               ))}
             </div>
-          </div>
+          </Figure>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-soft">
             Access stopped being scarce the day gateways shipped. Judgment — measured per kind of
             work, stated with its error bars, enforced as a floor — is the scarce layer. That layer
             is Potion, and it works the same over any gateway or provider underneath.
           </p>
         </Reveal>
-        </div>
-      </section>
+      </LabSection>
 
       {/* ---------------- the evidence band (exa lesson: one dark, named-bars section) ---------------- */}
       <EvidenceBand />
@@ -249,11 +278,10 @@ export function Landing() {
           one. The closing line is the only place the page looks past what is
           already measured, which is why it is phrased as an admission (almost
           none of it has been measured) rather than a promise. */}
-      <section className="bg-[#f0fdfa]">
-        <div className="mx-auto grid max-w-6xl items-center gap-14 px-6 py-24 lg:grid-cols-2">
+      <LabSection n="03" label="Sometimes the answer is not one model">
+        <div className="grid items-start gap-12 lg:grid-cols-2">
           <Reveal>
-            <Eyebrow>Sometimes the answer is not one model</Eyebrow>
-            <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
+            <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
               A mixture can beat anything you could have picked.
             </h2>
             <p className="mt-6 text-base leading-relaxed text-soft">
@@ -274,17 +302,18 @@ export function Landing() {
             </p>
           </Reveal>
           <Reveal delayMs={120}>
-            <MixDiagram />
+            <Figure n="4" caption="A cheap model answers and reports its confidence; only below a threshold does a stronger model take over. The threshold and the components are chosen by measurement, per kind of work.">
+              <MixDiagram />
+            </Figure>
           </Reveal>
         </div>
-      </section>
+      </LabSection>
 
       {/* ---------------- proof: the map ---------------- */}
-      <section className="border-y border-line bg-panel">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+      <LabSection n="04" label="How you know we are not making this up">
+        <div>
           <Reveal>
-            <Eyebrow>How you know we are not making this up</Eyebrow>
-            <h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem] text-ink">
+            <h2 className="mt-4 max-w-2xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
               The actual map. Drive it yourself.
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
@@ -294,21 +323,20 @@ export function Landing() {
             </p>
           </Reveal>
           <Reveal delayMs={120} className="mt-10">
-            <FrontierExplorer />
+            <Figure n="5" caption="The multi-step-reasoning frontier, version 3: nine measured options, 50 items each, 95% intervals drawn. The selection you run here is the selection the router runs in production, including its refusal when nothing qualifies.">
+              <FrontierExplorer />
+            </Figure>
           </Reveal>
         </div>
-      </section>
+      </LabSection>
 
       {/* ---------------- business model ---------------- */}
       {/* exa's enterprise-security composition: a full-bleed dark band, the
           headline top-left, and the concrete promises as outlined tiles. */}
-      <section className="bg-[linear-gradient(160deg,#042f2e_0%,#0f3d3a_55%,#134e4a_100%)] text-[#f0fdfa]">
-        <div className="mx-auto max-w-6xl px-6 py-28">
+      <LabSection n="05" label="The business" dark>
+        <div>
           <Reveal>
-            <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#a8a29e]">
-              The business
-            </div>
-            <h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
+            <h2 className="mt-4 max-w-2xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
               We get paid out of what we save you.
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#d6d3d1]">
@@ -361,7 +389,7 @@ export function Landing() {
               ].map((t) => (
                 <div
                   key={t.h}
-                  className="rounded-lg border border-white/15 bg-white/[0.04] px-6 py-6 transition-colors hover:border-[#2dd4bf]/70 hover:bg-white/[0.07]"
+                  className="border border-[#3f3b35] px-6 py-6 transition-colors hover:border-[#efece4]/60 hover:bg-white/[0.07]"
                 >
                   <svg viewBox="0 0 24 24" className="h-8 w-8 text-[#2dd4bf]" aria-hidden>
                     {t.glyph}
@@ -373,39 +401,39 @@ export function Landing() {
             </div>
           </Reveal>
         </div>
-      </section>
+      </LabSection>
 
       {/* ---------------- close ---------------- */}
-      <section className="bg-[linear-gradient(135deg,#0f766e_0%,#14b8a6_60%,#2dd4bf_100%)] text-white">
+      <section className="bg-[#f4f2ec] border-t border-[#d9d5cb]">
         <div className="mx-auto max-w-6xl px-6 py-28 text-center">
           <Reveal>
             <div className="flex items-center justify-center gap-6" aria-hidden>
               <span className="flex items-end">
-                <span className="h-px w-24 bg-white/50" />
-                <span className="h-2 w-px bg-white/50" />
+                <span className="h-px w-24 bg-[#d9d5cb]" />
+                <span className="h-2 w-px bg-[#d9d5cb]" />
               </span>
-              <Mark className="h-9 w-9 text-white" />
+              <Mark className="h-9 w-9 text-accent" />
               <span className="flex items-end" style={{ transform: 'scaleX(-1)' }}>
-                <span className="h-px w-24 bg-white/50" />
-                <span className="h-2 w-px bg-white/50" />
+                <span className="h-px w-24 bg-[#d9d5cb]" />
+                <span className="h-2 w-px bg-[#d9d5cb]" />
               </span>
             </div>
-            <h2 className="mx-auto mt-6 max-w-xl text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-[2.75rem]">
+            <h2 className="mx-auto mt-6 max-w-xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
               Change one line. Keep the receipts.
             </h2>
-            <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/85">
+            <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-soft">
               Point a client at Potion and watch the routing decisions arrive with the answers.
             </p>
             <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
               <Link
                 href="/login"
-                className="rounded-md bg-white px-5 py-2.5 text-sm font-medium text-accent hover:bg-[#f0fdfa] active:translate-y-px active:scale-[0.99]"
+                className="bg-ink px-6 py-3 text-sm font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
               >
                 Get an API key
               </Link>
               <Link
                 href="/docs"
-                className="rounded-md px-4 py-2.5 text-sm font-medium text-white ring-1 ring-white/50 transition-colors hover:bg-white/10"
+                className="px-4 py-3 text-sm font-medium text-ink underline decoration-[#d9d5cb] underline-offset-4 hover:decoration-ink"
               >
                 Read the docs →
               </Link>

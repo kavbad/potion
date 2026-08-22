@@ -48,11 +48,11 @@ export function ReceiptReel() {
 
   return (
     <div
-      className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-line bg-panel text-left shadow-[0_24px_70px_-24px_rgba(41,37,36,0.25)]"
+      className="mx-auto w-full max-w-3xl bg-[#fbfaf7] text-left"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="flex h-[4.25rem] items-center gap-3 border-b border-line px-5 sm:px-6">
+      <div className="flex h-[4.25rem] items-center gap-3 border-b border-[#d9d5cb] px-5 sm:px-6">
         <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">request</span>
         <div key={`p${i}`} className="reel-fade min-w-0 flex-1 truncate text-[15px] text-ink">{d.prompt}</div>
       </div>
@@ -85,7 +85,7 @@ export function ReceiptReel() {
           </dd>
         </dl>
       </div>
-      <div className="flex h-10 items-center justify-between border-t border-line px-5 font-mono text-[10px] text-faint sm:px-6">
+      <div className="flex h-10 items-center justify-between border-t border-[#d9d5cb] px-5 font-mono text-[10px] text-faint sm:px-6">
         <span>{String(i + 1).padStart(2, '0')} / {String(ROUTE_DEMO.length).padStart(2, '0')} · real decisions, not a demo · hover to pause</span>
         <span className="hidden sm:inline">every answer carries one of these</span>
       </div>
