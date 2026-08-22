@@ -3910,6 +3910,8 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         judgeModelOverride: judgeEntry.alias,
         judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
+        // Observatory canary: salt forces fresh cells (see harness cacheKeyOf).
+        ...(payload.cacheSalt !== undefined ? { cacheSalt: payload.cacheSalt } : {}),
         ...(payload.sampleN !== undefined ? { itemSampleN: payload.sampleN } : {}),
       },
       { db: ctx.dbHandle, pricesPath: ctx.pricesPath,
@@ -3998,12 +4000,19 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         });
         if (refusal !== null) throw refusal;
       }
-      const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
-        provenance: { suiteId: mapped.suiteId, suiteContentHash: contentHash },
-      });
-      frontierId = saved.id;
-      frontierVersion = saved.version;
-      frontierPoints = saved.points;
+      if (payload.publish === false) {
+        // Observatory canary / dry measurement: the points are returned for
+        // comparison but NEVER saved — a 4-item canary must not replace a
+        // 50-item frontier, and a dry run must leave the chain untouched.
+        frontierPoints = computed;
+      } else {
+        const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
+          provenance: { suiteId: mapped.suiteId, suiteContentHash: contentHash },
+        });
+        frontierId = saved.id;
+        frontierVersion = saved.version;
+        frontierPoints = saved.points;
+      }
     }
     return {
       runId: summary.runId,
@@ -4015,6 +4024,8 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       candidates: [...byHash.keys()],
       frontierId,
       frontierVersion,
+      /** False for publish:false runs (canaries, dry measurements). */
+      published: frontierId !== null,
       points: frontierPoints.length,
       droppedAnswerers,
       /**

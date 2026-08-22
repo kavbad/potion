@@ -452,6 +452,13 @@ export interface FrontierPlatformSweepPayload {
    * silent no-op that reports success.
    */
   auditionModels?: string[];
+  /**
+   * Observatory canary / dry measurement: measure and return points but
+   * NEVER save a frontier version. Default true.
+   */
+  publish?: boolean;
+  /** Observatory canary: salt the eval cache key so cells re-execute. */
+  cacheSalt?: string;
   /** Per-attempt provider timeout (ms). Absent → PLATFORM_SWEEP_TIMEOUT_MS. */
   providerTimeoutMs?: number;
   /** Retry attempts past the first. Absent → PLATFORM_SWEEP_MAX_RETRIES. */
