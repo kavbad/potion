@@ -44,7 +44,23 @@ curl -s -X POST "$POTION_API/api/policies" \
   -d '{"policy": {"type": "min_cost", "qualityFloor": 0.85}, "name": "prod", "createKey": true}'
 ```
 
-The response returns the raw `pk_...` key **exactly once**. Scopes (ENFORCED since
+The response returns the raw `pk_...` key **exactly once**.
+
+**Set the partner's own cap now** (Phase D rehearsal, 2026-08-21: an org created
+through this runbook has NO budget row of its own — it is bounded only by the
+platform default, `POTION_PLATFORM_ORG_CAP_USD`, $10/month). Agree the number
+with the partner and write it while their session is open:
+
+```bash
+curl -s -X PUT "$POTION_API/api/budgets" \
+  -H "Cookie: potion_session=<their session>" \
+  -H "Content-Type: application/json" \
+  -d '{"monthlyCapUsd": 250, "hardStop": true, "warnPct": 80}'
+```
+
+`hardStop: true` refuses requests with `429 budget_exceeded` once month-to-date
+spend reaches the cap; the verdict is re-checked every 5 s, so a burst can run
+at most ~5 s past it. Soft caps (`hardStop: false`) only alert. Scopes (ENFORCED since
 G2.3): keys default to the `serve` scope — serving, org reads, and self-service
 policy/workload operations, at **member grade**. Admin mutations (incident resolve,
 incumbent designation, budgets, alert rules, rubric/research/trace ops, live
