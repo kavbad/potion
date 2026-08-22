@@ -150,6 +150,24 @@ describe('POST /api/playground/chat — point selection', () => {
     expect(trace).toContain('policy=playground');
   });
 
+  it("clusterId 'auto' classifies the prompt the way serving does and names the cluster in the receipt", async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/playground/chat',
+      payload: { clusterId: 'auto', auto: true, messages: [{ role: 'user', content: 'Write a function that merges overlapping date ranges.' }] },
+    });
+    // Either the classified cluster has a frontier (200 + cluster_id in the meta
+    // chunk) or it does not (400 naming the classified cluster) — never a
+    // validation error about 'auto' itself.
+    if (res.statusCode === 200) {
+      expect(res.body).toMatch(/"cluster_id":"[a-z-]+"/);
+      expect(res.body).not.toMatch(/"cluster_id":"auto"/);
+    } else {
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toMatch(/no frontier for cluster '(?!auto')[a-z-]+'/);
+    }
+  });
+
   it('potion-auto routes via the org’s bound policy when one exists', async () => {
     // min_cost qualityFloor 0.7 → the cheap point satisfies it at lower cost
     await insertPolicy(db(), {

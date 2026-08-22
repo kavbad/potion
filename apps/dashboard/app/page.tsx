@@ -28,6 +28,7 @@ import { Landing } from '@/components/landing';
 import { SiteShell } from '@/components/site-header';
 import { CopyBlock } from '@/components/copy-block';
 import { RoutingProof } from '@/components/routing-proof';
+import { TryRequest } from '@/components/try-request';
 import { ServingKeys } from '@/components/serving-keys';
 import type { ConnectionResponse } from '@/lib/types';
 
@@ -158,9 +159,15 @@ export default async function ConnectPage({
         <ServingKeys initial={conn.servingKeys} />
       </section>
 
+      {/* 3 — use it, right here (the playground, folded in) */}
+      <section className="space-y-5">
+        <h2 className="text-sm font-medium text-ink">3 · Try a request</h2>
+        <TryRequest />
+      </section>
+
       {/* 4 — is it doing anything */}
       <section className="space-y-5">
-        <h2 className="text-sm font-medium text-ink">3 · Proof it is routing</h2>
+        <h2 className="text-sm font-medium text-ink">4 · Proof it is routing</h2>
         <RoutingProof />
       </section>
 

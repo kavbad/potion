@@ -50,6 +50,7 @@ import {
   type LatencyViolation,
 } from './chat.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
+import { assignmentCacheKey } from '../context.js';
 
 const PlaygroundChatSchema = z
   .object({
@@ -151,6 +152,22 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       return reply.code(400).send(openAiError(message, 'invalid_request_error'));
     }
     const body = parsed.data;
+    // 'auto' (2026-08-22, Home's "Try a request"): classify the prompt the way
+    // serving does — same assigner, same content-hash cache — so the box needs
+    // no cluster picked by hand. The receipt names what it chose.
+    let clusterId = body.clusterId;
+    let clusterConfidence: number | null = null;
+    if (clusterId === 'auto') {
+      const contents = body.messages.filter((m) => m.role === 'user').map((m) => m.content);
+      const cacheKey = assignmentCacheKey(contents);
+      let ranked = ctx.assignCache.get(cacheKey);
+      if (!ranked) {
+        ranked = await ctx.assigner.assignRanked(contents.join('\n'));
+        ctx.assignCache.set(cacheKey, ranked);
+      }
+      clusterId = ranked.assignment.clusterId;
+      clusterConfidence = ranked.assignment.confidence;
+    }
     if (!body.strategyHash && body.auto !== true) {
       return reply
         .code(400)
@@ -162,11 +179,11 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         );
     }
 
-    const frontier = await loadCurrentFrontier(ctx.db.db, body.clusterId, org.orgId);
+    const frontier = await loadCurrentFrontier(ctx.db.db, clusterId, org.orgId);
     if (!frontier || frontier.points.length === 0) {
       return reply
         .code(404)
-        .send(openAiError(`no frontier for cluster '${body.clusterId}'`, 'invalid_request_error'));
+        .send(openAiError(`no frontier for cluster '${clusterId}'`, 'invalid_request_error'));
     }
     const resolved = await resolvePlaygroundPoint(ctx, org.orgId, frontier, body);
     if ('error' in resolved) {
@@ -178,7 +195,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     const provenance: 'live' | 'mock' =
       resolved.point !== null && resolved.point.providerMode === 'live' ? 'live' : 'mock';
     const trace = traceHeaderValue({
-      clusterId: body.clusterId,
+      clusterId,
       strategyHash8: sh.slice(0, 8),
       frontierVersion: frontier.version,
       policyType: 'playground',
@@ -255,6 +272,8 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         cost_usd: result.usage.costUsd,
         strategy_hash: sh,
         provenance,
+        cluster_id: clusterId,
+        ...(clusterConfidence !== null ? { cluster_confidence: clusterConfidence } : {}),
         // G2.6: the compare view reads this meta chunk, so the latency
         // consequence travels with the answer rather than only in a header.
         ...(resolved.latencySource !== undefined ? { latency_source: resolved.latencySource } : {}),

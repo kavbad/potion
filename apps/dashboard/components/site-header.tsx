@@ -31,9 +31,6 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
           >
             Docs
           </Link>
-          <Link href="/leaderboard" className="text-soft transition-colors hover:text-ink">
-            Leaderboard
-          </Link>
         </nav>
         <div className="flex items-center gap-2.5 justify-self-end text-sm">
           <Link
@@ -65,7 +62,6 @@ export function SiteFooter() {
         </div>
         <div className="flex gap-6">
           <Link href="/docs" className="transition-colors hover:text-[#faf9f6]">Docs</Link>
-          <Link href="/leaderboard" className="transition-colors hover:text-[#faf9f6]">Leaderboard</Link>
           <Link href="/login" className="transition-colors hover:text-[#faf9f6]">Sign in</Link>
         </div>
       </div>
