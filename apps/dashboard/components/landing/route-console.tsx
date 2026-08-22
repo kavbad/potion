@@ -53,7 +53,7 @@ export function RouteConsole() {
   const typedSomething = typed.trim().length > 8;
 
   return (
-    <div className="w-full rounded-2xl border border-line bg-panel shadow-paper lift shadow-[0_24px_70px_-18px_rgba(41,37,36,0.22)]">
+    <div className="w-full min-w-0 rounded-2xl border border-line bg-panel shadow-paper lift shadow-[0_24px_70px_-18px_rgba(41,37,36,0.22)]">
       {/* ---- the query row ---- */}
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
         <input
@@ -86,7 +86,7 @@ export function RouteConsole() {
 
       <div className="grid lg:grid-cols-[15rem_1fr]">
         {/* ---- the receipt rail (exa's controls column, honest version) ---- */}
-        <div className="flex flex-col border-b border-line px-5 py-5 text-left lg:border-b-0 lg:border-r">
+        <div className="flex min-w-0 flex-col border-b border-line px-5 py-5 text-left lg:border-b-0 lg:border-r">
           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">receipt</div>
           {d ? (
             <dl className="mt-4 space-y-3.5 font-mono text-xs">
@@ -113,7 +113,7 @@ export function RouteConsole() {
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-faint">why</dt>
-                <dd className="mt-1 leading-relaxed text-soft">{d.note}</dd>
+                <dd className="mt-1 break-words leading-relaxed text-soft">{d.note}</dd>
               </div>
             </dl>
           ) : (
@@ -138,7 +138,7 @@ export function RouteConsole() {
         </div>
 
         {/* ---- the results field ---- */}
-        <div className="px-5 py-5">
+        <div className="min-w-0 px-5 py-5">
           {typedSomething ? (
             <div className="flex h-full min-h-[15rem] items-center rounded-lg border border-accent/25 bg-accent-soft/30 px-6 py-5">
               <p className="text-left text-sm leading-relaxed text-ink">

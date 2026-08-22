@@ -251,7 +251,7 @@ export function Landing() {
 
         <Reveal delayMs={120} className="mt-12">
           <div className="overflow-hidden rounded-2xl border border-line shadow-paper">
-            <div className="grid grid-cols-[1fr_1.1fr_1.15fr] gap-px bg-line max-sm:grid-cols-[0.8fr_1fr_1fr]">
+            <div className="hidden grid-cols-[1fr_1.1fr_1.15fr] gap-px bg-line sm:grid">
               {/* header row — the Potion column is washed and carried by the
                   mark, so the eye picks its side before reading a word */}
               <div className="bg-panel px-5 py-4" />
@@ -281,6 +281,29 @@ export function Landing() {
                     {b}
                   </div>
                 </React.Fragment>
+              ))}
+            </div>
+            {/* phones: the same six rows, stacked */}
+            <div className="divide-y divide-line sm:hidden">
+              {[
+                ['You get', 'Every model, one API', 'The right model for each request'],
+                ['Who chooses', 'You do, once per app', 'The measurements do, per request'],
+                ['Based on', 'Leaderboards, habit, vibes', 'Held-out tests of your kind of work'],
+                ['Quality', 'Whatever you picked', 'A floor your traffic never falls below'],
+                ['After the answer', 'Tokens and a price', 'A receipt: what served it, and why'],
+                ['A new model ships', 'You re-evaluate by hand', 'Measured first, adopted only if it earns it'],
+              ].map(([k, a, b]) => (
+                <div key={k} className="bg-panel px-4 py-4">
+                  <div className="font-mono text-[11px] uppercase tracking-wide text-faint">{k}</div>
+                  <div className="mt-2 text-sm leading-snug text-soft">
+                    <span className="text-faint">gateway · </span>
+                    {a}
+                  </div>
+                  <div className="mt-1.5 flex items-start gap-2 text-sm leading-snug text-ink">
+                    <Mark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                    {b}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

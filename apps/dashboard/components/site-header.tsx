@@ -17,7 +17,7 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
         . The name is the product.
       </div>
       <header className="sticky top-0 z-40 border-b border-line bg-paper/90 backdrop-blur">
-      <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-6 py-4">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:py-4">
         <Link href="/" className="flex items-center gap-2 justify-self-start">
           <Mark className="h-5 w-5 text-accent" />
           <span className="text-lg font-semibold tracking-tight text-ink">Potion</span>
@@ -38,7 +38,7 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
         <div className="flex items-center gap-2.5 justify-self-end text-sm">
           <Link
             href="/login"
-            className="rounded-md bg-paper px-3.5 py-1.5 font-medium text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink"
+            className="hidden rounded-md bg-paper px-3.5 py-1.5 font-medium text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink sm:inline-block"
           >
             Sign in
           </Link>
