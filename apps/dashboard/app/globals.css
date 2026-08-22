@@ -129,3 +129,15 @@
 @media (prefers-reduced-motion: reduce) {
   [class*='heroFloat'] { animation: none; }
 }
+
+/* routing field — the hero instrument; motion is opacity/stroke only, never layout */
+@keyframes fieldFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fieldRoute { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fieldPulse { 0% { r: 6; opacity: 0.9; } 100% { r: 18; opacity: 0; } }
+.field-fade { animation: fieldFade 420ms ease-out both; }
+.field-route { pathLength: 1; stroke-dasharray: 1; animation: fieldRoute 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.field-pulse { animation: fieldPulse 1600ms ease-out 900ms infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .field-fade, .field-route, .field-pulse { animation: none; }
+  .field-pulse { opacity: 0; }
+}

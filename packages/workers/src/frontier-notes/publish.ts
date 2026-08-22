@@ -1,0 +1,128 @@
+// Frontier Notes — assemble, gate, and write an issue (docs/FRONTIER-NOTES.md).
+//
+// The issue is a file: `${dir}/<week>.json` (the dashboard renders it) and
+// `${dir}/<week>.md` (a human-readable copy). Held issues are written too,
+// with status 'held' and the reason, so a failed week is visible rather
+// than silent. The redaction pass runs over EVERY string that can reach the
+// page, including the fact sheet's own names.
+
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { assertPublishable } from './redact.js';
+import type { FactSheet, Issue } from './types.js';
+import { METHOD_NOTE, type Draft } from './write.js';
+
+export const DEFAULT_BYLINE = 'Potion Research';
+
+export function issueSlug(week: string, title: string): string {
+  const words = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .split(/\s+/)
+    .filter((w) => w && !['the', 'a', 'an', 'of', 'on', 'at', 'and', 'this', 'week', 'to', 'its', 'in'].includes(w))
+    .slice(0, 7)
+    .join('-');
+  return `${week.toLowerCase()}-${words || 'frontier-notes'}`;
+}
+
+export interface AssembleOptions {
+  byline?: string;
+  publishedAt: string;
+  writer: Issue['writer'];
+  gate: boolean;
+  extraNeverName?: readonly string[];
+}
+
+export function assembleIssue(facts: FactSheet, draft: Draft, opts: AssembleOptions): Issue {
+  const base: Omit<Issue, 'status' | 'heldReason'> = {
+    slug: issueSlug(facts.week, draft.title),
+    week: facts.week,
+    title: draft.title,
+    summary: draft.summary,
+    publishedAt: opts.publishedAt,
+    byline: opts.byline ?? DEFAULT_BYLINE,
+    lede: draft.lede,
+    frontierNote: draft.frontierNote,
+    auditionNote: draft.auditionNote,
+    mixingNote: draft.mixingNote,
+    method: METHOD_NOTE,
+    faq: draft.faq,
+    facts,
+    writer: opts.writer,
+  };
+  try {
+    assertPublishable(publishableText(base), opts.extraNeverName);
+  } catch (e) {
+    return { ...base, status: 'held', heldReason: e instanceof Error ? e.message : String(e) };
+  }
+  if (opts.gate) return { ...base, status: 'held', heldReason: 'FRONTIER_NOTES_GATE is set: awaiting operator release' };
+  return { ...base, status: 'published' };
+}
+
+/** Every string that can reach a page, concatenated for the redaction pass. */
+export function publishableText(i: Omit<Issue, 'status' | 'heldReason'>): string {
+  const f = i.facts;
+  return [
+    i.title, i.summary, i.lede, i.frontierNote, i.auditionNote, i.mixingNote, i.method,
+    ...i.faq.flatMap((x) => [x.q, x.a]),
+    ...f.frontier.map((c) => `${c.clusterId} ${c.pick}`),
+    ...f.auditions.map((a) => `${a.alias} ${a.lane} ${a.clusterId} ${a.outcome}`),
+    ...f.caveats,
+  ].join('\n');
+}
+
+export function renderMarkdown(i: Issue): string {
+  const f = i.facts;
+  const q = (x: number) => x.toFixed(3);
+  const rows = f.frontier.map(
+    (c) => `| ${c.clusterId} | ${c.verdict === 'ok' ? 'held' : c.verdict === 'drift' ? 'moved' : 'inconclusive'} | ${c.pick} | ${q(c.storedQuality)} ± ${q(c.storedCi95)} | ${c.observedMean === null ? '—' : q(c.observedMean)} (n=${c.n}) |`,
+  );
+  const lines = [
+    `# ${i.title}`,
+    '',
+    `*Frontier Notes · ${i.week} · ${i.publishedAt.slice(0, 10)} · ${i.byline}*${i.status === 'held' ? `\n\n> HELD: ${i.heldReason}` : ''}`,
+    '',
+    i.lede,
+    '',
+    '## This week\'s frontiers',
+    '',
+    '| cluster | verdict | routed pick | stored quality | canary |',
+    '|---|---|---|---|---|',
+    ...rows,
+    '',
+    i.frontierNote,
+    '',
+    '## Auditions',
+    '',
+    i.auditionNote,
+    '',
+    '## Mixing',
+    '',
+    i.mixingNote,
+    '',
+    '## Method',
+    '',
+    i.method,
+    '',
+    '## Numbers',
+    '',
+    `${f.numbers.canaries} canaries · ${f.numbers.clustersHeld} held · ${f.numbers.clustersMoved} moved · ${f.numbers.inconclusive} inconclusive · ${f.numbers.itemsGraded} items graded · ${f.numbers.candidatesScreened} listings screened · ${f.numbers.candidatesMeasured} measured · $${f.numbers.spendUsd.toFixed(2)}`,
+    '',
+    '## Questions',
+    '',
+    ...i.faq.flatMap((x) => [`**${x.q}**`, '', x.a, '']),
+    '## Caveats',
+    '',
+    ...f.caveats.map((c) => `- ${c}`),
+    '',
+  ];
+  return lines.join('\n');
+}
+
+export function writeIssue(dir: string, issue: Issue): { json: string; md: string } {
+  mkdirSync(dir, { recursive: true });
+  const json = `${dir}/${issue.week}.json`;
+  const md = `${dir}/${issue.week}.md`;
+  writeFileSync(json, JSON.stringify(issue, null, 1) + '\n');
+  writeFileSync(md, renderMarkdown(issue));
+  return { json, md };
+}

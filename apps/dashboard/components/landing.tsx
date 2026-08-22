@@ -46,8 +46,7 @@ import { Mark } from '@/components/mark';
 import { Reveal } from '@/components/landing/reveal';
 import { ScrollRail } from '@/components/landing/scroll-rail';
 import { RouteTape } from '@/components/landing/route-tape';
-import { RouteConsole } from '@/components/landing/route-console';
-import { HeroDrift } from '@/components/landing/hero-drift';
+import { RoutingField } from '@/components/landing/routing-field';
 import { EvidenceBand } from '@/components/landing/evidence-band';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
 import { MixDiagram } from '@/components/landing/mix-diagram';
@@ -81,7 +80,6 @@ export function Landing() {
           instrument tape forming the section's bottom edge — an EDGE, not a
           box. Scale carries the confidence; the tape carries the proof. */}
       <section className="relative flex min-h-[calc(100vh-73px)] flex-col">
-        <HeroDrift />
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
           <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
             Measured model routing
@@ -111,15 +109,15 @@ export function Landing() {
             </Link>
           </div>
 
-          <ul className="mx-auto mt-9 max-w-xl space-y-2.5 text-left">
+          <ul className="mx-auto mt-9 max-w-md space-y-2 text-left">
             {[
-              'AI bills fall 49% when Potion routes each request to the cheapest model measured good enough.',
-              'Cost, quality, or speed: you set the rule, Potion picks from the measured Pareto frontier.',
-              'Your routing stays current automatically: new models are measured on release, and our research finds model combinations nobody else has.',
-              'One line of code. Every answer carries a receipt: what ran, and why.',
+              '49% lower bills. Each request goes to the cheapest model measured good enough.',
+              'Your rule: cost, quality, or speed. Picked from the measured Pareto frontier.',
+              'Always current. New models measured on release; combinations nobody else has.',
+              'One line of code. A receipt with every answer.',
             ].map((li) => (
-              <li key={li} className="flex gap-3 text-[15px] leading-relaxed text-soft">
-                <span aria-hidden className="mt-[11px] flex shrink-0 items-end self-start">
+              <li key={li} className="flex gap-3 text-[14.5px] leading-snug text-soft">
+                <span aria-hidden className="mt-[9px] flex shrink-0 items-end self-start">
                   <span className="h-px w-3.5 bg-accent/70" />
                   <span className="h-[5px] w-px bg-accent/70" />
                 </span>
@@ -131,7 +129,7 @@ export function Landing() {
           {/* exa's first page, whole: the product runs in the hero. Real
               measured routes streaming into the table, receipt alongside. */}
           <div className="mt-12 w-full max-w-4xl text-left">
-            <RouteConsole />
+            <RoutingField />
           </div>
         </div>
 
