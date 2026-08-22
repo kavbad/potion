@@ -175,7 +175,7 @@ services:
       retries: 6
       start_period: 30s
     volumes:
-      - /opt/potion/research/notes:/research/notes:ro
+      - /opt/potion/research/artifacts/notes:/research/notes:ro
 
   caddy:
     image: caddy:2-alpine
