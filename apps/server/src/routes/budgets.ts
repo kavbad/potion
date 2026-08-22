@@ -163,7 +163,11 @@ interface CacheEntry {
 }
 
 /** 60s per-org cache (SPEC §13.7: "cached 60s per org"). */
-const HARD_STOP_TTL_MS = 60_000;
+// 5s, not 60s: the Phase D re-proof against production (2026-08-21) showed a
+// 60s window letting a burst run ~3 full-price requests past an exceeded cap.
+// One MTD aggregate per org per 5s is negligible load; 5s of overshoot is the
+// honest bound on "refuses before the money is spent".
+const HARD_STOP_TTL_MS = 5_000;
 const hardStopCache = new Map<string, CacheEntry>();
 
 /** Test hook: clear the serving-path hard-stop cache. */
