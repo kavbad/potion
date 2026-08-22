@@ -83,6 +83,11 @@ if (!DRY) {
 }
 const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never;
 const { table: prices } = loadPrices(process.env.POTION_PRICES_PATH!);
+// The sweep prefers the store's db registry over the price file. A store whose
+// registry holds only what past auditions inserted would fail class
+// representation for EVERY lane (second live week, 2026-08-22) — seed the full
+// table first; seeding never clobbers, so audited candidates keep their rows.
+if (!DRY) await seedModelRegistry(handle.db, prices);
 
 // ---- lane 1: canaries ----
 const canaries: CanaryResult[] = [];
@@ -113,7 +118,7 @@ for (const clusterId of clusters) {
       { clusterId, capUsd: CANARY_CAP_USD, maxAnswerers: 1, auditionModels: [model], sampleN: CANARY_SAMPLE_N, publish: false, cacheSalt: week },
       ctx,
     );
-    const observed = res.frontierPoints.find((p) => p.strategyHash === target.strategyHash) ?? res.frontierPoints[0] ?? null;
+    const observed = (res.frontierPoints ?? []).find((p) => p.strategyHash === target.strategyHash) ?? (res.frontierPoints ?? [])[0] ?? null;
     const n = observed?.evidence?.n ?? res.itemCount;
     const verdict = observed
       ? driftVerdict({ quality: target.quality, qualityCi95: target.evidence?.qualityCi95 ?? 0 }, { meanQuality: observed.quality, n })
@@ -147,16 +152,24 @@ try {
       // price file). Inserting a lone candidate would make the db registry
       // consist of one model and fail class representation — seed from the
       // table first so the candidate JOINS the roster (first live week, 2026-08-22).
-      await seedModelRegistry(handle.db, prices);
       await addScannedModels(handle.db, [r.entry] as never, `${prices.version}+obs-${week}`);
       const res = await frontierPlatformSweepHandler(
         { clusterId: r.clusterId, capUsd: AUDITION_CAP_USD, maxAnswerers: 1, auditionModels: [r.entry.alias] },
         ctx,
       );
-      const earned = res.frontierPoints.some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
-      auditions.push({ alias: r.entry.alias, clusterId: r.clusterId, lane: r.lane, why: r.why, spendUsd: res.spendUsd, earnedSlot: earned, frontierVersion: res.frontierVersion });
+      const pts = res.frontierPoints ?? [];
+      const measured = res.candidates.length > 0 && res.executed + res.cacheHits > 0;
+      const earned = pts.some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
+      if (!measured) {
+        // Contained at the first call (provider error) — the candidate is not
+        // servable as listed. A published null, not a crash and not a slot.
+        auditions.push({ alias: r.entry.alias, clusterId: r.clusterId, lane: r.lane, why: r.why, spendUsd: res.spendUsd, earnedSlot: null, frontierVersion: null, error: 'not measurable: provider refused the model at the first call' });
+        console.log(`           not measurable on ${r.clusterId}: provider refused the model at the first call ($${res.spendUsd.toFixed(4)})`);
+      } else {
+        auditions.push({ alias: r.entry.alias, clusterId: r.clusterId, lane: r.lane, why: r.why, spendUsd: res.spendUsd, earnedSlot: earned, frontierVersion: res.frontierVersion });
+        console.log(`           ${earned ? 'EARNED A SLOT' : 'did not earn a slot'} on ${r.clusterId} (frontier v${res.frontierVersion ?? '—'}, $${res.spendUsd.toFixed(4)})`);
+      }
       ledgerAppend({ at: NOW.toISOString(), week, lane: 'audition', spendUsd: res.spendUsd, detail: `${r.entry.alias}@${r.clusterId}` });
-      console.log(`           ${earned ? 'EARNED A SLOT' : 'did not earn a slot'} on ${r.clusterId} (frontier v${res.frontierVersion ?? '—'}, $${res.spendUsd.toFixed(4)})`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       auditions.push({ alias: r.entry.alias, clusterId: r.clusterId, lane: r.lane, why: r.why, spendUsd: 0, earnedSlot: null, frontierVersion: null, error: msg });

@@ -46,7 +46,7 @@ export const OBSERVATORY_ENVELOPE_USD = 50;
  */
 export const CANARY_CAP_USD = 3;
 export const CANARY_EXPECTED_USD = 0.2;
-export const AUDITION_CAP_USD = 4;
+export const AUDITION_CAP_USD = 6;
 export const AUDITION_EXPECTED_USD = 2;
 /** Auditions per week — breadth at a manageable rate. */
 export const AUDITIONS_PER_WEEK = 3;
