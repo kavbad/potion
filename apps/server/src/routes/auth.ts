@@ -66,6 +66,7 @@ import {
   resolveRequestAuth,
 } from '../auth.js';
 import type { PotionContext } from '../context.js';
+import { sendEmailFromEnv } from '../email.js';
 
 /** Session + magic-link TTLs. */
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -263,7 +264,7 @@ export function registerAuthRoutes(
   opts: AuthRouteOptions = {},
 ): void {
   const db = ctx.db.db;
-  const sendEmail = opts.sendEmail ?? logSendEmail;
+  const sendEmail = opts.sendEmail ?? sendEmailFromEnv().sendEmail;
 
   // Housekeeping on boot: dead sessions + consumed/expired links are purged
   // (idempotent; live rows untouched).

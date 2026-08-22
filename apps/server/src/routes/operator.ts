@@ -34,7 +34,8 @@ import {
 import type { PotionQueue } from '@potion/queue';
 import { bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
-import { issueMagicLink, logSendEmail, soloOrgName } from './auth.js';
+import { issueMagicLink, soloOrgName } from './auth.js';
+import { sendEmailFromEnv } from '../email.js';
 
 export interface OperatorRoutesOptions {
   queue: PotionQueue;
@@ -112,7 +113,10 @@ export function registerOperatorRoutes(
     const linkBase = appUrl ? `${appUrl}/api` : `${proto}://${host}`;
     // The magic link is returned UNCONDITIONALLY — operator hand-delivery
     // is the partner flow; the email side effect is best-effort logging.
-    const magicLink = await issueMagicLink(db, email, orgId, linkBase, logSendEmail);
+    // Delivered by the configured transport when one exists (Resend); the
+    // link is STILL returned for hand-delivery — the partner flow never
+    // depends on email arriving.
+    const magicLink = await issueMagicLink(db, email, orgId, linkBase, sendEmailFromEnv().sendEmail);
     return reply.code(201).send({ orgId, name: body.data.name, adminEmail: email, magicLink });
   });
 

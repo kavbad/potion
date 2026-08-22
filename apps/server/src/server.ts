@@ -7,6 +7,7 @@ import { registerChatRoutes } from './routes/chat.js';
 import { registerPolicyRoutes } from './routes/policies.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { sendEmailFromEnv } from './email.js';
 import { dashboardAuthHook } from './auth.js';
 import { buildContext, type ContextOptions, type PotionContext } from './context.js';
 import { initSentry } from './sentry.js';
@@ -180,6 +181,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   app.decorateRequest('potionAuth', null);
   app.addHook('onRequest', dashboardAuthHook(ctx));
   registerAuthRoutes(app, ctx);
+  app.log.info({ transport: sendEmailFromEnv().transport }, 'email transport');
 
   // ---- M2 Wave 2 metering (ROADMAP #17/#18): append-only registration ----
   // Rate limiting runs as an onRequest hook matched on routeOptions.url, so
