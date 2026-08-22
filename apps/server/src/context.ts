@@ -53,6 +53,7 @@ import {
   createCacheInvalidator,
   type CacheInvalidationHandle,
 } from './cache-invalidation.js';
+import { checkPlatformFrontiersAgainstRegistry, formatFailure } from './frontier-registry-check.js';
 // ---- end M3 #27 HA imports ----
 
 /** Actor recorded on serving-path decrypts (custody_audit.actor). */
@@ -420,6 +421,23 @@ export async function buildContext(opts: ContextOptions = {}): Promise<PotionCon
     // Never a boot blocker: a deployment without the baseline routes on the
     // fallback, which is exactly today's behaviour. Loud, not fatal.
     log(`platform baseline: import skipped (${e instanceof Error ? e.message : String(e)})`);
+  }
+
+  // ---- frontier ↔ registry consistency (2026-08-21 production lesson) ----
+  // The frontiers just imported (or already present) must route only to
+  // models THIS registry can resolve; otherwise the measured route 503s while
+  // /readyz stays green. Fail closed in production; loud elsewhere.
+  {
+    const production = process.env.NODE_ENV === 'production';
+    const report = await checkPlatformFrontiersAgainstRegistry(db.db, prices, { production });
+    if (report.unresolved.length > 0) {
+      log(`frontier registry: WARNING — ${formatFailure(report)}`);
+    } else if (report.clustersChecked.length > 0) {
+      log(
+        `frontier registry: ${report.clustersChecked.length} platform cluster(s) checked — every routed model ` +
+          `resolves in registry ${report.registryVersion}`,
+      );
+    }
   }
 
   const { providers, mode } = opts.providers
