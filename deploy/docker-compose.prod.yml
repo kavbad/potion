@@ -191,6 +191,31 @@ services:
       dashboard:
         condition: service_started
 
+  # ---- The Observatory (docs/OBSERVATORY.md) — weekly, one-shot, profile-gated ----
+  # Never started by `up -d`; the host cron runs it Mondays:
+  #   docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod \
+  #     --profile observatory run --rm observatory
+  # Runs against the RESEARCH store under /opt/potion/research, never the
+  # serving database. Spend is governed by the script's own $50/month envelope
+  # (ledger in /research/artifacts/ledger.jsonl) on top of the harness belt.
+  observatory:
+    profiles: ["observatory"]
+    image: deploy-server
+    working_dir: /app
+    command: ["node_modules/.bin/tsx", "scripts/observatory-week.ts"]
+    environment:
+      OBSERVATORY_DB: /research/store
+      OBSERVATORY_ARTIFACTS: /research/artifacts
+      POTION_PRICES_PATH: /app/prices.json
+      POTION_EVAL_PROVIDER: live
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY}
+      # The operator's standing grant (2026-08-22): $50/month, ledgered.
+      KEY_RISK_ACCEPTED: "2026-08-22"
+      NODE_ENV: production
+    volumes:
+      - /opt/potion/research:/research
+    restart: "no"
+
 volumes:
   redisdata:
   caddydata:
