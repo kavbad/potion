@@ -158,6 +158,8 @@ services:
       # browser never needs this value.
       POTION_API_URL: http://server:3000
       POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
+      # Frontier Notes issues, written by the observatory service (read-only here)
+      FRONTIER_NOTES_DIR: /research/notes
     # No ports: reachable only through Caddy, same posture as the server.
     depends_on:
       server:
@@ -172,6 +174,8 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
+    volumes:
+      - /opt/potion/research/notes:/research/notes:ro
 
   caddy:
     image: caddy:2-alpine
@@ -217,6 +221,12 @@ services:
       KEY_RISK_ACCEPTED: "2026-08-22"
       NOTION_API_KEY: ${NOTION_API_KEY:-}
       NOTION_PAGE_ID: ${NOTION_PAGE_ID:-}
+      # Frontier Notes (docs/FRONTIER-NOTES.md): weekly issue written after the run
+      POTION_APP_URL: ${POTION_APP_URL:-https://app.withpotion.com}
+      FRONTIER_NOTES_WRITER: ${FRONTIER_NOTES_WRITER:-or-sonnet}
+      FRONTIER_NOTES_BYLINE: ${FRONTIER_NOTES_BYLINE:-Potion Research}
+      FRONTIER_NOTES_GATE: ${FRONTIER_NOTES_GATE:-}
+      FRONTIER_NOTES_NEVER_NAME: ${FRONTIER_NOTES_NEVER_NAME:-}
       NODE_ENV: production
     volumes:
       - /opt/potion/research:/research

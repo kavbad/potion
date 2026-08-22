@@ -40,12 +40,12 @@ mkdirSync(`${ART}/runs`, { recursive: true });
 
 const { createDb, migrate, upsertBudget, mtdSpendUsd, orgs, getLatestFrontier, addScannedModels, seedModelRegistry } =
   await import('@potion/db');
-const { loadPrices, fetchOpenRouterModels, diffModelListings } = await import('@potion/providers');
+const { loadPrices, fetchOpenRouterModels, diffModelListings, createProviders } = await import('@potion/providers');
 const W = await import('@potion/workers');
 const {
   frontierPlatformSweepHandler, PLATFORM_OPS_ORG_ID, PLATFORM_SUITE_BY_CLUSTER,
   isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, rankCandidates, digestLine, isFreeTier, postObservatoryEntry,
-  CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, OBSERVATORY_ENVELOPE_USD,
+  CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, OBSERVATORY_ENVELOPE_USD, runFrontierNotes, postNoteLine,
 } = W;
 type LedgerRow = W.LedgerRow;
 type CanaryResult = W.CanaryResult;
@@ -201,5 +201,40 @@ if (!DRY) {
 console.log(`\n${digestLine(run)}`);
 if (!DRY && process.env.NOTION_API_KEY && process.env.NOTION_PAGE_ID) {
   console.log(await postObservatoryEntry({ token: process.env.NOTION_API_KEY, pageId: process.env.NOTION_PAGE_ID }, run));
+}
+
+// ---- Frontier Notes: the week's issue, from this run + the replay lane ----
+// docs/FRONTIER-NOTES.md. Writes ${ART}/notes/${week}.{json,md}; the
+// dashboard serves that directory. Held (never published) on any redaction
+// hit or when FRONTIER_NOTES_GATE=1. Writer cost is ledgered like every
+// other research dollar.
+if (!DRY) {
+  try {
+    const key = process.env.OPENROUTER_API_KEY;
+    const writer = key
+      ? { provider: createProviders({ prices, apiKeys: { openrouter: key }, timeoutMs: 120_000 }).openrouter, model: process.env.FRONTIER_NOTES_WRITER ?? 'or-sonnet' }
+      : undefined;
+    const byline = process.env.FRONTIER_NOTES_BYLINE;
+    const notes = await runFrontierNotes({
+      run: run as never,
+      db: handle.db as never,
+      pricesVersion: prices.version,
+      notesDir: `${ART}/notes`,
+      now: NOW,
+      ...(writer ? { writer } : {}),
+      ...(byline ? { byline } : {}),
+      gate: process.env.FRONTIER_NOTES_GATE === '1',
+      extraNeverName: (process.env.FRONTIER_NOTES_NEVER_NAME ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    });
+    console.log(notes.digest);
+    if (notes.issue.writer && notes.issue.writer.costUsd > 0) {
+      ledgerAppend({ at: NOW.toISOString(), week, lane: 'canary', spendUsd: notes.issue.writer.costUsd, detail: `frontier-notes/${notes.issue.writer.model}` });
+    }
+    if (process.env.NOTION_API_KEY && process.env.NOTION_PAGE_ID) {
+      console.log(await postNoteLine({ token: process.env.NOTION_API_KEY, pageId: process.env.NOTION_PAGE_ID }, `${notes.digest} · ${process.env.POTION_APP_URL ?? 'https://app.withpotion.com'}/research/${notes.issue.slug}`));
+    }
+  } catch (e) {
+    console.log(`frontier notes: failed — ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 await handle.close();

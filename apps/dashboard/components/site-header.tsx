@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
 
-export function SiteHeader({ current }: { current?: 'docs' }) {
+export function SiteHeader({ current }: { current?: 'docs' | 'research' }) {
   return (
     <>
       {/* exa-style announcement bar — ours carries the masked discovery */}
@@ -31,6 +31,14 @@ export function SiteHeader({ current }: { current?: 'docs' }) {
             }
           >
             Docs
+          </Link>
+          <Link
+            href="/research"
+            className={
+              current === 'research' ? 'font-medium text-ink' : 'text-soft transition-colors hover:text-ink'
+            }
+          >
+            Research
           </Link>
         </nav>
         <div className="flex items-center gap-2.5 justify-self-end text-sm">
@@ -63,6 +71,7 @@ export function SiteFooter() {
         </div>
         <div className="flex gap-6">
           <Link href="/docs" className="transition-colors hover:text-[#faf9f6]">Docs</Link>
+          <Link href="/research" className="transition-colors hover:text-[#faf9f6]">Research</Link>
           <Link href="/login" className="transition-colors hover:text-[#faf9f6]">Sign in</Link>
         </div>
       </div>
@@ -71,7 +80,7 @@ export function SiteFooter() {
 }
 
 /** Public page frame: header, content, footer. Pages own their own widths. */
-export function SiteShell({ children, current }: { children: React.ReactNode; current?: 'docs' }) {
+export function SiteShell({ children, current }: { children: React.ReactNode; current?: 'docs' | 'research' }) {
   return (
     <div className="min-h-screen">
       <SiteHeader current={current} />

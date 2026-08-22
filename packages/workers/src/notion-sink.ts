@@ -56,3 +56,19 @@ export async function postObservatoryEntry(
     return `notion: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
+
+/** Append one paragraph to the page (Frontier Notes digest line). Never throws. */
+export async function postNoteLine(opts: { token: string; pageId: string; fetchImpl?: typeof fetch }, line: string): Promise<string> {
+  const f = opts.fetchImpl ?? fetch;
+  try {
+    const res = await f(`https://api.notion.com/v1/blocks/${opts.pageId}/children`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${opts.token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ children: [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: line.slice(0, 1900) } }] } }] }),
+    });
+    if (!res.ok) return `notion: HTTP ${res.status} ${(await res.text()).slice(0, 160)}`;
+    return 'notion: posted';
+  } catch (e) {
+    return `notion: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}

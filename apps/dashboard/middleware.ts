@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // /api/* path, not a /share/* one.
 // M4b #32: /leaderboard is PUBLIC (live-verified recipes only) — no proxy
 // route needed; the page fetches /api/leaderboard server-side.
-const OPEN_PREFIXES = ['/login', '/api/auth', '/share/', '/leaderboard', '/docs', '/home', '/hero-lab'];
+const OPEN_PREFIXES = ['/login', '/api/auth', '/share/', '/leaderboard', '/docs', '/home', '/hero-lab', '/research', '/sitemap.xml', '/robots.txt'];
 
 // '/' is public (the landing page) and MUST be matched exactly. It cannot go
 // in OPEN_PREFIXES: every path startsWith('/'), so one entry there would make

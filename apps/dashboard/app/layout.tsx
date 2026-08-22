@@ -32,6 +32,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL((process.env.POTION_APP_URL ?? 'https://app.withpotion.com').replace(/\/$/, '')),
   title: 'Potion — the right model for every request',
   description:
     'Potion reads each prompt, works out what kind of work it is, and serves it from the strategy measured best for that work under a policy you set. OpenAI-compatible.',
@@ -62,7 +63,7 @@ function isSignedOutSurface(path: string): boolean {
   // /home is the landing page at a stable URL — public regardless of session,
   // so it must never wear the app sidebar even for a signed-in operator
   // reviewing it.
-  return path.startsWith('/login') || path.startsWith('/home') || path.startsWith('/hero-lab');
+  return path.startsWith('/login') || path.startsWith('/home') || path.startsWith('/hero-lab') || path.startsWith('/research');
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

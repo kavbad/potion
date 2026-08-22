@@ -51,7 +51,7 @@ export function deterministicDraft(f: FactSheet): Draft {
   const title = titleParts.join('; ') + '.';
 
   const lede = [
-    `Week ${f.week.replace('-W', ', week ')}: ${f.numbers.canaries} drift canaries re-checked every routing frontier, ${f.numbers.candidatesScreened} new catalogue listings were screened and ${f.numbers.candidatesMeasured} were measured.`,
+    `Week ${f.week.split('-W')[1]} of ${f.week.split('-W')[0]}: ${f.numbers.canaries} drift canaries re-checked every routing frontier, ${f.numbers.candidatesScreened} new catalogue listings were screened and ${f.numbers.candidatesMeasured} were measured.`,
     moved.length === 0
       ? `No frontier moved${incon.length ? ` (${incon.length} check${incon.length > 1 ? 's' : ''} inconclusive)` : ''}.`
       : `${moved.map((m) => m.clusterId).join(', ')} moved and will be re-measured in full.`,
