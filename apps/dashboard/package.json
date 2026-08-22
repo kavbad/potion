@@ -20,13 +20,13 @@
     "recharts": "^2.15.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
-    "tsx": "^4.16.2",
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   }
 }
