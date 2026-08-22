@@ -250,14 +250,24 @@ export async function issueMagicLink(
     expiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MS),
   });
   const link = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
-  await sendEmail({
+  const message = {
     to: email,
     subject: 'Your Potion sign-in link',
     text:
       `Sign in to Potion: ${link}\n\n` +
       `This link is single-use and expires in 15 minutes. If you did not request it, ignore this email.\n\n` +
       `— Potion, a product by Mutiny`,
-  });
+  };
+  try {
+    await sendEmail(message);
+  } catch (e) {
+    // Delivery is best-effort; the LINK is the product. A failed send must
+    // never 500 the request (2026-08-22: Resend 403 on an unverified domain
+    // took sign-in down entirely) — log the failure and fall back to the
+    // log transport so the operator can hand-deliver.
+    console.warn(`[potion auth] email delivery failed for ${email}: ${e instanceof Error ? e.message : String(e)} — falling back to log`);
+    await logSendEmail(message);
+  }
   return link;
 }
 
