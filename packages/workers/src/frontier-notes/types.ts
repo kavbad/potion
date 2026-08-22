@@ -75,10 +75,14 @@ export interface Issue {
   summary: string;
   publishedAt: string;
   byline: string;
+  /** Plain-English summary for a reader who knows nothing about AI models. */
+  plain: string;
   lede: string;
   frontierNote: string;
   auditionNote: string;
   mixingNote: string;
+  /** Why a buyer should care. */
+  takeaway: string;
   method: string;
   faq: IssueFaq[];
   facts: FactSheet;

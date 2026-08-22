@@ -79,14 +79,26 @@ export default async function IssuePage({ params }: Params) {
         </nav>
         <h1 className="mt-4 text-3xl font-semibold leading-[1.12] tracking-tight text-ink sm:text-[2.5rem]">{i.title}</h1>
         <div className="mt-4 font-mono text-[11px] text-faint">{i.byline}</div>
+
+        <section className="mt-8 rounded-2xl border border-accent/30 bg-accent-soft/40 px-6 py-5">
+          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">In plain words</div>
+          <p className="mt-2 text-[17px] leading-relaxed text-ink">{i.plain}</p>
+        </section>
+
         <p className="mt-8 text-lg leading-relaxed text-ink">{i.lede}</p>
 
         <h2 className="mt-14 text-xl font-semibold tracking-tight text-ink">This week&apos;s frontiers</h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-soft">
+          One row per kind of work. <span className="text-ink">Routed pick</span> is the model Potion currently sends that work to.{' '}
+          <span className="text-ink">Stored quality</span> is its exam score when it was measured in full, give or take the margin.{' '}
+          <span className="text-ink">Canary</span> is this week&apos;s small re-check: a few fresh tasks, scored the same way, to catch a model that has got worse.{' '}
+          <span className="text-ink">Held</span> means the re-check landed inside the margin.
+        </p>
         <div className="mt-4 overflow-x-auto rounded-xl border border-line bg-panel">
           <table className="w-full text-left font-mono text-[12px]">
             <thead className="text-[10px] uppercase tracking-[0.14em] text-faint">
               <tr className="border-b border-line">
-                <th className="px-4 py-2.5 font-normal">cluster</th>
+                <th className="px-4 py-2.5 font-normal">kind of work</th>
                 <th className="px-4 py-2.5 font-normal">verdict</th>
                 <th className="px-4 py-2.5 font-normal">routed pick</th>
                 <th className="px-4 py-2.5 font-normal">stored quality</th>
@@ -109,6 +121,7 @@ export default async function IssuePage({ params }: Params) {
         <p className="mt-4 text-[15px] leading-relaxed text-soft">{i.frontierNote}</p>
 
         <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Auditions</h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-soft">An audition is a newly released model&apos;s first exam, on the kind of work it looks suited to. It earns a place only by beating the model already doing that work on quality or price.</p>
         <p className="mt-3 text-[15px] leading-relaxed text-soft">{i.auditionNote}</p>
         {f.auditions.length > 0 && (
           <ul className="mt-3 space-y-1 font-mono text-[12px] text-soft">
@@ -119,6 +132,7 @@ export default async function IssuePage({ params }: Params) {
         )}
 
         <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Mixing</h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-soft">Mixing means using two or three cheaper models together in a particular way instead of one expensive one. We score combinations by replaying results we already have, so this costs nothing to explore. How a combination works is part of the product and is not published; what it achieves is.</p>
         <p className="mt-3 text-[15px] leading-relaxed text-soft">{i.mixingNote}</p>
         {f.mixing.length > 0 && (
           <ul className="mt-3 space-y-1 font-mono text-[12px] text-soft">
@@ -130,7 +144,10 @@ export default async function IssuePage({ params }: Params) {
           </ul>
         )}
 
-        <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Method</h2>
+        <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">What it means for you</h2>
+        <p className="mt-3 text-[16px] leading-relaxed text-ink">{i.takeaway}</p>
+
+        <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">How the numbers are made</h2>
         <p className="mt-3 text-[15px] leading-relaxed text-soft">{i.method}</p>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-[13px] leading-relaxed text-soft">
           {f.caveats.map((c) => <li key={c}>{c}</li>)}
@@ -153,7 +170,7 @@ export default async function IssuePage({ params }: Params) {
         </dl>
 
         <p className="mt-12 text-[13px] leading-relaxed text-soft">
-          <span className="font-medium text-ink">Glossary.</span> A <em>frontier</em> is the set of model options nothing else beats on quality, cost and latency at once. A <em>floor</em> is the lowest quality a routing policy will accept. An <em>interval</em> is the bootstrap 95% range around a measured mean. See the <Link href="/docs" className="text-accent underline">docs</Link> and the <Link href="/home#evidence" className="text-accent underline">evidence</Link>.
+          <span className="font-medium text-ink">Glossary.</span> A <em>frontier</em> is the short list of models that are the best deal at their level of quality: nothing else is both better and cheaper. A <em>floor</em> is the lowest exam score you are willing to accept. A <em>margin</em> (or interval) is how far the true score could sit from the measured one, because an exam is a sample. A <em>canary</em> is a small weekly re-check. See the <Link href="/docs" className="text-accent underline">docs</Link> and the <Link href="/home#evidence" className="text-accent underline">evidence</Link>.
         </p>
 
         <nav className="mt-14 flex justify-between border-t border-line pt-6 font-mono text-[12px]">

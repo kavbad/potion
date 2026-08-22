@@ -12,15 +12,19 @@ import type { FactSheet, IssueFaq } from './types.js';
 export interface Draft {
   title: string;
   summary: string;
+  /** Three to five short plain-English sentences for a reader who knows nothing about AI models. */
+  plain: string;
   lede: string;
   frontierNote: string;
   auditionNote: string;
   mixingNote: string;
+  /** Why a buyer should care: two or three sentences, plain words, no numbers needed. */
+  takeaway: string;
   faq: IssueFaq[];
 }
 
 export const METHOD_NOTE =
-  'How these numbers are made. Every cluster of work (classification, extraction, code generation and the rest) has a retrieval-hostile suite of tasks the models have not seen. Each model, and each combination of models, is run on the full suite; code is scored by executing it, other answers by a rubric against a reference. Quality is the mean score with a bootstrap 95% interval, and two points whose intervals overlap are reported as tied. Cost is the measured cost per 1,000 requests at provider list prices. A frontier is the set of options nothing else beats on quality, cost and latency at once. Each week a small sample re-checks every frontier pick for drift, and new models on the public catalogue are measured on the work they look suited to.';
+  'How these numbers are made, in plain words. We sort requests into kinds of work: sorting text into categories, pulling fields out of documents, writing code, answering from a set of documents, and so on. For each kind we keep a private exam of tasks the models have never seen. Every model sits the same exam. Code is marked by running it; other answers are marked against a reference answer. A model\'s quality is its average mark, and because an exam is a sample we also give a margin of error: two models whose margins overlap are called a tie. Cost is what a thousand requests would cost at the provider\'s public prices. A frontier is the short list of models that are the best deal at their level of quality, meaning nothing else is both better and cheaper. Each week we re-check every model on that list with a few fresh tasks to catch any that have got worse, and we give newly released models the exam for the work they look suited to.';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const q = (x: number) => x.toFixed(3);
@@ -110,17 +114,39 @@ export function deterministicDraft(f: FactSheet): Draft {
     },
   ];
 
-  const summary = `${lede.split('. ').slice(0, 2).join('. ')}.`.replace(/\.\.$/, '.');
-  return { title, summary, lede, frontierNote, auditionNote, mixingNote, faq };
+  const plain = [
+    'Potion keeps a scoreboard of AI models: how well each one does a kind of work, and what it costs.',
+    moved.length === 0
+      ? 'This week every model on the scoreboard was re-checked and none had got worse.'
+      : `This week ${moved.length} model${moved.length > 1 ? 's' : ''} on the scoreboard did worse than before and will be re-tested in full.`,
+    f.auditions.length
+      ? `${f.auditions.length} newly released model${f.auditions.length > 1 ? 's were' : ' was'} tested; ${earned.length ? `${earned.length} made the scoreboard` : 'none did better than the models already on it'}.`
+      : 'No newly released model looked worth testing this week.',
+    mix
+      ? `The interesting result: for ${mix.vague ? `${mix.family} work` : mix.clusterId}, using two or three cheap models together in a particular way gave answers as good as the best single model for ${mix.vague ? mix.costBand.replace(/cheaper$/, 'less') : `${pct(mix.costSaving)} less`}.`
+      : 'No combination of cheaper models beat the best single model this week.',
+  ].join(' ');
+  const takeaway = mix
+    ? 'If you pay for AI by the request, the gap between the best model and the cheapest model that is good enough is where your money goes. This week that gap was measured again, and it is still wide. Routing each request to the cheapest model that passed the exam is how you keep the quality and stop paying for the rest.'
+    : 'If you pay for AI by the request, the gap between the best model and the cheapest model that is good enough is where your money goes. Routing each request to the cheapest model that passed the exam is how you keep the quality and stop paying for the rest.';
+  const summary = plain.split('. ').slice(0, 2).join('. ') + '.';
+  return { title, summary, plain, lede, frontierNote, auditionNote, mixingNote, takeaway, faq };
 }
 
-const SYSTEM = `You write Frontier Notes, a weekly research note on measured AI model routing. You are given a FACT SHEET as JSON. Write ONLY from it. Rules that cannot be broken:
+const SYSTEM = `You write Frontier Notes, a weekly research note about which AI models are the best value for different kinds of work. Your reader is a smart person who runs a business and has never read a machine-learning paper. Write so that they enjoy it and understand every sentence. You are given a FACT SHEET as JSON. Write ONLY from it.
+
+Rules that cannot be broken:
 - Never name a model that the fact sheet calls "name withheld"; never guess or describe which model it might be.
-- Never describe how models are combined: no mechanism names, no component names, no thresholds, no order of calls. Say "a combination of measured models".
+- Never describe how models are combined: no mechanism names, no component names, no thresholds, no order of calls. Say "a combination of measured models" or "two or three cheaper models used together in a particular way".
 - Where a mixing fact has vague=true it carries no clusterId: say "<family> work" (for example "code work", "structured output work") and use the costBand words, never an exact ratio and never a specific kind of work.
-- Use every number exactly as given. Always give intervals with quality figures. No superlatives the numbers do not support. No marketing. British understatement.
-- Plain declarative sentences. No em dashes. No headings. No bullet lists.
-Return strict JSON: {"title": string (a finding, under 120 chars, ends with a full stop), "summary": string (one paragraph, under 300 chars), "lede": string (3 sentences), "frontierNote": string (2-4 sentences), "auditionNote": string (1-3 sentences), "mixingNote": string (2-3 sentences), "faq": [{"q": string, "a": string}] (exactly 3 evergreen questions a buyer would type into a search engine, answered from this week's numbers)}`;
+- Use every number exactly as given. Give the margin of error with every quality figure, written as "0.979, give or take 0.020".
+
+Rules of the house style:
+- The first time you use any technical term, explain it in the same sentence in plain words. Terms that always need this: cluster (a kind of work), frontier (the short list of best-value models), canary (a small weekly re-check), interval or margin (how sure we are), cost per 1,000 requests (what a thousand requests would cost), quality (the exam score), audition (a first exam for a newly released model), replay (re-scoring a combination from results we already have, without spending money).
+- Short sentences. Concrete nouns. One idea per sentence. No jargon for its own sake. No em dashes. No headings. No bullet lists. No superlatives the numbers do not support. No marketing.
+- Explain why a reader should care, not just what happened.
+
+Return strict JSON: {"title": string (a finding in plain words, under 110 chars, ends with a full stop), "summary": string (one paragraph under 280 chars, plain words), "plain": string (3 to 5 short sentences a non-technical reader fully understands: what was checked, what was found, why it matters), "lede": string (3 sentences with the key numbers, each term explained), "frontierNote": string (2 to 4 sentences about the re-checks, explaining canary and margin of error on first use), "auditionNote": string (1 to 3 sentences about the newly released models tested), "mixingNote": string (2 to 3 sentences on the combination findings, explaining replay on first use), "takeaway": string (2 or 3 sentences on what this means for someone paying for AI by the request), "faq": [{"q": string, "a": string}] (exactly 3 questions a buyer would type into a search engine, answered in plain words from this week's numbers)}`;
 
 export interface ModelWriterOptions {
   provider: Provider;
@@ -160,13 +186,13 @@ export function parseDraft(text: string): Draft | null {
   try {
     const o = JSON.parse(m[0]) as Partial<Draft>;
     const s = (k: keyof Draft) => (typeof o[k] === 'string' && (o[k] as string).trim() ? (o[k] as string).trim() : null);
-    const title = s('title'), summary = s('summary'), lede = s('lede'), frontierNote = s('frontierNote'), auditionNote = s('auditionNote'), mixingNote = s('mixingNote');
-    if (!title || !summary || !lede || !frontierNote || !auditionNote || !mixingNote) return null;
+    const title = s('title'), summary = s('summary'), plain = s('plain'), lede = s('lede'), frontierNote = s('frontierNote'), auditionNote = s('auditionNote'), mixingNote = s('mixingNote'), takeaway = s('takeaway');
+    if (!title || !summary || !plain || !lede || !frontierNote || !auditionNote || !mixingNote || !takeaway) return null;
     const faq = Array.isArray(o.faq)
       ? o.faq.filter((x): x is IssueFaq => !!x && typeof x.q === 'string' && typeof x.a === 'string').slice(0, 3)
       : [];
     if (faq.length !== 3) return null;
-    return { title, summary, lede, frontierNote, auditionNote, mixingNote, faq };
+    return { title, summary, plain, lede, frontierNote, auditionNote, mixingNote, takeaway, faq };
   } catch {
     return null;
   }

@@ -17,7 +17,7 @@ export interface FactSheet {
 /** Mirrors packages/workers/src/frontier-notes/types.ts Issue — kept local so the dashboard never bundles workers. */
 export interface Issue {
   slug: string; week: string; title: string; summary: string; publishedAt: string; byline: string;
-  lede: string; frontierNote: string; auditionNote: string; mixingNote: string; method: string;
+  plain: string; lede: string; frontierNote: string; auditionNote: string; mixingNote: string; takeaway: string; method: string;
   faq: IssueFaq[]; facts: FactSheet; status: 'published' | 'held'; heldReason?: string;
   writer: { model: string; costUsd: number } | null;
 }

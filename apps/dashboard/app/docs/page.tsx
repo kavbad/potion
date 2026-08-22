@@ -365,5 +365,9 @@ export default async function DocsPage() {
 
   // Signed in, the app shell is already around this page. Signed out, it needs
   // its own chrome — otherwise a public docs page renders as a bare column.
-  return signedIn ? body : <SiteShell current="docs"><div className="mx-auto max-w-5xl px-6 py-14">{body}</div></SiteShell>;
+  // Always the public frame: /docs is a signed-out surface (app/template.tsx),
+  // so it never arrives inside the app rail — signed-in readers still get
+  // their personalised base URL and policy in the body.
+  void signedIn;
+  return <SiteShell current="docs"><div className="mx-auto max-w-5xl px-6 py-14">{body}</div></SiteShell>;
 }

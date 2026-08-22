@@ -93,7 +93,7 @@ describe('frontier-notes compose', () => {
 
   it('parses a model draft strictly', () => {
     expect(parseDraft('nope')).toBeNull();
-    const ok = parseDraft(JSON.stringify({ title: 't.', summary: 's', lede: 'l', frontierNote: 'f', auditionNote: 'a', mixingNote: 'm', faq: [{ q: '1', a: 'a' }, { q: '2', a: 'b' }, { q: '3', a: 'c' }] }));
+    const ok = parseDraft(JSON.stringify({ title: 't.', summary: 's', plain: 'p', lede: 'l', frontierNote: 'f', auditionNote: 'a', mixingNote: 'm', takeaway: 't', faq: [{ q: '1', a: 'a' }, { q: '2', a: 'b' }, { q: '3', a: 'c' }] }));
     expect(ok?.title).toBe('t.');
     expect(issueSlug('2026-W34', 'All 10 routing frontiers held this week; a combination matched.')).toBe('2026-w34-all-10-routing-frontiers-held-combination-matched');
     expect(publishableText({ ...assembleIssue(composeFactSheet(run, replays), deterministicDraft(composeFactSheet(run, replays)), { publishedAt: 'x', writer: null, gate: false }) })).toContain('name withheld');

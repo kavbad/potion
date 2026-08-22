@@ -141,3 +141,7 @@
   .field-fade, .field-route, .field-pulse { animation: none; }
   .field-pulse { opacity: 0; }
 }
+
+/* receipt reel — opacity only, never layout */
+.reel-fade { animation: fieldFade 360ms ease-out both; }
+@media (prefers-reduced-motion: reduce) { .reel-fade { animation: none; } }
