@@ -961,6 +961,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       providers: orgProviders.providers,
       prices: ctx.prices,
       resolve: orgProviders.resolve,
+      // `max_tokens` is the caller's bound on answer length and therefore on
+      // cost. Found ignored on 2026-08-22 by using the product ourselves
+      // (50 → 805 tokens): the schema accepted it and nothing threaded it.
+      ...(body.max_tokens !== undefined ? { maxOutputTokens: resolveMaxOutputTokens(body.max_tokens) } : {}),
       ...(body.tools !== undefined
         ? {
             params: {
@@ -1301,6 +1305,16 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         );
     }
   });
+}
+
+/**
+ * The caller's `max_tokens`, bounded. The ceiling matches the dashboard's
+ * own maxOutputTokens bound (8192): large enough for any answer the product
+ * serves, small enough that a typo cannot buy a 100k-token completion.
+ */
+export function resolveMaxOutputTokens(requested: number, ceiling = 8192): number {
+  if (!Number.isFinite(requested) || requested < 1) return 1;
+  return Math.min(Math.floor(requested), ceiling);
 }
 
 function openAiUsage(u: Usage): {
