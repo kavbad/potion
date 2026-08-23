@@ -54,3 +54,26 @@ describe('createProviders exposes the stream', () => {
     expect(providers.anthropic.completeStream).toBeUndefined();
   });
 });
+
+describe('tool-call fragments over the stream', () => {
+  it('are assembled by index into whole calls on the response', async () => {
+    const fetchFn = (async () =>
+      sse([
+        JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '' } }] } }] }),
+        JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"city":' } }] } }] }),
+        JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 1, id: 'call_2', type: 'function', function: { name: 'get_time', arguments: '{}' } }] } }] }),
+        JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"Paris"}' } }] } }] }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
+        JSON.stringify({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 9 } }),
+        '[DONE]',
+      ])) as unknown as typeof fetch;
+    const seen: string[] = [];
+    const res = await openAiCompatibleCompleteStream('openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn } as never, { model: 'or-mid', messages: [] }, (t) => seen.push(t));
+    expect(seen).toEqual([]);
+    expect(res.text).toBe('');
+    expect(res.toolCalls).toEqual([
+      { id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+      { id: 'call_2', type: 'function', function: { name: 'get_time', arguments: '{}' } },
+    ]);
+  });
+});

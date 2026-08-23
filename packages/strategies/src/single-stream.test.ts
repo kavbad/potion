@@ -33,10 +33,13 @@ describe('single strategy streaming', () => {
     expect(tokens.length).toBeGreaterThan(1);
     expect(tokens.join('').trim()).toBe(r.text.trim());
   });
-  it('falls back to the complete call and a replayed stream when tools are in play', async () => {
+  it('relays with tools too (the transport assembles the calls), and replays only for confidence capture', async () => {
     const log: string[] = []; const tokens: string[] = [];
-    const r = await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log, tokens, { params: { tools: [{ type: 'function', function: { name: 'f', parameters: {} } }] } } as never));
-    expect(log).toEqual(['complete']);
-    expect(tokens.join('')).toBe(r.text);
+    await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log, tokens, { params: { tools: [{ type: 'function', function: { name: 'f', parameters: {} } }] } } as never));
+    expect(log).toEqual(['stream']);
+    const log2: string[] = []; const tokens2: string[] = [];
+    const r = await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log2, tokens2, { captureConfidence: true } as never));
+    expect(log2).toEqual(['complete']);
+    expect(tokens2.join('')).toBe(r.text);
   });
 });

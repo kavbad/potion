@@ -128,7 +128,8 @@ export async function openAiCompatibleComplete(
 
 interface OpenAiStreamChunk {
   model?: string;
-  choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>;
+  choices?: Array<{ delta?: {
+      tool_calls?: Array<{ index: number; id?: string; type?: string; function?: { name?: string; arguments?: string } }>; content?: string | null }; finish_reason?: string | null }>;
   usage?: OpenAiChatResponse['usage'];
 }
 
@@ -189,6 +190,7 @@ export async function openAiCompatibleCompleteStream(
     let text = '';
     let model: string | undefined;
     let usage: OpenAiChatResponse['usage'];
+    const calls = new Map<number, { id: string; type: string; function: { name: string; arguments: string } }>();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -206,11 +208,25 @@ export async function openAiCompatibleCompleteStream(
         if (chunk.model) model = chunk.model;
         const delta = chunk.choices?.[0]?.delta?.content;
         if (typeof delta === 'string' && delta.length > 0) { text += delta; onToken(delta); }
+        // Tool-call fragments (2026-08-22): OpenAI streams each call as an
+        // index-keyed series — id/name once, arguments in pieces. Assembled
+        // here and returned whole on the response, the same shape the
+        // non-streaming path preserves verbatim.
+        for (const frag of chunk.choices?.[0]?.delta?.tool_calls ?? []) {
+          const cur = calls.get(frag.index) ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
+          if (frag.id) cur.id = frag.id;
+          if (frag.type) cur.type = frag.type;
+          if (frag.function?.name) cur.function.name += frag.function.name;
+          if (frag.function?.arguments) cur.function.arguments += frag.function.arguments;
+          calls.set(frag.index, cur);
+        }
         if (chunk.usage) usage = chunk.usage;
       }
     }
+    const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c) as ToolCall[];
     return {
       text,
+      ...(toolCalls.length > 0 ? { toolCalls } : {}),
       usage: {
         inputTokens: usage?.prompt_tokens ?? 0,
         outputTokens: usage?.completion_tokens ?? 0,
