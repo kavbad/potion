@@ -22,7 +22,7 @@ describe('tenancy classification artifact', () => {
     expect(
       committed,
       'artifacts/tenancy-classification.md is stale — regenerate with ' +
-        '`pnpm --filter @potion/server tenancy-report` and commit the result',
+        '`pnpm --filter @potion/server tenancy-report` (the artifact is gitignored; the committed inventories are the source of truth)',
     ).toBe(rendered);
   });
 
