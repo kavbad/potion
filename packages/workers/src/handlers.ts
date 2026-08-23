@@ -3847,6 +3847,8 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     const shapes =
       payload.capabilityFilter?.tools === true || audition !== null ? singles : [...singles, cascade];
     for (const cfg of shapes) byHash.set(strategyHash(cfg), cfg);
+    // MIXING M3: named combinations ride the leg verbatim (cascades carry tools now).
+    for (const cfg of payload.extraShapes ?? []) byHash.set(strategyHash(cfg), cfg);
     // INCUMBENT CARRY-FORWARD (2026-08-20). The pool above is built from the
     // CURRENT price table's class representatives, which means a composite
     // that earned its frontier place under an earlier pool is silently never

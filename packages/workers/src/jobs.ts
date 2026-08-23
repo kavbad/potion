@@ -470,6 +470,9 @@ export interface FrontierPlatformSweepPayload {
    * default — the tool-calling suite, whose items carry tools. Points
    * measured on it carry evidence.toolsMeasured. */
   suiteOverride?: { kind: 'v1' | 'v2'; suiteId: string };
+  /** MIXING M3: combinations to measure alongside the singles, verbatim —
+   * the tools filter and audition mode otherwise measure singles only. */
+  extraShapes?: StrategyConfig[];
 }
 
 /**
