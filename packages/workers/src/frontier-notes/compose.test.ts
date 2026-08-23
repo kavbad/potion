@@ -116,7 +116,7 @@ describe('frontier-notes potion writer', () => {
     const good = JSON.stringify(deterministicDraft(f));
     const fetchImpl = (async () =>
       new Response(JSON.stringify({ choices: [{ message: { content: good } }], usage: { prompt_tokens: 10, completion_tokens: 20 } }), {
-        status: 200, headers: { 'x-frontier-trace': 'cluster=creative;strategy=07b4dc72;frontier=v3;policy=min_cost;fallback=0;provenance=live' },
+        status: 200, headers: { 'content-type': 'application/json', 'x-frontier-trace': 'cluster=creative;strategy=07b4dc72;frontier=v3;policy=min_cost;fallback=0;provenance=live' },
       })) as unknown as typeof fetch;
     const r = await potionDraft(f, { url: 'http://x', apiKey: 'pk_test', fetchImpl });
     expect(r.fallback).toBeNull();

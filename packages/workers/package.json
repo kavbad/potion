@@ -30,7 +30,8 @@
     "@potion/providers": "workspace:*",
     "@potion/queue": "workspace:*",
     "@potion/researcher": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "openai": "^7.5.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

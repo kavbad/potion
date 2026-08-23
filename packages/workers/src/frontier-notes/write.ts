@@ -7,6 +7,7 @@
 // Either way the output goes through redact.ts before it is an issue.
 
 import type { Provider } from '@potion/providers';
+import OpenAI from 'openai';
 import type { FactSheet, IssueFaq, WriterReceipt } from './types.js';
 
 export interface Draft {
@@ -243,25 +244,28 @@ export async function potionDraft(
   o: PotionWriterOptions,
 ): Promise<{ draft: Draft; receipt: WriterReceipt | null; fallback: string | null }> {
   const fallback = deterministicDraft(f);
-  const fetchImpl = o.fetchImpl ?? fetch;
+  // The official OpenAI SDK against Potion (2026-08-23): the same client a
+  // customer holds, one baseURL and two default headers. `.withResponse()`
+  // exposes the headers the receipt is read from.
+  const client = new OpenAI({
+    baseURL: `${o.url.replace(/\/$/, '')}/v1`,
+    apiKey: o.apiKey,
+    maxRetries: 0,
+    defaultHeaders: { ...(o.policy ? { 'x-potion-policy': o.policy } : {}), ...(o.cluster ? { 'x-potion-cluster': o.cluster } : {}) },
+    ...(o.fetchImpl ? { fetch: o.fetchImpl as unknown as typeof fetch } : {}),
+  });
   try {
-    const res = await fetchImpl(`${o.url.replace(/\/$/, '')}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}`, ...(o.policy ? { 'x-potion-policy': o.policy } : {}), ...(o.cluster ? { 'x-potion-cluster': o.cluster } : {}) },
-      body: JSON.stringify({
+    const { data: body, response: res } = await client.chat.completions
+      .create({
         model: o.model ?? 'potion-auto',
         temperature: 0.3,
-        // A verbose model needs room for the whole JSON draft; this bound is
-        // honored since 2026-08-22 (it was ignored before, which hid the cut).
         max_tokens: 4000,
         messages: [
           { role: 'system', content: SYSTEM },
           { role: 'user', content: `FACT SHEET:\n${JSON.stringify(f, null, 1)}\n\nA deterministic draft for reference (improve its prose; do not add facts):\n${JSON.stringify(fallback, null, 1)}` },
         ],
-      }),
-    });
-    if (!res.ok) return { draft: fallback, receipt: null, fallback: `potion HTTP ${res.status}: ${(await res.text()).slice(0, 160)}` };
-    const body = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+      })
+      .withResponse();
     const text = body.choices?.[0]?.message?.content ?? '';
     const receipt: WriterReceipt = {
       ...parseTrace(res.headers.get('x-frontier-trace')),
@@ -269,9 +273,13 @@ export async function potionDraft(
       completionTokens: body.usage?.completion_tokens ?? 0,
     };
     const parsed = parseDraft(text, fallback);
-    if (!parsed) return { draft: fallback, receipt, fallback: `potion returned no parseable draft (${text.length} chars, finish ${String((body as { choices?: { finish_reason?: string }[] }).choices?.[0]?.finish_reason)})` };
+    if (!parsed) return { draft: fallback, receipt, fallback: `potion returned no parseable draft (${text.length} chars, finish ${String(body.choices?.[0]?.finish_reason)})` };
     return { draft: parsed, receipt, fallback: null };
   } catch (e) {
-    return { draft: fallback, receipt: null, fallback: e instanceof Error ? e.message : String(e) };
+    // The SDK raises on non-2xx with the status in the message; the
+    // deterministic draft still publishes, and the issue records why.
+    const status = e instanceof OpenAI.APIError ? e.status : undefined;
+    const msg = e instanceof Error ? e.message : String(e);
+    return { draft: fallback, receipt: null, fallback: status !== undefined ? `potion HTTP ${status}: ${msg.replace(/^\d{3}\s*/, '').slice(0, 160)}` : `potion: ${msg.slice(0, 200)}` };
   }
 }
