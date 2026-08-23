@@ -303,6 +303,9 @@ export default async function DocsPage() {
         <ul className="space-y-2 text-sm leading-relaxed text-soft">
           <li><span className="font-medium text-ink">Tools and function calling</span> pass through to the selected model unchanged. Because tool semantics cannot survive a strategy that rewrites or fans out the prompt, a request carrying <code className="font-mono text-xs">tools</code> is served from a single-model point; if that is not your policy&apos;s optimum, the trace says <code className="font-mono text-xs">constrained=tools</code>.</li>
           <li><span className="font-medium text-ink">Token usage and cost</span> come back on the response, taken from the provider’s own reported figures where it reports them rather than from a modelled estimate.</li>
+          <li><span className="font-medium text-ink">Agentic loops</span> work as in OpenAI: an assistant turn carrying <code className="font-mono text-xs">tool_calls</code> and the <code className="font-mono text-xs">role: &quot;tool&quot;</code> result turns are accepted and forwarded to the model verbatim.</li>
+          <li><span className="font-medium text-ink">Request parameters</span> forwarded to the selected model: <code className="font-mono text-xs">temperature</code>, <code className="font-mono text-xs">top_p</code>, <code className="font-mono text-xs">stop</code>, <code className="font-mono text-xs">seed</code>, <code className="font-mono text-xs">user</code>, <code className="font-mono text-xs">response_format</code> (JSON mode and JSON schema), <code className="font-mono text-xs">parallel_tool_calls</code>, <code className="font-mono text-xs">max_tokens</code>. <code className="font-mono text-xs">response_format</code> and <code className="font-mono text-xs">stop</code>, like tools, are served only by single-model points. <code className="font-mono text-xs">n</code> must be 1.</li>
+          <li><span className="font-medium text-ink">Content-part arrays</span> are accepted; text parts are joined. Image parts are refused with <code className="font-mono text-xs">400 unsupported_content</code> until a vision frontier is measured — never silently dropped.</li>
           <li><span className="font-medium text-ink">Legacy completions</span> are shimmed at <code className="font-mono text-xs">/v1/completions</code>.</li>
         </ul>
       </Section>
@@ -316,6 +319,7 @@ export default async function DocsPage() {
           <table className="w-full">
             <tbody>
               <Row k="400 invalid_request_error" v="The body did not validate — a missing messages array, a malformed policy." />
+              <Row k="400 unsupported_content" v="The messages carry image parts; Potion routes text only for now. The message says how many." />
               <Row k="401 authentication_required" v="No bearer token was supplied." />
               <Row k="401 invalid_api_key" v="The key is unknown, revoked or expired." />
               <Row k="403" v={<>The key is valid but its scope does not cover this call — provisioning with a <code className="font-mono">serve</code> key rather than <code className="font-mono">serve+admin</code>.</>} />

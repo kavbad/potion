@@ -23,6 +23,7 @@ Every Potion response carries the header \`x-frontier-trace\`. Its exact format:
 Optional extras: \`policy_override=<name>\` when a per-request rule was used; \`upgraded=0|1\` for combinations.
 The model that answered is in a second header, \`x-potion-model\` (a model name, or \`combination:<type>\` for a measured combination). The response body's \`model\` field only echoes the label you sent.
 Streaming: \`stream: true\` streams for a single model; when Potion serves a measured combination that cannot stream, it returns a complete 200 JSON body instead, with the header \`x-latency-contract: non-streamed\`. Streaming clients must handle a non-streamed JSON response.
+Tool loops work as in OpenAI (assistant \`tool_calls\` turn, then \`role: "tool"\` results). Forwarded parameters: temperature, top_p, stop, seed, user, response_format (JSON mode / JSON schema), parallel_tool_calls, max_tokens; \`n\` must be 1. Content-part arrays are accepted for text; image parts return 400 \`unsupported_content\` — do not send vision traffic through Potion yet.
 Errors are OpenAI-shaped JSON: \`{"error":{"message","type","code"}}\`; \`error.code\` is the stable field (e.g. \`budget_exceeded\`, \`rate_limit_exceeded\`, \`cluster_not_found\`, \`no_policy_bound\`). Error responses do not carry the receipt.
 
 Optional request headers: \`x-potion-cluster: <cluster>\` to state the kind of work yourself (one of the ten above; unknown values return 400 cluster_not_found); \`x-potion-policy: <policy name or id>\` to use a different rule for this one request.`;
