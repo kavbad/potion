@@ -18,6 +18,7 @@
 // they were trying to go.
 import { NextResponse } from 'next/server';
 import { SESSION_COOKIE } from '@/lib/api';
+import { publicOrigin } from '@/lib/origin';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,7 @@ export function GET(req: Request): NextResponse {
   const to = safeNext(new URL(req.url).searchParams.get('to'));
   // `cleared` is a loop guard, not decoration. If the cookie somehow survives
   // this response, the destination must not bounce straight back here.
-  const dest = new URL(to, req.url);
+  const dest = new URL(to, publicOrigin(req));
   dest.searchParams.set('cleared', '1');
   const out = NextResponse.redirect(dest);
   out.cookies.set(SESSION_COOKIE, '', { httpOnly: true, path: '/', maxAge: 0 });
