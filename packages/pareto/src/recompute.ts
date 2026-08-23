@@ -202,7 +202,7 @@ export async function aggregatesFromEvalResults(
   clusterId: ClusterId,
   strategies: StrategyConfig[],
   pricesVersion: string,
-  opts: { includeStale?: boolean; orgId?: string; providerMode?: 'live' | 'mock' } = {},
+  opts: { includeStale?: boolean; orgId?: string; providerMode?: 'live' | 'mock'; instrument?: 'default' | 'tools' } = {},
 ): Promise<StrategyAggregate[]> {
   const hashes = strategies.map((s) => strategyHash(s));
   if (hashes.length === 0) return [];
@@ -214,6 +214,8 @@ export async function aggregatesFromEvalResults(
         eq(evalResults.clusterId, clusterId),
         inArray(evalResults.strategyHash, hashes),
         eq(evalResults.pricesVersion, pricesVersion),
+        // MIXING M3: cells from different instruments are never averaged.
+        eq(evalResults.instrument, opts.instrument ?? 'default'),
         // G1.6 tenancy: org recomputes see ONLY their rows; the platform
         // default (orgId absent → IS NULL) keeps every pre-G1.6 caller and
         // fixture reading exactly what it read before.

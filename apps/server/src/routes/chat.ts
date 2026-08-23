@@ -863,7 +863,14 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // serving-latency binding → operating point under the org's policy.
     const resolveFor = async (cid: string) => {
       const clusterPolicy = policyForCluster(policy, cid);
-      const loaded = await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId);
+      // MIXING M3: a tool-carrying request consults the cluster's frontier
+      // measured ON TOOL USE when one exists (instrument 'tools'); otherwise
+      // the default frontier, narrowed to points that can carry tools below.
+      const toolsFrontier = body.tools !== undefined ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools') : null;
+      const loaded =
+        toolsFrontier !== null && toolsFrontier.points.length > 0
+          ? toolsFrontier
+          : await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId);
       const guarded = guardFrontierProvenance(loaded, ctx.providerMode, (msg) => app.log.warn(msg));
       const bound = await bindServingLatency(
         ctx,
@@ -930,6 +937,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // ---- end M3 #22 guarantee override ----
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
+    const servedInstrument = frontier?.instrument === 'tools' ? 'tools' : null;
     if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     logBase.frontierVersion = op.frontierVersion;
@@ -943,6 +951,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         provenance,
         ...(op.toolConstraint ? { constrained: 'tools' as const } : {}),
       }) +
+      (servedInstrument !== null ? `;instrument=${servedInstrument}` : '') +
       (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
     logBase.trace = trace;

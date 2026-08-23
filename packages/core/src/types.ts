@@ -303,6 +303,8 @@ export interface Frontier {
    * never chained off the platform frontier. */
   orgId?: string | null;
   createdAt: string;
+  /** The instrument the points were measured on: 'default' | 'tools' (MIXING M3). Absent = 'default'. */
+  instrument?: 'default' | 'tools';
 }
 
 export interface FrontierDiff {

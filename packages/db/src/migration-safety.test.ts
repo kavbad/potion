@@ -72,6 +72,11 @@ describe('F12 meta-test: no migration may carry an unguarded data statement', ()
     '0033_evidence_attribution_repair.sql':
       'The F12 repair. Only touches rows provably impossible (created before the ' +
       'claimed org existed); ambiguous rows are audited, never modified.',
+    '0047_instrument.sql':
+      "MIXING M3. Retags the cells scored 'tool-call' (the tool-calling suite, " +
+      "24 items × 11 strategies from the 2026-08-23 leg) to instrument 'tools' so " +
+      'they are never averaged with text-judged cells. Keyed on scorer, a column ' +
+      'only that scorer writes; idempotent; never touches any other row.',
   };
   const DATA_STATEMENT = /(^|\n)\s*(UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s/i;
 

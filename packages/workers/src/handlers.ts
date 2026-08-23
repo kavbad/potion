@@ -3955,7 +3955,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       payload.clusterId,
       completeStrategies,
       prices.version,
-      { providerMode: 'live' },
+      { providerMode: 'live', instrument: payload.instrument ?? 'default' },
     );
     // REGRESSION GUARD. A sweep publishes a NEW frontier version; if a
     // candidate failed this run, aggregatesFromEvalResults simply does not
@@ -3982,7 +3982,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // Refusing costs this leg's publish, not its spend: every executed cell
     // stays in the content-addressed cache, so a retry resumes at $0 for
     // everything that worked and only re-runs what failed.
-    const previous = await loadCurrentFrontier(ctx.db, payload.clusterId, undefined);
+    const previous = await loadCurrentFrontier(ctx.db, payload.clusterId, undefined, payload.instrument ?? 'default');
     let frontierId: string | null = null;
     let frontierVersion: number | null = null;
     let frontierPoints: FrontierPoint[] = [];
@@ -4011,6 +4011,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         frontierPoints = computed;
       } else {
         const saved = await saveFrontier(ctx.db, payload.clusterId, computed, 'recompute', prices.version, {
+          instrument: payload.instrument ?? 'default',
           provenance: { suiteId: mapped.suiteId, suiteContentHash: contentHash },
         });
         frontierId = saved.id;

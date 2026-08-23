@@ -166,18 +166,10 @@ describe('F12 repair (0033): only the provable subset is touched', () => {
     // (a) PROVABLE: attributed to the org but created BEFORE the org existed.
     //     The org did not exist, so this cannot be its evidence. 0023 only
     //     ever moved rows that were NULL, so NULL is where it belongs.
-    await h.db.insert(frontiers).values({
-      id: 'f-stolen', clusterId: CLUSTER, version: 1, orgId: 'org_tenant',
-      trigger: 'manual', points: [], pricesVersion: 'v1',
-      createdAt: '2020-01-01T00:00:00.000Z',
-    } as never);
+    await h.db.execute(sql.raw(`INSERT INTO frontiers (id, cluster_id, version, org_id, trigger, points, prices_version, created_at) VALUES ('f-stolen', '${CLUSTER}', 1, 'org_tenant', 'manual', '[]', 'v1', '2020-01-01T00:00:00.000Z')`)); // raw: this db is at BASELINE_THROUGH, before 0047's instrument column
     // (b) AMBIGUOUS: created after the org. Indistinguishable from evidence
     //     the tenant legitimately generated. Must NOT be guessed at.
-    await h.db.insert(frontiers).values({
-      id: 'f-genuine', clusterId: CLUSTER, version: 2, orgId: 'org_tenant',
-      trigger: 'recompute', points: [], pricesVersion: 'v1',
-      createdAt: '2099-01-01T00:00:00.000Z',
-    } as never);
+    await h.db.execute(sql.raw(`INSERT INTO frontiers (id, cluster_id, version, org_id, trigger, points, prices_version, created_at) VALUES ('f-genuine', '${CLUSTER}', 2, 'org_tenant', 'recompute', '[]', 'v1', '2099-01-01T00:00:00.000Z')`)); // raw: this db is at BASELINE_THROUGH, before 0047's instrument column
 
     await runRepair();
 

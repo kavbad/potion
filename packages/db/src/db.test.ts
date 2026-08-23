@@ -111,7 +111,7 @@ describe('repositories on PGlite', () => {
       await insertFrontier(handle.db, FRONTIER);
       const latest = await getLatestFrontier(handle.db, 'code-gen');
       // G1.6: rows come back with their scope made explicit (null = platform).
-      expect(latest).toEqual({ ...FRONTIER, orgId: null });
+      expect(latest).toEqual({ ...FRONTIER, orgId: null, instrument: 'default' });
     } finally {
       await handle.close();
     }

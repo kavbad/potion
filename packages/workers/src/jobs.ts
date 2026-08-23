@@ -473,6 +473,9 @@ export interface FrontierPlatformSweepPayload {
   /** MIXING M3: combinations to measure alongside the singles, verbatim —
    * the tools filter and audition mode otherwise measure singles only. */
   extraShapes?: StrategyConfig[];
+  /** MIXING M3: the instrument this leg measures on; its aggregates,
+   * previous frontier and published frontier all live under it. */
+  instrument?: 'default' | 'tools';
 }
 
 /**

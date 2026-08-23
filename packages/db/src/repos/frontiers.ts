@@ -27,6 +27,7 @@ export async function insertFrontier(db: PotionDb, frontier: Frontier): Promise<
       pricesVersion: frontier.pricesVersion,
       orgId: frontier.orgId ?? null,
       createdAt: frontier.createdAt,
+    instrument: frontier.instrument ?? 'default',
     });
     if (frontier.points.length > 0) {
       await tx.insert(frontierPoints).values(
@@ -59,6 +60,7 @@ function toFrontier(row: typeof frontiers.$inferSelect): Frontier {
     pricesVersion: row.pricesVersion,
     orgId: row.orgId,
     createdAt: row.createdAt,
+    instrument: (row.instrument === 'tools' ? 'tools' : 'default') as 'default' | 'tools',
   };
 }
 
@@ -76,6 +78,7 @@ export async function getLatestFrontier(
   db: PotionDb,
   clusterId: string,
   orgScope: string | null = null,
+  instrument: 'default' | 'tools' = 'default',
 ): Promise<Frontier | null> {
   const rows = await db
     .select()
@@ -84,6 +87,7 @@ export async function getLatestFrontier(
       and(
         eq(frontiers.clusterId, clusterId),
         orgScope === null ? isNull(frontiers.orgId) : eq(frontiers.orgId, orgScope),
+        eq(frontiers.instrument, instrument),
       ),
     )
     .orderBy(desc(frontiers.version))
@@ -102,8 +106,9 @@ export async function getServingFrontier(
   db: PotionDb,
   clusterId: string,
   orgId?: string,
+  instrument: 'default' | 'tools' = 'default',
 ): Promise<Frontier | null> {
-  if (orgId === undefined) return getLatestFrontier(db, clusterId, null);
+  if (orgId === undefined) return getLatestFrontier(db, clusterId, null, instrument);
   const rows = await db
     .select()
     .from(frontiers)
@@ -111,6 +116,7 @@ export async function getServingFrontier(
       and(
         eq(frontiers.clusterId, clusterId),
         sql`(${frontiers.orgId} = ${orgId} OR ${frontiers.orgId} IS NULL)`,
+        eq(frontiers.instrument, instrument),
       ),
     )
     .orderBy(desc(sql`(${frontiers.orgId} IS NOT NULL)`), desc(frontiers.version))

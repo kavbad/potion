@@ -59,6 +59,7 @@ const res = await frontierPlatformSweepHandler(
     maxAnswerers: SHORTLIST.length,
     publish: PUBLISH,
     cacheSalt: 'm3-tools-v1',
+    instrument: 'tools',
   } as never,
   ctx,
 );

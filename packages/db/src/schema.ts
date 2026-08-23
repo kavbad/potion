@@ -238,6 +238,8 @@ export const evalResults = pgTable('eval_results', {
   strategyConfig: jsonb('strategy_config').$type<StrategyConfig>().notNull(),
   quality: doublePrecision('quality').notNull(),
   scorer: text('scorer').notNull(),
+  /** MIXING M3: 'tools' for cells scored on a tool call, else 'default'. */
+  instrument: text('instrument').notNull().default('default'),
   judgeAgreement: doublePrecision('judge_agreement'),
   /** Producing stage's confidence (exp mean token logprob) when exposed. */
   confidence: doublePrecision('confidence'),
@@ -269,6 +271,8 @@ export const frontiers = pgTable('frontiers', {
   orgId: text('org_id').references(() => orgs.id),
   pricesVersion: text('prices_version').notNull(),
   createdAt: text('created_at').notNull(), // ISO, matches core Frontier
+  /** 'default' (text-judged suites) | 'tools' (items carrying tools; MIXING M3). */
+  instrument: text('instrument').notNull().default('default'),
 });
 
 export const frontierPoints = pgTable('frontier_points', {

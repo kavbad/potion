@@ -32,6 +32,8 @@ export interface SaveFrontierOpts {
   /** Tenant scope; absent = platform. Version chains are SCOPE-EXACT. */
   orgId?: string;
   provenance?: FrontierProvenanceContext;
+  /** MIXING M3: the instrument the points were measured on. */
+  instrument?: 'default' | 'tools';
 }
 
 const SAVE_RETRIES = 3;
@@ -82,7 +84,7 @@ export async function saveFrontier(
         });
   let lastErr: unknown;
   for (let attempt = 0; attempt < SAVE_RETRIES; attempt++) {
-    const prev = await getLatestFrontier(db, clusterId, opts.orgId ?? null);
+    const prev = await getLatestFrontier(db, clusterId, opts.orgId ?? null, opts.instrument ?? 'default');
     const frontier: Frontier = {
       id: `fr-${randomUUID()}`,
       clusterId,
@@ -93,6 +95,7 @@ export async function saveFrontier(
       pricesVersion,
       orgId: opts.orgId ?? null,
       createdAt: new Date().toISOString(),
+      instrument: opts.instrument ?? 'default',
     };
     try {
       await insertFrontier(db, frontier);
@@ -115,8 +118,9 @@ export async function loadCurrentFrontier(
   db: PotionDb,
   clusterId: ClusterId,
   orgId?: string,
+  instrument: 'default' | 'tools' = 'default',
 ): Promise<Frontier | null> {
-  return getServingFrontier(db, clusterId, orgId);
+  return getServingFrontier(db, clusterId, orgId, instrument);
 }
 
 /** Load a specific frontier version by row id. */
