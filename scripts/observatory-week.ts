@@ -34,6 +34,22 @@ if (!DRY && !process.env.KEY_RISK_ACCEPTED) {
 process.env.POTION_EVAL_PROVIDER = 'live';
 process.env.POTION_PROVIDER_TIMEOUT_MS = process.env.POTION_PROVIDER_TIMEOUT_MS ?? '180000';
 process.env.POTION_PRICES_PATH = process.env.POTION_PRICES_PATH ?? `${REPO}/prices.json`;
+// A failed week must not fail silently (audit 2026-08-22): any uncaught
+// error posts one line to the research log page and exits non-zero. The
+// success path already posts its own entry at the end.
+for (const signal of ['uncaughtException', 'unhandledRejection'] as const) {
+  process.on(signal, (err: unknown) => {
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(`observatory week FAILED (${signal}): ${msg}`);
+    const done = () => process.exit(1);
+    if (DRY || !process.env.NOTION_API_KEY || !process.env.NOTION_PAGE_ID) return done();
+    import('@potion/workers')
+      .then((w) => w.postNoteLine({ token: process.env.NOTION_API_KEY!, pageId: process.env.NOTION_PAGE_ID! }, `⚠ Observatory week failed at ${new Date().toISOString()}: ${msg.slice(0, 600)}`))
+      .then((r) => console.error(r))
+      .finally(done);
+  });
+}
+
 const STORE = process.env.OBSERVATORY_DB ?? `${REPO}/.pglite/platform-sweep-step5`;
 const ART = process.env.OBSERVATORY_ARTIFACTS ?? `${REPO}/artifacts/observatory`;
 mkdirSync(`${ART}/runs`, { recursive: true });
