@@ -30,7 +30,7 @@ import type { Policy } from '@potion/core';
 import { floorFor, withClusterFloor } from '../routing/floors.js';
 import type { PotionContext } from '../context.js';
 import type { PotionQueue } from '@potion/queue';
-import { incumbentRoster } from '../incumbents/roster.js';
+import { incumbentRoster, resolveTypedModel } from '../incumbents/roster.js';
 import { learningSampleCounts } from '../learning/sampling.js';
 
 const IncumbentsBody = z
@@ -60,17 +60,25 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     const org = req.potionOrg!;
     const parsed = IncumbentsBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send(openAiError(parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '), 'invalid_request_error'));
-    const known = new Set(incumbentRoster(ctx.prices).map((r) => r.alias));
+    const roster = incumbentRoster(ctx.prices);
+    const known = new Set(roster.flatMap((r) => [r.alias, ...r.alternates]));
     const unknown = parsed.data.models.filter((m) => !known.has(m));
     if (unknown.length > 0) return reply.code(400).send(openAiError(`unknown model(s): ${unknown.join(', ')} — use 'other' for a model not on the roster`, 'invalid_request_error'));
+    // A typed model that IS on the measured roster becomes a real incumbent —
+    // the learning period can only measure what it can price (roster.ts
+    // resolveTypedModel). One that is not stays recorded as 'other' and the
+    // picker says so, rather than silently never measuring it.
+    const typed = parsed.data.other?.trim() || null;
+    const resolved = typed ? resolveTypedModel(typed, roster) : null;
+    const models = resolved && !parsed.data.models.includes(resolved.alias) ? [...parsed.data.models, resolved.alias] : parsed.data.models;
     const prev = await getOrgIncumbents(db, org.orgId);
     const row = await upsertOrgIncumbents(db, {
       orgId: org.orgId,
-      models: parsed.data.models,
-      other: parsed.data.other ?? null,
+      models,
+      other: resolved ? null : typed,
       samplingConsent: parsed.data.samplingConsent ?? prev?.samplingConsent ?? false,
     });
-    return reply.send(dto(row));
+    return reply.send({ ...dto(row), ...(resolved ? { resolvedOther: { typed, alias: resolved.alias, name: `${resolved.vendor} ${resolved.name}` } } : {}) });
   });
 
   app.get('/api/learning', async (req, reply) => {

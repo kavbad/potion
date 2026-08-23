@@ -109,8 +109,18 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
       {error && <p className="mt-2 text-[12px] text-warn">{error}</p>}
       {saved && (
         <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
-          Measuring against <span className="text-ink">{saved.models[0] ?? saved.other}</span>
-          {saved.models.length > 1 ? ` (+${saved.models.length - 1} more recorded)` : ''}. {saved.samplingConsent ? 'Measuring starts with your first requests.' : 'Measuring is off until you allow a sample.'}
+          {saved.models.length === 0 && saved.other ? (
+            <>
+              <span className="text-ink">{saved.other}</span> is not in the measured roster yet, so Potion cannot score it against your work. Your bar will be proposed from the models it has measured; pick one above if you also use one of them.{' '}
+            </>
+          ) : (
+            <>
+              Measuring against <span className="text-ink">{saved.models[0]}</span>
+              {saved.models.length > 1 ? ` (+${saved.models.length - 1} more recorded)` : ''}
+              {saved.other ? <> · <span className="text-ink">{saved.other}</span> not in the roster yet</> : null}.{' '}
+            </>
+          )}
+          {saved.samplingConsent ? 'Measuring starts with your first requests.' : 'Measuring is off until you allow a sample.'}
         </p>
       )}
     </div>
