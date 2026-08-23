@@ -151,3 +151,19 @@
 .lab-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; background: #1c1a17; border: 0; border-radius: 0; cursor: ew-resize; }
 .lab-range::-moz-range-thumb { width: 10px; height: 10px; background: #1c1a17; border: 0; border-radius: 0; cursor: ew-resize; }
 .lab-range::-moz-range-track { height: 1px; background: #b8b3a6; }
+
+/* two roads — motion is translation of one dot and the drawing of one line */
+@keyframes roadsLeft { from { transform: translateX(0); } to { transform: translateX(242px); } }
+@keyframes roadsRight { from { transform: translateX(0); opacity: 1; } 60% { opacity: 1; } to { transform: translateX(48px); opacity: 0; } }
+@keyframes roadsRing { from { r: 3.5; opacity: 0.9; } to { r: 12; opacity: 0; } }
+.roads-travel-left { animation: roadsLeft 900ms cubic-bezier(0.3, 0, 0.2, 1) both; }
+.roads-travel-right { animation: roadsRight 700ms cubic-bezier(0.3, 0, 0.2, 1) both; }
+.roads-route { pathLength: 1; stroke-dasharray: 1; stroke-dashoffset: 1; animation: fieldRoute 700ms cubic-bezier(0.2, 0.7, 0.2, 1) 450ms both; }
+.roads-ring { animation: roadsRing 1200ms ease-out 1000ms both; }
+.roads-fade { animation: fieldFade 300ms ease-out 950ms both; }
+@media (prefers-reduced-motion: reduce) {
+  .roads-travel-left, .roads-travel-right, .roads-route, .roads-ring, .roads-fade { animation: none; }
+  .roads-route { stroke-dashoffset: 0; }
+  .roads-travel-left { transform: translateX(242px); }
+  .roads-travel-right { opacity: 0; }
+}

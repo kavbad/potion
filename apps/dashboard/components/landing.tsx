@@ -44,10 +44,10 @@ import React from 'react';
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
 import { Reveal } from '@/components/landing/reveal';
-import { ReceiptReel } from '@/components/landing/receipt-reel';
+import { TwoRoads } from '@/components/landing/two-roads';
 import { EvidenceBand } from '@/components/landing/evidence-band';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
-import { MixDiagram } from '@/components/landing/mix-diagram';
+import { ResearchLoop } from '@/components/landing/research-loop';
 
 // THE LAB LOOK (operator, 2026-08-22: "design the landing page as if you are
 // Dario Amodei … i want to look like this is the frontier"). The page reads
@@ -144,9 +144,9 @@ export function Landing() {
 
           {/* exa's first page, whole: the product runs in the hero. Real
               measured routes streaming into the table, receipt alongside. */}
-          <div className="mt-14 w-full max-w-3xl text-left">
-            <Figure n="1" caption="Six real requests and the decision each one received. Every routed point is a committed measurement; the receipt comes back with every answer.">
-              <ReceiptReel />
+          <div className="mt-14 w-full max-w-4xl text-left">
+            <Figure n="1" caption="The same requests through a gateway (one model for everything) and through Potion (the measured field for that kind of work, a quality floor, the cheapest point that clears it). Every point and price is a committed measurement; the tallies are means over the requests served so far.">
+              <TwoRoads />
             </Figure>
           </div>
         </div>
@@ -262,32 +262,36 @@ export function Landing() {
           one. The closing line is the only place the page looks past what is
           already measured, which is why it is phrased as an admission (almost
           none of it has been measured) rather than a promise. */}
-      <LabSection n="03" label="Sometimes the answer is not one model">
+      <LabSection n="03" label="The research engine">
         <div className="grid items-start gap-12 lg:grid-cols-2">
           <Reveal>
             <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
-              A mixture can beat anything you could have picked.
+              The frontier is measured weekly, by a machine. Combinations included.
             </h2>
             <p className="mt-6 text-base leading-relaxed text-soft">
-              A cheap model answers and reports how sure it is. Only when that confidence falls
-              below a measured threshold does the request go on to a stronger one. Most traffic
-              never reaches the expensive model at all — so the combination can land at the top of
-              the measured quality range while costing a fraction of sending everything to the
-              strong model.
+              Every model sits the same private exam for every kind of work. Then the engine does
+              the part nobody else does: it replays <em>combinations</em> of models against the
+              stored item-level results, so a new way of putting two or three models together is
+              scored in minutes, for nothing, before a dollar is spent on it. New models are
+              auditioned the week they ship. Only what dominates, on quality, cost and speed at
+              once, is published to the frontier your requests are routed from.
             </p>
             <p className="mt-4 text-base leading-relaxed text-soft">
-              There is nothing for you to assemble. You set the same rule you would set anyway —
-              stay above this quality, stay under this cost — and if a combination is the best way
-              to honour it, that is what serves your request. The receipt names whatever answered.
+              A combination is served as one strategy with one hash. Your rule is the same rule
+              you would set anyway, stay above this quality, stay under this cost, and if a
+              combination is the best way to honour it, that is what answers. The receipt says so.
+              What it is made of is not published.
             </p>
             <p className="mt-6 border-l-[3px] border-accent pl-5 text-base font-medium leading-relaxed text-accent">
-              There are far more useful combinations than there are models, and almost none of them
-              have been measured by anyone. That is the dimension this company is named for.
+              Why this is hard to copy: it needs the measured corpus, the live receipts, and the
+              replay engine in one place, and the corpus compounds every week. There are far more
+              useful combinations than there are models, and almost none of them have been
+              measured by anyone.
             </p>
           </Reveal>
           <Reveal delayMs={120}>
-            <Figure n="4" caption="A cheap model answers and reports its confidence; only below a threshold does a stronger model take over. The threshold and the components are chosen by measurement, per kind of work.">
-              <MixDiagram />
+            <Figure n="4" caption="The weekly loop, with no one in it: measure every model on every kind of work; replay combinations against stored results at no cost; audition new models the week they ship; publish only what dominates; route live traffic with receipts, which feed the next measurement.">
+              <ResearchLoop />
             </Figure>
           </Reveal>
         </div>
@@ -317,68 +321,70 @@ export function Landing() {
       {/* ---------------- business model ---------------- */}
       {/* exa's enterprise-security composition: a full-bleed dark band, the
           headline top-left, and the concrete promises as outlined tiles. */}
-      <LabSection n="05" label="The business" dark>
+      <LabSection n="05" label="The engineering" dark>
         <div>
           <Reveal>
             <h2 className="mt-4 max-w-2xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
-              We get paid out of what we save you.
+              Built to refuse before it is built to answer.
             </h2>
-            <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#d6d3d1]">
-              Usage-based today. The direction of travel is to charge against measured savings — the
-              only pricing that stays honest when the whole point of the product is spending less,
-              and the only one that makes the bill fall when we do our job badly.
+            <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#d6d3cb]">
+              A router that spends your money has to be trustworthy before it is clever. So the
+              serving path is written to fail closed: the server will not start if a frontier
+              names a model it cannot serve; a frontier cannot be republished if it regresses; a
+              request is refused before a budget is crossed, not after; and nothing is ever
+              served from a number that was not measured.
             </p>
-            <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#d6d3d1]">
-              Customers bring no accounts and no keys. Potion buys from every provider at once,
-              which is also what lets it reach the whole market rather than the one account a
-              customer happened to open.
+            <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#d6d3cb]">
+              Usage-based, no minimum. You bring no provider accounts and no keys: Potion buys
+              from every provider at once, which is also what lets it route across the whole
+              market rather than the one account you happened to open.
             </p>
           </Reveal>
           <Reveal delayMs={120} className="mt-14">
             <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#a8a29e]">
-              what a customer gets on day one
+              what is true of every request, today
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 {
-                  h: 'One line of code',
-                  p: 'Point your client at Potion. Nothing else about your app changes.',
-                  glyph: <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />,
-                },
-                {
-                  h: 'Routing on every measured kind of work',
-                  p: 'Each request goes where the evidence says it should, not where habit does.',
-                  glyph: <path d="M4 12h7m0 0l-3-3m3 3l-3 3M11 12h9M14 6l6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />,
-                },
-                {
-                  h: 'A quality floor',
-                  p: 'A line their traffic is never allowed to fall below, enforced per request.',
-                  glyph: <><path d="M4 17h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M7 13l3-5 3 3 4-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>,
-                },
-                {
                   h: 'A receipt on every answer',
-                  p: 'What was chosen, why, and which measurements it relied on.',
+                  p: 'Kind of work, strategy, policy, provenance: what answered and why, on the response itself.',
                   glyph: <><rect x="6" y="4" width="12" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" /><path d="M9 9h6M9 12.5h6M9 16h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></>,
                 },
                 {
-                  h: 'A spending cap',
-                  p: 'The request is refused before the money is spent, never after.',
+                  h: 'Fails closed',
+                  p: 'Boot refuses a frontier that names an unservable model. A regression cannot be published. No measurement, no route.',
+                  glyph: <><path d="M4 17h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M7 13l3-5 3 3 4-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>,
+                },
+                {
+                  h: 'Budgets that stop the request',
+                  p: 'A hard cap is enforced before the money is spent, within seconds of being crossed, never after.',
                   glyph: <><circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none" /><path d="M12 8v4l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>,
                 },
                 {
-                  h: 'A bill that argues for itself',
-                  p: 'Spend is attributable to decisions you can audit, line by line.',
+                  h: 'Intervals and dates on every point',
+                  p: 'Each frontier point carries its sample size, its 95% interval, and the day it was measured.',
                   glyph: <><path d="M5 19V9m4.5 10V5M14 19v-7m4.5 7V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></>,
+                },
+                {
+                  h: 'Re-checked every week',
+                  p: 'Every routed pick is re-measured on fresh tasks; a model that drifts is caught before it costs you.',
+                  glyph: <path d="M4 12h7m0 0l-3-3m3 3l-3 3M11 12h9M14 6l6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />,
+                },
+                {
+                  h: 'One line, the whole protocol',
+                  p: 'OpenAI chat completions, including streaming and tool calls. Point your client at Potion; keep everything else.',
+                  glyph: <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />,
                 },
               ].map((t) => (
                 <div
                   key={t.h}
-                  className="border border-[#3f3b35] px-6 py-6 transition-colors hover:border-[#efece4]/60 hover:bg-white/[0.07]"
+                  className="border border-[#3f3b35] px-6 py-6 transition-colors hover:border-[#efece4]/60"
                 >
-                  <svg viewBox="0 0 24 24" className="h-8 w-8 text-[#2dd4bf]" aria-hidden>
+                  <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#99f6e4]" aria-hidden>
                     {t.glyph}
                   </svg>
-                  <div className="mt-4 text-sm font-medium text-[#faf9f6]">{t.h}</div>
+                  <div className="mt-4 text-sm font-medium text-[#efece4]">{t.h}</div>
                   <p className="mt-1.5 text-xs leading-relaxed text-[#a8a29e]">{t.p}</p>
                 </div>
               ))}
