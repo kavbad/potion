@@ -404,6 +404,9 @@ export const requestLogs = pgTable('request_logs', {
   clusterConfidence: doublePrecision('cluster_confidence'),
   runnerUpCluster: text('runner_up_cluster'),
   clusterMargin: doublePrecision('cluster_margin'),
+  /** TRUE when the served cluster was chosen by the quality-safe tiebreak
+   * between two near-equal centroid matches (routing/ambiguity.ts). */
+  clusterTiebreak: boolean('cluster_tiebreak'),
   /**
    * Content-free request structure (`RequestShape`, core/shape.ts): turn
    * count, system flag, tool count, tool_choice MODE, stream flag, the

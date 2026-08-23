@@ -43,6 +43,7 @@ import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestL
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
+import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -771,44 +772,54 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // shared platform frontier. NOTE: the assignment LRU (context.ts) stays
     // content-keyed — safe ONLY while cluster ASSIGNMENT remains platform
     // taxonomy; revisit if assignment ever considers org clusters.
-    const loaded = await loadCurrentFrontier(ctx.db.db, clusterId, auth.org.orgId);
-    const { frontier, provenance } = guardFrontierProvenance(
-      loaded,
-      ctx.providerMode,
-      (msg) => app.log.warn(msg),
-    );
-    // G2.6: a latency-dimensioned policy binds against SERVING-grade p95 where
-    // the evidence supports it; otherwise the harness number, marked
-    // provisional. Substitution happens on the points BEFORE selection so the
-    // selector stays pure and "which latency did we bind against" has one
-    // answerable seam. A rollup failure never breaks serving.
-    const latency = await bindServingLatency(
-      ctx,
-      policy,
-      frontier,
-      auth.org.orgId,
-      clusterId,
-      (msg) => app.log.warn(msg),
-    );
-    let op = resolveOperatingPoint(
-      policy,
-      latency.frontier,
-      fallbackStrategyFor(ctx.providerMode, ctx.prices),
-      // A request carrying tools can only be served by a single-model point;
-      // narrowing happens HERE, at selection, rather than as a refusal after
-      // the fact. See the note in resolveOperatingPoint.
-      { toolCapableOnly: body.tools !== undefined },
-    );
-    // ---- M3 #22 guarantee (m3-guarantee) — rollback operating-point override ----
-    // The LATEST UNRESOLVED kind='rollback' incident for (org, cluster) IS the
-    // org's operating point for that cluster (SPEC §12.5; the incident row
-    // doubles as the override state — see repos/guarantee.ts). When one is
-    // active, the served strategy is swapped to its detail.toStrategy
-    // (resolved via the serving frontier's points, then strategy_configs);
-    // the trace header's strategy= field therefore shows the rolled-back
-    // hash. Resolving the incident (POST /api/incidents/:id/resolve) lifts
-    // the override. A failed/unresolvable lookup NEVER breaks the serving
-    // path — the policy-resolved point serves with a warn.
+    // One resolution per candidate cluster: frontier → provenance guard →
+    // serving-latency binding → operating point under the org's policy.
+    const resolveFor = async (cid: string) => {
+      const loaded = await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId);
+      const guarded = guardFrontierProvenance(loaded, ctx.providerMode, (msg) => app.log.warn(msg));
+      const bound = await bindServingLatency(
+        ctx,
+        policy,
+        guarded.frontier,
+        auth.org.orgId,
+        cid,
+        (msg) => app.log.warn(msg),
+      );
+      const point = resolveOperatingPoint(
+        policy,
+        bound.frontier,
+        fallbackStrategyFor(ctx.providerMode, ctx.prices),
+        { toolCapableOnly: body.tools !== undefined },
+      );
+      const served =
+        point.config === null
+          ? null
+          : ((bound.frontier?.points ?? guarded.frontier?.points ?? []).find(
+              (pt) => pt.strategyHash === strategyHash(point.config as StrategyConfig),
+            ) ?? null);
+      return { clusterId: cid, ...guarded, latency: bound, op: point, served };
+    };
+    let chosen = await resolveFor(clusterId);
+    // Quality-safe tiebreak (routing/ambiguity.ts): a near-equal runner-up is
+    // resolved too, and the pair is served under the higher measured quality.
+    const runnerUpId = ranked !== undefined ? ambiguousRunnerUp(ranked, ambiguityMargin()) : null;
+    if (runnerUpId !== null) {
+      const other = await resolveFor(runnerUpId);
+      const asCandidate = (r: typeof chosen) => ({
+        ...r,
+        quality: r.served?.quality ?? null,
+        costPer1K: r.served?.costPer1K ?? null,
+      });
+      const winner = pickSafer(asCandidate(chosen), asCandidate(other));
+      logBase.clusterTiebreak = winner.clusterId !== clusterId;
+      if (winner.clusterId !== clusterId) {
+        clusterId = winner.clusterId;
+        logBase.clusterId = clusterId;
+        chosen = other;
+      }
+    }
+    const { frontier, provenance, latency } = chosen;
+    let op = chosen.op;
     try {
       const guaranteeOverride = await resolveGuaranteeOverride(
         ctx,

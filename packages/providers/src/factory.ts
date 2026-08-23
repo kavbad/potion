@@ -36,6 +36,9 @@ export const ENV_VAR_BY_PROVIDER: Record<Exclude<ProviderId, 'mock'>, string> = 
 };
 
 /** Providers with a live `embed` in v1 (see live/*.ts header comments). */
+/** Transports with a real SSE path (live/openai.ts). */
+const HAS_STREAM: ReadonlySet<ProviderId> = new Set(['openai', 'openrouter']);
+
 const HAS_EMBED: ReadonlySet<ProviderId> = new Set<ProviderId>(['mock', 'openai', 'google']);
 
 /**
@@ -72,6 +75,18 @@ function lazyLiveProvider(id: Exclude<ProviderId, 'mock'>, opts: ProviderFactory
   };
   // Anthropic/OpenRouter have no embed (live/*.ts); for embed-capable
   // providers without a key, embed throws the same first-call auth error.
+  // Real token streaming (2026-08-22): forwarded lazily for the transports
+  // that implement it, so resilient() sees the method and the single strategy
+  // relays tokens instead of replaying a finished answer. Found live: the
+  // first token arrived with the last one (4.9 s then 180 ms for 65 chunks)
+  // because this wrapper hid completeStream from everything above it.
+  if (HAS_STREAM.has(id)) {
+    provider.completeStream = async (req, onToken) => {
+      const r = requireReal();
+      return r.completeStream ? r.completeStream(req, onToken) : r.complete(req);
+    };
+  }
+
   if (HAS_EMBED.has(id)) {
     provider.embed = async (texts) => {
       const r = requireReal();

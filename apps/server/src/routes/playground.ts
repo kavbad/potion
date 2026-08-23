@@ -40,6 +40,8 @@ import {
 } from '@potion/core';
 import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
+import type { RankedAssignment } from '@potion/cluster';
+import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { execute } from '@potion/strategies';
 import { openAiError } from '../auth.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
@@ -189,10 +191,11 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     // no cluster picked by hand. The receipt names what it chose.
     let clusterId = body.clusterId;
     let clusterConfidence: number | null = null;
+    let ranked: RankedAssignment | undefined;
     if (clusterId === 'auto') {
       const contents = body.messages.filter((m) => m.role === 'user').map((m) => m.content);
       const cacheKey = assignmentCacheKey(contents);
-      let ranked = ctx.assignCache.get(cacheKey);
+      ranked = ctx.assignCache.get(cacheKey);
       if (!ranked) {
         ranked = await ctx.assigner.assignRanked(contents.join('\n'));
         ctx.assignCache.set(cacheKey, ranked);
@@ -211,12 +214,6 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         );
     }
 
-    const frontier = await loadCurrentFrontier(ctx.db.db, clusterId, org.orgId);
-    if (!frontier || frontier.points.length === 0) {
-      return reply
-        .code(404)
-        .send(openAiError(`no frontier for cluster '${clusterId}'`, 'invalid_request_error'));
-    }
     // The org's floor, for the Try page's rules (0.95 when the policy has none).
     let floor = 0.95;
     {
@@ -224,6 +221,30 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       const row = k?.policyId ? await getPolicyById(ctx.db.db, org.orgId, k.policyId) : null;
       const cfg = row?.config as { qualityFloor?: number } | undefined;
       if (cfg && typeof cfg.qualityFloor === 'number') floor = cfg.qualityFloor;
+    }
+    let frontier = await loadCurrentFrontier(ctx.db.db, clusterId, org.orgId);
+    // Quality-safe tiebreak, the same rule the serving path applies
+    // (routing/ambiguity.ts): a near-equal runner-up cluster is loaded too and
+    // the pair is served under the higher measured quality of each one's pick.
+    let tiebreak = false;
+    const runnerUpId = ranked !== undefined ? ambiguousRunnerUp(ranked, ambiguityMargin()) : null;
+    if (runnerUpId !== null) {
+      const other = await loadCurrentFrontier(ctx.db.db, runnerUpId, org.orgId);
+      const candidate = (cid: string, f: Frontier | null) => {
+        const pick = f ? pickUnderRule(f.points, body.optimizeFor ?? 'cost', floor) : null;
+        return { clusterId: cid, frontier: f, quality: pick?.quality ?? null, costPer1K: pick?.costPer1K ?? null };
+      };
+      const winner = pickSafer(candidate(clusterId, frontier), candidate(runnerUpId, other));
+      if (winner.clusterId !== clusterId) {
+        tiebreak = true;
+        clusterId = winner.clusterId;
+        frontier = winner.frontier;
+      }
+    }
+    if (!frontier || frontier.points.length === 0) {
+      return reply
+        .code(404)
+        .send(openAiError(`no frontier for cluster '${clusterId}'`, 'invalid_request_error'));
     }
     const alternatives = alternativesFor(frontier.points, floor);
     const ruled = body.optimizeFor ? pickUnderRule(frontier.points, body.optimizeFor, floor) : null;
@@ -349,6 +370,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         provenance,
         cluster_id: clusterId,
         ...(clusterConfidence !== null ? { cluster_confidence: clusterConfidence } : {}),
+        ...(tiebreak ? { cluster_tiebreak: true } : {}),
         // G2.6: the compare view reads this meta chunk, so the latency
         // consequence travels with the answer rather than only in a header.
         ...(resolved.latencySource !== undefined ? { latency_source: resolved.latencySource } : {}),

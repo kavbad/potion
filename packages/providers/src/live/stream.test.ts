@@ -44,3 +44,13 @@ describe('openAiCompatibleCompleteStream', () => {
     await expect(openAiCompatibleCompleteStream('openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn } as never, { model: 'or-mid', messages: [] }, () => undefined)).rejects.toThrow(/HTTP 503/);
   });
 });
+
+describe('createProviders exposes the stream', () => {
+  it('openrouter and openai carry completeStream through the lazy wrapper and resilient()', async () => {
+    const { createProviders } = await import('../factory.js');
+    const providers = createProviders({ prices, apiKeys: { openrouter: 'k', openai: 'k' } } as never);
+    expect(typeof providers.openrouter.completeStream).toBe('function');
+    expect(typeof providers.openai.completeStream).toBe('function');
+    expect(providers.anthropic.completeStream).toBeUndefined();
+  });
+});
