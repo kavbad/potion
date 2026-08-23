@@ -1,0 +1,17 @@
+{
+  "suiteId": "agentic-tool-use-tools-v1",
+  "clusterId": "agentic-tool-use",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored function-calling (24 items): 12 tool pairs where one tool is the obvious neighbour of the right one (weather vs forecast, create vs list, send vs search, query vs describe, read vs write, get vs refund); every item expects ONE call with a deterministic argument subset; dates resolve against a fixed 'today'",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "tool-call"
+    ]
+  },
+  "createdAt": "2026-08-23T06:00:00.000Z"
+}

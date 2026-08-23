@@ -230,6 +230,8 @@ export const EvalItemSchema = z.object({
   id: z.string(),
   clusterId: z.string(),
   prompt: z.array(ChatMessageSchema).min(1),
+  /** Tools offered to the model for this item (MIXING M3). */
+  tools: z.array(ToolSchema).optional(),
   reference: z.unknown().optional(),
   scoring: ScoringMethodSchema,
 });

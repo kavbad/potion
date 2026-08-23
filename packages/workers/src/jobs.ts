@@ -466,6 +466,10 @@ export interface FrontierPlatformSweepPayload {
   providerTimeoutMs?: number;
   /** Retry attempts past the first. Absent → PLATFORM_SWEEP_MAX_RETRIES. */
   providerMaxRetries?: number;
+  /** MIXING M3 (2026-08-23): measure on a suite other than the cluster's
+   * default — the tool-calling suite, whose items carry tools. Points
+   * measured on it carry evidence.toolsMeasured. */
+  suiteOverride?: { kind: 'v1' | 'v2'; suiteId: string };
 }
 
 /**

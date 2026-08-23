@@ -3669,7 +3669,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // 3. Suite map + cluster gate. The map IS the taxonomy allowlist; the
     // row check is containment's front door — an org-owned cluster is
     // refused by name (the mirror image of the org sweep's ownership check).
-    const mapped = PLATFORM_SUITE_BY_CLUSTER[payload.clusterId];
+    const mapped = payload.suiteOverride ?? PLATFORM_SUITE_BY_CLUSTER[payload.clusterId];
     if (!mapped) {
       throw new PlatformSweepRefusalError(
         'unknown-cluster',

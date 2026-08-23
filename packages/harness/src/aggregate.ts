@@ -88,6 +88,9 @@ export function aggregateResults(
             latencyN: n,
             latencyP95Ci95: latencyCi!.ci95,
             latencySeed,
+            // MIXING M3: every cell was scored as a tool call → the point was
+            // measured on items that carried tools.
+            ...(results.every((r) => r.scorer === 'tool-call') ? { toolsMeasured: true } : {}),
           },
         }
       : {}),
