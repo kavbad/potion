@@ -116,8 +116,18 @@ function newToken(prefix: 'ml' | 'ps'): string {
   return `${prefix}_${randomBytes(prefix === 'ml' ? 24 : 32).toString('hex')}`;
 }
 
-function baseUrlOf(req: FastifyRequest, override?: string): string {
+/**
+ * Where a magic link must point: the DEPLOYED DASHBOARD's verify proxy
+ * (`${POTION_APP_URL}/api/auth/verify`), which sets the session cookie on the
+ * host the person actually uses. Never the request's own Host header in
+ * production: the dashboard reaches the API as `server:3000` inside compose,
+ * and a link built from that is unreachable from a mail client (shipped
+ * once, 2026-08-22, the first time a real email went out). The operator
+ * route had this fix since the rehearsal; this is the self-serve path.
+ */
+export function baseUrlOf(req: Pick<FastifyRequest, 'protocol' | 'headers'>, override?: string, appUrl = process.env.POTION_APP_URL): string {
   if (override) return override.replace(/\/$/, '');
+  if (appUrl && appUrl.trim() !== '') return `${appUrl.replace(/\/$/, '')}/api`;
   const proto = req.protocol || 'http';
   const host = req.headers.host ?? 'localhost:3000';
   return `${proto}://${host}`;
