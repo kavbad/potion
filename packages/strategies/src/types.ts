@@ -1,3 +1,4 @@
+import type { SamplingParams } from '@potion/core';
 // Strategy interpreter contract — EXACTLY per SPEC.md §3.
 // M3 #25 (OpenAI parity, ADDITIVE): ExecContext gains an optional tool-call
 // passthrough (`params.tools` / `params.toolChoice`) honored ONLY by
@@ -62,6 +63,8 @@ export interface ExecContext {
   /** Tool-calling passthrough (M3 #25; 'single' only): forwarded UNMODIFIED
    * to the provider's CompleteRequest.params. */
   params?: { tools?: Tool[]; toolChoice?: ToolChoice };
+  /** Caller sampling/format parameters (2026-08-23); honored by 'single'. */
+  sampling?: SamplingParams;
 }
 
 export type { ChatMessage, StrategyConfig };

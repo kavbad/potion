@@ -1,13 +1,63 @@
 import { z } from 'zod';
+import type { ChatMessage } from './types.js';
 
 /** Evidence provenance (M1a). Absence of the field on a value object means
  * 'unknown' — only 'live' may ever be served as live evidence. */
 export const ProviderModeSchema = z.enum(['mock', 'live']);
 
+/** One OpenAI content part. Text is carried; images are parsed so the API
+ * edge can refuse them with a precise message instead of a schema error. */
+export const ContentPartSchema = z.union([
+  z.object({ type: z.literal('text'), text: z.string() }),
+  z.object({ type: z.literal('image_url'), image_url: z.object({ url: z.string(), detail: z.string().optional() }) }),
+]);
+
+/** The wire shape of a message (OpenAI chat-completions), including the
+ * agentic turns: assistant tool_calls and role 'tool' results. */
 export const ChatMessageSchema = z.object({
-  role: z.enum(['system', 'user', 'assistant']),
-  content: z.string(),
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: z.union([z.string(), z.array(ContentPartSchema), z.null()]),
+  tool_calls: z.array(z.lazy(() => ToolCallSchema)).optional(),
+  tool_call_id: z.string().optional(),
+  name: z.string().optional(),
 });
+export type WireChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const SamplingParamsSchema = z.object({
+  temperature: z.number().min(0).max(2).optional(),
+  top_p: z.number().min(0).max(1).optional(),
+  stop: z.union([z.string(), z.array(z.string()).max(4)]).optional(),
+  seed: z.number().int().optional(),
+  user: z.string().max(256).optional(),
+  response_format: z
+    .union([
+      z.object({ type: z.enum(['text', 'json_object']) }),
+      z.object({ type: z.literal('json_schema'), json_schema: z.record(z.unknown()) }),
+    ])
+    .optional(),
+  parallel_tool_calls: z.boolean().optional(),
+});
+
+/** Flatten a wire message to the internal ChatMessage. Returns the image
+ * count so the edge can refuse vision input precisely. */
+export function flattenWireMessage(m: WireChatMessage): { message: ChatMessage; images: number } {
+  let images = 0;
+  let content = '';
+  if (typeof m.content === 'string') content = m.content;
+  else if (Array.isArray(m.content)) {
+    const texts: string[] = [];
+    for (const part of m.content) {
+      if (part.type === 'text') texts.push(part.text);
+      else images++;
+    }
+    content = texts.join('\n');
+  }
+  const message: ChatMessage = { role: m.role, content };
+  if (m.tool_calls !== undefined) message.tool_calls = m.tool_calls;
+  if (m.tool_call_id !== undefined) message.tool_call_id = m.tool_call_id;
+  if (m.name !== undefined) message.name = m.name;
+  return { message, images };
+}
 
 // ---- tool calling (M3 #25 OpenAI parity; ADDITIVE) ----
 export const ToolCallSchema = z.object({

@@ -25,6 +25,7 @@ export async function runSingle(
     ...(ctx.params?.tools !== undefined ? { tools: ctx.params.tools } : {}),
     ...(ctx.params?.toolChoice !== undefined ? { tool_choice: ctx.params.toolChoice } : {}),
     ...(ctx.captureConfidence ? { logprobs: true } : {}),
+    ...(ctx.sampling !== undefined ? { sampling: ctx.sampling } : {}),
   };
   const request = {
     model,

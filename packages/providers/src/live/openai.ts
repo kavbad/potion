@@ -1,3 +1,4 @@
+import type { SamplingParams } from '@potion/core';
 // OpenAI live transport (SPEC §2): raw fetch to
 // POST https://api.openai.com/v1/chat/completions (Bearer auth).
 // `logprobs: true` is requested when params.logprobs is set; when token
@@ -59,7 +60,7 @@ export async function openAiCompatibleComplete(
 
   const body: Record<string, unknown> = {
     model: native,
-    messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: req.messages.map(wireMessage),
   };
   if (sampling.temperature !== undefined) body.temperature = sampling.temperature;
   if (sampling.seed !== undefined) body.seed = sampling.seed;
@@ -75,6 +76,7 @@ export async function openAiCompatibleComplete(
   // M3 #25: tool-calling passthrough — forwarded UNMODIFIED.
   if (req.params?.tools !== undefined) body.tools = req.params.tools;
   if (req.params?.tool_choice !== undefined) body.tool_choice = req.params.tool_choice;
+  Object.assign(body, callerSampling(req.params?.sampling));
 
   const { apiKey, ...retry } = opts;
   const { json } = await postJsonWithRetry<OpenAiChatResponse>(
@@ -142,6 +144,25 @@ interface OpenAiStreamChunk {
  * One attempt, no retry (a stream cannot be replayed); the caller's signal
  * and the transport timeout (to first byte, then per read) both abort it.
  */
+/** The wire message: text content plus the agentic fields, verbatim. */
+function wireMessage(m: CompleteRequest['messages'][number]): Record<string, unknown> {
+  const out: Record<string, unknown> = { role: m.role, content: m.content };
+  if (m.tool_calls !== undefined) { out.tool_calls = m.tool_calls; if (m.content === '') out.content = null; }
+  if (m.tool_call_id !== undefined) out.tool_call_id = m.tool_call_id;
+  if (m.name !== undefined) out.name = m.name;
+  return out;
+}
+
+/** Caller sampling/format parameters, OpenAI names, forwarded as-is. */
+function callerSampling(p: SamplingParams | undefined): Record<string, unknown> {
+  if (!p) return {};
+  const out: Record<string, unknown> = {};
+  for (const k of ['temperature', 'top_p', 'stop', 'seed', 'user', 'response_format', 'parallel_tool_calls'] as const) {
+    if (p[k] !== undefined) out[k] = p[k];
+  }
+  return out;
+}
+
 export async function openAiCompatibleCompleteStream(
   provider: ProviderId,
   baseUrl: string,
@@ -156,7 +177,7 @@ export async function openAiCompatibleCompleteStream(
   const sampling = samplingParams(req);
   const body: Record<string, unknown> = {
     model: native,
-    messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: req.messages.map(wireMessage),
     stream: true,
     stream_options: { include_usage: true },
   };
@@ -169,6 +190,7 @@ export async function openAiCompatibleCompleteStream(
   // its whole budget thinking and the stream ended empty).
   if (req.params?.tools !== undefined) body.tools = req.params.tools;
   if (req.params?.tool_choice !== undefined) body.tool_choice = req.params.tool_choice;
+  Object.assign(body, callerSampling(req.params?.sampling));
 
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();

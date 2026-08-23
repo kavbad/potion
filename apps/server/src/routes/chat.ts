@@ -38,6 +38,9 @@ import {
   type StrategyConfig,
   type ToolCall,
   type Usage,
+  flattenWireMessage,
+  SamplingParamsSchema,
+  type SamplingParams,
 } from '@potion/core';
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
@@ -120,7 +123,11 @@ export const ChatCompletionsRequestSchema = z.object({
   tools: z.array(ToolSchema).min(1).optional(),
   tool_choice: ToolChoiceSchema.optional(),
   stream_options: z.object({ include_usage: z.boolean().optional() }).optional(),
-});
+  // 2026-08-23: caller sampling/format parameters, forwarded on single-model
+  // points (SamplingParamsSchema); response_format and stop pin the request
+  // to single points the way tools do. `n` is accepted only as 1.
+  n: z.number().int().min(1).max(1).optional(),
+}).merge(SamplingParamsSchema);
 
 export interface OperatingPoint {
   /** null = no strategy is resolvable for this server's mode (live server,
@@ -583,6 +590,24 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         .send(openAiError(message, 'invalid_request_error', 'invalid_request_error'));
     }
     const body = parsed.data;
+    // Wire messages → internal text messages (content-part arrays flattened;
+    // tool_calls / tool results carried verbatim). Images are refused with a
+    // precise message until a vision frontier exists — never silently dropped.
+    const flattened = body.messages.map(flattenWireMessage);
+    const imageParts = flattened.reduce((n, f) => n + f.images, 0);
+    if (imageParts > 0) {
+      return reply
+        .code(400)
+        .send(
+          openAiError(
+            `image inputs are not routed yet (${imageParts} image part${imageParts === 1 ? '' : 's'}); send text, or route vision traffic directly to a vision model for now`,
+            'invalid_request_error',
+            'unsupported_content',
+            'messages',
+          ),
+        );
+    }
+    const messages: ChatMessage[] = flattened.map((f) => f.message);
     // Pre-auth log fields: unattributed → default org (see above). Replaced
     // with the authenticated org as soon as the key resolves.
     const logBase: NewRequestLog = { orgId: DEFAULT_ORG_ID, model: body.model };
@@ -717,8 +742,8 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // M5 #36: hint wins; the embedder/assigner is skipped entirely.
       clusterId = hintedClusterId;
     } else {
-      const userContents = body.messages.filter((m) => m.role === 'user').map((m) => m.content);
-      const contents = userContents.length > 0 ? userContents : body.messages.map((m) => m.content);
+      const userContents = messages.filter((m) => m.role === 'user').map((m) => m.content);
+      const contents = userContents.length > 0 ? userContents : messages.map((m) => m.content);
       const cacheKey = assignmentCacheKey(contents);
       ranked = ctx.assignCache.get(cacheKey);
       if (!ranked) {
@@ -746,7 +771,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // Content-free request structure (S7 L1). Recorded for hinted clusters
     // too — the hint skips classification, not the shape, and agent traffic
     // is the most tool-carrying traffic there is.
-    const shape = requestShape(body);
+    const shape = requestShape({ ...body, messages });
     logBase.shape = shape;
 
     // ---- S7 L2: contribute to the demand aggregate ----
@@ -798,7 +823,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         clusterPolicy,
         bound.frontier,
         fallbackStrategyFor(ctx.providerMode, ctx.prices),
-        { toolCapableOnly: body.tools !== undefined },
+        { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined },
       );
       const served =
         point.config === null
@@ -984,7 +1009,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // PII-redacted; never throws into the served response). Called after a
     // successful completion on every path, fire-and-forget.
     const keepSample = (text: string, cfg: { type: string; model?: string }, usage: { costUsd?: number } | undefined, cluster: string) => {
-      const lastUser = [...(body.messages as { role: string; content: unknown }[])].reverse().find((m) => m.role === 'user');
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const prompt = typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content ?? '');
       void maybeKeepLearningSample(ctx.db.db, {
         orgId: auth.org.orgId,
@@ -1016,6 +1041,11 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // never reached execution (auth failures, budget refusals, unknown
     // policy) and cost nobody anything, so they correctly keep paid_by NULL.
     logBase.paidBy = orgProviders.byok ? 'byok' : 'platform';
+    // Caller sampling/format parameters (only the ones set), OpenAI names.
+    const sampling: SamplingParams = {};
+    for (const k of ['temperature', 'top_p', 'stop', 'seed', 'user', 'response_format', 'parallel_tool_calls'] as const) {
+      if (body[k] !== undefined) (sampling as Record<string, unknown>)[k] = body[k];
+    }
     const execBase = {
       providers: orgProviders.providers,
       prices: ctx.prices,
@@ -1032,6 +1062,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             },
           }
         : {}),
+      ...(Object.keys(sampling).length > 0 ? { sampling } : {}),
     };
     const wantStream = body.stream === true;
     const includeUsage = body.stream_options?.include_usage === true;
@@ -1056,7 +1087,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       writeData(sseChunk(base, { role: 'assistant' }));
       let result;
       try {
-        result = await execute(op.config, body.messages as ChatMessage[], {
+        result = await execute(op.config, messages, {
           ...execBase,
           stream: (token) => writeData(sseChunk(base, { content: token })),
         });
@@ -1077,7 +1108,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
               orgId: auth.org.orgId,
               requestId: id,
               clusterId,
-              messages: body.messages as ChatMessage[],
+              messages: messages,
               policy,
               policyId,
               served: { hash: sh },
@@ -1121,7 +1152,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             orgId: auth.org.orgId,
             requestId: id,
             clusterId,
-            messages: body.messages as ChatMessage[],
+            messages: messages,
             primary: { hash: sh, text: result.text },
             shadow: shadowCfg,
             frontier,
@@ -1142,7 +1173,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             orgId: auth.org.orgId,
             requestId: id,
             clusterId,
-            messages: body.messages as ChatMessage[],
+            messages: messages,
             policy,
             policyId,
             orgProviders,
@@ -1175,7 +1206,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const captured: string[] = [];
       let result;
       try {
-        result = await execute(op.config, body.messages as ChatMessage[], {
+        result = await execute(op.config, messages, {
           ...execBase,
           stream: (token) => captured.push(token),
         });
@@ -1204,7 +1235,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
               orgId: auth.org.orgId,
               requestId: id,
               clusterId,
-              messages: body.messages as ChatMessage[],
+              messages: messages,
               policy,
               policyId,
               served: { hash: sh },
@@ -1249,7 +1280,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
 
     // ---- 5b. JSON path (non-stream, or stream:true on a non-streamable multi-call strategy) ----
     try {
-      const result = await execute(op.config, body.messages as ChatMessage[], execBase);
+      const result = await execute(op.config, messages, execBase);
       if (wantStream) {
         // Documented contract: non-streamable multi-call strategies (anything
         // but 'single'/'composite') cannot token-stream.
@@ -1303,7 +1334,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             orgId: auth.org.orgId,
             requestId: id,
             clusterId,
-            messages: body.messages as ChatMessage[],
+            messages: messages,
             primary: { hash: sh, text: result.text },
             shadow: shadowCfg,
             frontier,
@@ -1324,7 +1355,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             orgId: auth.org.orgId,
             requestId: id,
             clusterId,
-            messages: body.messages as ChatMessage[],
+            messages: messages,
             policy,
             policyId,
             orgProviders,
@@ -1346,7 +1377,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             orgId: auth.org.orgId,
             requestId: id,
             clusterId,
-            messages: body.messages as ChatMessage[],
+            messages: messages,
             policy,
             policyId,
             served: { hash: sh },

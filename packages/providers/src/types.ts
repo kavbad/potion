@@ -1,3 +1,4 @@
+import type { SamplingParams } from '@potion/core';
 // Provider contract types — EXACTLY per SPEC.md §2.
 // M3 #25 (OpenAI parity, ADDITIVE): CompleteRequest.params gains optional
 // tools/tool_choice passthrough and CompleteResponse gains optional
@@ -18,6 +19,8 @@ export interface CompleteRequest {
      * the provider; only honored on the 'single' strategy serving path. */
     tools?: Tool[];
     tool_choice?: ToolChoice;
+    /** Caller sampling/format parameters (2026-08-23), forwarded as-is. */
+    sampling?: SamplingParams;
   };
   // M3 (SPEC §12.1, additive): optional cancellation signal threaded by the
   // resilience wrapper (per-attempt timeout / hedge loser abort). Providers

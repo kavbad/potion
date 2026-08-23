@@ -37,6 +37,7 @@ import {
   type FrontierPoint,
   type LatencyPremium,
   type Policy,
+  flattenWireMessage,
 } from '@potion/core';
 import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -187,6 +188,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       return reply.code(400).send(openAiError(message, 'invalid_request_error'));
     }
     const body = parsed.data;
+    const messages: ChatMessage[] = body.messages.map((m) => flattenWireMessage(m).message);
     // 'auto' (2026-08-22, Home's "Try a request"): classify the prompt the way
     // serving does — same assigner, same content-hash cache — so the box needs
     // no cluster picked by hand. The receipt names what it chose.
@@ -194,7 +196,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     let clusterConfidence: number | null = null;
     let ranked: RankedAssignment | undefined;
     if (clusterId === 'auto') {
-      const contents = body.messages.filter((m) => m.role === 'user').map((m) => m.content);
+      const contents = messages.filter((m) => m.role === 'user').map((m) => m.content);
       const cacheKey = assignmentCacheKey(contents);
       ranked = ctx.assignCache.get(cacheKey);
       if (!ranked) {
@@ -314,7 +316,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     writeData(chunk({ role: 'assistant' }));
     let streamed = 0;
     try {
-      const result = await execute(resolved.config, body.messages as ChatMessage[], {
+      const result = await execute(resolved.config, messages, {
         providers: orgProviders.providers,
         prices: ctx.prices,
         resolve: orgProviders.resolve,
@@ -335,7 +337,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       // gated, capped, redacted), and measure the moment a kind of work has
       // enough — the journey's own trial requests count toward it.
       {
-        const lastUser = [...(body.messages as { role: string; content: unknown }[])].reverse().find((m) => m.role === 'user');
+        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
         const cfg = resolved.config as { type: string; model?: string };
         void maybeKeepLearningSample(
           ctx.db.db,

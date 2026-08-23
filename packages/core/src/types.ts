@@ -48,8 +48,30 @@ export interface TaskCluster {
 
 // ---- chat ----
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  /** Text. Content-part arrays are flattened to their text at the API edge
+   * (2026-08-23); image parts are refused there until a vision frontier
+   * exists. */
   content: string;
+  // ---- agentic turns (2026-08-23): forwarded verbatim to the provider ----
+  /** An assistant turn that called tools (the second turn of every loop). */
+  tool_calls?: ToolCall[];
+  /** A tool-result turn (role 'tool'). */
+  tool_call_id?: string;
+  name?: string;
+}
+
+/** Sampling and format parameters a caller may set (OpenAI names). Forwarded
+ * on single-model points; response_format and stop pin the request to
+ * single points the way tools do (a combination cannot honor them). */
+export interface SamplingParams {
+  temperature?: number;
+  top_p?: number;
+  stop?: string | string[];
+  seed?: number;
+  user?: string;
+  response_format?: { type: 'text' | 'json_object' } | { type: 'json_schema'; json_schema: Record<string, unknown> };
+  parallel_tool_calls?: boolean;
 }
 
 // ---- tool calling (M3 #25 OpenAI parity; ADDITIVE — all uses optional) ----

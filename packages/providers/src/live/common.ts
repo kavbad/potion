@@ -32,7 +32,9 @@ export function splitSystem(messages: ChatMessage[]): {
   const turns: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   for (const m of messages) {
     if (m.role === 'system') systemParts.push(m.content);
-    else turns.push({ role: m.role, content: m.content });
+    // Anthropic/Google transports do not serve tool loops; a tool-result
+    // turn is presented as user text there.
+    else turns.push({ role: m.role === 'tool' ? 'user' : m.role, content: m.content });
   }
   return { system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined, turns };
 }
