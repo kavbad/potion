@@ -227,9 +227,14 @@ Redis is **not** in the backup set: it holds queue state only — every piece of
 customer evidence lives in Neon — so losing it costs in-flight jobs, which are
 re-enqueued, not restored.
 
-**A backup you have not restored is a hypothesis.** Neon makes the drill cheap:
-branch the project at a timestamp and point a scratch server at the branch.
-Do it once, now, and record the date in the rollback runbook.
+**A backup you have not restored is a hypothesis.** Production is Render
+Postgres 17 (Frankfurt), not Neon (this section predated the move). Render
+keeps daily backups and point-in-time recovery on the dashboard; the drill
+that proves the path end to end is `scripts/restore-drill.sh`, run on
+potion-prod: a read-only `pg_dump` of the live database, a restore into a
+throwaway `postgres:17` container, and a table/row-count comparison. The
+dump stays under `/opt/potion/backups` (0600). Run it after any migration
+that adds a table, and before a partner's first month closes.
 
 `POTION_MASTER_KEY` is backed up **separately** — see §2. It is not in the
 dump, and a restore without it leaves every stored BYOK key undecryptable.
