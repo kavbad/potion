@@ -245,3 +245,36 @@ describe('POST /api/playground/chat — point selection', () => {
     expect(ok.statusCode).toBe(200);
   });
 });
+
+describe('Try page rules (operator, 2026-08-22): optimize for cost / quality / latency', () => {
+  it('pickUnderRule applies each rule to one frontier', async () => {
+    const { pickUnderRule } = await import('../src/routes/playground.js');
+    const pts = [
+      { strategyHash: 'a', strategyConfig: { type: 'single', model: 'a' }, quality: 0.9, costPer1K: 0.1, latencyP95: 900 },
+      { strategyHash: 'b', strategyConfig: { type: 'single', model: 'b' }, quality: 0.96, costPer1K: 0.5, latencyP95: 300 },
+      { strategyHash: 'c', strategyConfig: { type: 'single', model: 'c' }, quality: 0.99, costPer1K: 4, latencyP95: 1200 },
+      { strategyHash: 'd', strategyConfig: { type: 'single', model: 'd' }, quality: 0.97, costPer1K: 2, latencyP95: 200 },
+    ] as never;
+    expect(pickUnderRule(pts, 'cost', 0.95)?.strategyHash).toBe('b');
+    expect(pickUnderRule(pts, 'quality', 0.95)?.strategyHash).toBe('c');
+    expect(pickUnderRule(pts, 'latency', 0.95)?.strategyHash).toBe('d');
+    // nothing above the floor: the rules fall back to the whole frontier
+    expect(pickUnderRule(pts, 'cost', 0.999)?.strategyHash).toBe('a');
+  });
+
+  it('optimizeFor picks the point and the meta chunk names the model and the three alternatives', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/playground/chat',
+      payload: { clusterId: 'code-gen', auto: true, optimizeFor: 'quality', messages: [{ role: 'user', content: 'hi' }] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-frontier-trace']).toContain(`strategy=${H_MID.slice(0, 8)}`);
+    const meta = parseSse(res.body).map((e) => e.data).filter((d) => d !== '[DONE]').map((d) => JSON.parse(d) as Record<string, unknown>).find((o) => o.usage);
+    expect(meta?.model).toBe('mock-mid');
+    expect(meta?.rule).toBe('quality');
+    const alts = meta?.alternatives as { rule: string; model: string | null }[];
+    expect(alts.map((a) => a.rule)).toEqual(['cost', 'quality', 'latency']);
+    expect(alts.every((a) => a.model !== null)).toBe(true);
+  });
+});

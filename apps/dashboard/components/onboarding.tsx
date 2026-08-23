@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CopyBlock } from '@/components/copy-block';
 import { ServingKeys } from '@/components/serving-keys';
-import { TryRequest } from '@/components/try-request';
+import { TryRequest, type Receipt } from '@/components/try-request';
 import { RoutingProof } from '@/components/routing-proof';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
@@ -38,10 +38,44 @@ function Step({ n, title, state, lede, children }: { n: string; title: string; s
   );
 }
 
+function TrialReceipt({ r }: { r: Receipt }) {
+  const premium = r.alternatives.find((a) => a.rule === 'quality');
+  const saved = premium?.cost_per_1k && r.costPer1K !== null && premium.cost_per_1k > 0 ? Math.max(0, Math.floor((1 - r.costPer1K / premium.cost_per_1k) * 100)) : null;
+  const usd = (n: number) => (n < 1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+  return (
+    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4 font-mono text-[12px]">
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_1fr]">
+        <dt className="text-faint">kind of work</dt><dd className="text-ink">{r.clusterId ?? '—'}</dd>
+        <dt className="text-faint">routed to</dt><dd className="text-accent">{r.model ?? '—'}{r.quality !== null ? <span className="text-soft"> · scores {r.quality.toFixed(2)}</span> : null}</dd>
+        <dt className="text-faint">this request cost</dt><dd className="text-ink">{r.costUsd !== null ? `$${r.costUsd.toFixed(5)}` : '—'}{r.costPer1K !== null ? <span className="text-soft"> · {usd(r.costPer1K)} per 1,000</span> : null}</dd>
+        {premium && premium.model && premium.cost_per_1k !== null && (
+          <>
+            <dt className="text-faint">the premium pick</dt>
+            <dd className="text-soft">{premium.model} · {usd(premium.cost_per_1k)} per 1,000{premium.quality !== null ? ` · scores ${premium.quality.toFixed(2)}` : ''}</dd>
+          </>
+        )}
+        {saved !== null && saved > 0 && (
+          <>
+            <dt className="text-faint">saved</dt>
+            <dd className="text-accent">{saved}% on this kind of work, at or above your quality floor</dd>
+          </>
+        )}
+      </dl>
+      <p className="mt-3 text-[11px] leading-relaxed text-faint">
+        Every answer through your key carries a receipt like this. Usage &amp; savings adds them up.
+      </p>
+    </div>
+  );
+}
+
 export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
   const [conn, setConn] = useState(initial);
   const [activity, setActivity] = useState<RoutingActivityResponse | null>(null);
   const [tick, setTick] = useState(0);
+  // The trial's own receipt counts as the first receipt: trial requests do
+  // not enter the serving log, and a first-time visitor should not have to
+  // wire code before step 4 means anything.
+  const [trial, setTrial] = useState<Receipt | null>(null);
   // After a key is issued or a request sent, the facts change: re-read them
   // so the steps advance without a reload.
   useEffect(() => {
@@ -59,7 +93,7 @@ export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
   }, [tick]);
 
   const hasKey = conn.servingKeys.some((k) => !k.revokedAt);
-  const served = (activity?.summary?.returned ?? 0) > 0;
+  const served = (activity?.summary?.returned ?? 0) > 0 || trial !== null;
   const s1: State = hasKey ? 'done' : 'now';
   const s2: State = !hasKey ? 'next' : served ? 'done' : 'now';
   const s3: State = !hasKey ? 'next' : served ? 'done' : 'now';
@@ -100,13 +134,17 @@ export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
         </Step>
 
         <Step n="03" title="Try a request" state={s3} lede="No code needed for this one. Type anything, or pick an example; it goes through the same routing your key gets.">
-          <div onClickCapture={() => setTimeout(() => setTick((t) => t + 1), 6000)}>
-            <TryRequest />
-          </div>
+          <TryRequest onReceipt={(r) => { setTrial(r); setTick((t) => t + 1); }} />
         </Step>
 
-        <Step n="04" title="Your first receipt, and what it saved" state={s4} lede={served ? 'Each row is a request you sent, the model it went to, and the premium price it did not pay.' : 'Appears after your first request.'}>
-          {served ? <RoutingProof /> : <p className="font-mono text-[11px] text-faint">waiting for a request</p>}
+        <Step n="04" title="Your first receipt, and what it saved" state={s4} lede={served ? 'What your request was, which measured model got it, and what the premium pick would have cost for the same work.' : 'Appears after your first request.'}>
+          {trial ? (
+            <TrialReceipt r={trial} />
+          ) : served ? (
+            <RoutingProof />
+          ) : (
+            <p className="font-mono text-[11px] text-faint">waiting for a request</p>
+          )}
         </Step>
       </div>
 

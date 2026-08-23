@@ -60,8 +60,40 @@ const PlaygroundChatSchema = z
     strategyHash: z.string().min(1).max(200).optional(),
     /** 'potion-auto': resolve the operating point via the org's policy. */
     auto: z.boolean().optional(),
+    /** Try page (operator, 2026-08-22): run the same request under a different
+     * rule and watch the choice change. cost = cheapest at or above the floor;
+     * quality = highest measured quality; latency = fastest at or above the
+     * floor. Picked from the same frontier the policy routes from. */
+    optimizeFor: z.enum(['cost', 'quality', 'latency']).optional(),
   })
   .strict();
+
+type OptimizeFor = 'cost' | 'quality' | 'latency';
+
+/** A public name for what a point runs: the model for a single, a count for a combination. */
+export function pointModelLabel(cfg: FrontierPoint['strategyConfig']): string {
+  if (cfg.type === 'single') return cfg.model;
+  return `a combination (${cfg.type})`;
+}
+
+/** The three rules a reader can pick, applied to one frontier. Pure; no provider call. */
+export function pickUnderRule(points: FrontierPoint[], rule: OptimizeFor, floor: number): FrontierPoint | null {
+  if (points.length === 0) return null;
+  const above = points.filter((p) => p.quality >= floor);
+  const pool = above.length > 0 ? above : points;
+  if (rule === 'quality') return points.reduce((a, b) => (b.quality > a.quality || (b.quality === a.quality && b.costPer1K < a.costPer1K) ? b : a));
+  if (rule === 'latency') return pool.reduce((a, b) => (b.latencyP95 < a.latencyP95 ? b : a));
+  return pool.reduce((a, b) => (b.costPer1K < a.costPer1K ? b : a));
+}
+
+export function alternativesFor(points: FrontierPoint[], floor: number) {
+  return (['cost', 'quality', 'latency'] as const).map((rule) => {
+    const p = pickUnderRule(points, rule, floor);
+    return p
+      ? { rule, model: pointModelLabel(p.strategyConfig), strategy_hash: p.strategyHash, quality: p.quality, cost_per_1k: p.costPer1K, p95_ms: p.latencyP95 }
+      : { rule, model: null, strategy_hash: null, quality: null, cost_per_1k: null, p95_ms: null };
+  });
+}
 
 interface ResolvedPoint {
   config: FrontierPoint['strategyConfig'];
@@ -185,7 +217,22 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         .code(404)
         .send(openAiError(`no frontier for cluster '${clusterId}'`, 'invalid_request_error'));
     }
-    const resolved = await resolvePlaygroundPoint(ctx, org.orgId, frontier, body);
+    // The org's floor, for the Try page's rules (0.95 when the policy has none).
+    let floor = 0.95;
+    {
+      const k = await getFirstApiKeyWithPolicy(ctx.db.db, org.orgId);
+      const row = k?.policyId ? await getPolicyById(ctx.db.db, org.orgId, k.policyId) : null;
+      const cfg = row?.config as { qualityFloor?: number } | undefined;
+      if (cfg && typeof cfg.qualityFloor === 'number') floor = cfg.qualityFloor;
+    }
+    const alternatives = alternativesFor(frontier.points, floor);
+    const ruled = body.optimizeFor ? pickUnderRule(frontier.points, body.optimizeFor, floor) : null;
+    const resolved = await resolvePlaygroundPoint(
+      ctx,
+      org.orgId,
+      frontier,
+      ruled ? { strategyHash: ruled.strategyHash, auto: false } : body,
+    );
     if ('error' in resolved) {
       return reply.code(404).send(openAiError(resolved.error, 'invalid_request_error', 'not_found'));
     }
@@ -271,6 +318,11 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         latency_ms: Math.round((performance.now() - t0) * 100) / 100,
         cost_usd: result.usage.costUsd,
         strategy_hash: sh,
+        model: pointModelLabel(resolved.config),
+        ...(resolved.point ? { quality: resolved.point.quality, cost_per_1k: resolved.point.costPer1K, p95_ms: resolved.point.latencyP95 } : {}),
+        rule: body.optimizeFor ?? 'policy',
+        floor,
+        alternatives,
         provenance,
         cluster_id: clusterId,
         ...(clusterConfidence !== null ? { cluster_confidence: clusterConfidence } : {}),
