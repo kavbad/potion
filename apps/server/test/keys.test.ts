@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, type Policy, type ProviderId } from '@potion/core';
 import {
+  createOrg,
   createMembership,
   createSession,
   createUser,
@@ -392,5 +393,25 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
     expect(demo.env).toBe('test');
     expect(demo.revokedAt).toBeTruthy();
     expect(JSON.stringify(keys)).not.toContain('pk_');
+  });
+});
+
+describe('a brand-new org can serve from its first key (found by walking the journey, 2026-08-22)', () => {
+  it('binds a default rule when no policy exists, so the first request is not refused', async () => {
+    const RAW_FRESH_ADMIN = 'pk_keys_test_admin_fresh';
+    await createOrg(db(), { id: 'org-fresh', name: 'Fresh' });
+    await insertApiKey(db(), {
+      id: 'key-fresh-admin',
+      keyHash: sha256(RAW_FRESH_ADMIN),
+      name: 'fresh-admin',
+      orgId: 'org-fresh',
+      scopes: 'serve+admin',
+    });
+    const mint = await authed('POST', '/api/api-keys', RAW_FRESH_ADMIN, { name: 'first key' });
+    expect(mint.statusCode).toBe(201);
+    expect(mint.json().policyId).toMatch(/^pol-/);
+    const res = await chat(mint.json().apiKey);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-frontier-trace']).toContain('policy=min_cost');
   });
 });

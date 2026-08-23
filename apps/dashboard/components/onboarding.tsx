@@ -38,9 +38,19 @@ function Step({ n, title, state, lede, children }: { n: string; title: string; s
   );
 }
 
-export function Onboarding({ conn }: { conn: ConnectionResponse }) {
+export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
+  const [conn, setConn] = useState(initial);
   const [activity, setActivity] = useState<RoutingActivityResponse | null>(null);
   const [tick, setTick] = useState(0);
+  // After a key is issued or a request sent, the facts change: re-read them
+  // so the steps advance without a reload.
+  useEffect(() => {
+    if (tick === 0) return;
+    fetch('/api/connection', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: ConnectionResponse | null) => { if (b) setConn(b); })
+      .catch(() => null);
+  }, [tick]);
   useEffect(() => {
     fetch('/api/routing-activity?limit=5', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -71,7 +81,9 @@ export function Onboarding({ conn }: { conn: ConnectionResponse }) {
 
       <div className="mt-10">
         <Step n="01" title="Your key" state={s1} lede={hasKey ? 'Issued. Potion stores only a hash, so it is shown once; issue another any time.' : 'Issue a serving key. It is shown once; Potion keeps only a hash of it.'}>
-          <ServingKeys initial={conn.servingKeys} />
+          <div onClickCapture={() => setTimeout(() => setTick((t) => t + 1), 1500)}>
+            <ServingKeys initial={initial.servingKeys} />
+          </div>
         </Step>
 
         <Step n="02" title="Change one line" state={s2} lede="Potion speaks the OpenAI chat protocol. Point your existing client here and keep everything else: the request, the response, streaming, tool calls.">

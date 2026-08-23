@@ -64,8 +64,7 @@ import {
   rotateProviderKey,
   setProviderKeyStatus,
   touchProviderKeyValidation,
-  type ProviderKeyRow,
-} from '@potion/db';
+  type ProviderKeyRow, listPolicies, insertPolicy } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -406,6 +405,26 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
           .send(openAiError(`unknown policy '${policyId}'`, 'invalid_request_error'));
       }
     }
+    // Every serving key is bound to a rule, so the first request on a new
+    // org works instead of refusing with 'no policy bound' (found by walking
+    // the journey as a brand-new org, 2026-08-22). No rule given: bind the
+    // org's existing one, or create the default — cheapest model that scores
+    // at least 0.95 — which the dashboard lets them change later.
+    let boundPolicyId = policyId;
+    if (boundPolicyId === undefined) {
+      const existing = await listPolicies(db, org.orgId);
+      if (existing.length > 0) {
+        boundPolicyId = existing[0]!.id;
+      } else {
+        boundPolicyId = `pol-${randomUUID().slice(0, 8)}`;
+        await insertPolicy(db, {
+          id: boundPolicyId,
+          orgId: org.orgId,
+          name: 'default',
+          config: { type: 'min_cost', qualityFloor: 0.95 },
+        });
+      }
+    }
     const raw = `pk_${randomUUID().replace(/-/g, '')}`;
     const id = `key-${randomUUID().slice(0, 8)}`;
     await insertApiKey(db, {
@@ -413,7 +432,7 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
       keyHash: sha256(raw),
       name,
       orgId: org.orgId,
-      ...(policyId !== undefined ? { policyId } : {}),
+      policyId: boundPolicyId,
       ...(scopes !== undefined ? { scopes } : {}),
       ...(env !== undefined ? { env } : {}),
       ...(expiresAt !== undefined ? { expiresAt: new Date(expiresAt) } : {}),
@@ -424,6 +443,7 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
       scopes: scopes ?? 'serve',
       env: env ?? 'live',
       expiresAt: expiresAt ?? null,
+      policyId: boundPolicyId,
       // returned EXACTLY ONCE — only the sha256 is stored.
       apiKey: raw,
     });
