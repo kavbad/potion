@@ -33,6 +33,8 @@ export interface StrategyResult {
   usage: Usage;
   /** Provider-returned tool calls, preserved verbatim (M3 #25; 'single' only). */
   toolCalls?: ToolCall[];
+  /** The provider's finish reason ('single' only; 2026-08-23). */
+  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
 }
 
 export interface ExecContext {

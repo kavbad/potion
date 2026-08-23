@@ -65,6 +65,7 @@ export async function runSingle(
   };
 
   return {
+    ...(response.finishReason !== undefined ? { finishReason: response.finishReason } : {}),
     text: response.text,
     trace: [trace],
     usage,

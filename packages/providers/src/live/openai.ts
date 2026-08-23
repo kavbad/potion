@@ -25,6 +25,7 @@ interface OpenAiChatResponse {
   model?: string;
   choices?: Array<{
     message?: { content?: string | null; tool_calls?: ToolCall[] };
+    finish_reason?: string | null;
     logprobs?: { content?: Array<{ logprob?: number }> | null } | null;
   }>;
   usage?: {
@@ -101,6 +102,7 @@ export async function openAiCompatibleComplete(
       : undefined;
 
   const toolCalls = choice?.message?.tool_calls;
+  const finishReason = finishReasonOf(choice?.finish_reason);
 
   return {
     text: choice?.message?.content ?? '',
@@ -124,6 +126,7 @@ export async function openAiCompatibleComplete(
     modelVersion: json.model ?? native,
     // M3 #25: preserved verbatim when the provider returned tool calls.
     ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
+    ...(finishReason !== undefined ? { finishReason } : {}),
   };
 }
 
@@ -144,6 +147,14 @@ interface OpenAiStreamChunk {
  * One attempt, no retry (a stream cannot be replayed); the caller's signal
  * and the transport timeout (to first byte, then per read) both abort it.
  */
+/** Normalize a provider finish reason to the OpenAI vocabulary. */
+function finishReasonOf(raw: string | null | undefined): CompleteResponse['finishReason'] | undefined {
+  if (raw === 'stop' || raw === 'length' || raw === 'tool_calls' || raw === 'content_filter') return raw;
+  if (raw === 'max_tokens' || raw === 'MAX_TOKENS') return 'length';
+  if (raw === 'end_turn' || raw === 'STOP') return 'stop';
+  return undefined;
+}
+
 /** The wire message: text content plus the agentic fields, verbatim. */
 function wireMessage(m: CompleteRequest['messages'][number]): Record<string, unknown> {
   const out: Record<string, unknown> = { role: m.role, content: m.content };
@@ -218,6 +229,7 @@ export async function openAiCompatibleCompleteStream(
     let model: string | undefined;
     let usage: OpenAiChatResponse['usage'];
     const calls = new Map<number, { id: string; type: string; function: { name: string; arguments: string } }>();
+    let finish: string | undefined;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -247,13 +259,17 @@ export async function openAiCompatibleCompleteStream(
           if (frag.function?.arguments) cur.function.arguments += frag.function.arguments;
           calls.set(frag.index, cur);
         }
+        const fr = chunk.choices?.[0]?.finish_reason;
+        if (typeof fr === 'string') finish = fr;
         if (chunk.usage) usage = chunk.usage;
       }
     }
     const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c) as ToolCall[];
+    const streamFinish = finishReasonOf(finish);
     return {
       text,
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      ...(streamFinish !== undefined ? { finishReason: streamFinish } : {}),
       usage: {
         inputTokens: usage?.prompt_tokens ?? 0,
         outputTokens: usage?.completion_tokens ?? 0,

@@ -373,6 +373,36 @@ export function baselineCostUsd(
 /** A public name for what a strategy runs — sent as the x-potion-model response
  * header next to the receipt (2026-08-22: an app could not tell which model
  * answered from the receipt alone; found by dogfooding). */
+/**
+ * An answer that is empty after the output budget was exhausted (2026-08-23,
+ * found live: the extraction pick is a reasoning model that spends a
+ * customer-sized max_tokens entirely on thinking — with or without JSON
+ * mode — and returns nothing, while the frontier had measured it under the
+ * harness's generous budget). The budget is the customer's contract, so the
+ * request is served ONCE more on the next single point the policy admits
+ * with the served point excluded; nothing else about the request changes.
+ */
+export function isEmptyAnswer(result: { text: string; toolCalls?: unknown[]; finishReason?: string; usage: { outputTokens: number } }, maxOutputTokens: number | undefined): boolean {
+  if (result.text.trim() !== '' || (result.toolCalls && result.toolCalls.length > 0)) return false;
+  if (result.finishReason === 'length') return true;
+  return maxOutputTokens !== undefined && result.usage.outputTokens >= maxOutputTokens;
+}
+
+export function nextPointExcluding(
+  policy: Policy,
+  frontier: Frontier | null,
+  servedHash: string,
+  fallbackStrategy: StrategyConfig | null,
+  opts: { toolCapableOnly?: boolean },
+): OperatingPoint | null {
+  if (!frontier) return null;
+  const rest = { ...frontier, points: frontier.points.filter((p) => p.strategyHash !== servedHash && p.strategyConfig.type === 'single') };
+  if (rest.points.length === 0) return null;
+  const op = resolveOperatingPoint(policy, rest, fallbackStrategy, opts);
+  if (op.config === null || op.fallback === 1 || strategyHash(op.config) === servedHash) return null;
+  return op;
+}
+
 export function strategyModelLabel(cfg: { type: string; model?: string }): string {
   return cfg.type === 'single' ? (cfg.model ?? 'single') : `combination:${cfg.type}`;
 }
@@ -505,14 +535,14 @@ interface SseChunk {
   choices: Array<{
     index: 0;
     delta: { role?: 'assistant'; content?: string; tool_calls?: SseToolCallDelta[] };
-    finish_reason: 'stop' | 'tool_calls' | null;
+    finish_reason: 'stop' | 'length' | 'tool_calls' | null;
   }>;
 }
 
 function sseChunk(
   base: { id: string; created: number; model: string },
   delta: { role?: 'assistant'; content?: string; tool_calls?: SseToolCallDelta[] },
-  finishReason: 'stop' | 'tool_calls' | null = null,
+  finishReason: 'stop' | 'length' | 'tool_calls' | null = null,
 ): SseChunk {
   return {
     id: base.id,
@@ -1041,6 +1071,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // never reached execution (auth failures, budget refusals, unknown
     // policy) and cost nobody anything, so they correctly keep paid_by NULL.
     logBase.paidBy = orgProviders.byok ? 'byok' : 'platform';
+    let emptyAnswerRetry = false;
     // Caller sampling/format parameters (only the ones set), OpenAI names.
     const sampling: SamplingParams = {};
     for (const k of ['temperature', 'top_p', 'stop', 'seed', 'user', 'response_format', 'parallel_tool_calls'] as const) {
@@ -1087,10 +1118,19 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       writeData(sseChunk(base, { role: 'assistant' }));
       let result;
       try {
-        result = await execute(op.config, messages, {
+        const sseCtx = {
           ...execBase,
-          stream: (token) => writeData(sseChunk(base, { content: token })),
-        });
+          stream: (token: string) => writeData(sseChunk(base, { content: token })),
+        };
+        result = await execute(op.config, messages, sseCtx);
+        if (op.config.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
+          const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined });
+          if (next?.config) {
+            app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget (stream) — served once more on the next point');
+            result = await execute(next.config, messages, sseCtx);
+            emptyAnswerRetry = true;
+          }
+        }
       } catch (err) {
         // M3 #25: mid-stream provider failure → OpenAI error parity shape.
         // M4 #33: breaker fast-reject → breaker_open alert (edge-deduped).
@@ -1123,7 +1163,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       if (result.toolCalls) {
         writeData(sseChunk(base, { tool_calls: toolCallDeltas(result.toolCalls) }));
       }
-      writeData(sseChunk(base, {}, result.toolCalls ? 'tool_calls' : 'stop'));
+      writeData(sseChunk(base, {}, result.toolCalls ? 'tool_calls' : (result.finishReason === 'length' ? 'length' : 'stop')));
       // M3 #25: stream_options.include_usage → final usage-only chunk
       // (choices: []) per the OpenAI spec, before [DONE].
       if (includeUsage) {
@@ -1280,7 +1320,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
 
     // ---- 5b. JSON path (non-stream, or stream:true on a non-streamable multi-call strategy) ----
     try {
-      const result = await execute(op.config, messages, execBase);
+      let result = await execute(op.config, messages, execBase);
+      let servedConfig: StrategyConfig = op.config;
+      if (op.config.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
+        const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined });
+        if (next?.config) {
+          app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget — served once more on the next point');
+          result = await execute(next.config, messages, execBase);
+          servedConfig = next.config;
+          emptyAnswerRetry = true;
+        }
+      }
       if (wantStream) {
         // Documented contract: non-streamable multi-call strategies (anything
         // but 'single'/'composite') cannot token-stream.
@@ -1294,6 +1344,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         void reply.header('x-frontier-trace', `${trace};upgraded=${upgraded}`);
       }
       // ---- end M3 #23 composite (m3-composite) ----
+      // The point that answered (a single point may have been served once
+      // more on the next point after an empty answer — routing/empty answer).
+      if (emptyAnswerRetry) void reply.header('x-frontier-trace', `${trace};retry=empty_answer`);
+      void reply.header('x-potion-model', strategyModelLabel(servedConfig));
       await logRequest({
         ...logBase,
         status: 'ok',
@@ -1318,7 +1372,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
               // M3 #25: provider tool_calls preserved verbatim.
               ...(result.toolCalls ? { tool_calls: result.toolCalls } : {}),
             },
-            finish_reason: result.toolCalls ? 'tool_calls' : 'stop',
+            finish_reason: result.toolCalls ? 'tool_calls' : (result.finishReason === 'length' ? 'length' : 'stop'),
           },
         ],
         usage: openAiUsage(result.usage),

@@ -30,6 +30,10 @@ export interface CompleteRequest {
 
 export interface CompleteResponse {
   text: string;
+  /** The provider's finish reason, passed through (2026-08-23). 'length'
+   * means the output budget was exhausted — a reasoning model can spend a
+   * customer-sized max_tokens entirely on thinking and answer nothing. */
+  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
   usage: {
     inputTokens: number;
     outputTokens: number;
