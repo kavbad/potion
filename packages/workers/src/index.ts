@@ -228,3 +228,4 @@ export * from './observatory.js';
 export * from './notion-sink.js';
 export * from './replay.js';
 export * from './frontier-notes/index.js';
+export * from './learning-period.js';

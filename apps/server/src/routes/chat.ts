@@ -40,6 +40,7 @@ import {
   type Usage,
 } from '@potion/core';
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
+import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
@@ -950,6 +951,23 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
 
     const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+    // The learning period's sampler (consent-gated, capped per kind of work,
+    // PII-redacted; never throws into the served response). Called after a
+    // successful completion on every path, fire-and-forget.
+    const keepSample = (text: string, cfg: { type: string; model?: string }, usage: { costUsd?: number } | undefined, cluster: string) => {
+      const lastUser = [...(body.messages as { role: string; content: unknown }[])].reverse().find((m) => m.role === 'user');
+      const prompt = typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content ?? '');
+      void maybeKeepLearningSample(ctx.db.db, {
+        orgId: auth.org.orgId,
+        requestId: id,
+        clusterId: cluster,
+        model: cfg.type === 'single' ? (cfg.model ?? null) : `combination:${cfg.type}`,
+        prompt,
+        completion: text,
+        costUsd: usage?.costUsd ?? 0,
+        usage: (usage ?? {}) as Record<string, unknown>,
+      });
+    };
     // G2.1: the completion id becomes the request log's correlation label —
     // every ok/error row from here down joins quality_samples.request_id
     // (quality meets spend/latency). Pre-generation failures stay NULL.
@@ -1058,6 +1076,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // defines it is still in hand. null = comparison undefined.
         baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
       });
+      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       // ---- M3 #21 shadow (m3-shadow) ----
       // Stream fully ended above ([DONE] + end): the shadow run executes
       // strictly AFTER the primary response, fire-and-forget with a
@@ -1189,6 +1208,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // defines it is still in hand. null = comparison undefined.
         baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
       });
+      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       return;
     }
     // ---- end M3 #23 composite (m3-composite) ----
@@ -1218,6 +1238,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // defines it is still in hand. null = comparison undefined.
         baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
       });
+      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       const sent = reply.send({
         id,
         object: 'chat.completion',

@@ -121,6 +121,8 @@ services:
       # know the measured roster — caught in the Phase D rehearsal (503 on route).
       POTION_PRICES_PATH: /app/.tranche/prices.json
       POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
+      # The learning period runs in-process here; a customer's audit must never run on mock providers
+      POTION_EVAL_PROVIDER: live
       # 13a spec §1.6: error reporting. Unset → the init is a no-op.
       SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: "3000"

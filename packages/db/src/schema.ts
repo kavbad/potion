@@ -1613,3 +1613,43 @@ export type LabSuperpowerGrantRow = typeof labSuperpowerGrants.$inferSelect;
 export type LabRunRow = typeof labRuns.$inferSelect;
 export type LabRunStepRow = typeof labRunSteps.$inferSelect;
 export type LabRunState = LabRunRow['state'];
+
+// ---- the learning period (migration 0045) ----
+export const orgIncumbents = pgTable('org_incumbents', {
+  orgId: text('org_id').primaryKey().references(() => orgs.id, { onDelete: 'cascade' }),
+  models: jsonb('models').notNull().default([]),
+  other: text('other'),
+  samplingConsent: boolean('sampling_consent').notNull().default(false),
+  sampleCapPerCluster: integer('sample_cap_per_cluster').notNull().default(40),
+  designatedAt: timestamp('designated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const learningProposals = pgTable(
+  'learning_proposals',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+    clusterId: text('cluster_id').notNull(),
+    suiteId: text('suite_id').notNull(),
+    incumbentModel: text('incumbent_model').notNull(),
+    incumbentHash: text('incumbent_hash').notNull(),
+    incumbentQuality: doublePrecision('incumbent_quality').notNull(),
+    incumbentCostPer1K: doublePrecision('incumbent_cost_per_1k'),
+    servingHash: text('serving_hash').notNull(),
+    servingModel: text('serving_model').notNull(),
+    servingQuality: doublePrecision('serving_quality').notNull(),
+    servingCostPer1K: doublePrecision('serving_cost_per_1k'),
+    retention: jsonb('retention').notNull(),
+    suggestedFloor: doublePrecision('suggested_floor').notNull(),
+    projectedSaving: doublePrecision('projected_saving'),
+    items: integer('items').notNull(),
+    spendUsd: doublePrecision('spend_usd').notNull().default(0),
+    status: text('status').notNull().default('proposed'),
+    statusReason: text('status_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    appliedPolicyId: text('applied_policy_id'),
+  },
+  (t) => [index('learning_proposals_org_idx').on(t.orgId, t.createdAt)],
+);

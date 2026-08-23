@@ -5392,7 +5392,7 @@ export class JobRedeliveryRefusedError extends Error {
   }
 }
 
-async function withDeliveryGuard<T>(
+export async function withDeliveryGuard<T>(
   kind: JobKind,
   ctx: JobContext,
   orgId: string | undefined,
@@ -5597,6 +5597,8 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   // ---- G2.1 trust hierarchy: contractual suite re-eval ----
   'guarantee:suite-verify': guaranteeSuiteVerifyHandler,
   'suite:certify': suiteCertifyHandler,
+  // lazy: learning-period.ts imports from this module (the registry must not import it back)
+  'learning:period': (payload, ctx) => import('./learning-period.js').then((m) => m.learningPeriodHandler(payload, ctx)),
   // ---- S7 L4: the autonomous probe ----
   'learning:probe': learningProbeHandler,
 };

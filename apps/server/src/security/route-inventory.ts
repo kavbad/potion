@@ -82,6 +82,7 @@ export interface RouteInventoryRow {
     | 'incident'
     | 'rubric'
     | 'certification'
+  | 'proposal'
     | 'shareToken'
     | 'alertRule'
     | 'labHarness'
@@ -131,6 +132,14 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/keys', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'providerKey', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/keys/:id/audit', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'providerKey', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'GET', path: '/api/api-keys', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'apiKey', crossOrgProbe: { expect: 'org-list-absent' } },
+  // the learning period (2026-08-22): what the org uses today, consent, samples, proposals
+  { method: 'GET', path: '/api/incumbents/options', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'shared-global', crossOrgProbe: { expect: 'skip', skipReason: 'the public price roster — the same list for every org' } },
+  { method: 'GET', path: '/api/incumbents', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'PUT', path: '/api/incumbents', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'GET', path: '/api/learning', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'POST', path: '/api/learning/run', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'enqueues the learning period for the CALLER\'s org only — no parameter, nothing to cross' } },
+  { method: 'POST', path: '/api/learning/proposals/:id/apply', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/learning/proposals/lp-x/apply', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'proposal', crossOrgProbe: { expect: 'uniform-404' } },
+
   { method: 'GET', path: '/api/alerts', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'alertRule', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/alerts/deliveries', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'alertRule', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/jobs/:id', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'platform-job', resourceParam: ':id', seededResource: 'job', crossOrgProbe: { expect: 'uniform-404' } },

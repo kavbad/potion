@@ -425,8 +425,10 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   // from governed db storage; authored suites stay repo files. Db-loaded
   // items pass the SAME crossCheckItem gate as file suites.
   const v2Ids = opts.suiteV2Ids ?? [];
-  const derivedIds = v2Ids.filter((id) => id.startsWith('agent-'));
-  const authoredIds = v2Ids.filter((id) => !id.startsWith('agent-'));
+  // Database-backed suites: trace-synthesized agent replays ('agent-…') and
+  // the learning period's per-kind-of-work suites ('learn-…', 2026-08-22).
+  const derivedIds = v2Ids.filter((id) => id.startsWith('agent-') || id.startsWith('learn-'));
+  const authoredIds = v2Ids.filter((id) => !id.startsWith('agent-') && !id.startsWith('learn-'));
   const v2Suites = loadSuitesV2(authoredIds, deps.suitesV2Dir);
   const derivedItems: EvalItem[] = [];
   if (derivedIds.length > 0) {

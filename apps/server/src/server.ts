@@ -57,6 +57,7 @@ import { checkReadiness } from './readiness.js';
 // ---- M4 #31 share (m4-playground) — appended imports ----
 import { registerShareRoutes } from './routes/share.js';
 import { registerPlaygroundRoutes } from './routes/playground.js';
+import { registerLearningRoutes } from './routes/learning.js';
 // ---- end M4 #31 share imports ----
 // ---- M4 #34 enterprise (m4-enterprise) — appended imports ----
 import { registerOidcRoutes } from './routes/oidc.js';
@@ -87,7 +88,9 @@ export const RESEARCH_SCAN_INTERVAL_MS = 24 * 3600 * 1000;
  * stays VISIBLE while it is switched off: an idle learning table would
  * otherwise be indistinguishable from a broken one.
  */
-export const LEARNING_PROBE_INTERVAL_MS = 24 * 3600 * 1000;
+export /** The learning period: every six hours, every consenting org gets its bar re-measured under the per-org cap. */
+const LEARNING_PERIOD_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const LEARNING_PROBE_INTERVAL_MS = 24 * 3600 * 1000;
 // ---- M5 #36 agent workloads ----
 /** Nightly agent-session clustering (SPEC §14.2). */
 export const TRACES_CLUSTER_INTERVAL_MS = 24 * 3600 * 1000;
@@ -326,6 +329,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // executes a chosen frontier point directly, org-scoped, SSE-streamed.
   registerShareRoutes(app, ctx);
   registerPlaygroundRoutes(app, ctx);
+  registerLearningRoutes(app, ctx, { queue });
   // ---- end M4 #31 share ----
   // ---- M4 #34 enterprise (m4-enterprise) ----
   // SSO + audit export (SPEC §13.6). OIDC routes self-gate: without the full
@@ -428,6 +432,15 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
       });
     });
 
+    const learningPeriod = setInterval(() => {
+      queue.enqueue('learning:period', {}).catch((err: unknown) => {
+        app.log.warn(err, 'learning period enqueue failed — swallowed');
+      });
+    }, LEARNING_PERIOD_INTERVAL_MS);
+    learningPeriod.unref();
+    app.addHook('onClose', () => {
+      clearInterval(learningPeriod);
+    });
     const learningProbe = setInterval(() => {
       queue.enqueue('learning:probe', {}).catch((err: unknown) => {
         app.log.warn(err, 'learning probe enqueue failed — swallowed');

@@ -41,8 +41,7 @@ import {
   upsertLabGrant,
   upsertDerivedSuite,
   upsertLabHarness,
-  upsertStrategyConfig,
-} from '@potion/db';
+  upsertStrategyConfig, insertLearningProposal } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { ROUTE_INVENTORY, type RouteInventoryRow } from '../src/security/route-inventory.js';
@@ -229,6 +228,15 @@ beforeAll(async () => {
     statusReason: 'refused-no-incumbent: sweep fixture',
     evidence: { refused: true, kind: 'no-incumbent' },
   });
+
+  // A learning proposal for the one-button route's cross-org probe.
+  await insertLearningProposal(db(), {
+    id: 'lp-sweep-a', orgId: ORG_A, clusterId: 'code-gen', suiteId: 'code-gen-replays-v1',
+    incumbentModel: 'mock-mid', incumbentHash: 'h-inc', incumbentQuality: 0.95, incumbentCostPer1K: 2.1,
+    servingHash: 'h-srv', servingModel: 'mock-cheap', servingQuality: 0.94, servingCostPer1K: 0.4,
+    retention: { mean: 0.99 }, suggestedFloor: 0.95, projectedSaving: 0.8, items: 8, spendUsd: 0,
+  });
+  seeded.proposal = 'lp-sweep-a';
 
   const share = await insertShareToken(db(), {
     orgId: ORG_A,

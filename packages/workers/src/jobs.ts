@@ -35,6 +35,7 @@ export type JobKind =
   | 'guarantee:suite-verify'
   // ---- Post-capstone item 3: suite-validity certification (Decision 2) ----
   | 'suite:certify'
+  | 'learning:period'
   // ---- S7 L4: the autonomous probe (demand → capped measurement) ----
   | 'learning:probe';
 
@@ -59,6 +60,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'org:delete',
   'guarantee:suite-verify',
   'suite:certify',
+  'learning:period',
   'learning:probe',
 ] as const;
 
@@ -132,6 +134,7 @@ export interface JobPayloads {
   'org:delete': OrgDeletePayload;
   'guarantee:suite-verify': GuaranteeSuiteVerifyPayload;
   'suite:certify': SuiteCertifyPayload;
+  'learning:period': LearningPeriodPayload;
   'learning:probe': LearningProbePayload;
 }
 
@@ -474,4 +477,9 @@ export interface FrontierPlatformSweepPayload {
  */
 export interface OrgDeletePayload {
   orgId: string;
+}
+
+/** The learning period (2026-08-22): one org, or every org with sampled requests. */
+export interface LearningPeriodPayload {
+  orgId?: string;
 }

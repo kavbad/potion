@@ -16,6 +16,8 @@ import { CopyBlock } from '@/components/copy-block';
 import { ServingKeys } from '@/components/serving-keys';
 import { TryRequest, type Receipt } from '@/components/try-request';
 import { RoutingProof } from '@/components/routing-proof';
+import { IncumbentPicker, type Incumbents } from '@/components/incumbent-picker';
+import { QualityBar } from '@/components/quality-bar';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 type State = 'done' | 'now' | 'next';
@@ -68,7 +70,7 @@ function TrialReceipt({ r }: { r: Receipt }) {
   );
 }
 
-export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
+export function Onboarding({ conn: initial, admin = true }: { conn: ConnectionResponse; admin?: boolean }) {
   const [conn, setConn] = useState(initial);
   const [activity, setActivity] = useState<RoutingActivityResponse | null>(null);
   const [tick, setTick] = useState(0);
@@ -76,6 +78,14 @@ export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
   // not enter the serving log, and a first-time visitor should not have to
   // wire code before step 4 means anything.
   const [trial, setTrial] = useState<Receipt | null>(null);
+  // What they use today — the incumbent the learning period measures against.
+  const [incumbents, setIncumbents] = useState<Incumbents | null | undefined>(undefined);
+  useEffect(() => {
+    fetch('/api/incumbents', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: Incumbents | null) => setIncumbents(b && (b.models.length > 0 || b.other) ? b : null))
+      .catch(() => setIncumbents(null));
+  }, []);
   // After a key is issued or a request sent, the facts change: re-read them
   // so the steps advance without a reload.
   useEffect(() => {
@@ -94,15 +104,17 @@ export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
 
   const hasKey = conn.servingKeys.some((k) => !k.revokedAt);
   const served = (activity?.summary?.returned ?? 0) > 0 || trial !== null;
+  const hasIncumbent = !!incumbents;
   const s1: State = hasKey ? 'done' : 'now';
-  const s2: State = !hasKey ? 'next' : served ? 'done' : 'now';
-  const s3: State = !hasKey ? 'next' : served ? 'done' : 'now';
+  const sI: State = !hasKey ? 'next' : hasIncumbent ? 'done' : 'now';
+  const s2: State = !hasKey || !hasIncumbent ? 'next' : served ? 'done' : 'now';
+  const s3: State = !hasKey || !hasIncumbent ? 'next' : served ? 'done' : 'now';
   const s4: State = served ? 'now' : 'next';
 
   return (
     <div className="max-w-4xl">
       <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
-        {served ? 'You are routing' : hasKey ? 'Two steps left' : 'Four steps, about a minute'}
+        {served ? 'You are routing' : hasKey ? (hasIncumbent ? 'Two steps left' : 'Three steps left') : 'Five steps, about two minutes'}
       </div>
       <h1 className="mt-3 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
         {served ? 'Your requests are being routed.' : 'Get routed in a minute.'}
@@ -120,7 +132,18 @@ export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
           </div>
         </Step>
 
-        <Step n="02" title="Change one line" state={s2} lede="Potion speaks the OpenAI chat protocol. Point your existing client here and keep everything else: the request, the response, streaming, tool calls.">
+        <Step n="02" title="What do you use today?" state={sI} lede="Name the model your requests go to now. Potion measures what it scores on your own requests and makes that your quality bar, so the rule becomes 'never below what I get today', not a number we picked.">
+          {incumbents === undefined ? (
+            <p className="font-mono text-[11px] text-faint">loading</p>
+          ) : (
+            <>
+              <IncumbentPicker initial={incumbents} onSaved={(i) => setIncumbents(i)} />
+              {incumbents && <QualityBar admin={admin} />}
+            </>
+          )}
+        </Step>
+
+        <Step n="03" title="Change one line" state={s2} lede="Potion speaks the OpenAI chat protocol. Point your existing client here and keep everything else: the request, the response, streaming, tool calls.">
           <div className="space-y-4">
             <CopyBlock label="Base URL" text={`${conn.baseUrl}/v1`} />
             {conn.snippets && <CopyBlock label="Node.js (openai SDK)" text={conn.snippets.openaiNode} />}
@@ -133,11 +156,11 @@ export function Onboarding({ conn: initial }: { conn: ConnectionResponse }) {
           </div>
         </Step>
 
-        <Step n="03" title="Try a request" state={s3} lede="No code needed for this one. Type anything, or pick an example; it goes through the same routing your key gets.">
+        <Step n="04" title="Try a request" state={s3} lede="No code needed for this one. Type anything, or pick an example; it goes through the same routing your key gets.">
           <TryRequest onReceipt={(r) => { setTrial(r); setTick((t) => t + 1); }} />
         </Step>
 
-        <Step n="04" title="Your first receipt, and what it saved" state={s4} lede={served ? 'What your request was, which measured model got it, and what the premium pick would have cost for the same work.' : 'Appears after your first request.'}>
+        <Step n="05" title="Your first receipt, and what it saved" state={s4} lede={served ? 'What your request was, which measured model got it, and what the premium pick would have cost for the same work.' : 'Appears after your first request.'}>
           {trial ? (
             <TrialReceipt r={trial} />
           ) : served ? (
