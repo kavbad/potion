@@ -56,9 +56,11 @@ describe('createProviders exposes the stream', () => {
 });
 
 describe('tool-call fragments over the stream', () => {
-  it('are assembled by index into whole calls on the response', async () => {
-    const fetchFn = (async () =>
-      sse([
+  it('are assembled by index into whole calls on the response, and the tools are sent', async () => {
+    let sentBody: Record<string, unknown> = {};
+    const fetchFn = (async (_url: string, init?: RequestInit) => {
+      sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return sse([
         JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '' } }] } }] }),
         JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"city":' } }] } }] }),
         JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 1, id: 'call_2', type: 'function', function: { name: 'get_time', arguments: '{}' } }] } }] }),
@@ -66,9 +68,13 @@ describe('tool-call fragments over the stream', () => {
         JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
         JSON.stringify({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 9 } }),
         '[DONE]',
-      ])) as unknown as typeof fetch;
+      ]);
+    }) as unknown as typeof fetch;
     const seen: string[] = [];
-    const res = await openAiCompatibleCompleteStream('openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn } as never, { model: 'or-mid', messages: [] }, (t) => seen.push(t));
+    const tools = [{ type: 'function', function: { name: 'get_weather', parameters: {} } }];
+    const res = await openAiCompatibleCompleteStream('openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn } as never, { model: 'or-mid', messages: [], params: { tools, tool_choice: 'auto' } } as never, (t) => seen.push(t));
+    expect(sentBody.tools).toEqual(tools);
+    expect(sentBody.tool_choice).toBe('auto');
     expect(seen).toEqual([]);
     expect(res.text).toBe('');
     expect(res.toolCalls).toEqual([

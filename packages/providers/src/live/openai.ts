@@ -164,6 +164,11 @@ export async function openAiCompatibleCompleteStream(
   if (sampling.seed !== undefined) body.seed = sampling.seed;
   body[tokenParam] = sampling.maxTokens;
   if (provider === 'openrouter') body.usage = { include: true };
+  // Tools ride the stream exactly as the non-streaming body carries them
+  // (found live 2026-08-23: a reasoning model, never shown the tool, spent
+  // its whole budget thinking and the stream ended empty).
+  if (req.params?.tools !== undefined) body.tools = req.params.tools;
+  if (req.params?.tool_choice !== undefined) body.tool_choice = req.params.tool_choice;
 
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
