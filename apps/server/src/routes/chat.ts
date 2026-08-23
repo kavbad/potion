@@ -44,6 +44,7 @@ import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
+import { baselineFor } from '../routing/baseline.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -345,11 +346,17 @@ export function baselineCostUsd(
   frontier: Frontier | null,
   chosenStrategyHash: string,
   actualCostUsd: number | undefined,
+  baselineStrategyHash: string | null = null,
 ): number | null {
   if (!frontier || frontier.points.length === 0) return null;
   if (actualCostUsd === undefined || !Number.isFinite(actualCostUsd)) return null;
   const chosen = frontier.points.find((p) => p.strategyHash === chosenStrategyHash);
-  const best = highestQualityPoint(frontier.points);
+  // routing/baseline.ts: the org's designated or named incumbent when it is a
+  // point on this frontier; the highest-quality point otherwise.
+  const best =
+    (baselineStrategyHash !== null
+      ? frontier.points.find((p) => p.strategyHash === baselineStrategyHash)
+      : undefined) ?? highestQualityPoint(frontier.points);
   if (!chosen || !best || !(chosen.costPer1K > 0)) return null;
   const scaled = actualCostUsd * (best.costPer1K / chosen.costPer1K);
   return Number.isFinite(scaled) ? scaled : null;
@@ -835,6 +842,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // ---- end M3 #22 guarantee override ----
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
+    const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     logBase.frontierVersion = op.frontierVersion;
     const trace =
       traceHeaderValue({
@@ -1097,7 +1105,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         latencyMs: elapsed(),
         // S3: the counterfactual, captured while the frontier that
         // defines it is still in hand. null = comparison undefined.
-        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
+        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd, baseline?.hash ?? null),
       });
       keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       // ---- M3 #21 shadow (m3-shadow) ----
@@ -1230,7 +1238,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         latencyMs: elapsed(),
         // S3: the counterfactual, captured while the frontier that
         // defines it is still in hand. null = comparison undefined.
-        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
+        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd, baseline?.hash ?? null),
       });
       keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       return;
@@ -1260,7 +1268,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         latencyMs: elapsed(),
         // S3: the counterfactual, captured while the frontier that
         // defines it is still in hand. null = comparison undefined.
-        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd),
+        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd, baseline?.hash ?? null),
       });
       keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       const sent = reply.send({

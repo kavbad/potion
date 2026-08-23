@@ -100,6 +100,12 @@ export default async function UsagePage({
         <StatCard label="Month-to-date — requests" value={formatInt(current.mtd.requests)} />
         <StatCard label="Month-to-date — cost" value={formatUsd(current.mtd.costUsd)} />
       </div>
+      {(current.mtd.baselineCostUsd ?? 0) > current.mtd.costUsd && (
+        <p className="mb-6 text-[13px] leading-relaxed text-soft">
+          Saved month-to-date: <span className="text-ink">{formatUsd((current.mtd.baselineCostUsd ?? 0) - current.mtd.costUsd)}</span> — measured against
+          the model you named for each kind of work where you named one, otherwise against the best measured model on that frontier.
+        </p>
+      )}
       {(current.measurementUsd ?? 0) > 0 && (
         <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
           Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date, billed to this account and not counted in the cost above.

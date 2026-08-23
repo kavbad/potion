@@ -80,7 +80,7 @@ export function QualityBar({ admin }: { admin: boolean }) {
                 </div>
                 <p className="mt-1 leading-relaxed text-soft">
                   <span className="text-ink">{p.incumbentModel}</span> scores <span className="text-ink">{p.incumbentQuality.toFixed(2)}</span> on your work.{' '}
-                  Potion&apos;s pick, <span className="text-ink">{p.servingModel}</span>, keeps {ret !== null ? <span className="text-ink">{Math.round(ret * 100)}%</span> : 'an unmeasured share'} of that
+                  Potion&apos;s pick, <span className="text-ink">{p.servingModel}</span>, {ret === null ? 'keeps an unmeasured share of that' : ret >= 1 ? <>matches or beats it</> : <>keeps <span className="text-ink">{Math.round(ret * 100)}%</span> of that</>}
                   {p.projectedSaving !== null ? <> at <span className="text-accent">{Math.round(p.projectedSaving * 100)}% less</span></> : p.servingCostPer1K !== null ? <> at {usd(p.servingCostPer1K)} per 1,000</> : null}.
                 </p>
                 {p.status === 'proposed' && admin && (

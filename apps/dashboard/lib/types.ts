@@ -229,6 +229,10 @@ export interface UsageTotalsDto {
   outputTokens: number;
   costUsd: number;
   platformCostUsd: number;
+  /** What the same traffic would have cost on the baseline point: the model
+   * the org designated or named for that kind of work where it is on the
+   * frontier, else the highest-quality point. 0 where nothing recorded one. */
+  baselineCostUsd?: number;
 }
 
 export interface UsageCurrentResponse {
