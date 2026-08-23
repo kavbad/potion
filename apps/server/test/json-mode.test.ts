@@ -12,7 +12,8 @@ describe('unwrapJsonFences', () => {
     expect(unwrapJsonFences('```\n[1,2]\n```')).toBe('[1,2]');
     expect(unwrapJsonFences('```json\nnot json\n```')).toBe('```json\nnot json\n```');
     expect(unwrapJsonFences('{"a":1}')).toBe('{"a":1}');
-    expect(unwrapJsonFences('Here you go:\n```json\n{"a":1}\n```')).toBe('Here you go:\n```json\n{"a":1}\n```');
+    expect(unwrapJsonFences('Here you go:\n```json\n{"a":1}\n```\nNote: approximate.')).toBe('{"a":1}');
+    expect(unwrapJsonFences('no json here')).toBe('no json here');
   });
 });
 

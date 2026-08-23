@@ -5,15 +5,21 @@
 // on OpenAI. The fence is removed only when what is inside parses; anything
 // else is returned untouched, so nothing is ever invented.
 export function unwrapJsonFences(text: string): string {
-  const m = /^\s*```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```\s*$/.exec(text);
-  if (!m) return text;
-  const inner = m[1]!.trim();
-  try {
-    JSON.parse(inner);
-    return inner;
-  } catch {
-    return text;
+  const parses = (t: string): boolean => {
+    try { JSON.parse(t); return true; } catch { return false; }
+  };
+  const trimmed = text.trim();
+  if (parses(trimmed)) return trimmed;
+  // The first fenced block whose inside parses wins: in JSON mode the caller
+  // asked for the object, and a model's note before or after it (seen live:
+  // "```json {…} ``` Note: the population…") is not part of the contract.
+  const fence = /```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```/g;
+  let m: RegExpExecArray | null;
+  while ((m = fence.exec(text)) !== null) {
+    const inner = m[1]!.trim();
+    if (parses(inner)) return inner;
   }
+  return text;
 }
 
 export function wantsJson(responseFormat: { type: string } | undefined): boolean {

@@ -8,7 +8,7 @@ import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { isEmptyAnswer } from '../src/routes/chat.js';
-import { clearReasoningMarks, isReasoningModel } from '../src/routing/reasoning.js';
+import { clearReasoningMarks, isReasoningModel, seedReasoningMarks } from '../src/routing/reasoning.js';
 
 const ORG = 'org-empty';
 const KEY = 'pk_empty';
@@ -55,6 +55,15 @@ afterAll(async () => {
 
 const post = (cluster: string, extra: Record<string, unknown> = {}) =>
   app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}`, 'x-potion-cluster': cluster }, payload: { model: 'potion-auto', max_tokens: 300, messages: [{ role: 'user', content: 'Extract the capital and population of France as JSON.' }], ...extra } });
+
+describe('seedReasoningMarks', () => {
+  it('marks the aliases named in POTION_REASONING_MODELS', () => {
+    clearReasoningMarks();
+    expect(seedReasoningMarks({ POTION_REASONING_MODELS: ' or-inkling-small, or-inkling ,' } as NodeJS.ProcessEnv)).toEqual(['or-inkling-small', 'or-inkling']);
+    expect(isReasoningModel('or-inkling')).toBe(true);
+    clearReasoningMarks();
+  });
+});
 
 describe('isEmptyAnswer', () => {
   it('is true only for an empty, budget-exhausted answer', () => {

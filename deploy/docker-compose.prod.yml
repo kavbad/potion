@@ -51,6 +51,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
+      # Reasoning models known at boot (2026-08-23): skipped before the call
+      # under a small output budget; the server also learns new ones live.
+      POTION_REASONING_MODELS: ${POTION_REASONING_MODELS:-}
       # NODE_ENV=production flips OFF the dev-auth bypass — real sessions and
       # api keys are required. The Dockerfile runtime stage sets it; repeated
       # here so it is visible at the deployment boundary.

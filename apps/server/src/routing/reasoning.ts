@@ -43,6 +43,16 @@ export function learnFromAnswer(
   }
 }
 
+/** Seed marks from POTION_REASONING_MODELS (comma-separated aliases) so a
+ * restart does not re-pay the cold-start cost for models already known. */
+export function seedReasoningMarks(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = env.POTION_REASONING_MODELS ?? '';
+  const aliases = raw.split(',').map((a) => a.trim()).filter(Boolean);
+  for (const a of aliases) markReasoning(a, 'reasoning_tokens');
+  return aliases;
+}
+seedReasoningMarks();
+
 /** Test seam. */
 export function clearReasoningMarks(): void {
   marked.clear();

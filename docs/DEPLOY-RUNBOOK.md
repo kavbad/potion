@@ -260,3 +260,7 @@ mistake inside a new migration.
 | Embeddings unpriced (F13) | embedding spend meters at $0 | F13, if the partner uses embeddings |
 | No SMTP | magic links are hand-delivered (single-use, 15 min) | by design |
 | Container/TLS layer unexecuted | §5–§6 run for the first time on your host | this deployment |
+
+## Added 2026-08-23
+
+- `POTION_REASONING_MODELS` (server, non-secret): comma-separated roster aliases known to be reasoning models, e.g. `or-inkling-small,or-inkling`. Below 1024 output tokens they are skipped before the call; the server also learns new ones from evidence (`apps/server/src/routing/reasoning.ts`).
