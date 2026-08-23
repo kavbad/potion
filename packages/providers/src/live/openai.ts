@@ -10,7 +10,8 @@
 // preserved verbatim on CompleteResponse.toolCalls.
 import type { ProviderId, ToolCall } from '@potion/core';
 import type { CompleteRequest, CompleteResponse, Provider } from '../types.js';
-import { postJsonWithRetry } from '../http.js';
+import { postJsonWithRetry, DEFAULT_TIMEOUT_MS } from '../http.js';
+import { ProviderError, ProviderTimeoutError } from '../errors.js';
 import { resolveModel, samplingParams, type LiveProviderOptions } from './common.js';
 
 export const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
@@ -124,6 +125,113 @@ export async function openAiCompatibleComplete(
   };
 }
 
+
+interface OpenAiStreamChunk {
+  model?: string;
+  choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>;
+  usage?: OpenAiChatResponse['usage'];
+}
+
+/**
+ * The streaming twin of openAiCompatibleComplete: same request, plus
+ * `stream: true` and `stream_options.include_usage` so the final chunk
+ * carries usage (and, on OpenRouter, the billed cost). Tokens are handed to
+ * `onToken` as they arrive; the resolved CompleteResponse is byte-for-byte
+ * what the non-streaming call would have returned for the same answer.
+ * One attempt, no retry (a stream cannot be replayed); the caller's signal
+ * and the transport timeout (to first byte, then per read) both abort it.
+ */
+export async function openAiCompatibleCompleteStream(
+  provider: ProviderId,
+  baseUrl: string,
+  extraHeaders: Record<string, string>,
+  opts: LiveProviderOptions,
+  req: CompleteRequest,
+  onToken: (token: string) => void,
+  tokenParam: 'max_tokens' | 'max_completion_tokens' = 'max_tokens',
+): Promise<CompleteResponse> {
+  const started = Date.now();
+  const { native } = resolveModel(opts.prices, req.model);
+  const sampling = samplingParams(req);
+  const body: Record<string, unknown> = {
+    model: native,
+    messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  if (sampling.temperature !== undefined) body.temperature = sampling.temperature;
+  if (sampling.seed !== undefined) body.seed = sampling.seed;
+  body[tokenParam] = sampling.maxTokens;
+  if (provider === 'openrouter') body.usage = { include: true };
+
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const controller = new AbortController();
+  const onCallerAbort = () => controller.abort();
+  req.signal?.addEventListener('abort', onCallerAbort, { once: true });
+  if (req.signal?.aborted === true) controller.abort();
+  let timer = setTimeout(() => controller.abort(), timeoutMs);
+  const armTimer = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), timeoutMs); };
+  const fetchFn = opts.fetchFn ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args));
+  try {
+    const res = await fetchFn(baseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${opts.apiKey}`, ...extraHeaders },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => '');
+      throw new ProviderError(provider, `HTTP ${res.status}: ${text.slice(0, 200)}`, { status: res.status });
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let text = '';
+    let model: string | undefined;
+    let usage: OpenAiChatResponse['usage'];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      armTimer();
+      buf += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let chunk: OpenAiStreamChunk;
+        try { chunk = JSON.parse(payload) as OpenAiStreamChunk; } catch { continue; }
+        if (chunk.model) model = chunk.model;
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (typeof delta === 'string' && delta.length > 0) { text += delta; onToken(delta); }
+        if (chunk.usage) usage = chunk.usage;
+      }
+    }
+    return {
+      text,
+      usage: {
+        inputTokens: usage?.prompt_tokens ?? 0,
+        outputTokens: usage?.completion_tokens ?? 0,
+        ...(typeof usage?.cost === 'number' ? { providerCostUsd: usage.cost } : {}),
+        ...(typeof usage?.prompt_tokens_details?.cached_tokens === 'number' ? { cachedInputTokens: usage.prompt_tokens_details.cached_tokens } : {}),
+        ...(typeof usage?.completion_tokens_details?.reasoning_tokens === 'number' ? { reasoningTokens: usage.completion_tokens_details.reasoning_tokens } : {}),
+      },
+      latencyMs: Date.now() - started,
+      modelVersion: model ?? native,
+    };
+  } catch (err) {
+    if (controller.signal.aborted && req.signal?.aborted !== true) {
+      throw new ProviderTimeoutError(provider, timeoutMs, { cause: err });
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    req.signal?.removeEventListener('abort', onCallerAbort);
+  }
+}
+
 export function createOpenAiProvider(opts: LiveProviderOptions): Provider {
   const { apiKey, ...retry } = opts;
   return {
@@ -131,6 +239,8 @@ export function createOpenAiProvider(opts: LiveProviderOptions): Provider {
 
     complete: (req) =>
       openAiCompatibleComplete('openai', OPENAI_CHAT_URL, {}, opts, req, 'max_completion_tokens'),
+    completeStream: (req, onToken) =>
+      openAiCompatibleCompleteStream('openai', OPENAI_CHAT_URL, {}, opts, req, onToken, 'max_completion_tokens'),
 
     async embed(texts: string[]): Promise<number[][]> {
       const { json } = await postJsonWithRetry<OpenAiEmbedResponse>(

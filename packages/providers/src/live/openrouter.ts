@@ -7,7 +7,7 @@
 // openai/text-embedding-3-small or any *embed* id), so there is no
 // embedding id to note; the 384-dim canonical path stays OpenAI/Google.
 import type { CompleteRequest, CompleteResponse, Provider } from '../types.js';
-import { openAiCompatibleComplete } from './openai.js';
+import { openAiCompatibleComplete, openAiCompatibleCompleteStream } from './openai.js';
 import type { LiveProviderOptions } from './common.js';
 
 // NOTE: the path is /api/v1/... — bare /v1/chat/completions returns HTTP 404
@@ -29,6 +29,16 @@ export function createOpenRouterProvider(opts: LiveProviderOptions): Provider {
         },
         opts,
         req,
+      ),
+
+    completeStream: (req, onToken) =>
+      openAiCompatibleCompleteStream(
+        'openrouter',
+        OPENROUTER_CHAT_URL,
+        { 'HTTP-Referer': 'https://github.com/potion-ai/potion', 'X-Title': 'Potion' },
+        opts,
+        req,
+        onToken,
       ),
 
     // embed intentionally undefined: OpenRouter embeddings unsupported in v1.

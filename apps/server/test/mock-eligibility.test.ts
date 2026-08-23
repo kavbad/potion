@@ -110,6 +110,9 @@ const NOT_A_DECISION: Record<string, string> = {
   'apps/server/src/routes/rubrics.ts': 'enqueues jobs; resolution happens in the worker',
   'packages/providers/src/mock/mock.ts': 'the mock provider implementation itself',
   'apps/server/src/routes/guarantee.ts': 'reads guarantee config/incidents; judge resolution lives in src/guarantee.ts',
+  'apps/server/src/incumbents/roster.ts': 'names incumbents from the price table for onboarding; skips mock aliases; no resolution',
+  'packages/workers/src/learning-period.ts':
+    'derives learn-* suites and hands them to runEval on the org provider set; alias guards (MockAliasInLiveRunError) apply in the harness',
 };
 
 describe('mock-eligibility inventory completeness (grep-derived)', () => {

@@ -26,13 +26,21 @@ export async function runSingle(
     ...(ctx.params?.toolChoice !== undefined ? { tool_choice: ctx.params.toolChoice } : {}),
     ...(ctx.captureConfidence ? { logprobs: true } : {}),
   };
-  const response = await provider.complete({
+  const request = {
     model,
     messages,
     ...(Object.keys(params).length > 0 ? { params } : {}),
-  });
+  };
+  // Real streaming when the caller wants tokens and the transport can relay
+  // them (2026-08-22). Tool calls and confidence capture need the complete
+  // response, so they keep the non-streaming call and replay the text.
+  const canRelay =
+    ctx.stream !== undefined && provider.completeStream !== undefined && params.tools === undefined && !ctx.captureConfidence;
+  const response = canRelay
+    ? await provider.completeStream!(request, ctx.stream!)
+    : await provider.complete(request);
 
-  if (ctx.stream) {
+  if (ctx.stream && !canRelay) {
     for (const chunk of streamChunks(response.text)) ctx.stream(chunk);
   }
 

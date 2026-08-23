@@ -59,7 +59,7 @@ export interface HttpJsonResponse<T> {
 const PARSE_FAILED: unique symbol = Symbol('json-parse-failed');
 
 const DEFAULT_MAX_RETRIES = 3;
-const DEFAULT_TIMEOUT_MS = 60_000;
+export const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BASE_DELAY_MS = 250;
 const DEFAULT_JITTER = 0.2;
 

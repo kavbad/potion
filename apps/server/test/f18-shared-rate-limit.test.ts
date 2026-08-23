@@ -120,6 +120,9 @@ describe('what F18 is NOT — the budget cap is not per-replica', () => {
   it('the platform defaults are unchanged by any of this', () => {
     // A guard against "fixing" the limiter by quietly loosening the numbers.
     expect(DEFAULT_RATE_LIMIT.rps).toBe(10);
-    expect(DEFAULT_RATE_LIMIT.dailyCap).toBe(10_000);
+    // 2026-08-22: the daily cap was raised from 10k to 200k on purpose (dogfood +
+    // the learning period route real traffic through keys); this pin guards the
+    // number, not its history.
+    expect(DEFAULT_RATE_LIMIT.dailyCap).toBe(200_000);
   });
 });

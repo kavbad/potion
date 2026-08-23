@@ -61,6 +61,16 @@ export interface CompleteResponse {
 export interface Provider {
   id: ProviderId;
   complete(req: CompleteRequest): Promise<CompleteResponse>;
+  /**
+   * Real token streaming (2026-08-22): relays the provider's own stream,
+   * calling `onToken` as deltas arrive, and resolves to the same
+   * CompleteResponse `complete` would return (text, usage, billed cost).
+   * Optional: transports without it fall back to complete() and the
+   * strategy replays the finished text, which is what every live path did
+   * before this — and why a streaming client saw a two-second silence then a
+   * burst (found by dogfooding the docs assistant).
+   */
+  completeStream?(req: CompleteRequest, onToken: (token: string) => void): Promise<CompleteResponse>;
   embed?(texts: string[]): Promise<number[][]>; // providers without embeddings leave undefined
 }
 

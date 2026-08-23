@@ -391,6 +391,26 @@ export function resilient(p: Provider, policy?: Partial<ResiliencePolicy>): Prov
     },
   };
 
+  // Real token streaming (2026-08-22) passes through with the breaker
+  // accounting of a single request and NO retry: a stream that has started
+  // emitting cannot be replayed, and hedging it would bill twice.
+  if (p.completeStream) {
+    const stream = p.completeStream.bind(p);
+    wrapped.completeStream = async (req: CompleteRequest, onToken: (token: string) => void): Promise<CompleteResponse> => {
+      const key = `${p.id}:${req.model}`;
+      const rec = resolved.breaker ? breakerRecord(key, resolved.breaker) : undefined;
+      if (rec) breakerBeforeCall(rec, p.id, req.model);
+      try {
+        const res = await stream(req, onToken);
+        if (rec) breakerOnSuccess(rec);
+        return res;
+      } catch (err) {
+        if (rec) breakerOnFailure(rec);
+        throw err;
+      }
+    };
+  }
+
   // Embeddings pass through untouched: §12.1 defines retry semantics for
   // complete() only, and embed must stay deterministic for the mock.
   if (p.embed) {

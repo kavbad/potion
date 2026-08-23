@@ -1,6 +1,6 @@
 {
-  "version": "2026-08-04-or2+tranche-2026-08-19+or-mock-nova-1+or-mock-apex-1",
-  "updatedAt": "2026-08-23",
+  "version": "2026-08-04-or2+tranche-2026-08-19",
+  "updatedAt": "2026-08-19",
   "entries": [
     {
       "alias": "haiku-class",
@@ -309,20 +309,6 @@
       "model": "openai/gpt-5.5-pro",
       "inputPer1M": 30,
       "outputPer1M": 180
-    },
-    {
-      "alias": "or-mock-nova-1",
-      "provider": "mock",
-      "model": "mock/mock-nova-1",
-      "inputPer1M": 0.19999999999999998,
-      "outputPer1M": 0.7999999999999999
-    },
-    {
-      "alias": "or-mock-apex-1",
-      "provider": "mock",
-      "model": "mock/mock-apex-1",
-      "inputPer1M": 12,
-      "outputPer1M": 60
     }
   ]
 }
