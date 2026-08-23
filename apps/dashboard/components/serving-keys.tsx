@@ -72,7 +72,7 @@ export function ServingKeys({ initial }: { initial: ServingKeyDto[] }) {
           No serving key yet. Issue one and point your traffic at the endpoint above.
         </p>
       ) : (
-        <ul className="divide-y divide-line rounded-xl border border-line bg-panel">
+        <ul className="divide-y divide-line border border-[#d9d5cb] bg-[#fbfaf7]">
           {keys.map((k) => {
             const state = keyState(k);
             return (
@@ -102,7 +102,7 @@ export function ServingKeys({ initial }: { initial: ServingKeyDto[] }) {
         <button
           onClick={issue}
           disabled={busy}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="bg-ink px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {busy ? 'Issuing…' : live.length > 0 ? 'Issue another key' : 'Issue a serving key'}
         </button>

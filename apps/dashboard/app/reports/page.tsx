@@ -45,7 +45,7 @@ export default async function ReportsPage({
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload — the demo data seeds itself on first boot.
           </div>
@@ -136,7 +136,7 @@ export default async function ReportsPage({
       </div>
 
       {/* actual vs projected spend chart */}
-      <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">Actual vs. projected spend</h2>
           <span className="text-xs text-faint">
@@ -147,7 +147,7 @@ export default async function ReportsPage({
       </section>
 
       {/* per-alternative table */}
-      <section className="rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <h2 className="mb-6 text-lg font-medium text-ink">Shadowed alternatives</h2>
         {report.alternatives.length === 0 ? (
           <div className="rounded-lg border border-dashed border-line px-6 py-10 text-center text-sm text-faint">
@@ -187,7 +187,7 @@ export default async function ReportsPage({
       </section>
 
       {/* guarantee incidents (M3 #22): breach/rollback trail + admin resolve */}
-      <section className="mt-8 rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="mt-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">Guarantee incidents</h2>
           <span className="text-xs text-faint">
@@ -251,7 +251,7 @@ function ConfidenceBadge({ confidence }: { confidence: 'low' | 'medium' | 'high'
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-panel px-5 py-4">
+    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
       <div className="text-xs text-faint">{label}</div>
       <div className="mt-1 truncate text-xl font-semibold tabular-nums text-ink" title={value}>
         {value}
@@ -263,7 +263,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Savings</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Savings</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         What you spent vs. what the shadowed alternatives would have spent — measured on your own
         traffic, after the fact, at zero risk.
@@ -280,7 +280,7 @@ function RetentionSection({ report }: { report: GuaranteeReportDto }) {
   const openAdvisories = report.entries.reduce((n, e) => n + e.openAdvisories.length, 0);
   const unverifiable = report.entries.filter((e) => e.verification?.state === 'unverifiable');
   return (
-    <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
+    <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
       <div className="mb-2 flex items-baseline justify-between">
         <h2 className="text-lg font-medium text-ink">Quality guarantee — baseline retention</h2>
         <span className="text-xs text-faint">
@@ -332,7 +332,7 @@ function RetentionSection({ report }: { report: GuaranteeReportDto }) {
 function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
   const r = entry.retention;
   return (
-    <div className="rounded-lg border border-line bg-paper px-5 py-4">
+    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
       <div className="mb-1 text-xs text-faint">
         {entry.policyId} · <span className="font-mono">{entry.clusterId}</span>
       </div>

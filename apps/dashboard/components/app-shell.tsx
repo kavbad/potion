@@ -1,23 +1,18 @@
 import { Nav } from '@/components/nav';
 import { Mark } from '@/components/mark';
 
-/** The signed-in frame: 240px rail with the product nav. Chosen per page by app/template.tsx. */
+/** The signed-in frame, in the lab style: paper, a hairline rail, the product nav. Chosen per page by ChromeSwitch. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-60 shrink-0 border-r border-line bg-panel px-6 py-10">
-        <a href="/" className="mb-10 block">
-          <div className="flex items-center gap-2">
-            <Mark className="h-5 w-5 text-accent" />
-            <span className="text-xl font-semibold tracking-tight text-ink">Potion</span>
-          </div>
-          <div className="mt-1 text-xs leading-relaxed text-faint">
-            Pay only for the quality you need.
-          </div>
+    <div className="flex min-h-screen bg-[#f4f2ec]">
+      <aside className="w-60 shrink-0 border-r border-[#d9d5cb] px-6 py-8">
+        <a href="/" className="mb-10 flex items-center gap-2">
+          <Mark className="h-5 w-5 text-accent" />
+          <span className="text-lg font-semibold tracking-tight text-ink">Potion</span>
         </a>
         <Nav />
       </aside>
-      <main className="flex-1 px-12 py-12">{children}</main>
+      <main className="min-w-0 flex-1 px-10 py-10 lg:px-14">{children}</main>
     </div>
   );
 }

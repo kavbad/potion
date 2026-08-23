@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 export default function BuildPage() {
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight">What are you building?</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">What are you building?</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         You don&apos;t need existing traffic, and you don&apos;t need to know which model is good.
         Describe what you&apos;re making and Potion will tell you which workload type it is, which

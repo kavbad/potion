@@ -94,7 +94,7 @@ export default async function IssuePage({ params }: Params) {
           <span className="text-ink">Canary</span> is this week&apos;s small re-check: a few fresh tasks, scored the same way, to catch a model that has got worse.{' '}
           <span className="text-ink">Held</span> means the re-check landed inside the margin.
         </p>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-line bg-panel">
+        <div className="mt-4 overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7]">
           <table className="w-full text-left font-mono text-[12px]">
             <thead className="text-[10px] uppercase tracking-[0.14em] text-faint">
               <tr className="border-b border-line">
@@ -174,7 +174,7 @@ export default async function IssuePage({ params }: Params) {
         </p>
 
         {i.writer?.receipt && (
-          <div className="mt-10 rounded-xl border border-line bg-panel px-5 py-4">
+          <div className="mt-10 border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Written through Potion</div>
             <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
               This issue was drafted by sending one request to Potion&apos;s own API, the same way a customer would. The receipt that came back: kind of work{' '}

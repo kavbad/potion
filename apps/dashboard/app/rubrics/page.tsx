@@ -91,7 +91,7 @@ export default async function RubricsPage() {
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload.
           </div>
@@ -112,7 +112,7 @@ export default async function RubricsPage() {
   return (
     <PageShell>
       {isAdmin && agentClusters.length > 0 ? (
-        <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+        <div className="mb-6 border border-[#d9d5cb] bg-[#fbfaf7] p-4">
           <div className="text-sm font-medium text-ink">Generate a rubric</div>
           <p className="mt-1 text-xs text-soft">
             One capped, metered LLM call over the cluster&apos;s redacted exemplars produces a
@@ -138,7 +138,7 @@ export default async function RubricsPage() {
       {/* Suite certifications (Decision 2) — same review surface as rubrics:
           every attempt visible with status + evidence. An uncertified suite
           may be inspected but backs NO contractual claim. */}
-      <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+      <div className="mb-6 border border-[#d9d5cb] bg-[#fbfaf7] p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-medium text-ink">Suite certifications</div>
         </div>
@@ -189,7 +189,7 @@ export default async function RubricsPage() {
       </div>
 
       {data.rubrics.length === 0 ? (
-        <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+        <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
           No rubrics yet. Rubrics are generated per agent cluster from your traced sessions
           {isAdmin ? ' — use the generator above once clustering has run.' : '.'}
         </div>
@@ -198,7 +198,7 @@ export default async function RubricsPage() {
           {data.rubrics.map((r) => {
             const badge = STATUS_BADGE[r.status];
             return (
-              <li key={r.id} className="rounded-lg border border-line bg-panel p-4">
+              <li key={r.id} className="border border-[#d9d5cb] bg-[#fbfaf7] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-mono text-xs text-soft">{r.clusterId}</span>
                   <span
@@ -271,7 +271,7 @@ export default async function RubricsPage() {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Rubrics</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Rubrics</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         How your agent clusters are graded. Every rubric derived from your data appears here with
         its lifecycle status and calibration evidence — drafts and rejections included. Only an

@@ -48,7 +48,7 @@ export default async function RecipesPage({
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload.
           </div>
@@ -66,7 +66,7 @@ export default async function RecipesPage({
   return (
     <PageShell>
       {/* research strip: scan trigger (admin) + recent cycles */}
-      <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+      <div className="mb-6 border border-[#d9d5cb] bg-[#fbfaf7] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-soft">
             <span className="font-medium text-ink">Autoresearcher.</span> Scans the model catalog
@@ -122,13 +122,13 @@ export default async function RecipesPage({
       </div>
 
       {data.recipes.length === 0 ? (
-        <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+        <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
           No recipes yet{activeStatus !== undefined ? ` with status ${activeStatus}` : ''}. The
           library fills in when a research cycle runs — trigger a scan (admin) or wait for the
           nightly scan.
         </div>
       ) : (
-        <ul className="divide-y divide-line rounded-lg border border-line bg-panel">
+        <ul className="divide-y divide-line border border-[#d9d5cb] bg-[#fbfaf7]">
           {data.recipes.map((r) => (
             <RecipeRow key={r.hash} recipe={r} isAdmin={isAdmin} />
           ))}
@@ -234,7 +234,7 @@ function fmtDate(iso: string | null): string {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Recipe library</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Recipe library</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         Every strategy the researcher has generated and measured, content-addressed and kept.
         Promoted recipes serve traffic; the rest stay as evidence that compounds with every model

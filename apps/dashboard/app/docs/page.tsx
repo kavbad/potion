@@ -97,14 +97,14 @@ export default async function DocsPage() {
   const body = (
     <div className="max-w-3xl space-y-12">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Docs</h1>
+        <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Docs</h1>
         <p className="mt-2 text-sm leading-relaxed text-soft">
           Potion speaks the OpenAI chat-completions protocol. If you already have an OpenAI client,
           you change one line and keep everything else — the request body, the response shape,
           streaming and tool calls are unchanged.
         </p>
         {!conn && (
-          <p className="mt-4 rounded-lg border border-line bg-panel px-4 py-3 text-xs leading-relaxed text-faint">
+          <p className="mt-4 border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3 text-xs leading-relaxed text-faint">
             You are reading this signed out, so the base URL below is the generic one and the
             policy section shows the four shapes rather than yours.{' '}
             <a href="/login" className="text-accent underline">Sign in</a> and this page fills in
@@ -200,7 +200,7 @@ export default async function DocsPage() {
           label="x-frontier-trace"
           text={`cluster=code-gen;strategy=6efe8a56;frontier=v2;policy=min_cost;fallback=0;provenance=live`}
         />
-        <div className="overflow-x-auto rounded-xl border border-line bg-panel px-6 py-2">
+        <div className="overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-2">
           <table className="w-full">
             <tbody>
               <Row k="cluster" v="The workload type the prompt was classified into." />
@@ -231,7 +231,7 @@ export default async function DocsPage() {
           not per 1,000 tokens. Latency bounds are p95 in milliseconds.
         </p>
         {conn?.policy && (
-          <p className="rounded-lg border border-line bg-paper px-4 py-3 text-sm text-soft">
+          <p className="border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3 text-sm text-soft">
             <span className="text-xs uppercase tracking-wide text-faint">Yours right now</span>
             <br />
             {conn.policy.description}
@@ -249,7 +249,7 @@ export default async function DocsPage() {
           frontier, because the best strategy for extraction is not the best strategy for
           multi-step reasoning — that difference is the entire reason routing pays.
         </p>
-        <div className="overflow-x-auto rounded-xl border border-line bg-panel px-6 py-2">
+        <div className="overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-2">
           <table className="w-full">
             <tbody>
               {WORKLOADS.map(([id, what]) => (
@@ -284,7 +284,7 @@ export default async function DocsPage() {
           Errors use the OpenAI envelope — <code className="font-mono text-xs">{'{ error: { message, type, param, code } }'}</code>{' '}
           — so existing client error handling keeps working.
         </p>
-        <div className="overflow-x-auto rounded-xl border border-line bg-panel px-6 py-2">
+        <div className="overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-2">
           <table className="w-full">
             <tbody>
               <Row k="400 invalid_request_error" v="The body did not validate — a missing messages array, a malformed policy." />
@@ -320,7 +320,7 @@ export default async function DocsPage() {
           A <span className="font-mono text-xs">serve</span> key covers the serving surface and its
           own reads; provisioning needs <span className="font-mono text-xs">serve+admin</span>.
         </p>
-        <ul className="rounded-xl border border-line bg-panel px-6 py-2">
+        <ul className="border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-2">
           <Endpoint method="POST" path="/v1/chat/completions" note="Serve a request. OpenAI-compatible; streaming supported." />
           <Endpoint method="POST" path="/v1/completions" note="Legacy completions shim." />
           <Endpoint method="POST" path="/v1/embeddings" note="Platform embedder." />

@@ -55,7 +55,7 @@ export default async function SharedReportPage({
       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">
         Shared read-only · Potion
       </div>
-      <h1 className="text-2xl font-semibold tracking-tight">Savings report</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Savings report</h1>
       <p className="mb-8 mt-2 text-sm text-soft">
         {payload.organization ? (
           <>
@@ -74,7 +74,7 @@ export default async function SharedReportPage({
         />
       </div>
 
-      <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">Actual vs. projected spend</h2>
           <span className="text-xs text-faint">
@@ -84,7 +84,7 @@ export default async function SharedReportPage({
         <SavingsChart report={report} />
       </section>
 
-      <section className="rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <h2 className="mb-6 text-lg font-medium text-ink">Shadowed alternatives</h2>
         {report.alternatives.length === 0 ? (
           <div className="rounded-lg border border-dashed border-line px-6 py-10 text-center text-sm text-faint">
@@ -136,7 +136,7 @@ export default async function SharedReportPage({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-panel px-5 py-4">
+    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
       <div className="text-xs text-faint">{label}</div>
       <div className="mt-1 truncate text-lg font-medium text-ink">{value}</div>
     </div>

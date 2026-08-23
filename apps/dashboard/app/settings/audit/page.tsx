@@ -50,7 +50,7 @@ export default async function AuditPage({
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload.
           </div>
@@ -68,7 +68,7 @@ export default async function AuditPage({
     if (isForbidden(e)) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The audit trail is admin-only. Sign in as an org admin to view custody, auth, and
             incident events — and to export the bounded JSONL archive.
           </div>
@@ -114,7 +114,7 @@ export default async function AuditPage({
         <span className="text-xs text-faint">bounded to a 92-day window</span>
       </form>
 
-      <section className="rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">Recent events</h2>
           <span className="text-xs text-faint">latest {data.events.length}</span>
@@ -168,7 +168,7 @@ export default async function AuditPage({
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-5xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Audit trail</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Audit trail</h1>
       <p className="mb-8 mt-2 text-sm leading-relaxed text-soft">
         Every sensitive thing that happened in your org: key custody, sign-ins, and guarantee
         incidents — one chronology, exportable as JSONL.

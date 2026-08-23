@@ -24,7 +24,8 @@ import { usePathname } from 'next/navigation';
  * destination.
  */
 const PRIMARY = [
-  { href: '/', label: 'Home', hint: 'Your key, the endpoint, and proof it routed' },
+  { href: '/', label: 'Home', hint: 'Your key, one line, a request, a receipt' },
+  { href: '/try', label: 'Try a request', hint: 'Send anything; see what Potion chose and why' },
   { href: '/usage', label: 'Usage & savings', hint: 'What you spent, what you would have spent' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, quality floor, spending cap' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
@@ -74,13 +75,10 @@ export function Nav() {
 
   return (
     <nav className="flex flex-col gap-1">
-      <div className="mb-5 rounded-lg border border-line bg-paper px-3 py-3">
-        <div className="truncate text-sm font-medium text-ink">{me.user?.email ?? 'api key'}</div>
-        <div className="mt-0.5 flex items-center justify-between text-xs text-faint">
-          <span className="truncate">{me.org.name}</span>
-          <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 font-medium text-accent">
-            {me.role}
-          </span>
+      <div className="mb-6 border-b border-[#d9d5cb] pb-4">
+        <div className="truncate text-[13px] text-ink">{me.user?.email ?? 'api key'}</div>
+        <div className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          {me.org.name} · {me.role}
         </div>
       </div>
 
@@ -91,10 +89,8 @@ export function Nav() {
             key={item.href}
             href={item.href}
             title={item.hint}
-            className={`rounded-md px-3 py-2 text-sm transition-colors ${
-              active
-                ? 'bg-accent-soft font-medium text-accent'
-                : 'text-soft hover:bg-paper hover:text-ink'
+            className={`-ml-3 border-l-2 px-3 py-1.5 text-[14px] transition-colors ${
+              active ? 'border-ink text-ink' : 'border-transparent text-soft hover:text-ink'
             }`}
           >
             {item.label}

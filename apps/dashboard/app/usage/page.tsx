@@ -44,7 +44,7 @@ export default async function UsagePage({
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload — the demo data seeds itself on first boot.
           </div>
@@ -102,7 +102,7 @@ export default async function UsagePage({
       </div>
 
       {/* stacked bar: requests/day by cluster */}
-      <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">Requests per day</h2>
           <span className="text-xs text-faint">
@@ -113,7 +113,7 @@ export default async function UsagePage({
       </section>
 
       {/* per-cluster cost table */}
-      <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <h2 className="mb-6 text-lg font-medium text-ink">Cost by cluster</h2>
         {byCluster.rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-line px-6 py-10 text-center text-sm text-faint">
@@ -150,7 +150,7 @@ export default async function UsagePage({
       </section>
 
       {/* invoice + rollup */}
-      <section className="rounded-xl border border-line bg-panel px-8 py-8">
+      <section className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <h2 className="mb-2 text-lg font-medium text-ink">Billing</h2>
         <p className="mb-6 text-sm leading-relaxed text-soft">
           Pricing v1 is pass-through plus a configurable margin (default 0%). Invoices are
@@ -190,7 +190,7 @@ export default async function UsagePage({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-panel px-5 py-4">
+    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
       <div className="text-xs text-faint">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{value}</div>
     </div>
@@ -200,7 +200,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Usage &amp; billing</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Usage &amp; billing</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         What your key actually served: requests, tokens, and cost per cluster per day — and the
         invoice it adds up to.

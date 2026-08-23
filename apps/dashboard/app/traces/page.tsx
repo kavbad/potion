@@ -35,7 +35,7 @@ export default async function TracesPage({
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload.
           </div>
@@ -65,7 +65,7 @@ export default async function TracesPage({
   return (
     <PageShell>
       {/* admin strip: clustering trigger + retention */}
-      <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+      <div className="mb-6 border border-[#d9d5cb] bg-[#fbfaf7] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-soft">
             <span className="font-medium text-ink">Agent traces.</span> Send spans to{' '}
@@ -88,7 +88,7 @@ export default async function TracesPage({
 
       {/* agent clusters discovered from traces */}
       {agentClusters.length > 0 ? (
-        <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+        <div className="mb-6 border border-[#d9d5cb] bg-[#fbfaf7] p-4">
           <div className="text-sm font-medium text-ink">Agent clusters</div>
           <ul className="mt-2 space-y-1">
             {agentClusters.map((c) => (
@@ -110,7 +110,7 @@ export default async function TracesPage({
 
       {/* waterfall panel for ?trace= */}
       {trace !== undefined && trace !== '' ? (
-        <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+        <div className="mb-6 border border-[#d9d5cb] bg-[#fbfaf7] p-4">
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium text-ink">
               Trace <span className="font-mono">{trace.slice(0, 16)}</span>
@@ -129,12 +129,12 @@ export default async function TracesPage({
 
       {/* session rollup */}
       {data.sessions.length === 0 ? (
-        <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+        <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
           No traces yet. Ingest spans with{' '}
           <code className="font-mono">POST /v1/traces</code> and they roll up here by trace id.
         </div>
       ) : (
-        <ul className="divide-y divide-line rounded-lg border border-line bg-panel">
+        <ul className="divide-y divide-line border border-[#d9d5cb] bg-[#fbfaf7]">
           {data.sessions.map((s) => (
             <SessionRow key={s.traceId} session={s} />
           ))}
@@ -242,7 +242,7 @@ function fmtTime(iso: string): string {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Traces</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Traces</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         Agent sessions rolled up from your spans — per-trace and per-span cost, loop signals, and
         the clusters they grow into. Retention is yours to set.

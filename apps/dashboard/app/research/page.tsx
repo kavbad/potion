@@ -39,7 +39,7 @@ export default function ResearchIndex() {
         </p>
         <div className="mt-12 space-y-8">
           {issues.length === 0 && (
-            <p className="rounded-xl border border-line bg-panel p-6 text-sm text-soft">
+            <p className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
               The first issue publishes after the next weekly run. The feed at{' '}
               <Link href="/research/feed.xml" className="text-accent underline">/research/feed.xml</Link> will carry it.
             </p>

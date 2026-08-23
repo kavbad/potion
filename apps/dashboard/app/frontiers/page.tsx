@@ -39,7 +39,7 @@ export default async function FrontiersPage({
     if (e instanceof ApiUnreachable) {
       return (
         <PageShell>
-          <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+          <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
             The Potion API is not reachable. Start <code className="font-mono">apps/server</code>{' '}
             (default port 3000) and reload — the demo data seeds itself on first boot.
           </div>
@@ -52,7 +52,7 @@ export default async function FrontiersPage({
   if (list.clusters.length === 0) {
     return (
       <PageShell>
-        <div className="rounded-lg border border-line bg-panel p-6 text-sm text-soft">
+        <div className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
           No frontiers yet. Frontiers are computed per workload cluster; the demo seed creates
           them for <span className="font-mono">code-gen</span> and{' '}
           <span className="font-mono">extraction</span> on first boot.
@@ -95,7 +95,7 @@ export default async function FrontiersPage({
         ))}
       </div>
 
-      <div className="rounded-xl border border-line bg-panel px-8 py-8">
+      <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">
             {selected} <span className="text-sm font-normal text-faint">— cost vs. quality</span>
@@ -260,7 +260,7 @@ function PointRow({ point }: { point: FrontierPointDto }) {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Frontiers</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Frontiers</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         Every dot is a strategy Potion measured on your kind of workload. Up and to the left is
         better: better answers for less money.

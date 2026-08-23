@@ -21,7 +21,7 @@ export default async function ApiKeysPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight">API keys</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">API keys</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         One token type for your application, one for your infrastructure. Everything the dashboard
         does is an HTTP call you can make yourself — see{' '}

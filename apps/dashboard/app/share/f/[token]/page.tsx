@@ -55,7 +55,7 @@ export default async function SharedFrontierPage({
       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">
         Shared read-only · Potion
       </div>
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">
         {payload.clusterName}{' '}
         <span className="text-base font-normal text-faint">— cost vs. quality frontier</span>
       </h1>
@@ -81,7 +81,7 @@ export default async function SharedFrontierPage({
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-line bg-panel px-8 py-8">
+      <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <FrontierChart data={chartData} />
         <ul className="mt-6 divide-y divide-line rounded-lg border border-line">
           {payload.frontier.points.map((p: FrontierPointDto) => {

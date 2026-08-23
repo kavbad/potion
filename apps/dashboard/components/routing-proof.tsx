@@ -107,7 +107,7 @@ export function RoutingProof() {
       )}
 
       {data && data.requests.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-line bg-panel">
+        <div className="overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7]">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-line text-faint">
               <tr>

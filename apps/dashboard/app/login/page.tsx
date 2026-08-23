@@ -62,19 +62,19 @@ function LoginForm() {
 
   return (
     <div className="max-w-md">
-      <h1 className="text-2xl font-semibold tracking-tight">Sign in to Potion</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Sign in to Potion</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         Passwordless — no password to choose or forget. First sign-in creates your workspace;
         teammates join by admin invite.
       </p>
 
       {formError && (
-        <div className="mb-6 rounded-lg border border-warn bg-amber-50 px-6 py-4">
+        <div className="mb-6 border border-warn px-6 py-4">
           <p className="text-sm font-medium text-warn">{formError}</p>
         </div>
       )}
 
-      <div className="rounded-xl border border-line bg-panel px-8 py-8">
+      <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         {state === 'entering' ? (
           <div className="space-y-3">
             <p className="text-sm font-medium text-ink">Signing you in…</p>
