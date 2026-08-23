@@ -42,6 +42,7 @@ import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute } from '@potion/strategies';
 import { openAiError } from '../auth.js';
+import { maybeKeepLearningSample } from '../learning/sampling.js';
 import { fallbackStrategyFor, type PotionContext } from '../context.js';
 import {
   highestQualityPoint,
@@ -304,6 +305,28 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         writeData(chunk({ content: result.text }));
       }
       writeData(chunk({}, 'stop'));
+      // A Try-page request is the org's real request under its rule: sample it
+      // for the learning period exactly like the key-served path (consent-
+      // gated, capped, redacted), and measure the moment a kind of work has
+      // enough — the journey's own trial requests count toward it.
+      {
+        const lastUser = [...(body.messages as { role: string; content: unknown }[])].reverse().find((m) => m.role === 'user');
+        const cfg = resolved.config as { type: string; model?: string };
+        void maybeKeepLearningSample(
+          ctx.db.db,
+          {
+            orgId: org.orgId,
+            requestId: id,
+            clusterId,
+            model: cfg.type === 'single' ? (cfg.model ?? null) : `combination:${cfg.type}`,
+            prompt: typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content ?? ''),
+            completion: result.text,
+            costUsd: result.usage.costUsd ?? 0,
+            usage: result.usage as unknown as Record<string, unknown>,
+          },
+          () => { ctx.queue?.enqueue('learning:period', { orgId: org.orgId }).catch(() => undefined); },
+        );
+      }
       // Final META chunk: empty choices + usage + the playground's per-response
       // latency/cost (the compare view reads this).
       writeData({

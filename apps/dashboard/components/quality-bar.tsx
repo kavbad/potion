@@ -51,19 +51,19 @@ export function QualityBar({ admin }: { admin: boolean }) {
   return (
     <div className="mt-4 border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4 font-mono text-[12px]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-[0.16em] text-faint">your quality bar</div>
+        <div className="text-[10px] uppercase tracking-[0.16em] text-faint">measuring your workloads</div>
         <div className="text-[11px] text-faint">
           {state.samplingConsent ? `${total} request${total === 1 ? '' : 's'} sampled so far` : 'sampling is off'}
         </div>
       </div>
       {!state.samplingConsent ? (
-        <p className="mt-2 text-soft">Allow sampling above and Potion measures your bar from your own requests.</p>
+        <p className="mt-2 text-soft">Allow sampling above and Potion measures your own workloads to route each one to the right model.</p>
       ) : clusters.length === 0 ? (
-        <p className="mt-2 text-soft">Send requests through your key (or try some above); a few per kind of work are kept, and the measurement starts on its own.</p>
+        <p className="mt-2 text-soft">Potion is measuring your workloads as your requests come in, to route each kind of work to the right model. It starts on its own after your first requests; each kind of work takes a little time.</p>
       ) : (
         <ul className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
           {clusters.map(([c, n]) => (
-            <li key={c} className="flex justify-between"><span className="text-soft">{c}</span><span className={n >= 8 ? 'text-ink' : 'text-faint'}>{n} of {state.sampleCapPerCluster}{n >= 8 ? ' · enough to measure' : ' · needs 8'}</span></li>
+            <li key={c} className="flex justify-between"><span className="text-soft">{c}</span><span className={n >= 8 ? 'text-ink' : 'text-faint'}>{n >= 8 ? 'measuring' : `${n} of 8 requests seen`}</span></li>
           ))}
         </ul>
       )}
@@ -100,7 +100,7 @@ export function QualityBar({ admin }: { admin: boolean }) {
         </button>
       )}
       {note && <p className="mt-3 text-[12px] text-accent">{note}</p>}
-      <p className="mt-3 text-[11px] leading-relaxed text-faint">Measured on your own prompts against what you use today, paid for by Potion, never applied without you.</p>
+      <p className="mt-3 text-[11px] leading-relaxed text-faint">Measured on your own requests against what you use today. Your rule changes only when you set it.</p>
     </div>
   );
 }

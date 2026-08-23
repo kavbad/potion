@@ -6,7 +6,7 @@
 //   2. for each kind of work with enough items and no fresh proposal, run
 //      the incumbent and the org's current serving pick on THEIR prompts
 //      (the guarantee verifier's exact recipe: runEval, pairedQualities,
-//      computeRetention), under a per-org daily cap;
+//      computeRetention), under a per-org daily cap billed to the org;
 //   3. write a PROPOSAL: the incumbent's quality on their work, the serving
 //      pick's retention against it, the floor Potion suggests, the saving.
 // Never applies anything. The dashboard's one button does that.
@@ -39,7 +39,6 @@ import {
   deriveSuiteVerifyCapUsd,
   LIVE_SWEEP_ANSWER_MAX_TOKENS,
   LIVE_SWEEP_JUDGE_MAX_TOKENS,
-  PLATFORM_OPS_ORG_ID,
   PLATFORM_SUITE_BY_CLUSTER,
   withDeliveryGuard,
   type JobContext,
@@ -181,13 +180,13 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     const above = frontier.points.filter((p) => p.quality >= floorNow);
     const serving = (above.length ? above : frontier.points).reduce((a, b) => (b.costPer1K < a.costPer1K ? b : a));
 
-    // the cap: per org per day, platform-paid
+    // the cap: per org per day, billed to the org's own usage (operator, 2026-08-22)
     const spentToday = await learningSpendSince(ctx.db, orgId, dayAgo);
     const remaining = LEARNING_PERIOD_DAILY_CAP_USD - spentToday;
     if (remaining <= 0.05) { report.skipped.push({ clusterId, why: 'daily cap reached' }); continue; }
     const capUsd = Math.min(remaining, deriveSuiteVerifyCapUsd(loaded.items.length, 2));
 
-    const meter = providerMode === 'live' ? perCallRequestLogSink(ctx.db, { orgId: PLATFORM_OPS_ORG_ID, clusterId, status: 'eval_live' }) : null;
+    const meter = providerMode === 'live' ? perCallRequestLogSink(ctx.db, { orgId, clusterId, status: 'eval_live' }) : null;
     let summary: RunSummary;
     try {
       summary = await runEval(

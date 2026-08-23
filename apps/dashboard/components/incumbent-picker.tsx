@@ -83,8 +83,8 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
       <label className="mt-4 flex cursor-pointer items-start gap-2.5 border-t border-[#d9d5cb] pt-4 text-[13px] leading-relaxed text-soft">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 h-3.5 w-3.5 accent-[#1c1a17]" />
         <span>
-          Keep a sample of my requests so Potion can measure my bar. At most {initial?.sampleCapPerCluster ?? 40} per kind of work, prompt and answer, with
-          personal data redacted before it is stored. Without this, the audit waits; routing works either way.
+          Let Potion keep a sample of my requests to measure my workloads (at most {initial?.sampleCapPerCluster ?? 40} per kind of work, prompt and answer,
+          personal data redacted before storage). Routing works either way; measuring needs this.
         </span>
       </label>
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[#d9d5cb] pt-4">
@@ -110,7 +110,7 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
       {saved && (
         <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
           Measuring against <span className="text-ink">{saved.models[0] ?? saved.other}</span>
-          {saved.models.length > 1 ? ` (+${saved.models.length - 1} more recorded)` : ''}. {saved.samplingConsent ? 'Sampling is on: your bar is what it scores on your own requests.' : 'Sampling is off: the audit waits until you allow it.'}
+          {saved.models.length > 1 ? ` (+${saved.models.length - 1} more recorded)` : ''}. {saved.samplingConsent ? 'Measuring starts with your first requests.' : 'Measuring is off until you allow a sample.'}
         </p>
       )}
     </div>

@@ -36,12 +36,20 @@ export interface LearningSample {
  * cap for that kind of work is not reached. Returns what happened; never
  * throws into the serving path.
  */
-export async function maybeKeepLearningSample(db: PotionDb, s: LearningSample): Promise<'kept' | 'no-consent' | 'cap' | 'error'> {
+/** Enough samples of one kind of work to measure it. Mirrors the worker's LEARNING_PERIOD_MIN_ITEMS. */
+export const LEARNING_MIN_ITEMS = 8;
+
+export async function maybeKeepLearningSample(
+  db: PotionDb,
+  s: LearningSample,
+  onThreshold?: (clusterId: string) => void,
+): Promise<'kept' | 'no-consent' | 'cap' | 'error'> {
   try {
     const inc = await getOrgIncumbents(db, s.orgId);
     if (!inc || !inc.samplingConsent) return 'no-consent';
     const counts = await learningSampleCounts(db, s.orgId);
-    if ((counts[s.clusterId] ?? 0) >= inc.sampleCapPerCluster) return 'cap';
+    const before = counts[s.clusterId] ?? 0;
+    if (before >= inc.sampleCapPerCluster) return 'cap';
     const attrs = redactAttrs({
       'gen_ai.operation.name': 'chat',
       'gen_ai.prompt': s.prompt.slice(0, 8000),
@@ -63,6 +71,8 @@ export async function maybeKeepLearningSample(db: PotionDb, s: LearningSample): 
         ts: new Date(),
       },
     ]);
+    // the moment a kind of work has enough, measure it — no waiting for the clock
+    if (before + 1 === LEARNING_MIN_ITEMS && onThreshold) onThreshold(s.clusterId);
     return 'kept';
   } catch {
     return 'error';

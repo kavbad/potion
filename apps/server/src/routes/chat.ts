@@ -966,6 +966,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         completion: text,
         costUsd: usage?.costUsd ?? 0,
         usage: (usage ?? {}) as Record<string, unknown>,
+      }, () => {
+        // enough of this kind of work sampled: measure now, not at the next tick
+        ctx.queue?.enqueue('learning:period', { orgId: auth.org.orgId }).catch(() => undefined);
       });
     };
     // G2.1: the completion id becomes the request log's correlation label —

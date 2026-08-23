@@ -20,6 +20,7 @@
 import { apiFetch, sessionCookieHeader } from '@/lib/api';
 import { CopyBlock } from '@/components/copy-block';
 import { SiteShell } from '@/components/site-header';
+import { AgentInstructions } from '@/components/agent-instructions';
 import type { ConnectionResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 
 const CONTENTS = [
   ['quickstart', 'Quickstart'],
+  ['agent', 'Hand it to your agent'],
   ['auth', 'Authentication'],
   ['model', 'The model field is a label'],
   ['trace', 'The decision header'],
@@ -157,6 +159,17 @@ export default async function DocsPage() {
           label="Python (openai SDK)"
           text={`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${base}/v1",\n    api_key=os.environ["POTION_API_KEY"],\n)\n\nres = client.chat.completions.create(\n    model="potion-auto",  # any label; Potion routes by prompt + policy\n    messages=[{"role": "user", "content": "Write a python function that reverses a string"}],\n)\nprint(res.choices[0].message.content)`}
         />
+      </Section>
+
+      <Section id="agent" title="Hand it to your agent">
+        <p className="text-sm leading-relaxed text-soft">
+          If Claude Code, Cursor, Codex or another coding agent does your integration, give it one of these. Each block
+          is written for the agent: what to change, what to keep, how to verify, and what never to do. Your key is not
+          in the block; the agent reads it from the environment.
+        </p>
+        <div className="mt-4">
+          <AgentInstructions baseUrl={base} />
+        </div>
       </Section>
 
       <Section id="auth" title="Authentication">

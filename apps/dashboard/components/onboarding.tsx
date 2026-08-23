@@ -18,6 +18,7 @@ import { TryRequest, type Receipt } from '@/components/try-request';
 import { RoutingProof } from '@/components/routing-proof';
 import { IncumbentPicker, type Incumbents } from '@/components/incumbent-picker';
 import { QualityBar } from '@/components/quality-bar';
+import { AgentInstructions } from '@/components/agent-instructions';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 type State = 'done' | 'now' | 'next';
@@ -132,7 +133,7 @@ export function Onboarding({ conn: initial, admin = true }: { conn: ConnectionRe
           </div>
         </Step>
 
-        <Step n="02" title="What do you use today?" state={sI} lede="Name the model your requests go to now. Potion measures what it scores on your own requests and makes that your quality bar, so the rule becomes 'never below what I get today', not a number we picked.">
+        <Step n="02" title="What do you use today?" state={sI} lede="Name the model your requests go to now. Potion measures your workloads against it and routes each kind of work to the right model, so the rule becomes 'never below what I get today', not a number we picked.">
           {incumbents === undefined ? (
             <p className="font-mono text-[11px] text-faint">loading</p>
           ) : (
@@ -143,8 +144,9 @@ export function Onboarding({ conn: initial, admin = true }: { conn: ConnectionRe
           )}
         </Step>
 
-        <Step n="03" title="Change one line" state={s2} lede="Potion speaks the OpenAI chat protocol. Point your existing client here and keep everything else: the request, the response, streaming, tool calls.">
+        <Step n="03" title="Change one line" state={s2} lede="Potion speaks the OpenAI chat protocol. Point your existing client here and keep everything else: the request, the response, streaming, tool calls. Or hand the instructions to your coding agent.">
           <div className="space-y-4">
+            <AgentInstructions baseUrl={conn.baseUrl} />
             <CopyBlock label="Base URL" text={`${conn.baseUrl}/v1`} />
             {conn.snippets && <CopyBlock label="Node.js (openai SDK)" text={conn.snippets.openaiNode} />}
             {conn.policy && (
