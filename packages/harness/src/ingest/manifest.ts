@@ -18,7 +18,7 @@ import {
 
 export type ScoringKind = ScoringMethod['kind'];
 
-export const ScoringKindSchema = z.enum(['exact', 'code-exec', 'field-match', 'llm-judge']);
+export const ScoringKindSchema = z.enum(['exact', 'code-exec', 'field-match', 'llm-judge', 'tool-call']);
 
 /** Where the suite's items came from. Conservative license bookkeeping:
  * anything uncertain must be marked "verify before shipping to customers"
@@ -73,7 +73,7 @@ export const CLUSTER_ALLOWED_SCORING: Readonly<Record<string, readonly ScoringKi
   'rewrite-edit': ['llm-judge', 'exact'],
   'rag-answer': ['llm-judge', 'field-match'],
   'multi-step-reasoning': ['exact', 'llm-judge'],
-  'agentic-tool-use': ['llm-judge', 'field-match'],
+  'agentic-tool-use': ['llm-judge', 'field-match', 'tool-call'],
 };
 
 export function scoringAllowedForCluster(clusterId: string, kind: ScoringKind): boolean {

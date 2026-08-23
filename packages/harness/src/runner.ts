@@ -588,12 +588,13 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         }
         let outcome, quality, scorer, scorerUsage;
         try {
-          outcome = await execute(strategy, item.prompt, ctx);
+          outcome = await execute(strategy, item.prompt, item.tools !== undefined ? { ...ctx, params: { tools: item.tools } } : ctx);
           ({ quality, scorer, scorerUsage } = await scoreAnswer(
             item,
             outcome.text,
             { providers, prices },
             opts.judgeMaxTokens,
+            outcome.toolCalls,
           ));
         } catch (err) {
           if (!opts.containStrategyFailures) throw err;

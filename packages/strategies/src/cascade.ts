@@ -125,6 +125,13 @@ export async function runCascade(
     // the trace BEFORE its confidence-probe entries.
     const probeEntries: StageTrace[] = [];
 
+    // MIXING M3: a tool call is a decision, not an answer to judge — the
+    // stage that makes it answers the request.
+    if (outcome.toolCalls !== undefined) {
+      trace.push({ stage: `stage-${i}`, model: stage.model, text: outcome.text, usage: outcome.usage, decision: 'tool_call' });
+      return { text: outcome.text, trace, usage: total, toolCalls: outcome.toolCalls };
+    }
+
     if (!isFinal && threshold !== undefined) {
       if (strategy.confidenceMethod === 'logprob') {
         if (outcome.logprobConfidence !== undefined) {

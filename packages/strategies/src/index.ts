@@ -23,3 +23,4 @@ export {
   baseSeedOf,
 } from './helpers.js';
 export * from './program.js';
+export * from './capabilities.js';

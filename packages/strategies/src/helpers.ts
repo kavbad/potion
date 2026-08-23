@@ -3,7 +3,7 @@
 // deterministic base-seed derivation, and the judge prompt/parse contract
 // shared by best-of-n and ensemble fusion.
 import { costUsd, lastAnchoredValue, roundCost, UNTRUSTED_DATA_FRAME, wrapUntrustedData } from '@potion/core';
-import type { ChatMessage, Usage } from '@potion/core';
+import type { ChatMessage, Usage, ToolCall } from '@potion/core';
 import { hashString } from '@potion/providers';
 import type { ExecContext } from './types.js';
 
@@ -48,6 +48,8 @@ export interface CallOutcome {
   usage: Usage; // costed via the resolved price entry, rounded
   logprobConfidence?: number;
   modelVersion: string;
+  /** Provider tool calls, preserved verbatim (MIXING M3). */
+  toolCalls?: ToolCall[];
 }
 
 /**
@@ -72,7 +74,13 @@ export async function callModel(
     model,
     messages,
     params: {
-      ...(ctx.captureConfidence ? { logprobs: true } : {}), seed, ...(maxTokens !== undefined ? { maxTokens } : {}) },
+      ...(ctx.captureConfidence ? { logprobs: true } : {}),
+      seed,
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
+      // MIXING M3: tools ride every stage call; a stage's tool call is terminal.
+      ...(ctx.params?.tools !== undefined ? { tools: ctx.params.tools } : {}),
+      ...(ctx.params?.toolChoice !== undefined ? { tool_choice: ctx.params.toolChoice } : {}),
+    },
   });
   const usage: Usage = {
     inputTokens: response.usage.inputTokens,
@@ -83,6 +91,7 @@ export async function callModel(
   return {
     text: response.text,
     usage,
+    ...(response.toolCalls && response.toolCalls.length > 0 ? { toolCalls: response.toolCalls } : {}),
     ...(response.logprobConfidence !== undefined
       ? { logprobConfidence: response.logprobConfidence }
       : {}),

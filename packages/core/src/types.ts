@@ -163,12 +163,20 @@ export type ScoringMethod =
   | { kind: 'exact'; field?: string }
   | { kind: 'code-exec'; language: 'javascript' | 'python'; tests: string }
   | { kind: 'field-match'; schema: Record<string, 'string' | 'number' | 'boolean' | 'array'> }
-  | { kind: 'llm-judge'; rubric: string; judgeModel: string; scale: [number, number] };
+  | { kind: 'llm-judge'; rubric: string; judgeModel: string; scale: [number, number] }
+  /** MIXING M3 instrument (2026-08-23): the answer must be a tool call.
+   * Full credit for the expected name with every expected argument present
+   * and equal; half credit for the right name with different arguments;
+   * zero for text or another tool. */
+  | { kind: 'tool-call'; expect: { name: string; arguments?: Record<string, unknown> } };
 
 export interface EvalItem {
   id: string;
   clusterId: ClusterId;
   prompt: ChatMessage[];
+  /** Tools offered to the model for this item (forwarded as the request's
+   * tools; MIXING M3). */
+  tools?: Tool[];
   reference?: unknown;
   scoring: ScoringMethod;
 }
@@ -219,6 +227,9 @@ export interface FrontierPointEvidence {
   /** Distinct eval run ids the rows came from. */
   runIds: string[];
   n: number;
+  /** TRUE when this point was measured on items that carried tools (MIXING
+   * M3): a combination may serve tool-carrying requests only with this. */
+  toolsMeasured?: boolean;
   qualityCi95: number;
   /**
    * G2.6 latency provenance — the same discipline quality already carried, so

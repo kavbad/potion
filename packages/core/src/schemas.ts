@@ -223,6 +223,7 @@ export const ScoringMethodSchema = z.discriminatedUnion('kind', [
     judgeModel: z.string(),
     scale: z.tuple([z.number(), z.number()]),
   }),
+  z.object({ kind: z.literal('tool-call'), expect: z.object({ name: z.string(), arguments: z.record(z.unknown()).optional() }) }),
 ]);
 
 export const EvalItemSchema = z.object({

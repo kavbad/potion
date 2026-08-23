@@ -280,6 +280,8 @@ export async function scoreAnswer(
   answer: string,
   deps?: ScorerDeps,
   judgeMaxTokens?: number,
+  /** The answer's tool calls, for 'tool-call' scoring (MIXING M3). */
+  toolCalls?: { function: { name: string; arguments: string } }[],
 ): Promise<ScoreOutcome> {
   const scoring = item.scoring;
   switch (scoring.kind) {
@@ -291,6 +293,8 @@ export async function scoreAnswer(
       const { quality } = await scoreCodeExec(answer, scoring);
       return { quality, scorer: 'code-exec' };
     }
+    case 'tool-call':
+      return { quality: scoreToolCall(toolCalls, scoring.expect), scorer: 'tool-call' };
     case 'llm-judge': {
       if (!deps) throw new Error('llm-judge scoring requires ScorerDeps (providers + prices)');
       // G1.7: judge completion budget (verbose live judges truncate at the
@@ -304,4 +308,22 @@ export async function scoreAnswer(
       };
     }
   }
+}
+
+/** MIXING M3 instrument: the expected tool, with the expected arguments
+ * present and equal (a subset match — the model may add optional ones). */
+export function scoreToolCall(
+  toolCalls: { function: { name: string; arguments: string } }[] | undefined,
+  expect: { name: string; arguments?: Record<string, unknown> },
+): number {
+  const call = toolCalls?.[0];
+  if (!call) return 0;
+  if (call.function.name !== expect.name) return 0;
+  if (!expect.arguments) return 1;
+  let parsed: Record<string, unknown>;
+  try { parsed = JSON.parse(call.function.arguments) as Record<string, unknown>; } catch { return 0.5; }
+  for (const [k, v] of Object.entries(expect.arguments)) {
+    if (JSON.stringify(parsed[k]) !== JSON.stringify(v)) return 0.5;
+  }
+  return 1;
 }

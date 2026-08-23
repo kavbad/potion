@@ -46,6 +46,7 @@ import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestL
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
+import { strategyCapabilities } from '@potion/strategies';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
@@ -224,8 +225,20 @@ export function resolveOperatingPoint(
   // (DEFAULT_STRATEGY, liveDefaultStrategy) are single by construction.
   if (opts.toolCapableOnly) {
     const unrestricted = resolveOperatingPoint(policy, frontier, fallbackStrategy);
-    if (unrestricted.config?.type === 'single' || unrestricted.config === null) return unrestricted;
-    const singles = frontier ? frontier.points.filter((p) => p.strategyConfig.type === 'single') : [];
+    if (unrestricted.config === null) return unrestricted;
+    if (unrestricted.config.type === 'single') return unrestricted;
+    const unrestrictedPoint = frontier?.points.find((p) => p.strategyHash === strategyHash(unrestricted.config as StrategyConfig));
+    if (strategyCapabilities(unrestricted.config).canServeTools && unrestrictedPoint?.evidence?.toolsMeasured === true) return unrestricted;
+    // MIXING M3: a point may carry tools when its SHAPE can (strategyCapabilities)
+    // and — for anything but a single model — it was MEASURED on items that
+    // carried tools (evidence.toolsMeasured). Singles are trusted as before.
+    const singles = frontier
+      ? frontier.points.filter(
+          (p) =>
+            strategyCapabilities(p.strategyConfig).canServeTools &&
+            (p.strategyConfig.type === 'single' || p.evidence?.toolsMeasured === true),
+        )
+      : [];
     const narrowed: Frontier | null =
       frontier && singles.length > 0 ? { ...frontier, points: singles } : null;
     const restricted = resolveOperatingPoint(policy, narrowed, fallbackStrategy);
