@@ -131,3 +131,29 @@ describe('withMetrics', () => {
     );
   });
 });
+
+describe('withMetrics keeps the stream (2026-08-22)', () => {
+  it('forwards completeStream, relays tokens, and meters it once', async () => {
+    const calls: unknown[] = [];
+    const meter = { observeProviderCall: (o: unknown) => calls.push(o) } as never;
+    const base = {
+      id: 'openrouter' as const,
+      complete: async () => { throw new Error('not used'); },
+      completeStream: async (_req: unknown, onToken: (t: string) => void) => {
+        onToken('a'); onToken('b');
+        return { text: 'ab', usage: { inputTokens: 1, outputTokens: 2 }, latencyMs: 5, modelVersion: 'm' };
+      },
+    };
+    const wrapped = withMetrics({ openrouter: base } as never, meter);
+    const seen: string[] = [];
+    const res = await wrapped.openrouter.completeStream!({ model: 'x', messages: [] }, (t) => seen.push(t));
+    expect(seen).toEqual(['a', 'b']);
+    expect(res.text).toBe('ab');
+    expect(calls).toHaveLength(1);
+    expect(wrapped.openrouter.complete).toBeTypeOf('function');
+  });
+  it('leaves completeStream absent when the transport has none', () => {
+    const wrapped = withMetrics({ mock: { id: 'mock', complete: async () => ({ text: '', usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: 0, modelVersion: '' }) } } as never, { observeProviderCall: () => undefined } as never);
+    expect(wrapped.mock.completeStream).toBeUndefined();
+  });
+});

@@ -42,6 +42,7 @@ import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import type { RankedAssignment } from '@potion/cluster';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
+import { floorFor } from '../routing/floors.js';
 import { execute } from '@potion/strategies';
 import { openAiError } from '../auth.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
@@ -215,13 +216,15 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     }
 
     // The org's floor, for the Try page's rules (0.95 when the policy has none).
-    let floor = 0.95;
+    let boundPolicy: Policy | null = null;
     {
       const k = await getFirstApiKeyWithPolicy(ctx.db.db, org.orgId);
       const row = k?.policyId ? await getPolicyById(ctx.db.db, org.orgId, k.policyId) : null;
-      const cfg = row?.config as { qualityFloor?: number } | undefined;
-      if (cfg && typeof cfg.qualityFloor === 'number') floor = cfg.qualityFloor;
+      boundPolicy = row?.config ?? null;
     }
+    // The org's floor for this kind of work (0.95 when the policy has none).
+    const floorOf = (cid: string) => (boundPolicy ? floorFor(boundPolicy, cid) : null) ?? 0.95;
+    let floor = floorOf(clusterId);
     let frontier = await loadCurrentFrontier(ctx.db.db, clusterId, org.orgId);
     // Quality-safe tiebreak, the same rule the serving path applies
     // (routing/ambiguity.ts): a near-equal runner-up cluster is loaded too and
@@ -231,7 +234,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     if (runnerUpId !== null) {
       const other = await loadCurrentFrontier(ctx.db.db, runnerUpId, org.orgId);
       const candidate = (cid: string, f: Frontier | null) => {
-        const pick = f ? pickUnderRule(f.points, body.optimizeFor ?? 'cost', floor) : null;
+        const pick = f ? pickUnderRule(f.points, body.optimizeFor ?? 'cost', floorOf(cid)) : null;
         return { clusterId: cid, frontier: f, quality: pick?.quality ?? null, costPer1K: pick?.costPer1K ?? null };
       };
       const winner = pickSafer(candidate(clusterId, frontier), candidate(runnerUpId, other));
@@ -239,6 +242,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         tiebreak = true;
         clusterId = winner.clusterId;
         frontier = winner.frontier;
+        floor = floorOf(clusterId);
       }
     }
     if (!frontier || frontier.points.length === 0) {

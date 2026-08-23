@@ -28,6 +28,12 @@ export function QualityBar({ admin }: { admin: boolean }) {
   }
   useEffect(() => { void load(); }, []);
 
+  async function applyAll() {
+    setBusy('all');
+    const r = await fetch('/api/learning/proposals/apply-all', { method: 'POST' }).catch(() => null);
+    setBusy(null);
+    if (r?.ok) await load();
+  }
   async function apply(id: string) {
     setBusy(id); setNote(null);
     const r = await fetch(`/api/learning/proposals/${id}/apply`, { method: 'POST' }).catch(() => null);
@@ -68,6 +74,14 @@ export function QualityBar({ admin }: { admin: boolean }) {
         </ul>
       )}
 
+      {admin && open.length >= 2 && (
+        <div className="mt-3 flex items-baseline justify-between gap-3">
+          <span className="text-soft">{open.length} kinds of work measured — set every bar at once, or one at a time below.</span>
+          <button type="button" disabled={busy !== null} onClick={() => void applyAll()} className="bg-ink px-4 py-2 text-[12px] font-medium text-[#f4f2ec] hover:opacity-90 disabled:opacity-40">
+            {busy === 'all' ? 'Setting…' : `Set all ${open.length} bars`}
+          </button>
+        </div>
+      )}
       {(open.length > 0 || applied.length > 0) && (
         <div className="mt-4 border-t border-[#d9d5cb] pt-3">
           {[...open, ...applied].map((p) => {

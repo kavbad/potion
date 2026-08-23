@@ -139,6 +139,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/learning', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'POST', path: '/api/learning/run', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'enqueues the learning period for the CALLER\'s org only — no parameter, nothing to cross' } },
   { method: 'POST', path: '/api/learning/proposals/:id/apply', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/learning/proposals/lp-x/apply', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'proposal', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/learning/proposals/apply-all', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'merges the CALLER\'s own open proposals into its own policy — no parameter, nothing to cross' } },
 
   { method: 'GET', path: '/api/alerts', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'alertRule', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/alerts/deliveries', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'alertRule', crossOrgProbe: { expect: 'org-list-absent' } },

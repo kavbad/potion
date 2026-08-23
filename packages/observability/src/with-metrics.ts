@@ -37,10 +37,34 @@ function wrapComplete(
   meter: Metrics,
   prices: PriceTable | undefined,
 ): Provider['complete'] {
-  return async (req: CompleteRequest): Promise<CompleteResponse> => {
+  return (req: CompleteRequest) => observedCall(provider, meter, prices, req, () => provider.complete(req));
+}
+
+// Real token streaming (2026-08-22): the stream is metered exactly like a
+// complete call — one observation, the final usage's cost — and forwarded
+// only when the transport has it. This proxy rebuilt each provider with just
+// complete + embed, which is why production kept bursting after the transport
+// and the lazy wrapper both carried completeStream.
+function wrapCompleteStream(
+  provider: Provider,
+  stream: NonNullable<Provider['completeStream']>,
+  meter: Metrics,
+  prices: PriceTable | undefined,
+): NonNullable<Provider['completeStream']> {
+  return (req, onToken) => observedCall(provider, meter, prices, req, () => stream.call(provider, req, onToken));
+}
+
+async function observedCall(
+  provider: Provider,
+  meter: Metrics,
+  prices: PriceTable | undefined,
+  req: CompleteRequest,
+  call: () => Promise<CompleteResponse>,
+): Promise<CompleteResponse> {
+  {
     const t0 = performance.now();
     try {
-      const res = await provider.complete(req);
+      const res = await call();
       const entry = prices ? findPriceEntry(prices, provider.id, req.model) : undefined;
       const costUsd = entry ? costOf(res, entry) : 0;
       meter.observeProviderCall({
@@ -62,7 +86,7 @@ function wrapComplete(
       });
       throw err;
     }
-  };
+  }
 }
 
 function wrapEmbed(
@@ -109,6 +133,9 @@ export function withMetrics(
     };
     if (provider.embed !== undefined) {
       wrapped.embed = wrapEmbed(provider, provider.embed, meter);
+    }
+    if (provider.completeStream !== undefined) {
+      wrapped.completeStream = wrapCompleteStream(provider, provider.completeStream, meter, opts.prices);
     }
     out[id] = wrapped;
   }

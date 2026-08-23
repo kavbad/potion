@@ -45,6 +45,7 @@ import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { baselineFor } from '../routing/baseline.js';
+import { policyForCluster } from '../routing/floors.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -782,18 +783,19 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // One resolution per candidate cluster: frontier → provenance guard →
     // serving-latency binding → operating point under the org's policy.
     const resolveFor = async (cid: string) => {
+      const clusterPolicy = policyForCluster(policy, cid);
       const loaded = await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId);
       const guarded = guardFrontierProvenance(loaded, ctx.providerMode, (msg) => app.log.warn(msg));
       const bound = await bindServingLatency(
         ctx,
-        policy,
+        clusterPolicy,
         guarded.frontier,
         auth.org.orgId,
         cid,
         (msg) => app.log.warn(msg),
       );
       const point = resolveOperatingPoint(
-        policy,
+        clusterPolicy,
         bound.frontier,
         fallbackStrategyFor(ctx.providerMode, ctx.prices),
         { toolCapableOnly: body.tools !== undefined },

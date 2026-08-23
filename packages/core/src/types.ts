@@ -360,6 +360,9 @@ export type Policy =
   | {
       type: 'min_cost';
       qualityFloor: number;
+      /** Per-kind-of-work floors (2026-08-22): a cluster listed here is served
+       * under its own floor; every other cluster uses qualityFloor. */
+      clusterFloors?: Record<string, number> | undefined;
       shadow?: ShadowConfig | undefined;
       guarantee?: GuaranteeConfig | undefined;
     }
@@ -387,6 +390,7 @@ export type Policy =
   | {
       type: 'compound';
       qualityFloor: number;
+      clusterFloors?: Record<string, number> | undefined;
       p95Ms: number;
       shadow?: ShadowConfig | undefined;
       guarantee?: GuaranteeConfig | undefined;

@@ -21,8 +21,13 @@ import {
   markProposalApplied,
   updateApiKeyPolicy,
   upsertOrgIncumbents,
+  getFirstApiKeyWithPolicy,
+  getPolicyById,
+  listLearningProposals,
 } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
+import type { Policy } from '@potion/core';
+import { floorFor, withClusterFloor } from '../routing/floors.js';
 import type { PotionContext } from '../context.js';
 import type { PotionQueue } from '@potion/queue';
 import { incumbentRoster } from '../incumbents/roster.js';
@@ -97,14 +102,44 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     const p = await getLearningProposal(db, org.orgId, id);
     if (!p) return reply.code(404).send(openAiError(`unknown proposal '${id}'`, 'invalid_request_error', 'not_found'));
     if (p.status !== 'proposed') return reply.code(409).send(openAiError(`proposal is ${p.status}`, 'invalid_request_error', 'proposal_not_open'));
-    const policyId = `pol-${randomUUID().slice(0, 8)}`;
-    const floor = Math.max(0.5, Math.min(1, Math.round(p.suggestedFloor * 100) / 100));
-    await insertPolicy(db, { id: policyId, orgId: org.orgId, name: `your bar · ${p.clusterId} ${floor.toFixed(2)}`, config: { type: 'min_cost', qualityFloor: floor } });
-    const keys = (await listApiKeys(db, org.orgId)).filter((k) => !k.revokedAt);
-    for (const k of keys) await updateApiKeyPolicy(db, org.orgId, k.id, policyId);
+    const { policyId, policy, keysRebound } = await applyFloors(org.orgId, [p]);
     await markProposalApplied(db, org.orgId, id, policyId);
-    return reply.send({ applied: true, policyId, qualityFloor: floor, keysRebound: keys.length });
+    return reply.send({ applied: true, policyId, qualityFloor: floorFor(policy, p.clusterId), clusterFloors: clusterFloorsOf(policy), keysRebound });
   });
+
+  // Every open proposal at once: one new policy carrying a floor per kind of
+  // work, every active key rebound to it.
+  app.post('/api/learning/proposals/apply-all', { preHandler: [requireRole('admin')] }, async (req, reply) => {
+    const org = req.potionOrg!;
+    const open = (await listLearningProposals(db, org.orgId)).filter((p) => p.status === 'proposed');
+    if (open.length === 0) return reply.code(409).send(openAiError('no open proposals', 'invalid_request_error', 'proposal_not_open'));
+    const { policyId, policy, keysRebound } = await applyFloors(org.orgId, open);
+    for (const p of open) await markProposalApplied(db, org.orgId, p.id, policyId);
+    return reply.send({ applied: open.length, policyId, clusterFloors: clusterFloorsOf(policy), keysRebound });
+  });
+
+  /** Merge the proposals' floors into the org's bound policy (routing/floors.ts)
+   * as a NEW policy row — policies are immutable history — and rebind keys. */
+  async function applyFloors(orgId: string, proposals: { clusterId: string; suggestedFloor: number }[]) {
+    const first = await getFirstApiKeyWithPolicy(db, orgId);
+    const current = first?.policyId ? ((await getPolicyById(db, orgId, first.policyId))?.config ?? null) : null;
+    let policy: Policy | null = current;
+    for (const p of proposals) {
+      const floor = Math.max(0.5, Math.min(1, Math.round(p.suggestedFloor * 100) / 100));
+      policy = withClusterFloor(policy, p.clusterId, floor);
+    }
+    const merged = policy as Policy;
+    const n = Object.keys(clusterFloorsOf(merged)).length;
+    const policyId = `pol-${randomUUID().slice(0, 8)}`;
+    await insertPolicy(db, { id: policyId, orgId, name: `your bar · ${n} kind${n === 1 ? '' : 's'} of work`, config: merged });
+    const keys = (await listApiKeys(db, orgId)).filter((k) => !k.revokedAt);
+    for (const k of keys) await updateApiKeyPolicy(db, orgId, k.id, policyId);
+    return { policyId, policy: merged, keysRebound: keys.length };
+  }
+}
+
+function clusterFloorsOf(policy: Policy): Record<string, number> {
+  return policy.type === 'min_cost' || policy.type === 'compound' ? (policy.clusterFloors ?? {}) : {};
 }
 
 function dto(r: { models: string[]; other: string | null; samplingConsent: boolean; sampleCapPerCluster: number; designatedAt: Date }) {

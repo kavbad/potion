@@ -134,6 +134,7 @@ export const PolicySchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('min_cost'),
     qualityFloor: z.number().min(0).max(1),
+    clusterFloors: z.record(z.string(), z.number().min(0).max(1)).optional(),
     shadow: ShadowConfigSchema.optional(),
     guarantee: GuaranteeConfigSchema.optional(),
   }),
@@ -148,6 +149,7 @@ export const PolicySchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('compound'),
     qualityFloor: z.number().min(0).max(1),
+    clusterFloors: z.record(z.string(), z.number().min(0).max(1)).optional(),
     p95Ms: z.number().positive(),
     shadow: ShadowConfigSchema.optional(),
     guarantee: GuaranteeConfigSchema.optional(),
