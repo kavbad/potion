@@ -212,6 +212,11 @@ const run = {
 };
 if (!DRY) {
   writeFileSync(`${ART}/runs/${week}.json`, JSON.stringify(run, null, 1) + '\n');
+// Coverage ratchet (rung 5): the monthly artifact, refreshed every week.
+if (!DRY) {
+  const { writeRatchet } = await import('./observatory-ratchet.ts');
+  console.log(`ratchet: ${writeRatchet(ART, process.env.POTION_PRICES_PATH!, NOW)}`);
+}
   appendFileSync(`${ART}/digest.md`, `- ${digestLine(run)}\n`);
 }
 console.log(`\n${digestLine(run)}`);

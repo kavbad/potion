@@ -82,12 +82,12 @@ Every dollar ledgered; the envelope is a belt, not a vibe.
 |---|---|---|
 | 0 | Content-addressed cache, belts, guards, carry-forward | BUILT |
 | 0 | Heartbeat scan (new-model detector) | BUILT, off by default |
-| 1 | **Complementarity miner** over existing evidence ($0) | START NOW |
+| 1 | **Complementarity miner** over existing evidence ($0) | BUILT — first run 2026-08-20 (agentic-tool-use: +2.1 pts fusion headroom) |
 | 2 | S7 rank-catalogue script (+ specialist lanes) | SPEC'D (SERVING S7) |
-| 3 | Audition mode: single-cluster sweep at a micro-cap | small handler change |
-| 4 | Canary job + drift alarm | new worker job |
-| 5 | Coverage ratchet report (monthly artifact) | script over artifacts |
-| 6 | Track B ensemble experiments from the shortlist | MIXING Track B |
+| 3 | Audition mode: single-cluster sweep at a micro-cap | BUILT, running weekly (W34: 3 tried, 0 earned) |
+| 4 | Canary job + drift alarm | BUILT, running weekly (W34: 10 canaries, no drift) |
+| 5 | Coverage ratchet report (monthly artifact) | BUILT 2026-08-23 — `scripts/observatory-ratchet.ts`, refreshed by every weekly run (`ratchet-<month>.md`) |
+| 6 | Track B ensemble experiments from the shortlist | NEXT — needs a spend decision (MIXING Track B) |
 
 ## What must stay true
 - Every number ships with its uncertainty; a stale point says its age.
