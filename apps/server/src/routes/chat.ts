@@ -1147,6 +1147,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           if (next?.config) {
             app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget (stream) — served once more on the next point');
             result = await execute(next.config, messages, sseCtx);
+            if (next.config.type === 'single') learnFromAnswer(next.config.model, result, execBase.maxOutputTokens);
             emptyAnswerRetry = true;
           }
         }
@@ -1347,6 +1348,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         if (next?.config) {
           app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget — served once more on the next point');
           result = await execute(next.config, messages, execBase);
+          if (next.config.type === 'single') learnFromAnswer(next.config.model, result, execBase.maxOutputTokens);
           servedConfig = next.config;
           emptyAnswerRetry = true;
         }

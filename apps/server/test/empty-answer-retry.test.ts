@@ -76,6 +76,8 @@ describe('serving', () => {
     expect(res.json().choices[0].finish_reason).toBe('stop');
     expect(res.headers['x-potion-model']).toBe('mock-mid');
     expect(String(res.headers['x-frontier-trace'])).toContain('retry=empty_answer');
+    expect(isReasoningModel('mock-cheap')).toBe(true); // the empty answer taught the server
+    expect(isReasoningModel('mock-mid')).toBe(false); // the retry's real answer taught nothing wrong
   });
   it('JSON path: no other point → the empty answer is reported with finish_reason length', async () => {
     calls.length = 0; thinkerMode = 'empty';
