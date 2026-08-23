@@ -50,6 +50,7 @@ import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambigu
 import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
 import { learnFromAnswer, tooSmallForReasoning } from '../routing/reasoning.js';
+import { unwrapJsonFences, wantsJson } from '../routing/json-mode.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -1352,6 +1353,12 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           servedConfig = next.config;
           emptyAnswerRetry = true;
         }
+      }
+      // JSON mode honored at the edge (routing/json-mode.ts): a fenced object
+      // is unwrapped when what is inside parses; nothing else is touched.
+      if (wantsJson(body.response_format) && result.text !== '') {
+        const unwrapped = unwrapJsonFences(result.text);
+        if (unwrapped !== result.text) result = { ...result, text: unwrapped };
       }
       if (wantStream) {
         // Documented contract: non-streamable multi-call strategies (anything
