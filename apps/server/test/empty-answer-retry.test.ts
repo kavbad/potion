@@ -8,6 +8,7 @@ import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { isEmptyAnswer } from '../src/routes/chat.js';
+import { clearReasoningMarks, isReasoningModel } from '../src/routing/reasoning.js';
 
 const ORG = 'org-empty';
 const KEY = 'pk_empty';
@@ -85,6 +86,7 @@ describe('serving', () => {
     expect(String(res.headers['x-frontier-trace'])).not.toContain('retry=');
   });
   it('stream path: retries before any content is written', async () => {
+    clearReasoningMarks(); // the JSON case above taught the server; test the retry itself
     calls.length = 0; thinkerMode = 'empty';
     const res = await post('extraction', { stream: true });
     expect(res.statusCode).toBe(200);
@@ -93,7 +95,23 @@ describe('serving', () => {
     expect(events.filter((e) => e.choices?.[0]?.delta?.content).length).toBeGreaterThan(0);
     expect(events.at(-1)?.choices?.[0]?.finish_reason ?? events.at(-2)?.choices?.[0]?.finish_reason).toBe('stop');
   });
+  it('the empty answer taught the server: the thinker is now a known reasoning model and is skipped BEFORE the call under a small budget', async () => {
+    expect(isReasoningModel('mock-cheap')).toBe(true);
+    calls.length = 0; thinkerMode = 'empty';
+    const res = await post('extraction');
+    expect(res.statusCode).toBe(200);
+    expect(calls).toEqual(['mock-mid']); // no wasted call on the thinker
+    expect(res.headers['x-potion-model']).toBe('mock-mid');
+    expect(String(res.headers['x-frontier-trace'])).not.toContain('retry=');
+  });
+  it('above REASONING_MIN_BUDGET the thinker is asked as usual', async () => {
+    calls.length = 0; thinkerMode = 'answer';
+    const res = await post('extraction', { max_tokens: 2048 });
+    expect(res.statusCode).toBe(200);
+    expect(calls).toEqual(['mock-cheap']);
+  });
   it('a normal answer is untouched', async () => {
+    clearReasoningMarks();
     calls.length = 0; thinkerMode = 'answer';
     const res = await post('extraction');
     expect(res.statusCode).toBe(200);

@@ -49,6 +49,7 @@ import { loadCurrentFrontier } from '@potion/pareto';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
+import { learnFromAnswer, tooSmallForReasoning } from '../routing/reasoning.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -393,10 +394,18 @@ export function nextPointExcluding(
   frontier: Frontier | null,
   servedHash: string,
   fallbackStrategy: StrategyConfig | null,
-  opts: { toolCapableOnly?: boolean },
+  opts: { toolCapableOnly?: boolean; maxOutputTokens?: number | undefined },
 ): OperatingPoint | null {
   if (!frontier) return null;
-  const rest = { ...frontier, points: frontier.points.filter((p) => p.strategyHash !== servedHash && p.strategyConfig.type === 'single') };
+  const rest = {
+    ...frontier,
+    points: frontier.points.filter(
+      (p) =>
+        p.strategyHash !== servedHash &&
+        p.strategyConfig.type === 'single' &&
+        !tooSmallForReasoning(p.strategyConfig.model, opts.maxOutputTokens),
+    ),
+  };
   if (rest.points.length === 0) return null;
   const op = resolveOperatingPoint(policy, rest, fallbackStrategy, opts);
   if (op.config === null || op.fallback === 1 || strategyHash(op.config) === servedHash) return null;
@@ -638,6 +647,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         );
     }
     const messages: ChatMessage[] = flattened.map((f) => f.message);
+    const execMaxOutputTokens = body.max_tokens !== undefined ? resolveMaxOutputTokens(body.max_tokens) : undefined;
     // Pre-auth log fields: unattributed → default org (see above). Replaced
     // with the authenticated org as soon as the key resolves.
     const logBase: NewRequestLog = { orgId: DEFAULT_ORG_ID, model: body.model };
@@ -884,6 +894,13 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
     const { frontier, provenance, latency } = chosen;
     let op = chosen.op;
+    // A known reasoning model under a small output budget is skipped BEFORE
+    // the call (routing/reasoning.ts); the trace says so.
+    let skippedReasoning: string | null = null;
+    if (op.config?.type === 'single' && tooSmallForReasoning(op.config.model, execMaxOutputTokens)) {
+      const next = nextPointExcluding(policy, op.frontier, strategyHash(op.config), fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execMaxOutputTokens });
+      if (next?.config) { skippedReasoning = strategyModelLabel(op.config); op = next; }
+    }
     try {
       const guaranteeOverride = await resolveGuaranteeOverride(
         ctx,
@@ -899,6 +916,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // ---- end M3 #22 guarantee override ----
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
+    if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     logBase.frontierVersion = op.frontierVersion;
     const trace =
@@ -1123,8 +1141,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           stream: (token: string) => writeData(sseChunk(base, { content: token })),
         };
         result = await execute(op.config, messages, sseCtx);
+        if (op.config.type === 'single') learnFromAnswer(op.config.model, result, execBase.maxOutputTokens);
         if (op.config.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
-          const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined });
+          const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
           if (next?.config) {
             app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget (stream) — served once more on the next point');
             result = await execute(next.config, messages, sseCtx);
@@ -1321,9 +1340,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // ---- 5b. JSON path (non-stream, or stream:true on a non-streamable multi-call strategy) ----
     try {
       let result = await execute(op.config, messages, execBase);
+      if (op.config.type === 'single') learnFromAnswer(op.config.model, result, execBase.maxOutputTokens);
       let servedConfig: StrategyConfig = op.config;
       if (op.config.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
-        const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined });
+        const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
         if (next?.config) {
           app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget — served once more on the next point');
           result = await execute(next.config, messages, execBase);
