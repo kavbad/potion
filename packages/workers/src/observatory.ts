@@ -208,6 +208,21 @@ export function rankCandidates(
 // ---------------------------------------------------------------------------
 // The run record — nulls are published
 
+/** Lane 1b (2026-08-23): the same pick re-run under a customer-sized output
+ * budget. 'budget-blind' = it lost more than half its stored quality there. */
+export interface BudgetCanary {
+  clusterId: string;
+  model: string;
+  strategyHash: string;
+  storedQuality: number;
+  observedMean: number | null;
+  n: number;
+  budgetTokens: number;
+  verdict: 'ok' | 'budget-blind' | 'inconclusive';
+  spendUsd: number;
+  error?: string;
+}
+
 export interface CanaryResult {
   clusterId: string;
   model: string;
@@ -239,6 +254,7 @@ export interface ObservatoryRun {
   envelopeBefore: Envelope;
   plan: LanePlan;
   canaries: CanaryResult[];
+  budgetCanaries?: BudgetCanary[];
   auditions: AuditionResult[];
   /** New listings seen this week (before ranking) — the catalogue's pulse. */
   catalogue: { listings: number; newSinceRegistry: number; skippedNoPricing: number; freeTierExcluded: number; ranked: number };

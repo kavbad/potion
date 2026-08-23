@@ -150,6 +150,41 @@ for (const clusterId of clusters) {
   }
 }
 
+// ---- lane 1b: budget canaries (2026-08-23) ----
+// A frontier point is a claim under the conditions the customer uses it in,
+// and the harness never varied the output budget. Found live: the extraction
+// pick, a reasoning model, returns nothing under max_tokens 120–800. Every
+// pick the canary measured this week is re-run on CANARY_BUDGET_N items at
+// CANARY_BUDGET_TOKENS; a collapse of quality there is a budget-blind point,
+// recorded on the run and said in the digest. Spend ≈ a quarter of lane 1.
+type BudgetCanary = import('@potion/workers').BudgetCanary;
+const CANARY_BUDGET_TOKENS = 256;
+const CANARY_BUDGET_N = 2;
+const budgetCanaries: BudgetCanary[] = [];
+for (const c of canaries) {
+  if (c.n === 0 || c.error) continue;
+  if (DRY) { console.log(`  budget ${c.clusterId.padEnd(22)} would re-run ${c.model} on ${CANARY_BUDGET_N} items at max_tokens ${CANARY_BUDGET_TOKENS}`); continue; }
+  try {
+    const res = await frontierPlatformSweepHandler(
+      { clusterId: c.clusterId, capUsd: CANARY_CAP_USD / 2, maxAnswerers: 1, auditionModels: [c.model], sampleN: CANARY_BUDGET_N, publish: false, cacheSalt: `${week}-b${CANARY_BUDGET_TOKENS}`, maxOutputTokens: CANARY_BUDGET_TOKENS },
+      ctx,
+    );
+    const sample = (res.sampled ?? []).find((x) => x.strategyHash === c.strategyHash) ?? null;
+    const n = sample?.n ?? 0;
+    // Two items cannot prove drift; they can prove an answer that is not there.
+    const verdict: BudgetCanary['verdict'] = !sample || n === 0 ? 'inconclusive' : sample.meanQuality < c.storedQuality / 2 ? 'budget-blind' : 'ok';
+    budgetCanaries.push({ clusterId: c.clusterId, model: c.model, strategyHash: c.strategyHash, storedQuality: c.storedQuality, observedMean: sample?.meanQuality ?? null, n, budgetTokens: CANARY_BUDGET_TOKENS, verdict, spendUsd: res.spendUsd });
+    ledgerAppend({ at: NOW.toISOString(), week, lane: 'budget-canary', spendUsd: res.spendUsd, detail: `${c.clusterId}/${c.model}@${CANARY_BUDGET_TOKENS}` });
+    console.log(`  budget ${c.clusterId.padEnd(22)} ${c.model.padEnd(28)} q ${sample ? sample.meanQuality.toFixed(3) : '  —  '} (n=${n}) at ${CANARY_BUDGET_TOKENS} tokens vs stored ${c.storedQuality.toFixed(3)} → ${verdict}  $${res.spendUsd.toFixed(4)}`);
+    if (res.published) throw new Error(`INVARIANT: a budget canary published a frontier on ${c.clusterId} — publish:false is broken`);
+  } catch (e) {
+    budgetCanaries.push({ clusterId: c.clusterId, model: c.model, strategyHash: c.strategyHash, storedQuality: c.storedQuality, observedMean: null, n: 0, budgetTokens: CANARY_BUDGET_TOKENS, verdict: 'inconclusive', spendUsd: 0, error: e instanceof Error ? e.message : String(e) });
+    console.log(`  budget ${c.clusterId.padEnd(22)} ${c.model} failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+const budgetBlind = budgetCanaries.filter((b) => b.verdict === 'budget-blind');
+if (budgetBlind.length > 0) console.log(`  budget-blind points: ${budgetBlind.map((b) => `${b.clusterId}/${b.model}`).join(', ')}`);
+
 // ---- lane 2: auditions (catalogue read-only; registry grows only by what we audition) ----
 const auditions: AuditionResult[] = [];
 let catalogue = { listings: 0, newSinceRegistry: 0, skippedNoPricing: 0, freeTierExcluded: 0, ranked: 0 };
@@ -205,9 +240,9 @@ try {
 }
 
 // ---- the record: nulls are published ----
-const spendUsd = [...canaries, ...auditions].reduce((s, r) => s + r.spendUsd, 0);
+const spendUsd = [...canaries, ...budgetCanaries, ...auditions].reduce((s, r) => s + r.spendUsd, 0);
 const run = {
-  week, at: NOW.toISOString(), envelopeBefore, plan, canaries, auditions, catalogue, spendUsd,
+  week, at: NOW.toISOString(), envelopeBefore, plan, canaries, budgetCanaries, auditions, catalogue, spendUsd,
   envelopeAfter: envelopeFor(ledger, NOW),
 };
 if (!DRY) {
@@ -217,7 +252,7 @@ if (!DRY) {
   const { writeRatchet } = await import('./observatory-ratchet.ts');
   console.log(`ratchet: ${writeRatchet(ART, process.env.POTION_PRICES_PATH!, NOW)}`);
 }
-  appendFileSync(`${ART}/digest.md`, `- ${digestLine(run)}\n`);
+  appendFileSync(`${ART}/digest.md`, `- ${digestLine(run)}${budgetBlind.length > 0 ? ` · ${budgetBlind.length} budget-blind` : ''}\n`);
 }
 console.log(`\n${digestLine(run)}`);
 if (!DRY && process.env.NOTION_API_KEY && process.env.NOTION_PAGE_ID) {
