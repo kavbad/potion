@@ -130,3 +130,21 @@ export interface ServedSpendRow {
   requests: number;
   costUsd: number;
 }
+
+/**
+ * What the learning period cost this org (status = 'eval_live' rows carry
+ * the per-call metering of measuring the org's own workloads). Billed to the
+ * org's usage since 2026-08-22, so it must be visible to the org.
+ */
+export async function measurementSpendUsd(db: PotionDb, orgId: string, fromDay: string, toDay: string): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT coalesce(sum((usage ->> 'costUsd')::double precision), 0) AS cost_usd
+      FROM request_logs
+     WHERE org_id = ${orgId}
+       AND status = 'eval_live'
+       AND ts >= ${fromDay}::date
+       AND ts < (${toDay}::date + interval '1 day')
+  `);
+  const r = (rows.rows as Array<{ cost_usd: number | string }>)[0];
+  return Number(r?.cost_usd ?? 0);
+}

@@ -3,7 +3,7 @@
 //
 // Limits (per key; columns added in migration 0006, NULL = platform default):
 //   · rate_rps    requests/sec — bucket capacity AND refill rate (default 10)
-//   · daily_cap   allowed requests per UTC day (default 10_000)
+//   · daily_cap   allowed requests per UTC day (default 200_000 — 10_000 until 2026-08-22, which a customer at one request a second exhausted before lunch)
 //   · max_body_kb request body ceiling in KiB (default 1024 = 1 MiB)
 //
 // Precedence + cost: the check runs in an onRequest hook — BEFORE body
@@ -54,7 +54,7 @@ export interface RateLimitConfig {
 /** Platform defaults — used when the api_keys columns are NULL. */
 export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
   rps: 10,
-  dailyCap: 10_000,
+  dailyCap: 200_000,
   maxBodyKb: 1024,
 };
 

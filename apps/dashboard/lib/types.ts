@@ -235,6 +235,8 @@ export interface UsageCurrentResponse {
   orgId: string;
   today: { day: string } & UsageTotalsDto;
   mtd: { from: string; to: string } & UsageTotalsDto;
+  /** What measuring this org's workloads cost this month (billed to the org). */
+  measurementUsd?: number;
 }
 
 // ---- savings report (M3 #21 shadow mode, SPEC §12.4) ----

@@ -162,6 +162,11 @@ services:
       POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
       # Frontier Notes issues, written by the observatory service (read-only here)
       FRONTIER_NOTES_DIR: /research/notes
+      # 'Ask the docs' (public, rate-limited) runs on the org's own serving key through the internal API
+      POTION_SELF_KEY: ${POTION_SELF_KEY:-}
+      POTION_API_URL_PUBLIC: http://server:3000
+      POTION_PUBLIC_API_URL: https://api.withpotion.com
+      DOCS_ASK_DAILY_MAX: ${DOCS_ASK_DAILY_MAX:-500}
     # No ports: reachable only through Caddy, same posture as the server.
     depends_on:
       server:

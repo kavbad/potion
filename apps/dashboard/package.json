@@ -13,7 +13,9 @@
     "lab-walkthrough": "tsx scripts/lab-walkthrough.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.46",
     "@potion/lab-form": "workspace:*",
+    "ai": "^7.0.77",
     "next": "15.5.22",
     "react": "19.0.0",
     "react-dom": "19.0.0",

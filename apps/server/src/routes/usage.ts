@@ -29,8 +29,7 @@ import {
   periodToDay,
   sumRollup,
   utcDay,
-  type UsageDailyRow,
-} from '@potion/db';
+  type UsageDailyRow, measurementSpendUsd } from '@potion/db';
 import {
   roleAtLeast, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
@@ -187,10 +186,13 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
     const monthStart = `${today.slice(0, 7)}-01`;
     const todayRows = await liveUsageRollup(db(), org.orgId, { fromDay: today, toDay: today });
     const mtdRows = await liveUsageRollup(db(), org.orgId, { fromDay: monthStart, toDay: today });
+    const measurementUsd = await measurementSpendUsd(db(), org.orgId, monthStart, today);
     return reply.send({
       orgId: org.orgId,
       today: { day: today, ...sumRollup(todayRows) },
       mtd: { from: monthStart, to: today, ...sumRollup(mtdRows) },
+      // the learning period's cost, billed to this org (2026-08-22)
+      measurementUsd,
     });
   });
 

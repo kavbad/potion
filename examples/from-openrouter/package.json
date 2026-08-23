@@ -1,0 +1,16 @@
+{
+  "name": "summarize-from-openrouter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reads a text file and prints a 3-bullet summary. Originally written against OpenRouter; migrated to Potion.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx summarize.ts input.txt"
+  },
+  "dependencies": {
+    "openai": "^7.5.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

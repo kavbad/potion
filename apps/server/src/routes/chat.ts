@@ -354,6 +354,13 @@ export function baselineCostUsd(
   return Number.isFinite(scaled) ? scaled : null;
 }
 
+/** A public name for what a strategy runs — sent as the x-potion-model response
+ * header next to the receipt (2026-08-22: an app could not tell which model
+ * answered from the receipt alone; found by dogfooding). */
+export function strategyModelLabel(cfg: { type: string; model?: string }): string {
+  return cfg.type === 'single' ? (cfg.model ?? 'single') : `combination:${cfg.type}`;
+}
+
 /** SPEC §8 trace header (semicolon-separated, no spaces), plus the M1a
  * provenance marker: provenance=live|mock|blocked. */
 export function traceHeaderValue(op: {
@@ -832,6 +839,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
     logBase.trace = trace;
     void reply.header('x-frontier-trace', trace);
+    void reply.header('x-potion-model', strategyModelLabel(op.config as { type: string; model?: string }));
     // G2.6: the standing policy-level condition. Deduped in the repo, so it
     // is safe per-request; the alert fires once per episode, on the raise.
     void maintainPolicyCondition(
@@ -1015,6 +1023,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         'cache-control': 'no-cache',
         connection: 'keep-alive',
         'x-frontier-trace': trace,
+        'x-potion-model': strategyModelLabel(op.config as { type: string; model?: string }),
         // M3 #26 observability: echo the request id (hijacked responses
         // bypass the plugin's onSend hook).
         'x-request-id': req.id,
@@ -1158,6 +1167,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           'cache-control': 'no-cache',
           connection: 'keep-alive',
           'x-frontier-trace': trace,
+          'x-potion-model': strategyModelLabel(op.config as { type: string; model?: string }),
           'x-request-id': req.id,
         });
         writeData(openAiError((err as Error).message, 'service_unavailable', 'service_unavailable'));

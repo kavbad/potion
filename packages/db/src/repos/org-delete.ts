@@ -60,6 +60,8 @@ import {
   usageDaily,
   users,
   DEFAULT_ORG_ID,
+  learningProposals,
+  orgIncumbents,
 } from '../schema.js';
 
 export interface OrgDeleteReport {
@@ -169,6 +171,9 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
     );
   }
   await count('alert_rules', db.delete(alertRules).where(eq(alertRules.orgId, orgId)).returning({ id: alertRules.id }));
+  // The learning period (0045): proposals reference the org; incumbents are one row per org.
+  await count('learning_proposals', db.delete(learningProposals).where(eq(learningProposals.orgId, orgId)).returning({ id: learningProposals.id }));
+  await count('org_incumbents', db.delete(orgIncumbents).where(eq(orgIncumbents.orgId, orgId)).returning({ id: orgIncumbents.orgId }));
   await count('api_keys', db.delete(apiKeys).where(eq(apiKeys.orgId, orgId)).returning({ id: apiKeys.id }));
   await count('policies', db.delete(policies).where(eq(policies.orgId, orgId)).returning({ id: policies.id }));
   await count(

@@ -1,0 +1,6 @@
+Love the new dashboard, finally see where every request went.
+Checkout crashed twice today and I lost my cart both times.
+Docs say "pip install" but the package name on PyPI is different.
+Support replied within an hour and fixed the billing mixup.
+It works, nothing special, does what the README says.
+Pricing page is vague. What does "usage-based" actually cost me per request?

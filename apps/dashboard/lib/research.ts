@@ -48,7 +48,10 @@ export function listIssues(): Issue[] {
 }
 
 export function getIssue(slug: string): Issue | null {
-  return listIssues().find((i) => i.slug === slug) ?? null;
+  const issues = listIssues();
+  // exact first; then by week prefix, so every address an issue has ever
+  // had (the old title-derived slugs) still resolves to it
+  return issues.find((i) => i.slug === slug) ?? issues.find((i) => slug.toLowerCase().startsWith(i.week.toLowerCase())) ?? null;
 }
 
 export const RESEARCH_TITLE = 'Frontier Notes';

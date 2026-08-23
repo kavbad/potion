@@ -1,0 +1,7 @@
+Minutes — Platform team sync, 18 Aug
+
+We finished moving the job queue from Redis lists to Postgres SKIP LOCKED last week. Throughput is down about 8% at peak but we no longer lose jobs on worker restarts, and the on-call runbook shrank from eleven steps to three. Sara will write the migration up for the engineering blog.
+
+The billing export job has been timing out every Sunday since the customer count crossed 40k. Root cause is the per-customer N+1 on invoices; Tomas has a batched query ready, expected to land Wednesday after review. Until then, Ops is running the export manually in two halves.
+
+Two hires start next month: a backend engineer from the payments team at Klarna and a new-grad SRE. Onboarding docs are stale; each team lead owes a refreshed "first week" page by Friday. Q4 planning kicks off on 2 Sept; bring one proposal each, with a rough cost and the metric it should move.

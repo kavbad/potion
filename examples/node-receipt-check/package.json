@@ -1,0 +1,19 @@
+{
+  "name": "potion-check",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Send one prompt through Potion and print the x-frontier-trace receipt.",
+  "type": "module",
+  "bin": {
+    "potion-check": "./potion-check.ts"
+  },
+  "scripts": {
+    "start": "node potion-check.ts"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "dependencies": {
+    "openai": "^7.5.0"
+  }
+}

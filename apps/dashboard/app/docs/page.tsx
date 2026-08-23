@@ -21,6 +21,7 @@ import { apiFetch, sessionCookieHeader } from '@/lib/api';
 import { CopyBlock } from '@/components/copy-block';
 import { SiteShell } from '@/components/site-header';
 import { AgentInstructions } from '@/components/agent-instructions';
+import { DocsAsk } from '@/components/docs-ask';
 import type { ConnectionResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 }
 
 const CONTENTS = [
+  ['ask', 'Ask the docs'],
   ['quickstart', 'Quickstart'],
   ['agent', 'Hand it to your agent'],
   ['auth', 'Authentication'],
@@ -94,7 +96,8 @@ export default async function DocsPage() {
     conn = null;
   }
   const signedIn = (await sessionCookieHeader()) !== undefined;
-  const base = conn?.baseUrl ?? 'https://api.potion.dev';
+  // Signed out there is no connection response; never hand out a stale host.
+  const base = conn?.baseUrl ?? process.env.POTION_PUBLIC_API_URL ?? 'https://api.withpotion.com';
 
   const body = (
     <div className="max-w-3xl space-y-12">
@@ -121,6 +124,18 @@ export default async function DocsPage() {
           ))}
         </nav>
       </div>
+
+      {/* The page answering its own questions, through Potion. The answer
+          is drawn from this page's prose only (lib/docs-text.ts) and the
+          receipt under it is the real x-frontier-trace — the product doing
+          the thing the section below describes. */}
+      <Section id="ask" title="Ask the docs">
+        <p className="text-sm leading-relaxed text-soft">
+          A question about anything on this page, answered from this page, served through Potion as{' '}
+          <code className="font-mono text-xs">rag-answer</code> — with the receipt it got.
+        </p>
+        <DocsAsk />
+      </Section>
 
       <Section id="quickstart" title="Quickstart">
         <ol className="space-y-2 text-sm leading-relaxed text-soft">

@@ -100,6 +100,13 @@ export default async function UsagePage({
         <StatCard label="Month-to-date — requests" value={formatInt(current.mtd.requests)} />
         <StatCard label="Month-to-date — cost" value={formatUsd(current.mtd.costUsd)} />
       </div>
+      {(current.measurementUsd ?? 0) > 0 && (
+        <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
+          Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date, billed to this account and not counted in the cost above.
+        </p>
+      )}
+      <div className="hidden">
+      </div>
 
       {/* stacked bar: requests/day by cluster */}
       <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">

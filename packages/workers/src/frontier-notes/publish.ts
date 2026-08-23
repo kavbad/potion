@@ -13,15 +13,13 @@ import { METHOD_NOTE, type Draft } from './write.js';
 
 export const DEFAULT_BYLINE = 'Potion Research';
 
-export function issueSlug(week: string, title: string): string {
-  const words = title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .split(/\s+/)
-    .filter((w) => w && !['the', 'a', 'an', 'of', 'on', 'at', 'and', 'this', 'week', 'to', 'its', 'in'].includes(w))
-    .slice(0, 7)
-    .join('-');
-  return `${week.toLowerCase()}-${words || 'frontier-notes'}`;
+/**
+ * The issue's address is its week, full stop: `2026-w34`. A title-derived
+ * slug changed every time an issue was regenerated, so links and search
+ * entries went stale within the day. Titles live in the page, not the URL.
+ */
+export function issueSlug(week: string, _title?: string): string {
+  return week.toLowerCase();
 }
 
 export interface AssembleOptions {

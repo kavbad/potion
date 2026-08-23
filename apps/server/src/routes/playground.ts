@@ -48,8 +48,7 @@ import {
   highestQualityPoint,
   resolveOperatingPoint,
   traceHeaderValue,
-  type LatencyViolation,
-} from './chat.js';
+  type LatencyViolation, strategyModelLabel } from './chat.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 import { assignmentCacheKey } from '../context.js';
 
@@ -271,6 +270,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       'cache-control': 'no-cache',
       connection: 'keep-alive',
       'x-frontier-trace': trace,
+        'x-potion-model': strategyModelLabel(resolved.config as { type: string; model?: string }),
       'x-request-id': req.id,
     });
     const base = { id, created, model };
