@@ -51,7 +51,9 @@ const res = await frontierPlatformSweepHandler(
     clusterId: 'agentic-tool-use',
     suiteOverride: { kind: 'v2', suiteId: 'agentic-tool-use-tools-v1' },
     auditionModels: SHORTLIST,
-    capabilityFilter: { tools: true },
+    // No capabilityFilter: the registry does not KNOW supports_tools for these
+    // models (null → excluded, honestly), and this instrument measures tool
+    // use directly — a model that cannot call a tool scores 0 here.
     extraShapes: CASCADES as never,
     capUsd: CAP,
     maxAnswerers: SHORTLIST.length,
