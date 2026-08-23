@@ -230,3 +230,4 @@ export * from './replay.js';
 export * from './frontier-notes/index.js';
 export * from './learning-period.js';
 export * from './observatory-ratchet.js';
+export * from './price-drift.js';
