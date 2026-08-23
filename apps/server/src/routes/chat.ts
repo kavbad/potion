@@ -792,6 +792,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // request has none — `undefined` there means "the customer told us",
     // which is a different fact from a weak match.
     let ranked: RankedAssignment | undefined;
+    let tClassifyMs: number | null = null;
     if (hintedClusterId !== null) {
       // M5 #36: hint wins; the embedder/assigner is skipped entirely.
       clusterId = hintedClusterId;
@@ -800,6 +801,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const contents = userContents.length > 0 ? userContents : messages.map((m) => m.content);
       const cacheKey = assignmentCacheKey(contents);
       ranked = ctx.assignCache.get(cacheKey);
+      const tClassify0 = performance.now();
       if (!ranked) {
         // S7 L1: assignRanked, not assign — ONE embedding, and it returns the
         // per-cluster cosines pickBest already computed instead of throwing
@@ -808,6 +810,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // well this request fit anything we have measured.
         ranked = await ctx.assigner.assignRanked(contents.join('\n'));
         ctx.assignCache.set(cacheKey, ranked);
+        // Item C (2026-08-23): the classifier's real cost on the critical
+        // path, measured in the request instead of probed from outside — a
+        // probe conflated it with the routed model's own speed.
+        tClassifyMs = Math.round(performance.now() - tClassify0);
       }
       clusterId = ranked.assignment.clusterId;
       logBase.clusterConfidence = ranked.assignment.confidence;
@@ -956,6 +962,8 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
     logBase.trace = trace;
     void reply.header('x-frontier-trace', trace);
+    // Item C: stage timing in its own header — the trace string is a pinned contract.
+    if (tClassifyMs !== null) void reply.header('x-potion-timing', `classify=${tClassifyMs}`);
     void reply.header('x-potion-model', strategyModelLabel(op.config as { type: string; model?: string }));
     // G2.6: the standing policy-level condition. Deduped in the repo, so it
     // is safe per-request; the alert fires once per episode, on the raise.

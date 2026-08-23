@@ -47,3 +47,12 @@ describe('the tools frontier', () => {
     expect(String(res.headers['x-frontier-trace'])).not.toContain('instrument=');
   });
 });
+
+describe('classifier timing on the trace (item C)', () => {
+  it('an unhinted request carries t_classify; a hinted one does not', async () => {
+    const un = await app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}` }, payload: { model: 'potion-auto', messages: [{ role: 'user', content: `Weather tool probe timing ${Date.now()}` }] } });
+    expect(String(un.headers['x-potion-timing'])).toMatch(/classify=\d+/);
+    const hinted = await app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}`, 'x-potion-cluster': 'agentic-tool-use' }, payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'hinted timing probe' }] } });
+    expect(hinted.headers['x-potion-timing']).toBeUndefined();
+  });
+});
