@@ -4,7 +4,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchOpenRouterModels } from '@potion/providers';
-import { postNoteLine, priceDriftReport } from '@potion/workers';
+import { postNoteLine } from '@potion/workers';
+// Relative on purpose: the deployed image's dist may predate a new export;
+// tsx resolves the source directly and the next image build folds it in.
+import { priceDriftReport } from '../packages/workers/src/price-drift.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 if (existsSync(`${REPO}/.env`)) {
