@@ -1,0 +1,17 @@
+{
+  "suiteId": "code-gen-vision-v1",
+  "clusterId": "code-gen",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored screenshot-to-code (10 PIL-rendered spec cards: signature, rules, examples; the code is scored by execution \u2014 deterministic, no judge)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "code-exec"
+    ]
+  },
+  "createdAt": "2026-08-23T23:30:00.000Z"
+}
