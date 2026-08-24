@@ -80,6 +80,20 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const invites = pgTable('invites', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  email: text('email').notNull(),
+  role: text('role').$type<Role>().notNull(),
+  invitedBy: text('invited_by').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+export type InviteRow = typeof invites.$inferSelect;
+
 export const memberships = pgTable(
   'memberships',
   {

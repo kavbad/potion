@@ -41,7 +41,7 @@ import {
   upsertLabGrant,
   upsertDerivedSuite,
   upsertLabHarness,
-  upsertStrategyConfig, insertLearningProposal } from '@potion/db';
+  upsertStrategyConfig, insertLearningProposal, createInvite } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { ROUTE_INVENTORY, type RouteInventoryRow } from '../src/security/route-inventory.js';
@@ -237,6 +237,9 @@ beforeAll(async () => {
     retention: { mean: 0.99 }, suggestedFloor: 0.95, projectedSaving: 0.8, items: 8, spendUsd: 0,
   });
   seeded.proposal = 'lp-sweep-a';
+  // Team invites (P0-2): an ORG_A invite for the cross-org uniform-404 probe.
+  const inv = await createInvite(db(), { orgId: ORG_A, email: 'sweep@invites.co', role: 'viewer', invitedBy: 'sweep' });
+  seeded.invite = inv.id;
 
   const share = await insertShareToken(db(), {
     orgId: ORG_A,

@@ -53,8 +53,7 @@ import {
   type AuthEventKind,
   type AuthEventMethod,
   type PotionDb,
-  type Role,
-} from '@potion/db';
+  type Role, openInviteForEmail, markInviteAccepted } from '@potion/db';
 import {
   SESSION_COOKIE,
   bearerToken,
@@ -318,7 +317,19 @@ export function registerAuthRoutes(
       const hasMembership =
         existing !== null && (await listMembershipsByUser(db, existing.id)).length > 0;
       if (!hasMembership) {
-        return reply.send({ ok: true, email });
+        // Team invites (P0-2, 2026-08-24): an open invite authorizes this
+        // email — the link is bound to the INVITE's org and verification
+        // converts it into the membership. Without one, silent ok as before.
+        const invite = await openInviteForEmail(db, email);
+        if (invite === null) {
+          return reply.send({ ok: true, email });
+        }
+        if (existing === null) {
+          await createUser(db, { id: `usr-${randomUUID().slice(0, 8)}`, email, name: userNameFromEmail(email) });
+        }
+        const link = await deliverMagicLink(email, invite.orgId, baseUrlOf(req, opts.publicBaseUrl));
+        const dev = devAuthBypassEnabled() || magicLinkInResponseEnabled() ? { devLink: link } : {};
+        return reply.send({ ok: true, email, ...dev });
       }
     }
     const { orgId } = await provision(email);
@@ -349,6 +360,20 @@ export function registerAuthRoutes(
       return reply
         .code(401)
         .send(openAiError('no user for this link', 'invalid_request_error', 'invalid_token'));
+    }
+    // Team invites: a link bound to an org the user is not yet a member of
+    // is the acceptance — email possession is proven by the link itself.
+    const memberOf = await listMembershipsByUser(db, user.id);
+    if (!memberOf.some((m) => m.orgId === link.orgId)) {
+      const invite = await openInviteForEmail(db, link.email, link.orgId);
+      if (!invite) {
+        return reply
+          .code(401)
+          .send(openAiError('no membership or open invite for this org', 'invalid_request_error', 'invalid_token'));
+      }
+      await createMembership(db, { orgId: link.orgId, userId: user.id, role: invite.role });
+      await markInviteAccepted(db, invite.id);
+      await recordAuthEvent(db, req, { orgId: link.orgId, kind: 'login', method: 'magic_link', actor: `${user.email} (invite accepted)` });
     }
     const sessionToken = newToken('ps');
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);

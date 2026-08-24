@@ -58,6 +58,7 @@ import { checkReadiness } from './readiness.js';
 import { registerShareRoutes } from './routes/share.js';
 import { registerPlaygroundRoutes } from './routes/playground.js';
 import { registerLearningRoutes } from './routes/learning.js';
+import { registerInviteRoutes } from './routes/invites.js';
 // ---- end M4 #31 share imports ----
 // ---- M4 #34 enterprise (m4-enterprise) — appended imports ----
 import { registerOidcRoutes } from './routes/oidc.js';
@@ -336,6 +337,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   registerShareRoutes(app, ctx);
   registerPlaygroundRoutes(app, ctx);
   registerLearningRoutes(app, ctx, { queue });
+  registerInviteRoutes(app, ctx);
   // ---- end M4 #31 share ----
   // ---- M4 #34 enterprise (m4-enterprise) ----
   // SSO + audit export (SPEC §13.6). OIDC routes self-gate: without the full

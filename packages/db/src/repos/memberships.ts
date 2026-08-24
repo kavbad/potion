@@ -4,6 +4,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   memberships,
+  users,
   type MembershipRow,
   type NewMembership,
   type Role,
@@ -51,4 +52,17 @@ export async function listMembershipsByUser(
     .from(memberships)
     .where(eq(memberships.userId, userId))
     .orderBy(asc(memberships.createdAt));
+}
+
+/** Members with their emails (team page, 2026-08-24). */
+export async function listMembersWithEmail(
+  db: PotionDb,
+  orgId: string,
+): Promise<{ email: string; role: Role; createdAt: Date }[]> {
+  const rows = await db
+    .select({ email: users.email, role: memberships.role, createdAt: memberships.createdAt })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(eq(memberships.orgId, orgId));
+  return rows;
 }

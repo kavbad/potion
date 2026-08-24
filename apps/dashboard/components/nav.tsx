@@ -28,6 +28,7 @@ const PRIMARY = [
   { href: '/try', label: 'Try a request', hint: 'Send anything; see what Potion chose and why' },
   { href: '/usage', label: 'Usage & savings', hint: 'What you spent, what you would have spent' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, quality floor, spending cap' },
+  { href: '/settings/team', label: 'Team', hint: 'Members and invites' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
 ];
 
