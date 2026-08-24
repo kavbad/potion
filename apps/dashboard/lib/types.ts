@@ -5,12 +5,12 @@ export type ProviderId = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'moc
 
 export type Policy =
   | { type: 'max_quality'; costCeilingPer1K: number }
-  | { type: 'min_cost'; qualityFloor: number }
+  | { type: 'min_cost'; qualityFloor: number; clusterFloors?: Record<string, number> }
   | { type: 'latency_bound'; p95Ms: number }
   /** G2.6: a quality floor AND a hard latency bound, cheapest among the
    * survivors. The bound EXCLUDES — it is an SLO the customer stated, not a
    * preference — so the UI's job is to show what that exclusion costs. */
-  | { type: 'compound'; qualityFloor: number; p95Ms: number };
+  | { type: 'compound'; qualityFloor: number; p95Ms: number; clusterFloors?: Record<string, number> };
 
 export type StrategyConfig =
   | { type: 'single'; model: string }

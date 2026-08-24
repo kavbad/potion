@@ -3,6 +3,7 @@
 // merged newest-first. Admin-only server-side; a 403 renders a notice, not
 // a crash (a 401 is a dead session, and recovers through /api/auth/clear). The export form downloads a bounded (≤92-day) JSONL stream.
 import { ApiUnreachable, isForbidden } from '@/lib/api';
+import { SettingsTabs } from '@/components/settings-tabs';
 import { fetchOrRecover } from '@/lib/recover';
 
 export const dynamic = 'force-dynamic';
@@ -173,6 +174,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
         Every sensitive thing that happened in your org: key custody, sign-ins, and guarantee
         incidents — one chronology, exportable as JSONL.
       </p>
+      <SettingsTabs />
       {children}
     </div>
   );

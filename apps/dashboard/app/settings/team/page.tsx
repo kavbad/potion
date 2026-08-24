@@ -2,6 +2,7 @@
 // Team (P0-2, 2026-08-24): members, open invites, the invite form. An
 // invite authorizes an email; the invitee accepts by signing in with it.
 import { useCallback, useEffect, useState } from 'react';
+import { SettingsTabs } from '@/components/settings-tabs';
 
 interface Member { email: string; role: string; since: string }
 interface Invite { id: string; email: string; role: string; invitedBy: string; createdAt: string; status: string }
@@ -47,6 +48,8 @@ export default function TeamPage() {
       <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-soft">
         Members sign in by magic link with their email. An invite authorizes an address; signing in with it accepts the invite.
       </p>
+
+      <div className="mt-8"><SettingsTabs /></div>
 
       <div className="mt-8 border border-[#d9d5cb] bg-[#fbfaf7]">
         <div className="border-b border-[#d9d5cb] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Members</div>

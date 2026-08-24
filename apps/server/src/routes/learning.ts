@@ -126,6 +126,40 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     return reply.send({ applied: open.length, policyId, clusterFloors: clusterFloorsOf(policy), keysRebound });
   });
 
+  // The org-wide quality floor, settable from /settings/controls (P1-7).
+  // Same shape as apply: a NEW policy row (policies are immutable history)
+  // carrying the changed floor, every active key rebound. Per-kind floors
+  // survive a default-floor change; a latency bound survives as compound;
+  // max_quality has no floor, so setting one deliberately replaces it.
+  const FloorBody = z.object({ qualityFloor: z.number().min(0.5).max(1) }).strict();
+  app.put('/api/floor', { preHandler: [requireRole('admin')] }, async (req, reply) => {
+    const org = req.potionOrg!;
+    const parsed = FloorBody.safeParse(req.body);
+    if (!parsed.success) {
+      const message = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ');
+      return reply.code(400).send(openAiError(message, 'invalid_request_error'));
+    }
+    const f = Math.round(parsed.data.qualityFloor * 100) / 100;
+    const first = await getFirstApiKeyWithPolicy(db, org.orgId);
+    const current = first?.policyId ? ((await getPolicyById(db, org.orgId, first.policyId))?.config ?? null) : null;
+    const carried = { ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
+    let next: Policy;
+    if (current && (current.type === 'min_cost' || current.type === 'compound')) next = { ...current, qualityFloor: f };
+    else if (current && current.type === 'latency_bound') next = { type: 'compound', qualityFloor: f, p95Ms: current.p95Ms, ...carried };
+    else next = { type: 'min_cost', qualityFloor: f, ...carried };
+    const policyId = `pol-${randomUUID().slice(0, 8)}`;
+    await insertPolicy(db, { id: policyId, orgId: org.orgId, name: `floor ${f.toFixed(2)}`, config: next });
+    const keys = (await listApiKeys(db, org.orgId)).filter((k) => !k.revokedAt);
+    for (const k of keys) await updateApiKeyPolicy(db, org.orgId, k.id, policyId);
+    return reply.send({
+      policyId,
+      qualityFloor: f,
+      clusterFloors: clusterFloorsOf(next),
+      keysRebound: keys.length,
+      previousType: current?.type ?? null,
+    });
+  });
+
   /** Merge the proposals' floors into the org's bound policy (routing/floors.ts)
    * as a NEW policy row — policies are immutable history — and rebind keys. */
   async function applyFloors(orgId: string, proposals: { clusterId: string; suggestedFloor: number }[]) {
