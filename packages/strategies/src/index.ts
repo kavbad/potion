@@ -24,3 +24,4 @@ export {
 } from './helpers.js';
 export * from './program.js';
 export * from './capabilities.js';
+export * from './exec-sandbox.js';

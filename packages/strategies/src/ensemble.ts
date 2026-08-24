@@ -4,6 +4,16 @@
 //  - 'concat-rank'  : deterministic ranking (see concatRankScore in helpers.ts:
 //                     confidence primary, length tiebreak, stable) and the
 //                     candidates are concatenated in ranked order with headers.
+//  - 'exec-pick'    : R4 (2026-08-24). A test-writer model derives a JS test
+//                     snippet FROM THE REQUEST ONLY (in parallel with the
+//                     candidates — it needs nothing from them), every
+//                     candidate runs against it in the code-exec sandbox,
+//                     highest pass count wins. Ties — including "the tests
+//                     were unusable", which scores every candidate -1 —
+//                     fall back to judge-pick over the tied candidates,
+//                     then to confidence rank. The reference answer is
+//                     never visible to any of this: the shape is servable
+//                     verbatim.
 // Usage/cost aggregated across all calls; candidate fan-out latency = max.
 import type { ChatMessage, StrategyConfig } from '@potion/core';
 import { PROTOCOL_MAX_TOKENS } from '@potion/core';
@@ -17,9 +27,29 @@ import {
   rankIndices,
   zeroUsage,
 } from './helpers.js';
+import { runCodeWithTests, stripCodeFences } from './exec-sandbox.js';
 import type { ExecContext, StageTrace, StrategyResult } from './types.js';
 
 type EnsembleConfig = Extract<StrategyConfig, { type: 'ensemble' }>;
+
+/** The test-writer wire: request context + an instruction to write tests for
+ * the sandbox's exact dialect. Deliberately forbids an implementation — a
+ * writer that answers the request instead of testing it produces a snippet
+ * whose load fails, which scores every candidate -1 and degrades to the
+ * judge/confidence fallback rather than crowning anyone. */
+export function buildTestWriterMessages(original: ChatMessage[]): ChatMessage[] {
+  return [
+    ...original,
+    {
+      role: 'user',
+      content:
+        'Do NOT answer the request above. Instead, write a JavaScript test snippet for the requested functionality. ' +
+        'The sandbox provides: test(name, fn), assert(cond, msg), assertDeepEqual(actual, expected). ' +
+        'Write 3 to 8 focused test() cases derived ONLY from what the request itself states or clearly implies. ' +
+        'Do not define or include the implementation. Return only the test code — no markdown fences, no prose.',
+    },
+  ];
+}
 
 export async function runEnsemble(
   strategy: EnsembleConfig,
@@ -31,9 +61,18 @@ export async function runEnsemble(
   const trace: StageTrace[] = [];
   const total = zeroUsage();
 
-  const candidates = await Promise.all(
-    strategy.models.map((model, i) => callModel(model, messages, ctx, baseSeed + i)),
-  );
+  const execPick = strategy.fusion.method === 'exec-pick';
+  const testWriter = strategy.fusion.testWriter;
+  if (execPick && !testWriter) throw new Error("ensemble fusion 'exec-pick' requires fusion.testWriter");
+
+  // exec-pick's test-writer needs only the request, so it rides the same
+  // parallel fan-out as the candidates — zero added latency on the happy path.
+  const [candidates, testsOutcome] = await Promise.all([
+    Promise.all(strategy.models.map((model, i) => callModel(model, messages, ctx, baseSeed + i))),
+    execPick
+      ? callModel(testWriter!.model, buildTestWriterMessages(messages), ctx, baseSeed + strategy.models.length + 1)
+      : Promise.resolve(null),
+  ]);
   candidates.forEach((c, i) => {
     addUsageParallel(total, c.usage);
     trace.push({
@@ -44,6 +83,60 @@ export async function runEnsemble(
       ...(c.logprobConfidence !== undefined ? { confidence: c.logprobConfidence } : {}),
     });
   });
+
+  if (execPick) {
+    addUsageParallel(total, testsOutcome!.usage);
+    trace.push({
+      stage: 'test-writer',
+      model: testWriter!.model,
+      text: testsOutcome!.text,
+      usage: testsOutcome!.usage,
+    });
+    const tests = stripCodeFences(testsOutcome!.text);
+    // Sandbox runs are sequential (one worker at a time, same as the scorer);
+    // structural failure or zero registered cases → -1 = "cannot attest".
+    const scores: number[] = [];
+    const verdicts: string[] = [];
+    for (const c of candidates) {
+      const report = await runCodeWithTests(stripCodeFences(c.text), tests);
+      const unusable = report.error !== undefined || report.total === 0;
+      scores.push(unusable ? -1 : report.passed / report.total);
+      verdicts.push(unusable ? `error(${(report.error ?? 'no cases').slice(0, 60)})` : `${report.passed}/${report.total}`);
+    }
+    const top = Math.max(...scores);
+    const tied = scores.map((s, i) => (s === top ? i : -1)).filter((i) => i >= 0);
+    let index = tied[0]!;
+    let how = `exec:${verdicts.join('|')}`;
+    if (tied.length > 1) {
+      const judge = strategy.fusion.judge;
+      if (judge) {
+        const judgeOutcome = await callModel(
+          judge.model,
+          buildJudgeMessages(messages, tied.map((i) => candidates[i]!.text), judge.rubric),
+          ctx,
+          baseSeed + strategy.models.length,
+          { maxTokens: PROTOCOL_MAX_TOKENS },
+        );
+        addUsage(total, judgeOutcome.usage);
+        const { index: within, parsed } = parsePick(judgeOutcome.text, tied.length);
+        index = tied[within]!;
+        how += `;tie-judge:${index}${parsed ? '' : ';unparseable-judge-answer-default-0'}`;
+        trace.push({ stage: 'tie-judge', model: judge.model, text: judgeOutcome.text, usage: judgeOutcome.usage });
+      } else {
+        const order = rankIndices(candidates);
+        index = order.find((i) => tied.includes(i)) ?? tied[0]!;
+        how += `;tie-confidence:${index}`;
+      }
+    }
+    trace.push({
+      stage: 'fusion-exec',
+      model: 'sandbox',
+      text: candidates[index]!.text,
+      usage: zeroUsage(),
+      decision: `exec-pick:${index};${how}`,
+    });
+    return { text: candidates[index]!.text, trace, usage: total };
+  }
 
   if (strategy.fusion.method === 'judge-pick') {
     const judge = strategy.fusion.judge;

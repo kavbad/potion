@@ -34,7 +34,7 @@
 import type { ChatMessage, EvalItem, PriceEntry, PriceTable, ProgramCheck, ProgramNode, StrategyConfig } from '@potion/core';
 import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import { DEFAULT_MAX_TOKENS } from '@potion/providers';
-import { MAX_SUBTASKS } from '@potion/strategies';
+import { CODE_EXEC_TIMEOUT_MS, CODE_EXEC_WALL_SLACK_MS, MAX_SUBTASKS } from '@potion/strategies';
 import { buildJudgeScoreMessages } from './scorers.js';
 
 /** Enforced output ceiling for an answering call (provider-layer max_tokens). */
@@ -134,7 +134,13 @@ export function estimateCalls(
         inputTokens: baseInputTokens,
         outputTokens: OUT,
       }));
-      if (strategy.fusion.method === 'judge-pick' && strategy.fusion.judge) {
+      // exec-pick (R4): the test-writer answers the request-derived wire at
+      // the answer ceiling; the judge is the tie-break and fires in the
+      // worst case, so it is priced whenever configured.
+      if (strategy.fusion.method === 'exec-pick' && strategy.fusion.testWriter) {
+        calls.push({ model: strategy.fusion.testWriter.model, inputTokens: baseInputTokens, outputTokens: OUT });
+      }
+      if ((strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick') && strategy.fusion.judge) {
         calls.push({
           model: strategy.fusion.judge.model,
           inputTokens: baseInputTokens + strategy.models.length * EMBED,
@@ -350,10 +356,22 @@ export function projectStrategyP95Ms(
     case 'draft-verify':
       return sum([L(strategy.draftModel), L(strategy.verifierModel)]);
     case 'ensemble': {
-      const drafts = par(strategy.models.map((m) => L(m)));
+      // exec-pick's test-writer rides the candidate fan-out (parallel); the
+      // sandbox runs are sequential per candidate at the hard wall bound;
+      // the tie-judge fires in the worst case whenever configured.
+      const fanout =
+        strategy.fusion.method === 'exec-pick' && strategy.fusion.testWriter
+          ? par([...strategy.models.map((m) => L(m)), L(strategy.fusion.testWriter.model)])
+          : par(strategy.models.map((m) => L(m)));
+      const sandbox =
+        strategy.fusion.method === 'exec-pick'
+          ? strategy.models.length * (CODE_EXEC_TIMEOUT_MS + CODE_EXEC_WALL_SLACK_MS)
+          : 0;
       const judge =
-        strategy.fusion.method === 'judge-pick' && strategy.fusion.judge ? L(strategy.fusion.judge.model) : 0;
-      return sum([drafts, judge]);
+        (strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick') && strategy.fusion.judge
+          ? L(strategy.fusion.judge.model)
+          : 0;
+      return sum([fanout, sandbox, judge]);
     }
     case 'composite':
       // start + probe (same model) + upgrade, all sequential

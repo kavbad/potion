@@ -99,8 +99,16 @@ export const JudgeConfigSchema = z.object({
 });
 
 export const FusionConfigSchema = z.object({
-  method: z.enum(['judge-pick', 'concat-rank']),
+  /** R4 (2026-08-24): 'exec-pick' — a test-writer model derives a JS test
+   * snippet FROM THE REQUEST ONLY (never a reference), every candidate runs
+   * against it in the code-exec sandbox, the highest pass count wins; ties
+   * (including "tests unusable") fall back to judge-pick, then confidence.
+   * Measured motivation: judge-pick realized 27% of a pair's oracle
+   * headroom on code-gen — the text judge is the bottleneck. */
+  method: z.enum(['judge-pick', 'concat-rank', 'exec-pick']),
   judge: JudgeConfigSchema.optional(),
+  /** exec-pick only: the model that writes the tests. */
+  testWriter: JudgeConfigSchema.optional(),
 });
 
 export const StrategyConfigSchema = z.discriminatedUnion('type', [

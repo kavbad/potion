@@ -60,3 +60,16 @@ describe('projectStrategyP95Ms', () => {
     expect(projectStrategyP95Ms(cfg, L)).toBeNull();
   });
 });
+
+describe('projectStrategyP95Ms: exec-pick (R4)', () => {
+  it('fan-out max includes the test-writer; sandbox wall bound and tie-judge add on', async () => {
+    const { CODE_EXEC_TIMEOUT_MS, CODE_EXEC_WALL_SLACK_MS } = await import('@potion/strategies');
+    const cfg = {
+      type: 'ensemble',
+      models: ['cheap', 'strong'],
+      fusion: { method: 'exec-pick', testWriter: { model: 'judge' }, judge: { model: 'judge' } },
+    } as StrategyConfig;
+    const wall = 2 * (CODE_EXEC_TIMEOUT_MS + CODE_EXEC_WALL_SLACK_MS);
+    expect(projectStrategyP95Ms(cfg, L)).toBe(5000 + wall + 800);
+  });
+});

@@ -121,8 +121,10 @@ export interface JudgeConfig {
 }
 
 export interface FusionConfig {
-  method: 'judge-pick' | 'concat-rank';
+  method: 'judge-pick' | 'concat-rank' | 'exec-pick';
   judge?: JudgeConfig;
+  /** exec-pick only: the model that writes request-derived tests. */
+  testWriter?: JudgeConfig;
 }
 
 export type StrategyConfig =
