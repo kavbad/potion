@@ -1,0 +1,17 @@
+{
+  "suiteId": "rag-answer-vision-v1",
+  "clusterId": "rag-answer",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored chart/panel reading (12 PIL-rendered bar charts and status panels; every asked value printed in the pixels; deterministic field-match)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "field-match"
+    ]
+  },
+  "createdAt": "2026-08-23T22:00:00.000Z"
+}

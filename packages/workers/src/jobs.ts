@@ -445,6 +445,8 @@ export interface FrontierPlatformSweepPayload {
     tools?: boolean;
     /** Keep only models whose KNOWN context window is at least this. */
     minContextTokens?: number;
+    /** Keep only models with measured vision evidence (supports_vision). */
+    vision?: boolean;
   };
   /**
    * Observatory AUDITION (OBSERVATORY.md §2, rung 3): measure ONLY these

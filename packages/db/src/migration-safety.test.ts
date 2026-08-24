@@ -72,6 +72,10 @@ describe('F12 meta-test: no migration may carry an unguarded data statement', ()
     '0033_evidence_attribution_repair.sql':
       'The F12 repair. Only touches rows provably impossible (created before the ' +
       'claimed org existed); ambiguous rows are audited, never modified.',
+    '0050_supports_vision.sql':
+      'G. Sets supports_vision=true only for models with vision-instrument ' +
+      'evidence cells (measured, never claimed); touches no other column or ' +
+      'row; idempotent. Unknown stays NULL — excluded, like supports_tools.',
     '0049_vision_cell_retag.sql':
       "G. Retags the vision suite's cells (item_id LIKE 'vis-%', a prefix only " +
       'that suite uses) to instrument vision — they landed as default because ' +

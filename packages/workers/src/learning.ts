@@ -182,6 +182,7 @@ export async function planProbe(db: PotionDb, opts: PlanOptions): Promise<ProbeD
 export interface ModelCapability {
   alias: string;
   supportsTools: boolean | null;
+  supportsVision?: boolean | null;
   contextLength: number | null;
 }
 
@@ -196,11 +197,14 @@ export interface ModelCapability {
 export function filterByCapability<T extends { alias: string }>(
   pool: readonly T[],
   catalog: ReadonlyMap<string, ModelCapability>,
-  filter: { tools?: boolean; minContextTokens?: number },
+  filter: { tools?: boolean; minContextTokens?: number; vision?: boolean },
 ): T[] {
   return pool.filter((e) => {
     const row = catalog.get(e.alias);
     if (filter.tools === true && row?.supportsTools !== true) return false;
+    // G: vision capability is LEARNED (supports_vision from evidence cells);
+    // unknown is excluded, the same posture as tools.
+    if (filter.vision === true && row?.supportsVision !== true) return false;
     if (filter.minContextTokens !== undefined) {
       if (row?.contextLength === null || row?.contextLength === undefined) return false;
       if (row.contextLength < filter.minContextTokens) return false;

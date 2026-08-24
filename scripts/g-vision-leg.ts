@@ -21,6 +21,8 @@ if (!process.env.KEY_RISK_ACCEPTED) throw new Error('live spend: set KEY_RISK_AC
 const STORE = process.env.OBSERVATORY_DB ?? `${REPO}/.pglite/platform-sweep-step5`;
 const ART = process.env.OBSERVATORY_ARTIFACTS ?? `${REPO}/artifacts/observatory`;
 process.env.POTION_PRICES_PATH = process.env.POTION_PRICES_PATH ?? `${REPO}/prices.json`;
+const CLUSTER = process.env.VISION_CLUSTER ?? 'extraction';
+const SUITE = process.env.VISION_SUITE ?? 'extraction-vision-v1';
 const CAP = Number(process.env.VISION_CAP_USD ?? 5);
 const PUBLISH = process.env.VISION_PUBLISH === '1';
 
@@ -40,11 +42,11 @@ const handle = await createDb(`pglite://${STORE}`);
 await migrate(handle.db);
 const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never;
 
-console.log(`g vision leg: ${SHORTLIST.length} singles + ${CASCADES.length} cascades on extraction-vision-v1 · cap $${CAP} · publish=${PUBLISH}`);
+console.log(`g vision leg: ${SHORTLIST.length} singles + ${CASCADES.length} cascades on ${SUITE} (${CLUSTER}) · cap $${CAP} · publish=${PUBLISH}`);
 const res = await frontierPlatformSweepHandler(
   {
-    clusterId: 'extraction',
-    suiteOverride: { kind: 'v2', suiteId: 'extraction-vision-v1' },
+    clusterId: CLUSTER,
+    suiteOverride: { kind: 'v2', suiteId: SUITE },
     auditionModels: SHORTLIST,
     // No capabilityFilter: the registry does not KNOW supports_tools for these
     // models (null → excluded, honestly), and this instrument measures tool
@@ -53,7 +55,7 @@ const res = await frontierPlatformSweepHandler(
     capUsd: CAP,
     maxAnswerers: SHORTLIST.length,
     publish: PUBLISH,
-    cacheSalt: 'g-vision-v1',
+    cacheSalt: `g-vision-${CLUSTER}-v1`,
     instrument: 'vision',
   } as never,
   ctx,

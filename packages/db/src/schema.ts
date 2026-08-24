@@ -195,6 +195,8 @@ export const models = pgTable('models', {
   contextLength: integer('context_length'),
   maxOutputTokens: integer('max_output_tokens'),
   supportsTools: boolean('supports_tools'),
+  /** G: learned from vision-instrument evidence; NULL = unknown (excluded). */
+  supportsVision: boolean('supports_vision'),
   /** 'seed' (committed prices.json) | 'scan' (discovered live). */
   source: text('source').notNull().default('seed'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
