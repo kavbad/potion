@@ -38,9 +38,19 @@ export function promptTextOf(messages: ChatMessage[]): string {
  * Deterministic base seed for multi-call strategies: ctx.seed wins, else a
  * hash of the prompt (same rule the mock uses internally). Callers derive
  * per-call seeds as baseSeed + offset so fan-out variants differ.
+ *
+ * MASKED TO 31 BITS (R4 flake, 2026-08-24): hashString is FNV-1a → unsigned
+ * 32-bit, so roughly half of all prompts derived a seed ≥ 2^31 — and
+ * Google-backed OpenRouter endpoints reject those with the generic
+ * 'Provider returned error'. Since the failing seed is a pure function of
+ * the prompt, the same items failed every run: multi-stage shapes carrying
+ * gemini-family stages contained deterministically while singles (which
+ * send no seed unless ctx.seed is set) sailed through. Root-caused by the
+ * seed-range probe in scripts/r4-flake-probe.ts. Explicit ctx.seed is the
+ * caller's contract and is passed through unmasked.
  */
 export function baseSeedOf(ctx: ExecContext, messages: ChatMessage[]): number {
-  return ctx.seed ?? hashString(promptTextOf(messages));
+  return ctx.seed ?? hashString(promptTextOf(messages)) & 0x7fffffff;
 }
 
 export interface CallOutcome {
