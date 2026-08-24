@@ -227,7 +227,7 @@ export interface RunSummary {
    * Judge-scoring spend included in spendUsd: Σ over this run's EXECUTED
    * llm-judge scorer calls (scorerUsage.costUsd). 0 for runs with no
    * llm-judge items. Caveat: resume cache-hits reuse stored rows, which do
-   * not retain the scorerUsage split — their judge cost IS inside spendUsd
+   * retain the split on scorerUsage since 2026-08-23; older cached cells fold
    * (via usage.costUsd) but cannot be re-attributed here.
    */
   judgeSpendUsd: number;
@@ -623,10 +623,15 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         // discarded). latencyMs deliberately stays STRATEGY-ONLY: scorer
         // latency is not folded in, so latency aggregates keep their
         // pre-M1b meaning (strategy response time, not scoring overhead).
+        // Serving truth vs measurement truth (2026-08-23): the cell's usage
+        // is the ANSWER call only — it is what the frontier's cost axis
+        // aggregates and what a receipt cites. The scorer's spend is kept on
+        // its own field and added back into the run's spendUsd below, so the
+        // budget belt still counts every dollar burned.
         const usage: Usage = {
-          inputTokens: outcome.usage.inputTokens + (scorerUsage?.inputTokens ?? 0),
-          outputTokens: outcome.usage.outputTokens + (scorerUsage?.outputTokens ?? 0),
-          costUsd: outcome.usage.costUsd + (scorerUsage?.costUsd ?? 0),
+          inputTokens: outcome.usage.inputTokens,
+          outputTokens: outcome.usage.outputTokens,
+          costUsd: outcome.usage.costUsd,
           latencyMs: outcome.usage.latencyMs,
         };
         const result: EvalResult = {
@@ -638,6 +643,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           quality,
           scorer,
           usage,
+          ...(scorerUsage !== undefined ? { scorerUsage } : {}),
           // Single-sample distribution: per-item latency IS the strategy's
           // aggregated usage.latencyMs; p50/p95 across items live on the aggregate.
           latencyMs: { p50: usage.latencyMs, p95: usage.latencyMs, mean: usage.latencyMs },
@@ -655,7 +661,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         if (!cached) await insertEvalResult(handle.db, result);
         executed++;
         judgeSpendUsd += scorerUsage?.costUsd ?? 0;
-        executedSpendUsd += usage.costUsd;
+        executedSpendUsd += usage.costUsd + (scorerUsage?.costUsd ?? 0);
         results.push(result);
       }
     }
@@ -686,7 +692,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
 
     // spendUsd = Σ per-result usage.costUsd — INCLUDES judge scoring cost
     // (folded into usage above), so live budget accounting sees real spend.
-    const spendUsd = results.reduce((a, r) => a + r.usage.costUsd, 0) + abandonedSpendUsd;
+    const spendUsd = results.reduce((a, r) => a + r.usage.costUsd + (r.scorerUsage?.costUsd ?? 0), 0) + abandonedSpendUsd;
     return {
       runId,
       aggregates,

@@ -1,0 +1,11 @@
+-- Serving truth vs measurement truth (2026-08-23). The runner folded the
+-- llm-judge's tokens and cost into each cell's usage for budget accounting,
+-- and the frontier's costPer1K aggregated that same field — so judge-scored
+-- clusters carried the judge's fee on the customer-facing cost axis (found
+-- by the price-drift reflow: 20-60x over tokens-at-any-price on creative/
+-- summarization/rewrite-edit, while deterministic-scored clusters reconciled).
+-- New cells store the answer's usage in `usage` and the scorer's in
+-- `scorer_usage`; legacy cells (scorer_usage IS NULL) remain judge-inclusive
+-- and cannot be unsplit — frontiers built from them are corrected by the
+-- token-based reflow.
+ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS scorer_usage jsonb;

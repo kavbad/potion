@@ -245,6 +245,8 @@ export const evalResults = pgTable('eval_results', {
   confidence: doublePrecision('confidence'),
   confidenceMethod: text('confidence_method'),
   usage: jsonb('usage').$type<Usage>().notNull(),
+  /** 2026-08-23: the judge's spend, split out of `usage` (serving vs measurement truth). */
+  scorerUsage: jsonb('scorer_usage').$type<Usage>(),
   latencyMs: jsonb('latency_ms').$type<EvalResult['latencyMs']>().notNull(),
   modelVersions: jsonb('model_versions').$type<Record<string, string>>().notNull(),
   pricesVersion: text('prices_version').notNull(),

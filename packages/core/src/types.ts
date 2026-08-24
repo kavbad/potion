@@ -199,6 +199,11 @@ export interface EvalResult {
   // spend is real provider spend). usage.latencyMs stays strategy-only;
   // scorer latency is deliberately not folded in.
   usage: Usage;
+  /** The scorer's own spend (llm-judge), kept OUT of `usage` (2026-08-23):
+   * usage is the serving truth the frontier's cost axis aggregates; this is
+   * the measurement truth the run's budget adds back. Absent on legacy cells
+   * (their usage is judge-inclusive and cannot be unsplit). */
+  scorerUsage?: Usage;
   latencyMs: { p50: number; p95: number; mean: number };
   modelVersions: Record<string, string>; // model alias -> resolved provider version
   pricesVersion: string;

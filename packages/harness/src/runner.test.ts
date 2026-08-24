@@ -392,7 +392,7 @@ describe('runEval', () => {
     expect(authored.simulated).toBe(false);
   });
 
-  it('counts judge scoring cost in usage/spend/aggregates — hand-computed totals (M1b)', async () => {
+  it('judge cost rides scorerUsage and spend, never the cell usage or the cost axis — hand-computed totals', async () => {
     const pricedPrices = loadPrices(PRICED_PRICES_PATH).table;
     const strategy = { type: 'single', model: 'm-cheap-answer' } as const;
     const summary = await runEval(
@@ -422,9 +422,15 @@ describe('runEval', () => {
       const r = summary.results.find((x) => x.itemId === id)!;
       expect(r.scorer).toBe('llm-judge:m-judge');
       // usage = strategy + judge, tokens and cost summed…
-      expect(r.usage.inputTokens).toBe(strat.usage.inputTokens + judge.usage.inputTokens);
-      expect(r.usage.outputTokens).toBe(strat.usage.outputTokens + judge.usage.outputTokens);
-      expect(r.usage.costUsd).toBeCloseTo(stratCost + judgeCost, 12);
+      // 2026-08-23: the cell's usage is the ANSWER call only (the serving
+      // truth the frontier's cost axis aggregates); the judge's spend rides
+      // scorerUsage and is added back into the run's spendUsd.
+      expect(r.usage.inputTokens).toBe(strat.usage.inputTokens);
+      expect(r.usage.outputTokens).toBe(strat.usage.outputTokens);
+      expect(r.usage.costUsd).toBeCloseTo(stratCost, 12);
+      expect(r.scorerUsage?.inputTokens).toBe(judge.usage.inputTokens);
+      expect(r.scorerUsage?.outputTokens).toBe(judge.usage.outputTokens);
+      expect(r.scorerUsage?.costUsd).toBeCloseTo(judgeCost, 12);
       // …but latencyMs stays STRATEGY-ONLY (cheap profile 300ms, judge is 900ms).
       expect(r.usage.latencyMs).toBe(300);
       expect(r.latencyMs.p50).toBe(300);
@@ -436,7 +442,7 @@ describe('runEval', () => {
     expect(summary.spendUsd).toBeCloseTo(expectedSpend, 12);
     expect(summary.judgeSpendUsd).toBeCloseTo(expectedJudgeSpend, 12);
     // …the aggregate costPer1K includes judge cost (mean per-item cost × 1000)…
-    expect(summary.aggregates[0]!.costPer1K).toBeCloseTo((expectedSpend / 2) * 1000, 9);
+    expect(summary.aggregates[0]!.costPer1K).toBeCloseTo(((expectedSpend - expectedJudgeSpend) / 2) * 1000, 9);
     // …and the preflight projection counts the judge call too (strategy-only
     // projection would be smaller by exactly the judge estimate).
     const expectedProjection = ['pr-01', 'pr-02'].reduce(
