@@ -16,6 +16,13 @@ export function describeStrategy(cfg: StrategyConfig): string {
     case 'draft-verify':
       return `draft-verify(${cfg.draftModel}→${cfg.verifierModel})`;
     case 'ensemble': {
+      // R4: exec-pick decides by RUNNING the candidates, so saying "judge"
+      // would misdescribe it on the customer-facing changelog the moment the
+      // first execution-fused point lands on a frontier.
+      if (cfg.fusion.method === 'exec-pick') {
+        const w = cfg.fusion.testWriter ? `, tests by ${cfg.fusion.testWriter.model}` : '';
+        return `exec-pick(${cfg.models.join(' | ')}${w})`;
+      }
       const judge = cfg.fusion.judge ? `, judge ${cfg.fusion.judge.model}` : '';
       return `ensemble(${cfg.models.join('+')}${judge})`;
     }
