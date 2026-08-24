@@ -199,3 +199,62 @@ a strong anchor. **"Beats its members 5 of 5" is withdrawn.**
 
 Holding the promotion at the CI gate was the right call for a better reason
 than the one I gave at the time.
+
+---
+
+## FINAL: the cluster was unwinnable, and a $0 scan proves it
+
+Two corrections above were themselves wrong, so here is the settled account.
+
+**The decisive reading.** A third independent salted run of just the two
+contenders, like-for-like on the same 30 items: **or-gpt-full 0.9896,
+or-grok-4.6 1.0000.** gpt-full's two earlier perfect runs were the lucky
+tail, not a new baseline. Grok is **not** dominated.
+
+**Both of my explanations for the 0.9945-vs-1.0000 gap were wrong.**
+Version drift: ruled out — all 212 cells carry the same resolved version
+(`openai/gpt-4.1`), so "the cached evidence is stale" was false.
+Instrument saturation: also false — the suite discriminates perfectly well
+between grok and gpt-full. The real explanation is the dullest one:
+**gpt-full varies run to run and grok does not.** Per suite, grok is
+1.0000 on *every* one — cgh, cg2, humaneval, vision — across 263 cells.
+Its frontier slot is thoroughly earned.
+
+**Why no mixture could ever have won here.** A pick-style shape is bounded
+by its best member: it can only recover items where some member succeeds
+and the chosen one fails. **If the best member never fails, the ceiling IS
+the best member.** Code-gen's champion is at ceiling. The cluster was
+unwinnable before the first leg ran, and choosing it was the error — not
+the shape.
+
+### The map I should have drawn first ($0, from evidence already paid for)
+
+| cluster | champion | champ Q | failures covered by another model |
+|---|---|---|---|
+| classification | — | **1.0000** | at ceiling — unwinnable |
+| code-gen | or-grok-4.6 | **1.0000** | at ceiling — unwinnable |
+| multi-step-reasoning | — | **1.0000** | at ceiling — unwinnable |
+| creative | or-sonnet | 0.8994 | **11 of 12** — judge-scored, G8-gated |
+| rewrite-edit | or-claude-opus-5-fast | 0.9193 | **8 of 10** — judge-scored, G8-gated |
+| extraction | or-inkling | 0.9841 | **6 of 10** — deterministic scoring |
+| summarization | or-glm-5.3 | 0.9750 | 4 of 4 — judge-scored, G8-gated |
+| code-review | or-gpt-full | 0.9690 | 3 of 3 |
+| agentic-tool-use | or-gpt-5.6-terra-pro | 0.9750 | 2 of 2 — deterministic scoring |
+
+Three clusters are at ceiling. Of the six with headroom, three of the
+richest are judge-scored and therefore gated behind G8 — **the constraint
+stack was right: instruments bound capability mixing, and most of the
+remaining prize sits behind the judge question.**
+
+### Where R4 goes next
+
+**extraction** — real headroom (6 covered failures), deterministic
+scoring, so G8 does not bind. But `exec-pick` does not transfer: it runs
+JavaScript. The generalization it implies is **verifier-pick** — pick by
+the *cluster's own deterministic check* (JSON/schema validity and field
+agreement for extraction, tool-call validity for agentic-tool-use), with
+execution as the code-flavored instance of that family. That is a design
+decision, not a leg, and it is where the next R4 spend should go.
+
+**Spent proving all of this: ≈ $4.9.** Every promotion gate held, nothing
+was published, and the production frontier is exactly where it was.
