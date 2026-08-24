@@ -478,6 +478,27 @@ export interface FrontierPlatformSweepPayload {
   /** MIXING M3: the instrument this leg measures on; its aggregates,
    * previous frontier and published frontier all live under it. */
   instrument?: 'default' | 'tools' | 'vision' | 'audio';
+  /**
+   * R2 (inference-compiler roadmap): mixture shapes this leg BUYS, generated
+   * from the researcher's template grammar over this leg's capability-
+   * filtered answerer pool. Absent → the historical default (every single
+   * plus one hardcoded two-stage cascade) — an operator names what a
+   * campaign is buying, it is never implied. 'cascade' here generates the
+   * grammar's class-slotted cascades, distinct from the default one.
+   */
+  shapes?: Array<'cascade' | 'composite' | 'draft-verify' | 'best-of-n' | 'ensemble' | 'decompose'>;
+  /** Max grammar-generated candidates for this leg (default 20). */
+  shapeBudget?: number;
+  /**
+   * R2: pre-spend latency gate. Every mixture candidate's worst-case p95 is
+   * projected from measured single-model evidence on this cluster; a
+   * candidate whose projection exceeds this cap is refused BEFORE money is
+   * spent measuring it, itemised in the result. A candidate whose members
+   * have no measured latency cannot be projected and is NOT refused —
+   * unknown is not slow — but is itemised as unprojected. Absent → no gate
+   * (the historical behavior).
+   */
+  p95CapMs?: number;
 }
 
 /**

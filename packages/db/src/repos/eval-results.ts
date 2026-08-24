@@ -280,3 +280,36 @@ export async function clusterEvidenceCounts(
     items: Number(r?.items ?? 0),
   };
 }
+
+/**
+ * R2: measured per-model p95 latency on one cluster — the evidence base for
+ * the pre-spend latency projection. Single-model cells only (a mixture's
+ * latency is what the projection derives, never its own input), 95th
+ * percentile over the cells' per-item p95s. providerMode filters mock
+ * evidence out of live projections and vice versa; a model absent from the
+ * map has no measured latency here, and the projector returns null for it
+ * rather than guessing.
+ */
+export async function singleModelLatencyP95(
+  db: PotionDb,
+  clusterId: string,
+  providerMode: ProviderMode,
+): Promise<Map<string, number>> {
+  const res = await db.execute(sql`
+    SELECT strategy_config->>'model' AS model,
+           percentile_cont(0.95) WITHIN GROUP (
+             ORDER BY (latency_ms->>'p95')::double precision
+           ) AS p95
+      FROM eval_results
+     WHERE cluster_id = ${clusterId}
+       AND provider_mode = ${providerMode}
+       AND strategy_config->>'type' = 'single'
+       AND latency_ms->>'p95' IS NOT NULL
+     GROUP BY 1
+  `);
+  const out = new Map<string, number>();
+  for (const r of res.rows as Array<{ model: string | null; p95: number | string | null }>) {
+    if (r.model && r.p95 !== null) out.set(r.model, Number(r.p95));
+  }
+  return out;
+}

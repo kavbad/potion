@@ -11,6 +11,7 @@ import {
   addScannedModels,
   loadModelRegistry,
   listModelCatalog,
+  singleModelLatencyP95,
   insertLearningRun,
   updateLearningRun,
   type LearningRunStatus,
@@ -86,6 +87,7 @@ import {
   markStale,
   meteredProviders,
   projectRunCostUsd,
+  projectStrategyP95Ms,
   runEval,
   runRubricProbeCalibration,
   RubricProbeInsufficientError,
@@ -117,6 +119,7 @@ import {
   evaluatePromotion,
   generateCandidatesExplained,
   type ItemPair,
+  type ModelRegistryEntry,
 } from '@potion/researcher';
 import { programModels } from '@potion/core';
 // ---- M5 #36 agent workloads (SPEC §14) ----
@@ -3492,6 +3495,83 @@ export class PlatformSweepRefusalError extends Error {
   }
 }
 
+/**
+ * R2 seam: grammar-generated mixture shapes for one sweep leg. Pure over its
+ * inputs (mutates `candidates` by adding what it generated) so the behavior
+ * is provable without a live leg. Only the named shape types are bought;
+ * singles never come from here (the pool already owns them); the leg-wide
+ * shapeBudget binds across all focuses.
+ */
+export function generateSweepShapes(opts: {
+  answerers: ModelRegistryEntry[];
+  registry: ModelRegistryEntry[];
+  shapes: NonNullable<FrontierPlatformSweepPayload['shapes']>;
+  shapeBudget: number;
+  candidates: Map<string, StrategyConfig>;
+}): Array<{ template: string; strategyHash: string; type: string }> {
+  const out: Array<{ template: string; strategyHash: string; type: string }> = [];
+  const wanted = new Set<string>(opts.shapes);
+  const judgeRep = classRepresentative(opts.registry, 'judge');
+  const grammarRegistry =
+    judgeRep !== null && !opts.answerers.some((e) => e.alias === judgeRep.alias)
+      ? [...opts.answerers, judgeRep]
+      : [...opts.answerers];
+  for (const focus of opts.answerers) {
+    if (out.length >= opts.shapeBudget) break;
+    const cands = generateCandidatesExplained({
+      registry: grammarRegistry,
+      focusAlias: focus.alias,
+      existingHashes: new Set(opts.candidates.keys()),
+      // raw per-focus allowance; the leg-wide shapeBudget binds below
+      budget: opts.shapeBudget * 4,
+      includeDecompose: wanted.has('decompose'),
+    });
+    for (const c of cands) {
+      if (out.length >= opts.shapeBudget) break;
+      if (c.config.type === 'single' || !wanted.has(c.config.type)) continue;
+      const h = strategyHash(c.config);
+      if (opts.candidates.has(h)) continue;
+      opts.candidates.set(h, c.config);
+      out.push({ template: c.template, strategyHash: h, type: c.config.type });
+    }
+  }
+  return out;
+}
+
+/**
+ * R2 seam: the pre-spend latency gate. Gates ONLY hashes in `gateable`
+ * (new candidates — a carried-forward incumbent re-measures by right),
+ * deletes refused mixtures from `candidates`, and itemises both refusals
+ * and the mixtures it could not project (a member without measured
+ * latency): "passed" and "could not be gated" must never read the same.
+ */
+export function gateMixturesByP95(
+  candidates: Map<string, StrategyConfig>,
+  gateable: ReadonlySet<string>,
+  p95CapMs: number,
+  latencyEvidence: ReadonlyMap<string, number>,
+): {
+  latencyRefused: Array<{ strategyHash: string; type: string; projectedP95Ms: number }>;
+  latencyUnprojected: string[];
+} {
+  const latencyRefused: Array<{ strategyHash: string; type: string; projectedP95Ms: number }> = [];
+  const latencyUnprojected: string[] = [];
+  for (const [h, cfg] of [...candidates]) {
+    if (cfg.type === 'single') continue;
+    if (!gateable.has(h)) continue;
+    const projected = projectStrategyP95Ms(cfg, latencyEvidence);
+    if (projected === null) {
+      latencyUnprojected.push(h);
+      continue;
+    }
+    if (projected > p95CapMs) {
+      candidates.delete(h);
+      latencyRefused.push({ strategyHash: h, type: cfg.type, projectedP95Ms: Math.round(projected) });
+    }
+  }
+  return { latencyRefused, latencyUnprojected };
+}
+
 export interface FrontierPlatformSweepResult {
   runId: string;
   /**
@@ -3530,6 +3610,22 @@ export interface FrontierPlatformSweepResult {
    * and these counts make any pruning visible per cluster, never quiet. */
   singlesOnFrontier: number;
   compositesOnFrontier: number;
+  /** R2: grammar-generated candidates this leg bought (payload.shapes). */
+  generatedShapes: Array<{ template: string; strategyHash: string; type: string }>;
+  /** R2: mixtures refused PRE-SPEND — projected worst-case p95 over payload.p95CapMs. */
+  latencyRefused: Array<{ strategyHash: string; type: string; projectedP95Ms: number }>;
+  /** R2: mixtures the gate could not project (a member without measured latency). */
+  latencyUnprojected: string[];
+  /** R2: what was tried and what each cost — quality/cost/latency present
+   * only for candidates that completed and aggregated. */
+  perCandidate: Array<{
+    strategyHash: string;
+    type: string;
+    evidenceSpendUsd: number;
+    quality?: number;
+    costPer1K?: number;
+    latencyP95Ms?: number;
+  }>;
 }
 
 /**
@@ -3895,6 +3991,26 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     for (const cfg of shapes) byHash.set(strategyHash(cfg), cfg);
     // MIXING M3: named combinations ride the leg verbatim (cascades carry tools now).
     for (const cfg of payload.extraShapes ?? []) byHash.set(strategyHash(cfg), cfg);
+    // R2 (inference-compiler roadmap): grammar-generated mixture shapes.
+    // Bought explicitly via payload.shapes — the operator names what a
+    // campaign is buying — and generated over THIS leg's capability-filtered
+    // answerer pool, so a tools leg's mixtures are built only from
+    // tool-capable members. Absent shapes → the historical candidate set,
+    // byte for byte.
+    const generatedShapes =
+      payload.shapes !== undefined && payload.shapes.length > 0
+        ? generateSweepShapes({
+            answerers,
+            registry,
+            shapes: payload.shapes,
+            shapeBudget: payload.shapeBudget ?? DEFAULT_CANDIDATE_BUDGET,
+            candidates: byHash,
+          })
+        : [];
+    // Snapshot BEFORE carry-forward: the latency gate below buys (or refuses
+    // to buy) NEW measurements only — an incumbent re-measures by right, and
+    // gating it would drop a routed operating point pre-spend.
+    const preCarryHashes = new Set(byHash.keys());
     // INCUMBENT CARRY-FORWARD (2026-08-20). The pool above is built from the
     // CURRENT price table's class representatives, which means a composite
     // that earned its frontier place under an earlier pool is silently never
@@ -3913,6 +4029,18 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         singlesOnly: payload.capabilityFilter?.tools === true,
       });
     }
+    // R2: PRE-SPEND LATENCY GATE — the p95 twin of the budget preflight.
+    // Each NEW mixture's worst-case p95 is projected from measured
+    // single-model evidence on this cluster (projectStrategyP95Ms — an upper
+    // bound by construction, the M1b lesson applied to time); a projection
+    // over the cap refuses the candidate before a cent is spent measuring
+    // it, itemised in the result. Null projection (a member with no measured
+    // latency) is NOT a refusal — unknown is not slow — but is itemised, so
+    // "passed the gate" and "could not be gated" never read the same.
+    const { latencyRefused, latencyUnprojected } =
+      payload.p95CapMs !== undefined
+        ? gateMixturesByP95(byHash, preCarryHashes, payload.p95CapMs, await singleModelLatencyP95(ctx.db, payload.clusterId, 'live'))
+        : { latencyRefused: [], latencyUnprojected: [] };
     const strategies = [...byHash.values()];
     for (const [hash, config] of byHash) {
       await ctx.db.insert(strategyConfigs).values({ hash, config }).onConflictDoNothing();
@@ -4118,6 +4246,23 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       abandonedSpendUsd: summary.abandonedSpendUsd,
       singlesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type === 'single').length,
       compositesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type !== 'single').length,
+      // R2: what was tried and what each cost — the leg file's raw material.
+      generatedShapes,
+      latencyRefused,
+      latencyUnprojected,
+      perCandidate: [...byHash.entries()].map(([h, cfg]) => {
+        const rows = summary.results.filter((r) => r.strategyHash === h);
+        const agg = aggregates.find((a) => a.strategyHash === h);
+        return {
+          strategyHash: h,
+          type: cfg.type,
+          evidenceSpendUsd:
+            Math.round(rows.reduce((a, r) => a + (r.usage.costUsd ?? 0) + (r.scorerUsage?.costUsd ?? 0), 0) * 1e6) / 1e6,
+          ...(agg !== undefined
+            ? { quality: agg.qualityMean, costPer1K: agg.costPer1K, latencyP95Ms: agg.latencyP95 }
+            : {}),
+        };
+      }),
     };
   });
 

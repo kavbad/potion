@@ -299,6 +299,98 @@ export function projectRunCostUsd(
   return total;
 }
 
+/**
+ * R2 (inference-compiler roadmap): pre-spend p95 projection for a strategy,
+ * mirroring the cost preflight's philosophy — a WORST-CASE UPPER BOUND BY
+ * CONSTRUCTION, never a typical estimate. The measured lesson behind it: the
+ * committed rewrite-edit cascade served p95 54s against 5.9s for a
+ * comparable single — actuals exceed naive sums, so the bound must dominate.
+ *
+ *   · Sequential shapes (cascade, draft-verify, composite, decompose) SUM
+ *     their calls' p95s — every stage escalates, every probe fires, exactly
+ *     the worst case estimateCalls prices.
+ *   · Parallel shapes credit their parallelism, because the executor really
+ *     is parallel (Promise.all): best-of-n / ensemble drafts contribute
+ *     max(member p95), then the judge call adds on top. program vote/pick
+ *     likewise. decompose subtasks run SEQUENTIALLY (decompose.ts) and sum.
+ *   · Probe/judge protocol calls are counted at the model's FULL p95. That
+ *     overstates short calls, and deliberately so: this gate exists to
+ *     refuse catastrophes before money is spent measuring them, and a bound
+ *     that can understate is theater (the M1b cost lesson).
+ *
+ * Latency evidence comes from measured single-model cells on the same
+ * cluster. A model with no evidence yields null — the projection refuses to
+ * guess, and the CALLER must treat null as "cannot gate", never as "fast":
+ * unknown is not slow, but it is also not a pass on the record.
+ */
+export function projectStrategyP95Ms(
+  strategy: StrategyConfig,
+  p95ByModel: ReadonlyMap<string, number>,
+): number | null {
+  const L = (model: string): number | null => p95ByModel.get(model) ?? null;
+  const sum = (xs: Array<number | null>): number | null =>
+    xs.some((x) => x === null) ? null : xs.reduce<number>((a, b) => a + (b as number), 0);
+  const par = (xs: Array<number | null>): number | null =>
+    xs.some((x) => x === null) ? null : Math.max(...(xs as number[]));
+  switch (strategy.type) {
+    case 'single':
+      return L(strategy.model);
+    case 'cascade':
+      // every stage answers; every thresholded non-final stage probes
+      return sum(
+        strategy.stages.flatMap((s, i) => {
+          const isFinal = i === strategy.stages.length - 1;
+          return !isFinal && s.escalateIf?.confidenceBelow !== undefined ? [L(s.model), L(s.model)] : [L(s.model)];
+        }),
+      );
+    case 'best-of-n': {
+      const drafts = par(Array.from({ length: strategy.n }, () => L(strategy.model)));
+      return sum([drafts, L(strategy.judge.model)]);
+    }
+    case 'draft-verify':
+      return sum([L(strategy.draftModel), L(strategy.verifierModel)]);
+    case 'ensemble': {
+      const drafts = par(strategy.models.map((m) => L(m)));
+      const judge =
+        strategy.fusion.method === 'judge-pick' && strategy.fusion.judge ? L(strategy.fusion.judge.model) : 0;
+      return sum([drafts, judge]);
+    }
+    case 'composite':
+      // start + probe (same model) + upgrade, all sequential
+      return sum([L(strategy.startModel), L(strategy.startModel), L(strategy.upgradeModel)]);
+    case 'decompose': {
+      // decompose call + MAX_SUBTASKS sequential subtasks, each at the
+      // slowest routable model, + optional judge fusion — mirrors the cost
+      // worst case's most-expensive-candidate rule.
+      const routable = [...new Set([...Object.values(strategy.routing), strategy.decomposerModel])];
+      const slowest = par(routable.map((m) => L(m)));
+      const judge =
+        strategy.fusion?.method === 'judge-pick' && strategy.fusion.judge ? L(strategy.fusion.judge.model) : 0;
+      return sum([L(strategy.decomposerModel), ...Array.from({ length: MAX_SUBTASKS }, () => slowest), judge]);
+    }
+    case 'program': {
+      const walkCheck = (c: ProgramCheck): number | null =>
+        c.kind === 'agree' ? par([walk(c.of[0]), walk(c.of[1])]) : walk(c.of);
+      const walk = (n: ProgramNode): number | null => {
+        switch (n.op) {
+          case 'call':
+            return L(n.model);
+          case 'if':
+            // worst case: the check runs, then the slower branch
+            return sum([walkCheck(n.check), par([walk(n.then), walk(n.else)])]);
+          case 'vote':
+            return par(n.of.map(walk));
+          case 'pick': {
+            const members = par(n.of.map(walk));
+            return n.by.kind === 'judge' ? sum([members, L(n.by.model)]) : members;
+          }
+        }
+      };
+      return walk(strategy.body);
+    }
+  }
+}
+
 /** Error thrown by runEval's preflight when the projection exceeds the cap. */
 export class BudgetCapError extends Error {
   readonly projectedUsd: number;
