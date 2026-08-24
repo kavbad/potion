@@ -88,6 +88,7 @@ export interface RouteInventoryRow {
     | 'labHarness'
     | 'labRun'
     | 'labGrant'
+    | 'invite'
     | 'none';
   crossOrgProbe?: CrossOrgProbe;
 }
