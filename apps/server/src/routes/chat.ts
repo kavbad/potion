@@ -648,18 +648,11 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // precise message until a vision frontier exists — never silently dropped.
     const flattened = body.messages.map(flattenWireMessage);
     const imageParts = flattened.reduce((n, f) => n + f.images, 0);
-    if (imageParts > 0) {
-      return reply
-        .code(400)
-        .send(
-          openAiError(
-            `image inputs are not routed yet (${imageParts} image part${imageParts === 1 ? '' : 's'}); send text, or route vision traffic directly to a vision model for now`,
-            'invalid_request_error',
-            'unsupported_content',
-            'messages',
-          ),
-        );
-    }
+    // G (2026-08-23): image-carrying requests are served only from a
+    // cluster's frontier MEASURED ON VISION (instrument 'vision') — the
+    // refusal moves below, after the cluster is known, so it can say which
+    // frontier is missing. Classification reads the text view; the images
+    // never enter it, nor the learning sampler.
     const messages: ChatMessage[] = flattened.map((f) => f.message);
     const execMaxOutputTokens = body.max_tokens !== undefined ? resolveMaxOutputTokens(body.max_tokens) : undefined;
     // Pre-auth log fields: unattributed → default org (see above). Replaced
@@ -872,10 +865,16 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // MIXING M3: a tool-carrying request consults the cluster's frontier
       // measured ON TOOL USE when one exists (instrument 'tools'); otherwise
       // the default frontier, narrowed to points that can carry tools below.
-      const toolsFrontier = body.tools !== undefined ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools') : null;
+      const modalFrontier =
+        imageParts > 0
+          ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'vision')
+          : body.tools !== undefined
+            ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools')
+            : null;
+      if (imageParts > 0 && (modalFrontier === null || modalFrontier.points.length === 0)) return null;
       const loaded =
-        toolsFrontier !== null && toolsFrontier.points.length > 0
-          ? toolsFrontier
+        modalFrontier !== null && modalFrontier.points.length > 0
+          ? modalFrontier
           : await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId);
       const guarded = guardFrontierProvenance(loaded, ctx.providerMode, (msg) => app.log.warn(msg));
       const bound = await bindServingLatency(
@@ -898,15 +897,29 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           : ((bound.frontier?.points ?? guarded.frontier?.points ?? []).find(
               (pt) => pt.strategyHash === strategyHash(point.config as StrategyConfig),
             ) ?? null);
-      return { clusterId: cid, ...guarded, latency: bound, op: point, served };
+      return { clusterId: cid, ...guarded, latency: bound, op: point, served, servedInstrument: (loaded?.instrument ?? 'default') as 'default' | 'tools' | 'vision' };
     };
     let chosen = await resolveFor(clusterId);
+    if (chosen === null) {
+      await logRequest({ ...logBase, status: 'unsupported_content', latencyMs: elapsed() });
+      return reply
+        .code(400)
+        .send(
+          openAiError(
+            `image inputs need a measured vision frontier and '${clusterId}' has none yet (${imageParts} image part${imageParts === 1 ? '' : 's'}); send text, or route vision traffic directly to a vision model for now`,
+            'invalid_request_error',
+            'unsupported_content',
+            'messages',
+          ),
+        );
+    }
     // Quality-safe tiebreak (routing/ambiguity.ts): a near-equal runner-up is
     // resolved too, and the pair is served under the higher measured quality.
     const runnerUpId = ranked !== undefined ? ambiguousRunnerUp(ranked, ambiguityMargin()) : null;
     if (runnerUpId !== null) {
       const other = await resolveFor(runnerUpId);
-      const asCandidate = (r: typeof chosen) => ({
+      if (other !== null) {
+      const asCandidate = (r: NonNullable<typeof chosen>) => ({
         ...r,
         quality: r.served?.quality ?? null,
         costPer1K: r.served?.costPer1K ?? null,
@@ -917,6 +930,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         clusterId = winner.clusterId;
         logBase.clusterId = clusterId;
         chosen = other;
+      }
       }
     }
     const { frontier, provenance, latency } = chosen;
@@ -943,7 +957,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // ---- end M3 #22 guarantee override ----
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
-    const servedInstrument = frontier?.instrument === 'tools' ? 'tools' : null;
+    const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
     if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     logBase.frontierVersion = op.frontierVersion;
