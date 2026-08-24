@@ -160,8 +160,8 @@
       "alias": "or-deepseek",
       "provider": "openrouter",
       "model": "deepseek/deepseek-chat-v3.1",
-      "inputPer1M": 0.25,
-      "outputPer1M": 0.95
+      "inputPer1M": 0.55,
+      "outputPer1M": 1.65
     },
     {
       "alias": "gpt-nano-class",
@@ -209,8 +209,8 @@
       "alias": "or-deepseek-v4-pro-0813",
       "provider": "openrouter",
       "model": "deepseek/deepseek-v4-pro-0813",
-      "inputPer1M": 0.66,
-      "outputPer1M": 1.9800000000000002
+      "inputPer1M": 1.122,
+      "outputPer1M": 3.366
     },
     {
       "alias": "or-grok-4.6",
@@ -244,8 +244,8 @@
       "alias": "or-deepseek-v4-flash-0731",
       "provider": "openrouter",
       "model": "deepseek/deepseek-v4-flash-0731",
-      "inputPer1M": 0.14,
-      "outputPer1M": 0.28
+      "inputPer1M": 0.08,
+      "outputPer1M": 0.18
     },
     {
       "alias": "or-inkling-small",
