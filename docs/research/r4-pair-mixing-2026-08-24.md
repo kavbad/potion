@@ -137,3 +137,65 @@ no, so no.
 gpt-full with its own coverage partner — exec-pick(gpt-full | partner)
 aims at the quality band between 0.9940 and grok's 1.000 at roughly a
 third of grok's price, which is a slot nothing occupies.
+
+---
+
+## CORRECTION + attempt 4 (same day, $1.14): the comparison was flattering the mixtures
+
+**A measurement bug in my own leg scripts, found by disbelieving a result.**
+Attempt 4's three runs reported nearly identical numbers, which is not how
+independent salted runs behave. Cause: the sweep result exposed one
+`quality` field per candidate — the CLUSTER-WIDE aggregate over every live
+cell at this prices version, accumulating across runs, salts **and suites**.
+The leg scripts printed that. A brand-new shape's only cells come from the
+current run, so its number was fresh; an incumbent single's number was a
+stale pooled average. **Comparing them compared two different samples, and
+it flattered the new shape every time.**
+
+Fixed in `packages/workers/src/handlers.ts`: `perCandidate` now carries
+`runQuality` (this run's cells, with `runN`) separately from
+`aggregateQuality`, with the trap named in a comment; every leg script
+compares `runQuality` on both sides.
+
+### What the honest per-run numbers say (30-item hard suite, two salts)
+
+| strategy | run 1 | run 2 | $/1k | p95 |
+|---|---|---|---|---|
+| **or-gpt-full** | **1.0000** | **1.0000** | $1.40 | 3.3 s |
+| or-grok-4.6 | 1.0000 | 1.0000 | $7.32 | 52.5 s |
+| exec-pick(gpt-full \| solar \| gemini-flash) | 1.0000 | 0.9926 | $3.42 | 15.2 s |
+| exec-pick(gpt-full \| solar) | 0.9886 | 0.9970 | $2.59 | 13.5 s |
+| or-gemini-flash | 0.9815 | 0.9750 | $0.60 | 2.9 s |
+| or-gpt-mini | 0.9896 | 0.9747 | $0.26 | 5.2 s |
+| or-solar-pro4 | 0.8996 | 0.9306 | $0.02 | 15.3 s |
+
+Three conclusions, none of them the one I set out to prove:
+
+1. **The premise died on contact.** The leg was mined from cached evidence
+   saying gpt-full fails 3 of 99 items. On fresh measurement it fails
+   **none** — 1.0000 twice. There was no headroom to capture, so no mixture
+   could capture it, and none did.
+2. **The instrument is saturated.** Two models sit at 1.0000 on repeated
+   fresh runs; `code-gen-hard-v1` can no longer discriminate at the top.
+   Any further capability claim on this cluster needs harder items first —
+   an R1 instrument problem wearing an R4 costume.
+3. **The product result is a SINGLE, not a mixture.** or-gpt-full now ties
+   or-grok-4.6's perfect score at **1/5 the price and 1/16 the latency**. If
+   that replicates it *dominates* grok outright, and the top quality point
+   on code-gen gets radically cheaper and faster for every customer routed
+   to it. That is worth more than the mixture we were hunting.
+
+### Correction to attempt 3's headline
+
+Attempt 3 claimed exec-pick "beat both its members". Re-read like-for-like
+from its saved artifact: on that run exec-pick scored 0.9967 while
+`or-gemini-flash` alone scored **0.9972** on the same items — a hair
+*behind*, not ahead. The members' 0.9785/0.9804 I compared against were
+stale aggregates. The promotion-checks leg (which happened to prefer the
+per-run field) remains valid: exec-pick 0.9917 vs gemini-flash 0.9856 on
+one fresh run, and 1.0000 vs 0.9722/0.9167 on humaneval — so exec-pick
+does help against *weak, complementary* members, and does not help against
+a strong anchor. **"Beats its members 5 of 5" is withdrawn.**
+
+Holding the promotion at the CI gate was the right call for a better reason
+than the one I gave at the time.

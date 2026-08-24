@@ -56,9 +56,9 @@ async function leg(label: string, extra: Record<string, unknown>) {
     ctx,
   )) as Record<string, unknown>;
   const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
-  const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; evidenceSpendUsd: number; quality?: number }>;
+  const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; evidenceSpendUsd: number; runQuality?: number; runN?: number }>;
   const q = new Map(sampled.map((s) => [s.strategyHash, { q: s.meanQuality, n: s.n }]));
-  for (const p of perCandidate) if (p.quality !== undefined && !q.has(p.strategyHash)) q.set(p.strategyHash, { q: p.quality, n: -1 });
+  for (const p of perCandidate) if (p.runQuality !== undefined && !q.has(p.strategyHash)) q.set(p.strategyHash, { q: p.runQuality, n: p.runN ?? -1 });
   for (const [h, v] of [...q.entries()].sort((a, b) => b[1].q - a[1].q)) {
     console.log(`  ${(NAMES.get(h) ?? h.slice(0, 10)).padEnd(46)} ${v.q.toFixed(4)}  (n=${v.n})`);
   }

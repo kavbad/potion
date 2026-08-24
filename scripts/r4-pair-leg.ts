@@ -74,10 +74,10 @@ const res = (await frontierPlatformSweepHandler(
 
 const refused = (res.latencyRefused ?? []) as Array<{ strategyHash: string; type: string; projectedP95Ms: number }>;
 for (const r of refused) console.log(`REFUSED pre-spend: ${NAMES.get(r.strategyHash) ?? r.type} projected p95 ${r.projectedP95Ms}ms`);
-const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; type: string; evidenceSpendUsd: number; quality?: number; costPer1K?: number; latencyP95Ms?: number }>;
+const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; type: string; evidenceSpendUsd: number; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number }>;
 const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
 const qualityOf = new Map(sampled.map((s) => [s.strategyHash, { q: s.meanQuality, n: s.n }]));
-for (const p of perCandidate) if (p.quality !== undefined) qualityOf.set(p.strategyHash, { q: p.quality, n: -1 });
+for (const p of perCandidate) if (p.runQuality !== undefined) qualityOf.set(p.strategyHash, { q: p.runQuality, n: p.runN ?? -1 }); // like-for-like: THIS run only
 
 console.log('\nstrategy                                             quality     $per1K     p95ms    evidence$');
 const rows = perCandidate

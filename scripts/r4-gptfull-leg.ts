@@ -75,10 +75,10 @@ async function leg(label: string, extra: Record<string, unknown>): Promise<numbe
     console.log(`  REFUSED pre-spend: ${NAMES.get(r.strategyHash) ?? r.strategyHash.slice(0, 8)} @ ${r.projectedP95Ms}ms`);
   }
   const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
-  const per = (res.perCandidate ?? []) as Array<{ strategyHash: string; quality?: number; costPer1K?: number; latencyP95Ms?: number }>;
+  const per = (res.perCandidate ?? []) as Array<{ strategyHash: string; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number }>;
   const merged = new Map<string, Reading>();
   for (const s of sampled) merged.set(s.strategyHash, { q: s.meanQuality, n: s.n });
-  for (const p of per) if (p.quality !== undefined) merged.set(p.strategyHash, { q: p.quality, n: -1, cost: p.costPer1K, p95: p.latencyP95Ms });
+  for (const p of per) if (p.runQuality !== undefined) merged.set(p.strategyHash, { q: p.runQuality, n: p.runN ?? -1, cost: p.costPer1K, p95: p.latencyP95Ms }); // like-for-like: THIS run only
   for (const [h, r] of merged) {
     readings.set(h, [...(readings.get(h) ?? []), r]);
     console.log(`  ${(NAMES.get(h) ?? h.slice(0, 10)).padEnd(44)} ${r.q.toFixed(4)}  n=${r.n}${r.cost !== undefined ? `  $${r.cost.toFixed(4)}/1k  ${Math.round(r.p95 ?? 0)}ms` : ''}`);

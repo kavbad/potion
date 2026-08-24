@@ -63,7 +63,7 @@ const res = (await frontierPlatformSweepHandler(
 const generated = (res.generatedShapes ?? []) as Array<{ template: string; strategyHash: string; type: string }>;
 const refused = (res.latencyRefused ?? []) as Array<{ strategyHash: string; type: string; projectedP95Ms: number }>;
 const unprojected = (res.latencyUnprojected ?? []) as string[];
-const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; type: string; evidenceSpendUsd: number; quality?: number }>;
+const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; type: string; evidenceSpendUsd: number; runQuality?: number; runN?: number }>;
 const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
 
 const names = new Map<string, string>();

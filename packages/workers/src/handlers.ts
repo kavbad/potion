@@ -3669,7 +3669,12 @@ export interface FrontierPlatformSweepResult {
     strategyHash: string;
     type: string;
     evidenceSpendUsd: number;
-    quality?: number;
+    /** What THIS run's cells scored — the only like-for-like comparison. */
+    runQuality?: number;
+    runN?: number;
+    /** Cluster-wide mean across runs, salts AND suites. Never compare this
+     * against another candidate's runQuality. */
+    aggregateQuality?: number;
     costPer1K?: number;
     latencyP95Ms?: number;
   }>;
@@ -4298,16 +4303,27 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       generatedShapes,
       latencyRefused,
       latencyUnprojected,
+      // A TRAP WORTH NAMING (2026-08-24): `aggregateQuality` is the
+      // CLUSTER-WIDE mean over every live cell for this strategy at this
+      // prices version — it accumulates across runs, salts and SUITES.
+      // `runQuality` is what THIS run's cells scored. Comparing a brand-new
+      // shape's runQuality against an incumbent's aggregateQuality compares
+      // two different samples and silently flatters the new shape; it cost
+      // an inflated "beats its members" claim before the fields were split.
+      // Like-for-like comparison uses runQuality on both sides.
       perCandidate: [...byHash.entries()].map(([h, cfg]) => {
         const rows = summary.results.filter((r) => r.strategyHash === h);
         const agg = aggregates.find((a) => a.strategyHash === h);
+        const runQuality =
+          rows.length > 0 ? Math.round((rows.reduce((a, r) => a + r.quality, 0) / rows.length) * 1e4) / 1e4 : undefined;
         return {
           strategyHash: h,
           type: cfg.type,
           evidenceSpendUsd:
             Math.round(rows.reduce((a, r) => a + (r.usage.costUsd ?? 0) + (r.scorerUsage?.costUsd ?? 0), 0) * 1e6) / 1e6,
+          ...(runQuality !== undefined ? { runQuality, runN: rows.length } : {}),
           ...(agg !== undefined
-            ? { quality: agg.qualityMean, costPer1K: agg.costPer1K, latencyP95Ms: agg.latencyP95 }
+            ? { aggregateQuality: agg.qualityMean, costPer1K: agg.costPer1K, latencyP95Ms: agg.latencyP95 }
             : {}),
         };
       }),
