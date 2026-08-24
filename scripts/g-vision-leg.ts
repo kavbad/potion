@@ -55,8 +55,8 @@ const res = await frontierPlatformSweepHandler(
     capUsd: CAP,
     maxAnswerers: SHORTLIST.length,
     publish: PUBLISH,
-    cacheSalt: `g-vision-${CLUSTER}-v1`,
-    instrument: 'vision',
+    cacheSalt: process.env.VISION_SALT ?? `g-vision-${CLUSTER}-v1`,
+    instrument: (process.env.VISION_INSTRUMENT ?? 'vision') as 'vision' | 'audio',
   } as never,
   ctx,
 );
