@@ -144,6 +144,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'PUT', path: '/api/floor', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'sets the CALLER\'s own org-wide floor (new policy row, own keys rebound) — no cross-org parameter exists' } },
   { method: 'GET', path: '/api/members', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/invites', surface: 'api', mutating: false, guard: 'admin', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'POST', path: '/api/support', surface: 'api', mutating: true, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'emails the CALLER\'s own message with its own org context attached — no cross-org parameter exists' } },
   { method: 'POST', path: '/api/invites', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'creates an invite in the CALLER\'s own org — no cross-org parameter exists' } },
   { method: 'DELETE', path: '/api/invites/:id', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/invites/00000000-0000-4000-8000-000000000000', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'invite', crossOrgProbe: { expect: 'uniform-404' } },
 

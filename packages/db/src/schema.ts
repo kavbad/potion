@@ -211,6 +211,10 @@ export const models = pgTable('models', {
   supportsTools: boolean('supports_tools'),
   /** G: learned from vision-instrument evidence; NULL = unknown (excluded). */
   supportsVision: boolean('supports_vision'),
+  /** P1-8: reasoning model, learned from serving evidence (reasoning tokens
+   *  in usage, or an empty answer that exhausted its budget). NULL = unknown.
+   *  Read at boot so the skip-below-budget guard survives a restart. */
+  reasoning: boolean('reasoning'),
   /** 'seed' (committed prices.json) | 'scan' (discovered live). */
   source: text('source').notNull().default('seed'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

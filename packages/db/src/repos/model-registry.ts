@@ -18,7 +18,7 @@
 // first load; a content hash — the tempting choice — would have changed on
 // the very first boot after this migration and invalidated the Step 5
 // campaign's $3.58 of paid-for evidence.
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { models, type ModelRow, type NewModelRow } from '../schema.js';
 
@@ -176,4 +176,18 @@ export async function addScannedModels(
 export async function countModels(db: PotionDb): Promise<number> {
   const res = await db.execute(sql`SELECT count(*)::int AS n FROM models`);
   return Number((res.rows as Array<{ n: number }>)[0]?.n ?? 0);
+}
+
+/** P1-8: aliases marked as reasoning models — read at boot so the
+ *  skip-below-budget guard survives a restart. */
+export async function listReasoningAliases(db: PotionDb): Promise<string[]> {
+  const rows = await db.select({ alias: models.alias }).from(models).where(eq(models.reasoning, true));
+  return rows.map((r) => r.alias);
+}
+
+/** P1-8: persist a serving-path reasoning mark. A miss (alias not in the
+ *  registry, e.g. a mock model in tests) is fine — the in-process mark still
+ *  protects this process; the next boot just re-learns. */
+export async function markModelReasoning(db: PotionDb, alias: string): Promise<void> {
+  await db.update(models).set({ reasoning: true, updatedAt: new Date() }).where(eq(models.alias, alias));
 }

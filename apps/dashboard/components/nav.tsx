@@ -39,6 +39,7 @@ const ADVANCED = [
   { href: '/reports', label: 'Savings report' },
   { href: '/traces', label: 'Receipts (traces)' },
   { href: '/settings/audit', label: 'Audit trail' },
+  { href: '/support', label: 'Support' },
 ];
 
 interface MeResponse {

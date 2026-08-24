@@ -26,11 +26,14 @@ import {
   importPlatformBaseline,
   seedModelRegistry,
   loadModelRegistry,
+  listReasoningAliases,
   listServableProviderKeys,
   loadPlatformBaseline,
+  markModelReasoning,
   migrate,
   type DbHandle,
 } from '@potion/db';
+import { listMarkedReasoning, loadReasoningMarks, setReasoningPersistence } from './routing/reasoning.js';
 import {
   createMockProvider,
   createProviders,
@@ -390,6 +393,19 @@ export async function buildContext(opts: ContextOptions = {}): Promise<PotionCon
     log(
       `model registry: falling back to prices.json (${e instanceof Error ? e.message : String(e)})`,
     );
+  }
+
+  // ---- reasoning marks survive restarts (P1-8, migration 0052) ----
+  // Load what earlier processes learned, install the write-through, then
+  // persist anything already marked in this process (the env seed). All
+  // best-effort: a failure here costs only the old cold-start behavior.
+  try {
+    loadReasoningMarks(await listReasoningAliases(db.db));
+    setReasoningPersistence((model) => markModelReasoning(db.db, model));
+    for (const alias of listMarkedReasoning()) await markModelReasoning(db.db, alias);
+    log(`reasoning marks: ${listMarkedReasoning().length} loaded/persisted`);
+  } catch (e) {
+    log(`reasoning marks: not persisted this boot (${e instanceof Error ? e.message : String(e)})`);
   }
 
   // ---- platform frontier baseline (measured routing on day zero) ----

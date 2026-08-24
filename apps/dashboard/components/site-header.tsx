@@ -74,6 +74,7 @@ export function SiteFooter() {
           <Link href="/research" className="transition-colors hover:text-[#faf9f6]">Research</Link>
           <Link href="/terms" className="transition-colors hover:text-[#faf9f6]">Terms</Link>
           <Link href="/privacy" className="transition-colors hover:text-[#faf9f6]">Privacy</Link>
+          <Link href="/status" className="transition-colors hover:text-[#faf9f6]">Status</Link>
           <a href="/login" className="transition-colors hover:text-[#faf9f6]">Sign in</a>
         </div>
       </div>
