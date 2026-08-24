@@ -10,6 +10,8 @@ export const ProviderModeSchema = z.enum(['mock', 'live']);
 export const ContentPartSchema = z.union([
   z.object({ type: z.literal('text'), text: z.string() }),
   z.object({ type: z.literal('image_url'), image_url: z.object({ url: z.string(), detail: z.string().optional() }) }),
+  /** G audio (2026-08-24): OpenAI-shaped audio input part. */
+  z.object({ type: z.literal('input_audio'), input_audio: z.object({ data: z.string(), format: z.enum(['wav', 'mp3']) }) }),
 ]);
 
 /** The wire shape of a message (OpenAI chat-completions), including the
@@ -40,24 +42,26 @@ export const SamplingParamsSchema = z.object({
 
 /** Flatten a wire message to the internal ChatMessage. Returns the image
  * count so the edge can refuse vision input precisely. */
-export function flattenWireMessage(m: WireChatMessage): { message: ChatMessage; images: number } {
+export function flattenWireMessage(m: WireChatMessage): { message: ChatMessage; images: number; audio: number } {
   let images = 0;
+  let audio = 0;
   let content = '';
   if (typeof m.content === 'string') content = m.content;
   else if (Array.isArray(m.content)) {
     const texts: string[] = [];
     for (const part of m.content) {
       if (part.type === 'text') texts.push(part.text);
+      else if (part.type === 'input_audio') audio++;
       else images++;
     }
     content = texts.join('\n');
   }
   const message: ChatMessage = { role: m.role, content };
-  if (Array.isArray(m.content) && images > 0) message.parts = m.content as NonNullable<ChatMessage['parts']>;
+  if (Array.isArray(m.content) && (images > 0 || audio > 0)) message.parts = m.content as NonNullable<ChatMessage['parts']>;
   if (m.tool_calls !== undefined) message.tool_calls = m.tool_calls;
   if (m.tool_call_id !== undefined) message.tool_call_id = m.tool_call_id;
   if (m.name !== undefined) message.name = m.name;
-  return { message, images };
+  return { message, images, audio };
 }
 
 // ---- tool calling (M3 #25 OpenAI parity; ADDITIVE) ----

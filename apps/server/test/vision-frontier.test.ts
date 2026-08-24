@@ -67,3 +67,22 @@ describe('vision serving', () => {
     expect(String(res.headers['x-frontier-trace'])).not.toContain('instrument=');
   });
 });
+
+describe('audio serving (G, same gate as vision)', () => {
+  const AUD = { type: 'input_audio', input_audio: { data: 'UklGRiQAAABXQVZF', format: 'wav' } };
+  it('an audio request on a cluster WITHOUT an audio frontier is refused, naming the modality', async () => {
+    const res = await post('extraction', [{ type: 'text', text: 'What code is spoken?' }, AUD]);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('unsupported_content');
+    expect(res.json().error.message).toMatch(/audio inputs.*'extraction'/);
+  });
+  it('with an audio frontier it is served from it', async () => {
+    const db = app.potion.db.db;
+    await saveFrontier(db, 'extraction', [point(VISION_PICK, 0.9)], 'manual', 'test-prices', { instrument: 'audio' });
+    const res = await post('extraction', [{ type: 'text', text: 'What code is spoken?' }, AUD]);
+    expect(res.statusCode).toBe(200);
+    expect(String(res.headers['x-frontier-trace'])).toContain('instrument=audio');
+    const msgs = seen.at(-1) as { parts?: { type: string }[] }[];
+    expect(msgs[0].parts?.some((p) => p.type === 'input_audio')).toBe(true);
+  });
+});

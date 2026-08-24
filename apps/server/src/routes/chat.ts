@@ -652,6 +652,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // precise message until a vision frontier exists — never silently dropped.
     const flattened = body.messages.map(flattenWireMessage);
     const imageParts = flattened.reduce((n, f) => n + f.images, 0);
+    const audioParts = flattened.reduce((n, f) => n + f.audio, 0);
     // G (2026-08-23): image-carrying requests are served only from a
     // cluster's frontier MEASURED ON VISION (instrument 'vision') — the
     // refusal moves below, after the cluster is known, so it can say which
@@ -876,12 +877,14 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // measured ON TOOL USE when one exists (instrument 'tools'); otherwise
       // the default frontier, narrowed to points that can carry tools below.
       const modalFrontier =
-        imageParts > 0
-          ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'vision')
-          : body.tools !== undefined
-            ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools')
-            : null;
-      if (imageParts > 0 && (modalFrontier === null || modalFrontier.points.length === 0)) return null;
+        audioParts > 0
+          ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'audio')
+          : imageParts > 0
+            ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'vision')
+            : body.tools !== undefined
+              ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools')
+              : null;
+      if ((audioParts > 0 || imageParts > 0) && (modalFrontier === null || modalFrontier.points.length === 0)) return null;
       const loaded =
         modalFrontier !== null && modalFrontier.points.length > 0
           ? modalFrontier
@@ -907,7 +910,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           : ((bound.frontier?.points ?? guarded.frontier?.points ?? []).find(
               (pt) => pt.strategyHash === strategyHash(point.config as StrategyConfig),
             ) ?? null);
-      return { clusterId: cid, ...guarded, latency: bound, op: point, served, servedInstrument: (loaded?.instrument ?? 'default') as 'default' | 'tools' | 'vision' };
+      return { clusterId: cid, ...guarded, latency: bound, op: point, served, servedInstrument: (loaded?.instrument ?? 'default') as 'default' | 'tools' | 'vision' | 'audio' };
     };
     let chosen = await resolveFor(clusterId);
     if (chosen === null) {
@@ -916,7 +919,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         .code(400)
         .send(
           openAiError(
-            `image inputs need a measured vision frontier and '${clusterId}' has none yet (${imageParts} image part${imageParts === 1 ? '' : 's'}); send text, or route vision traffic directly to a vision model for now`,
+            audioParts > 0
+              ? `audio inputs need a measured audio frontier and '${clusterId}' has none yet (${audioParts} audio part${audioParts === 1 ? '' : 's'}); send text for now`
+              : `image inputs need a measured vision frontier and '${clusterId}' has none yet (${imageParts} image part${imageParts === 1 ? '' : 's'}); send text, or route vision traffic directly to a vision model for now`,
             'invalid_request_error',
             'unsupported_content',
             'messages',

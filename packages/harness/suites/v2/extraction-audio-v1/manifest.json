@@ -1,0 +1,17 @@
+{
+  "suiteId": "extraction-audio-v1",
+  "clusterId": "extraction",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored spoken-record extraction (10 macOS-say WAVs at 16 kHz; every asked value spoken unambiguously; deterministic field-match)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "field-match"
+    ]
+  },
+  "createdAt": "2026-08-24T00:00:00.000Z"
+}

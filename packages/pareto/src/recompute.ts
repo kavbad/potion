@@ -202,7 +202,7 @@ export async function aggregatesFromEvalResults(
   clusterId: ClusterId,
   strategies: StrategyConfig[],
   pricesVersion: string,
-  opts: { includeStale?: boolean; orgId?: string; providerMode?: 'live' | 'mock'; instrument?: 'default' | 'tools' | 'vision' } = {},
+  opts: { includeStale?: boolean; orgId?: string; providerMode?: 'live' | 'mock'; instrument?: 'default' | 'tools' | 'vision' | 'audio' } = {},
 ): Promise<StrategyAggregate[]> {
   const hashes = strategies.map((s) => strategyHash(s));
   if (hashes.length === 0) return [];

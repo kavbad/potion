@@ -49,7 +49,8 @@ export interface TaskCluster {
 // ---- chat ----
 export type ContentPart =
   | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string; detail?: string } };
+  | { type: 'image_url'; image_url: { url: string; detail?: string } }
+  | { type: 'input_audio'; input_audio: { data: string; format: 'wav' | 'mp3' } };
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -201,7 +202,7 @@ export interface EvalResult {
    * LEG, not inferred from the scorer — a vision suite scored by field-match
    * is still vision evidence. Absent = 'default' (or 'tools' when the scorer
    * is 'tool-call', the legacy derivation). */
-  instrument?: 'default' | 'tools' | 'vision';
+  instrument?: 'default' | 'tools' | 'vision' | 'audio';
   judgeAgreement?: number;
   /** The producing stage's confidence (exp mean token logprob), when the
    *  provider exposed logprobs. The selector-training signal. */
@@ -321,8 +322,8 @@ export interface Frontier {
    * never chained off the platform frontier. */
   orgId?: string | null;
   createdAt: string;
-  /** The instrument the points were measured on: 'default' | 'tools' | 'vision' (MIXING M3). Absent = 'default'. */
-  instrument?: 'default' | 'tools' | 'vision';
+  /** The instrument the points were measured on: 'default' | 'tools' | 'vision' | 'audio' (MIXING M3). Absent = 'default'. */
+  instrument?: 'default' | 'tools' | 'vision' | 'audio';
 }
 
 export interface FrontierDiff {

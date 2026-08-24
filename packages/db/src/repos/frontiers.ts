@@ -60,7 +60,7 @@ function toFrontier(row: typeof frontiers.$inferSelect): Frontier {
     pricesVersion: row.pricesVersion,
     orgId: row.orgId,
     createdAt: row.createdAt,
-    instrument: (row.instrument === 'tools' || row.instrument === 'vision' ? row.instrument : 'default') as 'default' | 'tools' | 'vision',
+    instrument: (row.instrument === 'tools' || row.instrument === 'vision' || row.instrument === 'audio' ? row.instrument : 'default') as 'default' | 'tools' | 'vision' | 'audio',
   };
 }
 
@@ -78,7 +78,7 @@ export async function getLatestFrontier(
   db: PotionDb,
   clusterId: string,
   orgScope: string | null = null,
-  instrument: 'default' | 'tools' | 'vision' = 'default',
+  instrument: 'default' | 'tools' | 'vision' | 'audio' = 'default',
 ): Promise<Frontier | null> {
   const rows = await db
     .select()
@@ -106,7 +106,7 @@ export async function getServingFrontier(
   db: PotionDb,
   clusterId: string,
   orgId?: string,
-  instrument: 'default' | 'tools' | 'vision' = 'default',
+  instrument: 'default' | 'tools' | 'vision' | 'audio' = 'default',
 ): Promise<Frontier | null> {
   if (orgId === undefined) return getLatestFrontier(db, clusterId, null, instrument);
   const rows = await db

@@ -56,7 +56,7 @@ export class SimulatedSuiteError extends Error {
 
 export interface RunOptions {
   /** The instrument the cells are measured on (G): stamped on every result. */
-  instrument?: 'default' | 'tools' | 'vision';
+  instrument?: 'default' | 'tools' | 'vision' | 'audio';
   suiteIds: string[];
   /** v2 suites (suites/v2/<id>/manifest.json + items) loaded through the v2
    * loader with manifest cross-checks (ROADMAP M1a). */
