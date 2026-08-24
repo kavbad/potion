@@ -60,7 +60,9 @@ import {
   usageDaily,
   users,
   DEFAULT_ORG_ID,
+  billingCustomers,
   frontierPins,
+  invoiceCharges,
   invites,
   learningProposals,
   orgIncumbents,
@@ -174,6 +176,12 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   }
   await count('alert_rules', db.delete(alertRules).where(eq(alertRules.orgId, orgId)).returning({ id: alertRules.id }));
   // The learning period (0045): proposals reference the org; incumbents are one row per org.
+  // Billing (R0). The local rows go with the org, consistent with the
+  // G2.7 true-cascade posture; when payments are live Stripe retains its
+  // own immutable record of anything actually collected, which is the
+  // financial record that must survive a tenant deletion anyway.
+  await count('billing_customers', db.delete(billingCustomers).where(eq(billingCustomers.orgId, orgId)).returning({ orgId: billingCustomers.orgId }));
+  await count('invoice_charges', db.delete(invoiceCharges).where(eq(invoiceCharges.orgId, orgId)).returning({ id: invoiceCharges.id }));
   await count('frontier_pins', db.delete(frontierPins).where(eq(frontierPins.orgId, orgId)).returning({ orgId: frontierPins.orgId }));
   await count('invites', db.delete(invites).where(eq(invites.orgId, orgId)).returning({ id: invites.id }));
   await count('learning_proposals', db.delete(learningProposals).where(eq(learningProposals.orgId, orgId)).returning({ id: learningProposals.id }));

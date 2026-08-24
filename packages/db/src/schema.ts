@@ -742,6 +742,44 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'frontier_moved',
 ];
 
+/** R0 (migration 0054): the org's payment identity. Card METADATA only —
+ * a brand and last four for display; never a PAN. */
+export const billingCustomers = pgTable('billing_customers', {
+  orgId: text('org_id')
+    .primaryKey()
+    .references(() => orgs.id),
+  customerId: text('customer_id').notNull(),
+  transport: text('transport').notNull().default('ledger'),
+  brand: text('brand'),
+  last4: text('last4'),
+  expMonth: integer('exp_month'),
+  expYear: integer('exp_year'),
+  status: text('status').notNull().default('none'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type BillingCustomerRow = typeof billingCustomers.$inferSelect;
+
+/** R0 (migration 0054): one row per (org, period) charge attempt — what we
+ * believed was owed, what we tried to collect, and what happened. */
+export const invoiceCharges = pgTable('invoice_charges', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id),
+  period: text('period').notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  currency: text('currency').notNull().default('usd'),
+  status: text('status').notNull(),
+  transport: text('transport').notNull(),
+  externalId: text('external_id'),
+  error: text('error'),
+  invoiceJson: jsonb('invoice_json'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type InvoiceChargeRow = typeof invoiceCharges.$inferSelect;
+
 /** R7 (migration 0053): a frozen frontier version per (org, cluster,
  * instrument). Present ⇒ serving reads that exact version instead of the
  * latest; absent ⇒ the historical "serve the newest" behavior. */

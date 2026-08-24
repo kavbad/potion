@@ -6,6 +6,7 @@ export * from './org-context.js';
 export * from './repos/frontiers.js';
 export * from './repos/model-registry.js';
 export * from './repos/frontier-pins.js';
+export * from './repos/billing.js';
 export * from './repos/platform-baseline.js';
 export * from './repos/eval-results.js';
 export * from './repos/demand.js';
