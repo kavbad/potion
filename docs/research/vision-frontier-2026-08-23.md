@@ -47,3 +47,23 @@ Image parts are accepted when the resolved cluster has a measured vision
 frontier and refused with the cluster named when it does not. The images
 never enter classification or the learning sampler — both read the text
 view. Next modalities ride the same rails: an instrument, a leg, a frontier.
+
+## Phase 2 (same day): charts, panels, document types
+
+Two more instruments on the same rails, $0.23 for both legs:
+
+- `rag-answer-vision-v1` (12 rendered bar charts and status panels, the
+  asked value printed in the pixels): seven models perfect; inkling-small
+  and the cascade at 0.917. Frontier: **gpt-mini alone** — perfect and
+  cheapest ($0.21/1k).
+- `classification-vision-v1` (12 documents across six types): a clean sweep
+  — every candidate 1.000 including the cascade. Frontier: gpt-mini
+  ($0.22) + gpt-full (surviving on the latency axis).
+
+`supports_vision` now lives on the registry, set only from vision-instrument
+evidence (migration 0050); `capabilityFilter.vision` excludes unknowns.
+
+Live probes: a fresh chart answered 1610 for W3 (served by the cascade,
+`instrument=vision`); a fresh boarding pass typed and its gate read
+(gpt-mini). Three clusters serve vision; an image landing anywhere else
+still gets the honest refusal naming its cluster.
