@@ -87,3 +87,29 @@ gpt-mini → working code, correct on a case the image never showed.
 Vision now serves on FOUR clusters: extraction, rag-answer, classification,
 code-gen. Uniform scores across all models are treated as an indictment of
 the instrument first — that rule caught a real bug twice today.
+
+## Phase 4 (2026-08-24): audio, same rails
+
+`extraction-audio-v1`: 10 spoken records (macOS `say`, 16 kHz WAV), every
+value spoken unambiguously, deterministic field-match. The leg cost
+**$0.008**. Capability discovered by containment again: only the gemini
+family and inkling-small accept audio upstream; everything else excluded
+itself. Scores are honestly lower than vision — spoken-number extraction is
+harder: gemini-3.7-flash 0.850, gemini-flash and inkling-small 0.750.
+
+Frontier (`extraction`, instrument `audio`, v1): inkling-small $0.13 →
+gemini-flash $0.14 → gemini-3.7-flash 0.850 @ $0.26.
+
+Live: a locker combination spoken into a fresh WAV came back
+`{"combination": [19, 32, 7]}` — correct — through the public API,
+`instrument=audio` on the trace.
+
+**Potion serves three modalities**: text everywhere, vision on four
+clusters, audio on extraction. Every modality is gated on measured evidence
+and refused honestly, by cluster and modality name, where none exists.
+
+Ops note from the same day: a vision-hardcoded promote script briefly
+published rewrite-edit's TEXT frontier as a vision frontier — caught and
+deleted within two minutes; the promote script now carries the instrument
+per entry. Cross-instrument publication is exactly the class the instrument
+dimension exists to prevent; the tooling now matches the schema.
