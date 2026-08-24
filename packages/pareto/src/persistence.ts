@@ -33,7 +33,7 @@ export interface SaveFrontierOpts {
   orgId?: string;
   provenance?: FrontierProvenanceContext;
   /** MIXING M3: the instrument the points were measured on. */
-  instrument?: 'default' | 'tools';
+  instrument?: 'default' | 'tools' | 'vision';
 }
 
 const SAVE_RETRIES = 3;
@@ -118,7 +118,7 @@ export async function loadCurrentFrontier(
   db: PotionDb,
   clusterId: ClusterId,
   orgId?: string,
-  instrument: 'default' | 'tools' = 'default',
+  instrument: 'default' | 'tools' | 'vision' = 'default',
 ): Promise<Frontier | null> {
   return getServingFrontier(db, clusterId, orgId, instrument);
 }
