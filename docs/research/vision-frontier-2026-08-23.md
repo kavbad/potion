@@ -1,0 +1,49 @@
+# The first vision frontier (G phase 1 — 2026-08-23)
+
+## The instrument
+
+`extraction-vision-v1`: 16 PIL-rendered documents — invoices, receipts,
+signs, tables, labels, meters — every field objectively in the pixels,
+scored by deterministic field-match. No judge anywhere near this axis.
+
+## The leg ($0.26 total, inside the envelope)
+
+| strategy | quality (16 items) |
+|---|---|
+| or-gpt-full | **1.000** |
+| cascade(or-inkling-small → or-gpt-full) | **1.000** |
+| or-gemini-3.7-flash | 0.979 |
+| or-inkling-small | 0.979 |
+| or-kimi-k3 | 0.958 |
+| or-grok-4.6 / or-sonnet | 0.938 |
+| or-gemini-flash / or-gpt-mini | 0.917 |
+| or-solar-pro4, or-deepseek, or-kat-coder | contained: "no endpoints support image input" — capability discovered by measurement, not claimed |
+
+Published frontier (`extraction`, instrument `vision`, v1, six points):
+gpt-mini $0.24 → inkling-small $0.45 → gemini-flash $0.65 → gemini-3.7 $0.83
+→ **cascade $0.90 @ 1.000** → gpt-full $1.16 @ 1.000.
+
+## Verified live
+
+A never-seen invoice image through the public OpenAI-compatible API:
+classified on its text view, served from the vision frontier under
+max-quality — answered by **the cascade** (`x-potion-model:
+combination:cascade`, trace `instrument=vision`), every field correct.
+Unlike function calling, where cascades lost, **on vision the cascade is
+frontier-optimal**: perfect quality at 78% of the best single's price.
+
+## The bug the leg caught
+
+The first publish returned nothing: a cell's instrument derived from its
+*scorer*, and vision items are field-match → the cells landed as `default`,
+invisible to the vision aggregation and polluting extraction's text axis —
+the same contamination class the instrument dimension was built against.
+The instrument now comes from the leg (`runEval` stamps it; scorer
+derivation is legacy fallback); migration 0049 retagged the cells.
+
+## What serving does now
+
+Image parts are accepted when the resolved cluster has a measured vision
+frontier and refused with the cluster named when it does not. The images
+never enter classification or the learning sampler — both read the text
+view. Next modalities ride the same rails: an instrument, a leg, a frontier.
