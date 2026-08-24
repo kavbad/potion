@@ -54,3 +54,30 @@ cells. Spend $0.50 of the $8 cap.
   $6.76/1k at 46 s p95. A pair reaching 1.000 at ~$1/1k would dominate it
   outright. The 4 failure items are known; nothing about them requires a
   46 s model.
+
+## Attempt 2 — pick shapes (same day, $0.80)
+
+| strategy | quality | $/1k | p95 ms |
+|---|---|---|---|
+| or-grok-4.6 (= the frontier's 1.000 single, identity confirmed) | 1.0000 | $6.76 | 46055 |
+| or-gpt-mini | 0.9858 | $0.25 | 5150 |
+| **pick(solar \| gemini-flash)** | **0.9856** | $0.98 | 25264 |
+| or-solar-pro4 | 0.9804 | $0.02 | 15693 |
+| or-gemini-flash | 0.9785 | $0.57 | 2635 |
+| pick(gemini-flash \| 3.7-flash) | 0.9671 | $2.84 | 13763 |
+| pick(gemini-flash \| sonnet) | 0.9426 | $5.10 | 7127 |
+| pick(gemini-flash \| grok-4.6) | REFUSED pre-spend | — | projected 49320 |
+
+**pick(solar|gemini-flash) beat both of its members — the program's first
+best-member exceedance.** Rewrite loses, pick wins: direction confirmed.
+But it realized only 0.0052 of the pair's 0.0196 oracle headroom and is
+dominated by or-gpt-mini alone: **the judge is now the named bottleneck.**
+A text judge choosing between two code answers without running them picks
+wrong on exactly the hard disagreements.
+
+**The machine this evidence asks for:** an execution-fused pick — the
+strategy writes its own tests from the REQUEST (never from the reference),
+runs both candidates against them in the sandbox, and picks the survivor;
+judge only on ties. That is a new strategy shape plus a serving-side
+sandbox — R4's real build, now with a measured justification and a
+measured target: 1.000 at ~$1/1k against grok-4.6's $6.76 at 46 s.
