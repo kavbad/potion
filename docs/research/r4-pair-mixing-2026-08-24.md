@@ -81,3 +81,29 @@ runs both candidates against them in the sandbox, and picks the survivor;
 judge only on ties. That is a new strategy shape plus a serving-side
 sandbox — R4's real build, now with a measured justification and a
 measured target: 1.000 at ~$1/1k against grok-4.6's $6.76 at 46 s.
+
+## Attempt 3 — exec-pick (same day, $0.65): the machine works
+
+| strategy | quality | $/1k | p95 ms |
+|---|---|---|---|
+| or-grok-4.6 | 1.0000 | $6.76 | 46055 |
+| exec-pick(solar \| gemini-flash, writer 3.7-flash) | 0.9972 | $3.09 | 40041 |
+| **exec-pick(solar \| gemini-flash, writer gpt-mini)** | **0.9967** | **$1.71** | **15001** |
+| exec-pick(gemini-flash \| gpt-mini, writer 3.7-flash) | 0.9865 | $3.39 | 11589 |
+| or-gpt-full | 0.9940 | $1.30 | 2741 |
+| judge-pick(same pair) — attempt 2 | 0.9856 | $0.98 | 25264 |
+| or-gpt-mini | 0.9858 | $0.25 | 5150 |
+| or-solar-pro4 | 0.9804 | $0.02 | 15693 |
+
+**exec-pick realized 83% of the pair's oracle headroom where judge-pick
+realized 27% — replacing the judge's opinion with an execution run is
+worth 3× of the headroom.** The headline config (writer gpt-mini) is a
+NON-DOMINATED point on the measured frontier: above gpt-full on quality
+at comparable cost, and 99.67% of grok-4.6's perfect score at a quarter
+of its price and a third of its latency. The writer choice matters for
+cost/latency, barely for quality (0.9967 vs 0.9972) — the cheap fast
+writer wins on the frontier.
+
+This is the strategy doc's test passed: a new point a customer could
+buy. Promotion to the production frontier is a NEW-SHAPE promotion and
+is deliberately held for the operator's sign-off.
