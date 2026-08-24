@@ -245,7 +245,13 @@ export async function scoreLlmJudge(
   );
   if (!entry) throw new Error(`llm-judge: unknown judge model '${scoring.judgeModel}' in prices table`);
   const provider = deps.providers[entry.provider];
-  const seed = hashString(`${scoring.judgeModel}|${item.id}|${answer}`);
+  // Masked to 31 bits — the seed-range bug's THIRD instance (2026-08-24):
+  // FNV is unsigned 32-bit, and several OpenRouter upstreams reject seeds
+  // >= 2^31 with the generic 'Provider returned error'. First found in
+  // baseSeedOf (multi-stage strategies), then here, where it deterministically
+  // killed every live judge call whose (judge, item, answer) hashed high —
+  // including the whole G8 calibration run.
+  const seed = hashString(`${scoring.judgeModel}|${item.id}|${answer}`) & 0x7fffffff;
   const response = await provider.complete({
     model: scoring.judgeModel,
     messages: buildJudgeScoreMessages(item, answer, scoring),
