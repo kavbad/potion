@@ -3,6 +3,7 @@
 // already speak the real APIs (PUT /api/floor, GET/PUT /api/budgets).
 import { BudgetCard } from '@/components/budget-card';
 import { FloorCard } from '@/components/floor-card';
+import { FrontierStatus } from '@/components/frontier-status';
 import { SettingsTabs } from '@/components/settings-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export default function ControlsPage() {
       </p>
       <SettingsTabs />
       <FloorCard />
+      <FrontierStatus />
       <BudgetCard />
     </div>
   );

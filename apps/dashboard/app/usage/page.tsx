@@ -3,6 +3,7 @@
 // requests/day by cluster, per-cluster cost table, invoice download, and a
 // native POST button that triggers the idempotent usage rollup.
 import { UsageChart } from '@/components/usage-chart';
+import { FrontierStatus } from '@/components/frontier-status';
 import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
 import { formatInt, formatUsd } from '@/lib/usage-chart';
@@ -218,6 +219,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
         What your key actually served: requests, tokens, and cost per cluster per day — and the
         invoice it adds up to.
       </p>
+      <FrontierStatus />
       {children}
     </div>
   );
