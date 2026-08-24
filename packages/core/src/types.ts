@@ -197,6 +197,11 @@ export interface EvalResult {
   strategyConfig: StrategyConfig;
   quality: number; // normalized 0..1
   scorer: string; // 'exact' | 'code-exec' | 'field-match' | 'llm-judge:<model>'
+  /** The instrument this cell was measured on (G, 2026-08-23): set by the
+   * LEG, not inferred from the scorer — a vision suite scored by field-match
+   * is still vision evidence. Absent = 'default' (or 'tools' when the scorer
+   * is 'tool-call', the legacy derivation). */
+  instrument?: 'default' | 'tools' | 'vision';
   judgeAgreement?: number;
   /** The producing stage's confidence (exp mean token logprob), when the
    *  provider exposed logprobs. The selector-training signal. */

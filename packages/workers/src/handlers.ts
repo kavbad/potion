@@ -3895,6 +3895,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     });
     const summary: RunSummary = await runEval(
       {
+        ...(payload.instrument !== undefined ? { instrument: payload.instrument } : {}),
         suiteIds: mapped.kind === 'v1' ? [mapped.suiteId] : [],
         suiteV2Ids: mapped.kind === 'v2' ? [mapped.suiteId] : [],
         strategies,

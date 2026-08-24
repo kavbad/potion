@@ -55,6 +55,8 @@ export class SimulatedSuiteError extends Error {
 }
 
 export interface RunOptions {
+  /** The instrument the cells are measured on (G): stamped on every result. */
+  instrument?: 'default' | 'tools' | 'vision';
   suiteIds: string[];
   /** v2 suites (suites/v2/<id>/manifest.json + items) loaded through the v2
    * loader with manifest cross-checks (ROADMAP M1a). */
@@ -644,6 +646,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           scorer,
           usage,
           ...(scorerUsage !== undefined ? { scorerUsage } : {}),
+          ...(opts.instrument !== undefined ? { instrument: opts.instrument } : {}),
           // Single-sample distribution: per-item latency IS the strategy's
           // aggregated usage.latencyMs; p50/p95 across items live on the aggregate.
           latencyMs: { p50: usage.latencyMs, p95: usage.latencyMs, mean: usage.latencyMs },

@@ -26,7 +26,7 @@ export async function insertEvalResult(db: PotionDb, result: EvalResult): Promis
     strategyConfig: result.strategyConfig,
     quality: result.quality,
     scorer: result.scorer,
-    instrument: result.scorer === 'tool-call' ? 'tools' : 'default',
+    instrument: result.instrument ?? (result.scorer === 'tool-call' ? 'tools' : 'default'),
     scorerUsage: result.scorerUsage ?? null,
     judgeAgreement: result.judgeAgreement ?? null,
     confidence: result.confidence ?? null,

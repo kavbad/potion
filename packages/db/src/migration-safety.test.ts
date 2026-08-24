@@ -72,6 +72,10 @@ describe('F12 meta-test: no migration may carry an unguarded data statement', ()
     '0033_evidence_attribution_repair.sql':
       'The F12 repair. Only touches rows provably impossible (created before the ' +
       'claimed org existed); ambiguous rows are audited, never modified.',
+    '0049_vision_cell_retag.sql':
+      "G. Retags the vision suite's cells (item_id LIKE 'vis-%', a prefix only " +
+      'that suite uses) to instrument vision — they landed as default because ' +
+      'the instrument derived from the scorer. Idempotent; nothing else matches.',
     '0047_instrument.sql':
       "MIXING M3. Retags the cells scored 'tool-call' (the tool-calling suite, " +
       "24 items × 11 strategies from the 2026-08-23 leg) to instrument 'tools' so " +

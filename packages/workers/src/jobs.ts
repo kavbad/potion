@@ -475,7 +475,7 @@ export interface FrontierPlatformSweepPayload {
   extraShapes?: StrategyConfig[];
   /** MIXING M3: the instrument this leg measures on; its aggregates,
    * previous frontier and published frontier all live under it. */
-  instrument?: 'default' | 'tools';
+  instrument?: 'default' | 'tools' | 'vision';
 }
 
 /**
