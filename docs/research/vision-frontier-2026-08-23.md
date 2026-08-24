@@ -67,3 +67,23 @@ Live probes: a fresh chart answered 1610 for W3 (served by the cascade,
 `instrument=vision`); a fresh boarding pass typed and its gate read
 (gpt-mini). Three clusters serve vision; an image landing anywhere else
 still gets the honest refusal naming its cluster.
+
+## Phase 3 (same day): screenshots → code
+
+`code-gen-vision-v1`: 10 spec cards that exist only as pixels — signature,
+rules, an examples table — with the produced code scored by **execution**
+(the sandbox's own tests). Deterministic end to end.
+
+The instrument convicted itself once before publishing: eight models scored
+a uniform 0.967, the signature of an instrument bug, and it was — one test
+sat on an IEEE rounding boundary (9.995 → 9.99), so every model "failed"
+the trap. The spec moved off the boundary, the trap cells were staled, and
+the re-published frontier reads true: **gpt-mini, gemini-flash and gpt-full
+all at 1.000**, gpt-mini cheapest at $0.28/1k (code-gen vision v2).
+
+Live probe: a never-seen spec image (`middleChar`) through the public API →
+gpt-mini → working code, correct on a case the image never showed.
+
+Vision now serves on FOUR clusters: extraction, rag-answer, classification,
+code-gen. Uniform scores across all models are treated as an indictment of
+the instrument first — that rule caught a real bug twice today.
