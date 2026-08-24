@@ -28,24 +28,19 @@ const { createDb, migrate } = await import('@potion/db');
 const W = await import('@potion/workers');
 const { frontierPlatformSweepHandler } = W;
 
-const SHORTLIST = ['or-gpt-full', 'or-grok-4.6', 'or-inkling-small', 'or-kat-coder-pro-v2.5', 'or-gpt-5.6-terra-pro'];
+const SHORTLIST = ['or-gemini-flash', 'or-gemini-3.7-flash', 'or-gpt-full', 'or-gpt-mini', 'or-sonnet', 'or-grok-4.6', 'or-kimi-k3', 'or-inkling-small'];
 const cascade = (cheap: string, strong: string) => ({
   type: 'cascade' as const,
   stages: [{ model: cheap, escalateIf: { confidenceBelow: 0.8 } }, { model: strong }],
   confidenceMethod: 'self-report-calibrated' as const,
 });
-const CASCADES = [
-  cascade('or-inkling-small', 'or-gpt-full'),
-  cascade('or-kat-coder-pro-v2.5', 'or-gpt-full'),
-  cascade('or-inkling-small', 'or-grok-4.6'),
-  cascade('or-gpt-5.6-terra-pro', 'or-gpt-full'),
-];
+const CASCADES = [cascade('or-inkling-small', 'or-gpt-full'), cascade('or-gemini-flash', 'or-gpt-full')];
 
 const handle = await createDb(`pglite://${STORE}`);
 await migrate(handle.db);
 const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never;
 
-console.log(`m3 tools leg: ${SHORTLIST.length} singles + ${CASCADES.length} cascades on extraction-vision-v1 · cap $${CAP} · publish=${PUBLISH}`);
+console.log(`g vision leg: ${SHORTLIST.length} singles + ${CASCADES.length} cascades on extraction-vision-v1 · cap $${CAP} · publish=${PUBLISH}`);
 const res = await frontierPlatformSweepHandler(
   {
     clusterId: 'extraction',
