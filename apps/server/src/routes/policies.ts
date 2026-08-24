@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { PolicySchema } from '@potion/core';
-import { insertPolicy, updateApiKeyPolicy } from '@potion/db';
+import { insertPolicy, updateApiKeyPolicy, listPolicies } from '@potion/db';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -30,10 +30,19 @@ export function registerPolicyRoutes(app: FastifyInstance, ctx: PotionContext): 
         .code(401)
         .send(openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key'));
     }
-    if (!auth.policy || !auth.policyId) {
-      return reply.send({ policy: null });
-    }
-    return reply.send({ policy: { id: auth.policyId, config: auth.policy } });
+    // Beta feedback (2026-08-24): policy DISCOVERY — the org's policies with
+    // names and ids, and which one this key is bound to, so a client can
+    // populate a selector from real data instead of guessing identifiers.
+    const all = (await listPolicies(ctx.db.db, auth.org.orgId)).map((pl) => ({
+      id: pl.id,
+      name: pl.name,
+      config: pl.config,
+      bound: pl.id === auth.policyId,
+    }));
+    return reply.send({
+      policy: auth.policy && auth.policyId ? { id: auth.policyId, config: auth.policy, bound: true } : null,
+      policies: all,
+    });
   });
 
   /** Create + bind a policy for the authenticated key.

@@ -42,7 +42,7 @@ import {
   SamplingParamsSchema,
   type SamplingParams,
 } from '@potion/core';
-import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestLog, resolvePolicyRef, type NewRequestLog } from '@potion/db';
+import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -133,6 +133,10 @@ export const ChatCompletionsRequestSchema = z.object({
 }).merge(SamplingParamsSchema);
 
 export interface OperatingPoint {
+  /** Why the fallback fired (2026-08-24, beta feedback): 'policy_infeasible'
+   * = no measured point met the policy (e.g. the quality floor); the best
+   * point served. Absent when fallback is 0. */
+  fallbackReason?: 'no_frontier' | 'no_point_resolvable' | 'policy_infeasible';
   /** null = no strategy is resolvable for this server's mode (live server,
    * no non-mock price entry) — the caller REFUSES rather than serving mock
    * output on a live path (G2.4). */
@@ -253,7 +257,7 @@ export function resolveOperatingPoint(
     };
   }
   if (!frontier || frontier.points.length === 0) {
-    return { config: fallbackStrategy, fallback: 1, frontierVersion: 0, frontier };
+    return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_frontier', frontierVersion: 0, frontier };
   }
   const selected = selectPoint(policy, frontier);
   if (selected) {
@@ -298,9 +302,9 @@ export function resolveOperatingPoint(
   }
   const best = highestQualityPoint(frontier.points);
   if (!best) {
-    return { config: fallbackStrategy, fallback: 1, frontierVersion: frontier.version, frontier };
+    return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_point_resolvable', frontierVersion: frontier.version, frontier };
   }
-  return { config: best.strategyConfig, fallback: 1, frontierVersion: frontier.version, frontier };
+  return { config: best.strategyConfig, fallback: 1, fallbackReason: 'policy_infeasible', frontierVersion: frontier.version, frontier };
 }
 
 /**
@@ -723,14 +727,20 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         await logRequest({ ...logBase, status: 'policy_not_found', latencyMs: elapsed() });
         return reply
           .code(400)
-          .send(
-            openAiError(
-              `unknown policy '${overrideRef.trim()}' — no policy with that id or name exists in your org`,
-              'invalid_request_error',
-              'policy_not_found',
-              'X-Potion-Policy',
-            ),
-          );
+          .send({
+            error: {
+              ...openAiError(
+                `unknown policy '${overrideRef.trim()}' — no policy with that id or name exists in your org`,
+                'invalid_request_error',
+                'policy_not_found',
+                'X-Potion-Policy',
+              ).error,
+              // Beta feedback (2026-08-24): say what IS valid and what the
+              // safe default is, instead of leaving the caller to guess.
+              hint: 'omit the x-potion-policy header to use the policy bound to this key',
+              available_policies: (await listPolicies(ctx.db.db, auth.org.orgId)).map((pl) => ({ id: pl.id, name: pl.name })),
+            },
+          });
       }
       policy = overrideRow.config;
       policyId = overrideRow.id;
@@ -1449,6 +1459,22 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           },
         ],
         usage: openAiUsage(result.usage),
+        // Beta feedback (2026-08-24): the routing decision as a typed object —
+        // requested settings vs resolved outcome, no trace parsing required.
+        // The trace header stays the source record.
+        potion: {
+          requested_cluster: hintedClusterId ?? 'auto',
+          resolved_cluster: clusterId,
+          requested_policy: policyOverrideName,
+          policy_source: policyOverrideName !== null ? 'override' : 'key_default',
+          resolved_policy_type: policy.type,
+          model: strategyModelLabel(servedConfig),
+          fallback: op.fallback === 1,
+          ...(op.fallbackReason !== undefined ? { fallback_reason: op.fallbackReason } : {}),
+          ...(servedInstrument !== null ? { instrument: servedInstrument } : {}),
+          ...(emptyAnswerRetry ? { retry: 'empty_answer' } : {}),
+          provenance,
+        },
       });
       // ---- M3 #21 shadow (m3-shadow) ----
       // Primary response handed to the transport above; shadow candidates
