@@ -12,6 +12,8 @@ import {
   loadModelRegistry,
   listModelCatalog,
   singleModelLatencyP95,
+  getFrontierById,
+  getFrontierPin,
   insertLearningRun,
   updateLearningRun,
   type LearningRunStatus,
@@ -106,6 +108,7 @@ import {
   aggregatesFromEvalResults,
   computeFrontier,
   describeStrategy,
+  diffFrontiers,
   hasLiveEvidence,
   loadCurrentFrontier,
   mergePriceEntry,
@@ -1446,6 +1449,50 @@ async function liveHeldoutPairs(
     ...(orgId !== undefined ? { orgId } : {}),
   });
   return pairs;
+}
+
+type FrontierRecord = Awaited<ReturnType<typeof saveFrontier>>;
+
+/** R7: tell the customers a published movement would reach. Platform
+ * publishes fan out to every org with an ENABLED rule subscribed to
+ * frontier_moved; the detail carries diffFrontiers' buyer-readable
+ * narrative, so the email says what changed rather than that something did.
+ * Best-effort by construction — a sweep that measured honestly must not be
+ * failed by a mail problem. */
+async function emitFrontierMovedAlerts(ctx: JobContext, saved: FrontierRecord, clusterId: string): Promise<void> {
+  try {
+    if (!saved.parentId) return; // a first version moves nobody
+    const prev = await getFrontierById(ctx.db, saved.parentId);
+    if (!prev) return;
+    const diff = diffFrontiers(prev, saved);
+    if (diff.appeared.length === 0 && diff.vanished.length === 0) return;
+    const rows = await ctx.db
+      .selectDistinct({ orgId: alertRules.orgId })
+      .from(alertRules)
+      .where(and(isNull(alertRules.disabledAt), sql`'frontier_moved' = ANY(${alertRules.events})`));
+    for (const { orgId } of rows) {
+      // A pinned org is NOT moved — that is what the pin bought them.
+      const pin = await getFrontierPin(ctx.db, orgId, clusterId, (saved.instrument ?? 'default') as 'default');
+      await emitAlertEvent(ctx, {
+        orgId,
+        event: 'frontier_moved',
+        detail: {
+          clusterId,
+          instrument: saved.instrument ?? 'default',
+          fromVersion: prev.version,
+          toVersion: saved.version,
+          appeared: diff.appeared.length,
+          vanished: diff.vanished.length,
+          narrative: diff.narrative,
+          appliesToYou: pin === null,
+          ...(pin !== null ? { heldBackByPinAtVersion: pin.frontierVersion } : {}),
+        },
+      });
+    }
+  } catch (e) {
+    // never fail a measured leg on a notification
+    console.warn(`[potion] frontier_moved alerts skipped: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 /** Fan a promotion alert out. Platform promotions go to every org with an
@@ -4192,6 +4239,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         frontierId = saved.id;
         frontierVersion = saved.version;
         frontierPoints = saved.points;
+        await emitFrontierMovedAlerts(ctx, saved, payload.clusterId);
       }
     }
     return {

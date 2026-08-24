@@ -722,7 +722,12 @@ export type AlertEvent =
   // missed. Fires ONCE per episode, on the standing condition's raise — the
   // per-request labels are on the trace and the DTO. Same TS-only widening
   // (alert_rules.events is text[] with no DB CHECK), so no migration.
-  | 'policy_infeasible';
+  | 'policy_infeasible'
+  // R7 (2026-08-24): a newly published frontier version would change what
+  // this org is served. Emitted per affected org with the buyer-readable
+  // narrative from diffFrontiers, so silent improvement stays the DEFAULT
+  // rather than the only option.
+  | 'frontier_moved';
 export const ALERT_EVENTS: readonly AlertEvent[] = [
   'quality_breach',
   'rollback',
@@ -734,7 +739,28 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'guarantee_restored',
   'guarantee_recovery_unconfirmed',
   'policy_infeasible',
+  'frontier_moved',
 ];
+
+/** R7 (migration 0053): a frozen frontier version per (org, cluster,
+ * instrument). Present ⇒ serving reads that exact version instead of the
+ * latest; absent ⇒ the historical "serve the newest" behavior. */
+export const frontierPins = pgTable(
+  'frontier_pins',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clusterId: text('cluster_id').notNull(),
+    instrument: text('instrument').notNull().default('default'),
+    frontierId: text('frontier_id').notNull(),
+    frontierVersion: integer('frontier_version').notNull(),
+    pinnedBy: text('pinned_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.orgId, t.clusterId, t.instrument] }) }),
+);
+export type FrontierPinRow = typeof frontierPins.$inferSelect;
 
 export const alertRules = pgTable(
   'alert_rules',

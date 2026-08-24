@@ -8,6 +8,7 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Frontier } from '@potion/core';
 import type { PotionDb } from '../db.js';
+import { getFrontierPin } from './frontier-pins.js';
 import { frontierPoints, frontiers } from '../schema.js';
 
 /**
@@ -109,6 +110,17 @@ export async function getServingFrontier(
   instrument: 'default' | 'tools' | 'vision' | 'audio' = 'default',
 ): Promise<Frontier | null> {
   if (orgId === undefined) return getLatestFrontier(db, clusterId, null, instrument);
+  // R7: a PIN wins over every latest-version rule below. One indexed
+  // primary-key lookup on a table most orgs have no row in — the cost of
+  // honoring "don't move under me" on the serving path, paid per request
+  // rather than cached, because a stale cache would serve a version the
+  // customer already released. A pin whose frontier row has vanished is
+  // ignored rather than fatal: serving the newest beats serving nothing.
+  const pin = await getFrontierPin(db, orgId, clusterId, instrument);
+  if (pin) {
+    const pinned = await getFrontierById(db, pin.frontierId);
+    if (pinned) return pinned;
+  }
   const rows = await db
     .select()
     .from(frontiers)
@@ -128,4 +140,21 @@ export async function getServingFrontier(
     return getLatestFrontier(db, clusterId, null);
   }
   return toFrontier(row);
+}
+
+/**
+ * R7: the clusters an org can actually BE SERVED on — distinct cluster ids
+ * with a visible frontier (the org's own chain, plus the platform chain).
+ * The `clusters` registry is the taxonomy; this is the serving reality, and
+ * the pin/changelog surfaces must speak about the latter.
+ */
+export async function listServedClusterIds(db: PotionDb, orgId?: string): Promise<string[]> {
+  const res = await db.execute(sql`
+    SELECT DISTINCT cluster_id
+      FROM frontiers
+     WHERE instrument = 'default'
+       AND (org_id IS NULL ${orgId === undefined ? sql`` : sql`OR org_id = ${orgId}`})
+     ORDER BY 1
+  `);
+  return (res.rows as Array<{ cluster_id: string }>).map((r) => r.cluster_id);
 }
