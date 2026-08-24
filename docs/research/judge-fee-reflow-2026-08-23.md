@@ -41,3 +41,11 @@ as a targeted leg. A point that cannot state its cost does not hold one.
 - The weekly canaries compare against stored quality (unchanged); the drift
   verdicts are unaffected.
 - The nightly watcher now guards the corrected axis.
+
+## The re-measure (2026-08-24)
+
+rewrite-edit re-measured with the split accounting ($1.25 actual): the
+cascade returns to the frontier — as the **budget point** (0.836 quality at
+$0.34/1k, the cheapest), not the champion (opus-fast 0.950 at $29.93). The
+corrected axis demoted it honestly rather than deleting it. Promoted to
+production as rewrite-edit default v5.
