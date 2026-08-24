@@ -13,7 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // route needed; the page fetches /api/leaderboard server-side.
 // /api/docs-ask is PUBLIC: "Ask the docs" on the signed-out /docs page. It
 // spends the dashboard's own key, never the visitor's, and is rate-limited.
-const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/leaderboard', '/docs', '/home', '/hero-lab', '/research', '/sitemap.xml', '/robots.txt'];
+const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/leaderboard', '/docs', '/home', '/hero-lab', '/research', '/terms', '/privacy', '/sitemap.xml', '/robots.txt'];
 
 // '/' is public (the landing page) and MUST be matched exactly. It cannot go
 // in OPEN_PREFIXES: every path startsWith('/'), so one entry there would make

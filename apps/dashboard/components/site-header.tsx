@@ -69,9 +69,11 @@ export function SiteFooter() {
           <Mark className="h-4 w-4 text-[#2dd4bf]" />
           <span className="text-[#d6d3d1]">Potion — pay only for the quality you need.</span>
         </div>
-        <div className="flex gap-6">
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
           <Link href="/docs" className="transition-colors hover:text-[#faf9f6]">Docs</Link>
           <Link href="/research" className="transition-colors hover:text-[#faf9f6]">Research</Link>
+          <Link href="/terms" className="transition-colors hover:text-[#faf9f6]">Terms</Link>
+          <Link href="/privacy" className="transition-colors hover:text-[#faf9f6]">Privacy</Link>
           <a href="/login" className="transition-colors hover:text-[#faf9f6]">Sign in</a>
         </div>
       </div>
