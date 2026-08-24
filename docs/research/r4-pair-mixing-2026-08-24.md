@@ -107,3 +107,33 @@ writer wins on the frontier.
 This is the strategy doc's test passed: a new point a customer could
 buy. Promotion to the production frontier is a NEW-SHAPE promotion and
 is deliberately held for the operator's sign-off.
+
+## Promotion checks (same day, $0.39): validated shape, unearned slot
+
+**(a) Stability** (salted fresh run, 30 items): exec-pick 0.9917 vs first
+reading 0.9967 — two-run mean 0.9942, spread ±0.005. Its members swung far
+wider on the same fresh sample (solar 0.9804 → 0.9409): **the mixture is
+more stable than its members**, as it should be — it needs only one member
+right per item. It beat every fresh single except grok.
+
+**(b) Generalization** (code-gen-humaneval-js-v1, 12 items): exec-pick
+**1.0000**; its members 0.9722 and 0.9167. Third independent instrument,
+third best-member exceedance.
+
+**(c) Serving e2e** (throwaway prod org, org-scoped frontier, floor
+0.995): live `/v1/chat/completions` executed the ensemble end to end —
+trace `strategy=0dcafb99;fallback=0`, correct answer, the sandbox ran on
+the serving box. Org cascade-deleted after.
+
+**Verdict: NOT promoted.** The replicated claim — exec-pick beats its own
+members, now 5 of 5 comparisons across three instruments — is solid. The
+claim that earns a frontier slot — above or-gpt-full (0.9940 @ $1.30 @
+2.7s) — is not: two-run mean 0.9942 at $1.71 and 15s is
+indistinguishable quality at worse cost and latency. Our own CI gate says
+no, so no.
+
+**The config that should clear it:** this pair was mined to cover
+*solar's* failures. Mine **gpt-full's** failure set instead and pair
+gpt-full with its own coverage partner — exec-pick(gpt-full | partner)
+aims at the quality band between 0.9940 and grok's 1.000 at roughly a
+third of grok's price, which is a slot nothing occupies.
