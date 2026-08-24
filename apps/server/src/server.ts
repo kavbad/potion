@@ -268,7 +268,13 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
       // the app log as the redacted failure sink (the default handler in
       // @potion/workers runs meter-less/log-less).
       'alerts:dispatch': createAlertsDispatchHandler({
-        deps: { meter: observability.meter, log: (m: string) => app.log.warn(m) },
+        deps: {
+          meter: observability.meter,
+          log: (m: string) => app.log.warn(m),
+          // mailto: alert rules deliver through the same transport as
+          // sign-in links (2026-08-24) — the 'nobody is watching' fix.
+          sendEmail: (msg) => Promise.resolve(sendEmailFromEnv().sendEmail({ to: msg.to, subject: msg.subject, text: msg.text })).then(() => undefined),
+        },
       }),
       // ---- M4 #35 budget (m4-alerts-budget) ----
       // budget:evaluate with the observability meter attached (same pattern

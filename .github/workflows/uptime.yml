@@ -1,0 +1,21 @@
+# External uptime watch (2026-08-24): GitHub's runners hit production every
+# 15 minutes; a failed run emails the repo owner. Zero new services — this
+# is the watchfulness fix that needs no account.
+name: uptime
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: API readyz
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://api.withpotion.com/readyz)
+          echo "readyz: $code"; test "$code" = "200"
+      - name: Dashboard home
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.withpotion.com/home)
+          echo "home: $code"; test "$code" = "200"

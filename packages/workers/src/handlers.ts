@@ -893,6 +893,10 @@ export const ALERT_DISPATCH_BACKOFF_MS = [0, 50, 150] as const;
 /** Injectable seams (tests / server in-process fallback). */
 export interface AlertDispatchDeps {
   fetchImpl?: typeof fetch;
+  /** Email transport for mailto: rules (2026-08-24) — the server registers
+   * its Resend sender; without one a mailto rule records a failed delivery
+   * instead of silently succeeding. */
+  sendEmail?: (msg: { to: string; subject: string; text: string }) => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
   /** Failure/observability log — receives ONLY redacted text. */
@@ -943,6 +947,43 @@ export interface AlertsDispatchResult {
 }
 
 /** POST one rule with inline per-rule retry; append the audit row. */
+async function deliverByEmail(
+  db: PotionDb,
+  rule: AlertRuleRow,
+  payload: AlertsDispatchPayload,
+  body: string,
+  ts: string,
+  deps: AlertDispatchDeps,
+): Promise<AlertDeliveryOutcome> {
+  const to = rule.targetUrl.slice('mailto:'.length);
+  let delivered = false;
+  let lastError: string | null = null;
+  if (deps.sendEmail === undefined) {
+    lastError = 'no email transport registered for mailto rules';
+  } else {
+    try {
+      await deps.sendEmail({
+        to,
+        subject: `[potion alert] ${payload.event} — org ${payload.orgId}`,
+        text: `Alert: ${payload.event}\nOrg: ${payload.orgId}\nAt: ${ts}\n\n${body}\n`,
+      });
+      delivered = true;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  await insertAlertDelivery(db, {
+    ruleId: rule.id,
+    event: payload.event,
+    status: delivered ? 'delivered' : 'failed',
+    attempts: 1,
+    ...(lastError !== null ? { lastError } : {}),
+    ...(delivered ? { deliveredAt: deps.now?.() ?? new Date() } : {}),
+    ...(payload.incidentId !== undefined ? { incidentId: payload.incidentId } : {}),
+  });
+  return { ruleId: rule.id, kind: rule.kind, status: delivered ? 'delivered' : 'failed', attempts: 1, lastError };
+}
+
 async function deliverToRule(
   db: PotionDb,
   rule: AlertRuleRow,
@@ -954,6 +995,11 @@ async function deliverToRule(
   const now = deps.now ?? (() => new Date());
   const ts = now().toISOString();
   const body = alertRequestBody(rule.kind, payload, ts);
+  // mailto: rules deliver by email (2026-08-24) — same retries, same
+  // delivery record, a different transport.
+  if (rule.targetUrl.startsWith('mailto:')) {
+    return deliverByEmail(db, rule, payload, body, ts, deps);
+  }
   // The redacted target is safe to put in logs/audit; the raw URL is not.
   const redactedTarget = redactUrl(rule.targetUrl);
   let attempts = 0;

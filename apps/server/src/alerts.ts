@@ -6,11 +6,14 @@
 // never affect a served response or a refused one.
 import { dispatchAlertEvent, type AlertsDispatchPayload } from '@potion/workers';
 import type { PotionContext } from './context.js';
+import { sendEmailFromEnv } from './email.js';
 
 export async function emitAlert(ctx: PotionContext, payload: AlertsDispatchPayload): Promise<void> {
   if (ctx.queue) {
     await ctx.queue.enqueue('alerts:dispatch', payload);
     return;
   }
-  await dispatchAlertEvent(ctx.db.db, payload);
+  await dispatchAlertEvent(ctx.db.db, payload, {
+    sendEmail: (msg) => Promise.resolve(sendEmailFromEnv().sendEmail({ to: msg.to, subject: msg.subject, text: msg.text })).then(() => undefined),
+  });
 }
