@@ -157,7 +157,8 @@ function finishReasonOf(raw: string | null | undefined): CompleteResponse['finis
 
 /** The wire message: text content plus the agentic fields, verbatim. */
 function wireMessage(m: CompleteRequest['messages'][number]): Record<string, unknown> {
-  const out: Record<string, unknown> = { role: m.role, content: m.content };
+  // Multimodal parts (G): when present they are the true content.
+  const out: Record<string, unknown> = { role: m.role, content: m.parts ?? m.content };
   if (m.tool_calls !== undefined) { out.tool_calls = m.tool_calls; if (m.content === '') out.content = null; }
   if (m.tool_call_id !== undefined) out.tool_call_id = m.tool_call_id;
   if (m.name !== undefined) out.name = m.name;

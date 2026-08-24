@@ -53,6 +53,7 @@ export function flattenWireMessage(m: WireChatMessage): { message: ChatMessage; 
     content = texts.join('\n');
   }
   const message: ChatMessage = { role: m.role, content };
+  if (Array.isArray(m.content) && images > 0) message.parts = m.content as NonNullable<ChatMessage['parts']>;
   if (m.tool_calls !== undefined) message.tool_calls = m.tool_calls;
   if (m.tool_call_id !== undefined) message.tool_call_id = m.tool_call_id;
   if (m.name !== undefined) message.name = m.name;

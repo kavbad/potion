@@ -4,7 +4,7 @@
 // when required). Old flat JSONL suites (suites.ts) keep working unchanged.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { EvalItemSchema, type EvalItem } from '@potion/core';
+import { EvalItemSchema, type EvalItem, flattenWireMessage } from '@potion/core';
 import {
   SUITE_ID_RE,
   SuiteManifestSchema,
@@ -34,7 +34,10 @@ function parseItemsJsonl(text: string, suiteId: string): EvalItem[] {
     if (!parsed.success) {
       throw new Error(`v2 suite '${suiteId}' items line ${i + 1}: invalid EvalItem — ${parsed.error.message}`);
     }
-    items.push(parsed.data as EvalItem);
+    // Wire → internal messages (G): image parts survive on `parts`; the
+    // classifier/scorer text view stays on `content`.
+    const flattened = { ...parsed.data, prompt: parsed.data.prompt.map((m) => flattenWireMessage(m as never).message) };
+    items.push(flattened as EvalItem);
   });
   return items;
 }

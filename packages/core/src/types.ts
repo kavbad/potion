@@ -47,12 +47,20 @@ export interface TaskCluster {
 }
 
 // ---- chat ----
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: string } };
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   /** Text. Content-part arrays are flattened to their text at the API edge
    * (2026-08-23); image parts are refused there until a vision frontier
    * exists. */
   content: string;
+  /** Multimodal parts (G, 2026-08-23): when present they are the message's
+   * true content, forwarded verbatim to the provider; `content` stays the
+   * text view every text-only consumer (classifier, shape, sampling) reads. */
+  parts?: ContentPart[];
   // ---- agentic turns (2026-08-23): forwarded verbatim to the provider ----
   /** An assistant turn that called tools (the second turn of every loop). */
   tool_calls?: ToolCall[];
@@ -308,8 +316,8 @@ export interface Frontier {
    * never chained off the platform frontier. */
   orgId?: string | null;
   createdAt: string;
-  /** The instrument the points were measured on: 'default' | 'tools' (MIXING M3). Absent = 'default'. */
-  instrument?: 'default' | 'tools';
+  /** The instrument the points were measured on: 'default' | 'tools' | 'vision' (MIXING M3). Absent = 'default'. */
+  instrument?: 'default' | 'tools' | 'vision';
 }
 
 export interface FrontierDiff {

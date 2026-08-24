@@ -1,0 +1,17 @@
+{
+  "suiteId": "extraction-vision-v1",
+  "clusterId": "extraction",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Potion-authored vision extraction (16 PIL-rendered documents: invoices, receipts, signs, tables, labels, meters; every field objectively present in the pixels; deterministic field-match, no judge)",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "field-match"
+    ]
+  },
+  "createdAt": "2026-08-23T20:00:00.000Z"
+}
