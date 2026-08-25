@@ -66,8 +66,11 @@ describe('generateInvoice (hand-computed to the cent)', () => {
       periodStart: '2026-08-01',
       periodEnd: '2026-08-31',
       currency: 'usd',
-      pricingModel: 'pass-through-plus-margin',
+      // Default is pricing v2 (2026-08-25); with no recorded baselines the
+      // share is $0 and every total below is identical to v1 pass-through.
+      pricingModel: 'at-cost-plus-verified-savings-share',
       marginPct: 0,
+      savingsSharePct: 25,
     });
     // lines sorted by clusterId; 2026-09 row excluded
     expect(inv.lineItems.map((l) => l.clusterId)).toEqual(['code-gen', 'extraction']);
@@ -83,7 +86,8 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     });
     expect(inv.totals).toEqual({
       requests: 7, inputTokens: 550, outputTokens: 275,
-      platformCostUsd: 0.23, marginUsd: 0, totalUsd: 0.23,
+      platformCostUsd: 0.23, marginUsd: 0,
+      verifiedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0.23,
     });
   });
 

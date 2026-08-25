@@ -82,7 +82,7 @@ describe('the row: stamped shape + recorded silence', () => {
       method: 'POST',
       url: '/v1/chat/completions',
       headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
-      payload: { model: 'potion', messages: [{ role: 'user', content: 'Classify this: the invoice total is wrong.' }] },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'Classify this: the invoice total is wrong.' }] },
     });
     expect(res.statusCode).toBe(200);
     const db = app.potion.db.db;
@@ -110,7 +110,7 @@ describe('the row: stamped shape + recorded silence', () => {
       method: 'POST',
       url: '/v1/chat/completions',
       headers: { authorization: 'Bearer pk_wrong', 'content-type': 'application/json' },
-      payload: { model: 'potion', messages: [{ role: 'user', content: 'hello there' }] },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'hello there' }] },
     });
     expect(res.statusCode).toBe(401);
     const db = app.potion.db.db;
@@ -160,7 +160,7 @@ describe('the 0056 stamps: answer shape and fingerprints', () => {
       method: 'POST',
       url: '/v1/chat/completions',
       headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
-      payload: { model: 'potion', messages: [{ role: 'user', content: 'Summarize the quarterly Vexacorp numbers.' }], user: 'sess-99' },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'Summarize the quarterly Vexacorp numbers.' }], user: 'sess-99' },
     });
     expect(res.statusCode).toBe(200);
     const db = app.potion.db.db;

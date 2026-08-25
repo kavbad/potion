@@ -193,6 +193,7 @@ export async function aggregateUsage(
         outputTokens: r.outputTokens,
         costUsd: r.costUsd,
         platformCostUsd: r.platformCostUsd,
+        baselineCostUsd: r.baselineCostUsd,
       })
       .onConflictDoUpdate({
         target: [usageDaily.orgId, usageDaily.day, usageDaily.clusterId],
@@ -202,6 +203,7 @@ export async function aggregateUsage(
           outputTokens: r.outputTokens,
           costUsd: r.costUsd,
           platformCostUsd: r.platformCostUsd,
+          baselineCostUsd: r.baselineCostUsd,
         },
       });
   }

@@ -23,6 +23,14 @@ import { getOrgById } from '@potion/db';
 
 export const DEFAULT_MARGIN_PCT = 0;
 export const PRICING_MODEL_V1 = 'pass-through-plus-margin' as const;
+/** Pricing v2 (operator decision, 2026-08-25, from the external review's
+ * alignment finding): model cost passes through AT COST, and Potion's
+ * revenue is a share of the VERIFIED savings — the per-request counterfactual
+ * recorded at serve time (usage_daily.baseline_cost_usd). The better Potion
+ * routes, the more both sides make; save nothing, and Potion earns nothing
+ * above cost. The receipt system IS the billing system. */
+export const PRICING_MODEL_V2 = 'at-cost-plus-verified-savings-share' as const;
+export const DEFAULT_SAVINGS_SHARE_PCT = 25;
 
 export interface InvoiceLineItem {
   clusterId: string;
@@ -36,7 +44,13 @@ export interface InvoiceLineItem {
   /** [●] pricing decision: margin over platform cost (default 0). */
   marginPct: number;
   marginUsd: number;
-  /** What the customer pays for this line (= platform + margin). */
+  /** Verified savings on this line: recorded baseline minus platform cost,
+   * floored at 0. Partial baseline coverage under-reports savings, which
+   * favors the customer by construction. */
+  verifiedSavedUsd: number;
+  savingsSharePct: number;
+  savingsShareUsd: number;
+  /** What the customer pays for this line (= platform + margin + share). */
   totalUsd: number;
   /** Stripe-ready mapping (Stripe amounts are integer cents). */
   stripe: {
@@ -60,8 +74,9 @@ export interface Invoice {
   periodStart: string;
   periodEnd: string;
   currency: 'usd';
-  pricingModel: typeof PRICING_MODEL_V1;
+  pricingModel: typeof PRICING_MODEL_V1 | typeof PRICING_MODEL_V2;
   marginPct: number;
+  savingsSharePct: number;
   lineItems: InvoiceLineItem[];
   totals: {
     requests: number;
@@ -69,6 +84,8 @@ export interface Invoice {
     outputTokens: number;
     platformCostUsd: number;
     marginUsd: number;
+    verifiedSavedUsd: number;
+    savingsShareUsd: number;
     totalUsd: number;
   };
   generatedAt: string;
@@ -95,7 +112,7 @@ export async function generateInvoice(
   db: PotionDb,
   orgId: string,
   period: string,
-  opts: { marginPct?: number } = {},
+  opts: { marginPct?: number; savingsSharePct?: number } = {},
 ): Promise<Invoice> {
   if (!isPeriodString(period)) {
     throw new Error(`invalid period '${period}' (want YYYY-MM)`);
@@ -103,6 +120,10 @@ export async function generateInvoice(
   const marginPct = opts.marginPct ?? DEFAULT_MARGIN_PCT;
   if (!Number.isFinite(marginPct) || marginPct < 0) {
     throw new Error(`marginPct must be a finite number >= 0 (got ${marginPct})`);
+  }
+  const savingsSharePct = opts.savingsSharePct ?? DEFAULT_SAVINGS_SHARE_PCT;
+  if (!Number.isFinite(savingsSharePct) || savingsSharePct < 0 || savingsSharePct >= 100) {
+    throw new Error(`savingsSharePct must be in [0, 100) (got ${savingsSharePct})`);
   }
   const org = await getOrgById(db, orgId);
   if (!org) throw new Error(`unknown org '${orgId}'`);
@@ -113,7 +134,7 @@ export async function generateInvoice(
   // One line per cluster: sum the org's daily rows for the period.
   const byCluster = new Map<
     string,
-    { requests: number; inputTokens: number; outputTokens: number; platformCostUsd: number }
+    { requests: number; inputTokens: number; outputTokens: number; platformCostUsd: number; baselineCostUsd: number }
   >();
   for (const r of rows) {
     const acc = byCluster.get(r.clusterId) ?? {
@@ -121,11 +142,13 @@ export async function generateInvoice(
       inputTokens: 0,
       outputTokens: 0,
       platformCostUsd: 0,
+      baselineCostUsd: 0,
     };
     acc.requests += r.requests;
     acc.inputTokens += r.inputTokens;
     acc.outputTokens += r.outputTokens;
     acc.platformCostUsd += r.platformCostUsd;
+    acc.baselineCostUsd += r.baselineCostUsd;
     byCluster.set(r.clusterId, acc);
   }
 
@@ -135,7 +158,9 @@ export async function generateInvoice(
       // Integer-cent math at line granularity — see file header.
       const platformCents = toCents(acc.platformCostUsd);
       const marginCents = Math.round((platformCents * marginPct) / 100);
-      const totalCents = platformCents + marginCents;
+      const savedCents = Math.max(0, toCents(acc.baselineCostUsd) - platformCents);
+      const shareCents = Math.round((savedCents * savingsSharePct) / 100);
+      const totalCents = platformCents + marginCents + shareCents;
       return {
         clusterId,
         // G2.1 relabel: a cost-only line (0 served requests — guarantee
@@ -151,6 +176,9 @@ export async function generateInvoice(
         platformCostUsd: centsToUsd(platformCents),
         marginPct,
         marginUsd: centsToUsd(marginCents),
+        verifiedSavedUsd: centsToUsd(savedCents),
+        savingsSharePct,
+        savingsShareUsd: centsToUsd(shareCents),
         totalUsd: centsToUsd(totalCents),
         stripe: {
           currency: 'usd' as const,
@@ -168,9 +196,11 @@ export async function generateInvoice(
       outputTokens: acc.outputTokens + l.outputTokens,
       platformCostUsd: centsToUsd(toCents(acc.platformCostUsd) + toCents(l.platformCostUsd)),
       marginUsd: centsToUsd(toCents(acc.marginUsd) + toCents(l.marginUsd)),
+      verifiedSavedUsd: centsToUsd(toCents(acc.verifiedSavedUsd) + toCents(l.verifiedSavedUsd)),
+      savingsShareUsd: centsToUsd(toCents(acc.savingsShareUsd) + toCents(l.savingsShareUsd)),
       totalUsd: centsToUsd(toCents(acc.totalUsd) + toCents(l.totalUsd)),
     }),
-    { requests: 0, inputTokens: 0, outputTokens: 0, platformCostUsd: 0, marginUsd: 0, totalUsd: 0 },
+    { requests: 0, inputTokens: 0, outputTokens: 0, platformCostUsd: 0, marginUsd: 0, verifiedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0 },
   );
 
   return {
@@ -182,8 +212,9 @@ export async function generateInvoice(
     periodStart: range.fromDay,
     periodEnd: range.toDay,
     currency: 'usd',
-    pricingModel: PRICING_MODEL_V1,
+    pricingModel: savingsSharePct > 0 ? PRICING_MODEL_V2 : PRICING_MODEL_V1,
     marginPct,
+    savingsSharePct,
     lineItems,
     totals,
     generatedAt: new Date().toISOString(),

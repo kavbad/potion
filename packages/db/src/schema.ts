@@ -575,6 +575,10 @@ export const usageDaily = pgTable(
     costUsd: doublePrecision('cost_usd').notNull().default(0),
     /** Our price-table cost of served usage (request_logs.usage.costUsd). */
     platformCostUsd: doublePrecision('platform_cost_usd').notNull().default(0),
+    /** Serve-time counterfactual (migration 0059; recorded per request since
+     * 0039): what the same traffic would have cost on the highest-quality
+     * point. The base of pricing v2's verified-savings share. */
+    baselineCostUsd: doublePrecision('baseline_cost_usd').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.day, t.clusterId] })],
 );

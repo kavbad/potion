@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-25._
+_Last updated: 2026-08-25 (pricing v2 decided; positioning depth folded into the redesign track)._
 
 ## What Potion is (current thesis)
 
@@ -33,10 +33,12 @@ clears your bar.*
   browser → off-session charge → webhook → invoice marked paid. Charging is
   OFF until the operator pastes keys and that test passes. The old
   `billing/backend.ts` stub is legacy.
-- **Pricing model**: pass-through + margin (default 0). KNOWN STRUCTURAL
-  ISSUE (external review 2026-08-25): savings shrink Potion's own revenue;
-  platform fee + share-of-verified-savings is the natural fix and the
-  counterfactual receipts already exist. **Operator decision pending.**
+- **Pricing model (DECIDED 2026-08-25, operator)**: pricing v2 —
+  **at-cost pass-through + 25% share of verified savings**, computed from
+  the serve-time counterfactual the rollup now persists (migration 0059).
+  Save nothing → Potion earns nothing above cost. Implemented end to end
+  (invoice, HTML render, billing page, landing); charging itself remains
+  OFF until the Stripe sitting. marginPct machinery retained at 0.
 - **Capability mixing: CLOSED** (five pre-registered negatives, ≈$13; public
   note at /research/the-mixing-verdict). No further mixture legs; the weekly
   saturation alarm owns the reopening condition. verify-pick and

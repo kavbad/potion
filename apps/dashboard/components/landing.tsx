@@ -340,9 +340,11 @@ export function Landing() {
               served from a number that was not measured.
             </p>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#d6d3cb]">
-              Usage-based, no minimum. You bring no provider accounts and no keys: Potion buys
-              from every provider at once, which is also what lets it route across the whole
-              market rather than the one account you happened to open.
+              Priced like the incentives should be: model costs pass through at cost, and
+              Potion earns a share of the savings your own receipts verify — if it saves you
+              nothing, it earns nothing above cost. No minimum. You bring no provider accounts
+              and no keys: Potion buys from every provider at once, which is also what lets it
+              route across the whole market rather than the one account you happened to open.
             </p>
           </Reveal>
           <Reveal delayMs={120} className="mt-14">

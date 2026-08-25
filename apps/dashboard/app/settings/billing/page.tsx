@@ -12,7 +12,8 @@ export default function BillingPage() {
     <div className="max-w-3xl">
       <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Billing</h1>
       <p className="mb-8 mt-2 text-sm leading-relaxed text-soft">
-        Usage-based: you pay for the requests Potion serves, at the prices on your receipts.
+        Aligned by construction: model costs pass through at cost, and Potion earns a share of
+        the savings your receipts verify. Save nothing, and you pay nothing above cost.
       </p>
       <SettingsTabs />
       <BillingCard />

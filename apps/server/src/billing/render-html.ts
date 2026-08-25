@@ -31,8 +31,8 @@ export function renderInvoiceHtml(invoice: Invoice): string {
         <td class="num">${int(l.inputTokens)}</td>
         <td class="num">${int(l.outputTokens)}</td>
         <td class="num">${usd(l.platformCostUsd)}</td>
-        <td class="num">${l.marginPct}%</td>
-        <td class="num">${usd(l.marginUsd)}</td>
+        <td class="num">${usd(l.verifiedSavedUsd)}</td>
+        <td class="num">${usd(l.savingsShareUsd)}</td>
         <td class="num">${usd(l.totalUsd)}</td>
       </tr>`,
     )
@@ -110,8 +110,8 @@ export function renderInvoiceHtml(invoice: Invoice): string {
         <th class="num">Input tokens</th>
         <th class="num">Output tokens</th>
         <th class="num">Platform cost</th>
-        <th class="num">Margin</th>
-        <th class="num">Margin $</th>
+        <th class="num">Verified savings</th>
+        <th class="num">Savings share</th>
         <th class="num">Total</th>
       </tr>
     </thead>
@@ -122,8 +122,10 @@ export function renderInvoiceHtml(invoice: Invoice): string {
   <div class="totals">
     <div class="row"><span>Requests</span><span>${int(invoice.totals.requests)}</span></div>
     <div class="row"><span>Tokens (in / out)</span><span>${int(invoice.totals.inputTokens)} / ${int(invoice.totals.outputTokens)}</span></div>
-    <div class="row"><span>Platform cost</span><span>${usd(invoice.totals.platformCostUsd)}</span></div>
-    <div class="row"><span>Margin (${invoice.marginPct}%)</span><span>${usd(invoice.totals.marginUsd)}</span></div>
+    <div class="row"><span>Model cost, at cost</span><span>${usd(invoice.totals.platformCostUsd)}</span></div>
+    <div class="row"><span>Verified savings this period</span><span>${usd(invoice.totals.verifiedSavedUsd)}</span></div>
+    <div class="row"><span>Savings share (${invoice.savingsSharePct}% of verified savings)</span><span>${usd(invoice.totals.savingsShareUsd)}</span></div>
+    ${invoice.totals.marginUsd > 0 ? `<div class="row"><span>Margin (${invoice.marginPct}%)</span><span>${usd(invoice.totals.marginUsd)}</span></div>` : ''}
     <div class="row grand"><span>Total due</span><span>${usd(invoice.totals.totalUsd)}</span></div>
   </div>
 

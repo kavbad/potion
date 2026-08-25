@@ -16,6 +16,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/server.js';
+import { createOrg, usageDaily } from '@potion/db';
+import { generateInvoice } from '../src/billing/invoice.js';
 import { baselineCostUsd } from '../src/routes/chat.js';
 import type { Frontier, FrontierPoint } from '@potion/core';
 
@@ -183,4 +185,38 @@ describe('every served request records WHAT FUNDED IT and WHAT IT SAVED', () => 
     // counterfactual is an upper bound on what we actually spent.
     expect(totals.baselineCostUsd).toBeGreaterThanOrEqual(totals.costUsd);
   }, 60_000);
+});
+
+// ---- pricing v2 (operator decision 2026-08-25): verified-savings share ----
+describe('pricing v2: at cost plus a share of verified savings', () => {
+  it('the share is computed from the recorded counterfactual, and the customer always nets positive', async () => {
+    const db = app.potion.db.db;
+    await createOrg(db, { id: 'org-v2price', name: 'V2 Price Co' });
+    // A rolled-up day where routing verifiably saved money: baseline $10, cost $2.
+    await db.insert(usageDaily).values({
+      orgId: 'org-v2price', day: '2026-08-03', clusterId: 'code-gen',
+      requests: 100, inputTokens: 1000, outputTokens: 2000,
+      costUsd: 2, platformCostUsd: 2, baselineCostUsd: 10,
+    });
+    // And a day with no baseline coverage: contributes cost, zero claimed savings.
+    await db.insert(usageDaily).values({
+      orgId: 'org-v2price', day: '2026-08-04', clusterId: 'extraction',
+      requests: 10, inputTokens: 100, outputTokens: 200,
+      costUsd: 1, platformCostUsd: 1, baselineCostUsd: 0,
+    });
+    const inv = await generateInvoice(db, 'org-v2price', '2026-08');
+    expect(inv.pricingModel).toBe('at-cost-plus-verified-savings-share');
+    expect(inv.savingsSharePct).toBe(25);
+    expect(inv.totals.platformCostUsd).toBe(3);
+    expect(inv.totals.verifiedSavedUsd).toBe(8); // max(0, 10-2) + max(0, 0-1)
+    expect(inv.totals.savingsShareUsd).toBe(2); // 25% of 8
+    expect(inv.totals.totalUsd).toBe(5); // cost 3 + share 2
+    // The alignment property: what the customer pays is always less than
+    // cost-without-Potion (baseline) on covered traffic.
+    expect(inv.totals.totalUsd).toBeLessThan(10 + 1);
+    // share=0 degrades to v1 pass-through exactly.
+    const v1 = await generateInvoice(db, 'org-v2price', '2026-08', { savingsSharePct: 0 });
+    expect(v1.pricingModel).toBe('pass-through-plus-margin');
+    expect(v1.totals.totalUsd).toBe(3);
+  });
 });
