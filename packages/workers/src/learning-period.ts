@@ -139,10 +139,15 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   if (!inc || (inc.models.length === 0 && !inc.other)) return { ...report, outcome: 'no-incumbent' };
   if (!inc.samplingConsent) return { ...report, outcome: 'no-consent' };
   const { table: prices } = loadPrices(ctx.pricesPath);
-  const incumbentModel = inc.models.find((m) => prices.entries.some((e) => e.alias === m));
-  if (!incumbentModel) return { ...report, outcome: 'incumbent-unpriced' };
-  const incumbentCfg = singleCfg(incumbentModel);
-  const incumbentHash = strategyHash(incumbentCfg);
+  // GREENFIELD FALLBACK (2026-08-24, operator's from-scratch question): an
+  // org with consent but NO priced named incumbent — building from scratch,
+  // or "several / not sure" — used to dead-end here with samples
+  // accumulating and the progress card promising "measuring" forever. Now
+  // the reference becomes, per cluster, the frontier's top-quality SINGLE:
+  // "what you'd otherwise use by default" — the same premium counterfactual
+  // every receipt already prices. It is a real, priced model measured on
+  // THEIR prompts, so the proposal reads identically either way.
+  const namedIncumbent = inc.models.find((m) => prices.entries.some((e) => e.alias === m));
 
   const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
   let judgeModelOverride: string | undefined;
@@ -174,6 +179,15 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     // the org's current serving pick for this kind of work
     const frontier = await getServingFrontier(ctx.db, clusterId, orgId);
     if (!frontier || frontier.points.length === 0) { report.skipped.push({ clusterId, why: 'no frontier' }); continue; }
+    // The measurement reference: the named incumbent when one is priced,
+    // else the greenfield fallback (top-quality single on this frontier).
+    const topSingle = frontier.points
+      .filter((p) => p.strategyConfig.type === 'single')
+      .sort((a, b) => b.quality - a.quality || a.costPer1K - b.costPer1K)[0];
+    const incumbentModel = namedIncumbent ?? (topSingle?.strategyConfig as { model?: string } | undefined)?.model;
+    if (!incumbentModel) { report.skipped.push({ clusterId, why: 'no reference model (no named incumbent, no single on the frontier)' }); continue; }
+    const incumbentCfg = singleCfg(incumbentModel);
+    const incumbentHash = strategyHash(incumbentCfg);
     const key = await getFirstApiKeyWithPolicy(ctx.db, orgId);
     const policy = key?.policyId ? (await getPolicyById(ctx.db, orgId, key.policyId))?.config : null;
     const floorNow = policy && (policy as { qualityFloor?: number }).qualityFloor !== undefined ? (policy as { qualityFloor: number }).qualityFloor : 0.95;

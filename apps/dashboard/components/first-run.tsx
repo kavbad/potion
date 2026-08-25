@@ -16,6 +16,7 @@ const CHOICES: Array<{ key: string; label: string; sub: string; models: string[]
   { key: 'anthropic', label: 'Anthropic', sub: 'Claude models', models: ['or-sonnet'], other: null },
   { key: 'google', label: 'Google', sub: 'Gemini models', models: ['or-gemini-flash'], other: null },
   { key: 'unsure', label: 'Several / not sure', sub: 'Use smart defaults', models: [], other: 'several or unsure — smart defaults' },
+  { key: 'scratch', label: 'Building from scratch', sub: 'No AI in production yet', models: [], other: 'building from scratch' },
 ];
 
 export function FirstRunGate() {
@@ -73,9 +74,10 @@ export function FirstRunGate() {
           What do you use for AI today?
         </h1>
         <p className="mt-2 text-[14px] leading-relaxed text-soft">
-          Potion routes each request to the cheapest model measured at your quality bar. Telling us
-          your starting point lets us measure against it — <span className="text-ink">never below what you get today</span>.
-          You can change this anytime in Settings.
+          Potion routes each request to the cheapest model measured at your quality bar. If you use
+          AI today, we measure against it — <span className="text-ink">never below what you get now</span>.
+          Starting fresh? We set a strong default bar and measure your work as it grows. Change this
+          anytime in Settings.
         </p>
 
         <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">

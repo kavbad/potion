@@ -64,6 +64,29 @@ describe('learning:period', () => {
     expect(again.skipped.some((s) => s.why === 'fresh proposal')).toBe(true);
   });
 
+  it('GREENFIELD: "building from scratch" measures against the frontier\'s premium single', async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await saveFrontier(db.db, 'classification', [point('mock-cheap', 0.96, 0.4, 120), point('mock-mid', 0.98, 2.1, 340)], 'manual', 'test-prices');
+    // no models named, consent given — the exact first-run smart-default state
+    await upsertOrgIncumbents(db.db, { orgId: 'org_lp', models: [], other: 'building from scratch', samplingConsent: true });
+    await insertTraceSpans(
+      db.db,
+      Array.from({ length: 10 }, (_, i) => ({
+        orgId: 'org_lp', traceId: `learn-g${i}`, spanId: 'chat', parentId: null, name: LEARNING_SPAN_NAME, model: 'mock-cheap', usage: {}, costUsd: 0,
+        attrs: { 'gen_ai.operation.name': 'chat', 'gen_ai.prompt': `Is comment ${i} spam or not spam?`, 'gen_ai.completion': 'not spam', 'potion.cluster_id': 'classification' },
+        ts: new Date(),
+      })),
+    );
+    const report = await runLearningPeriodForOrg(ctx, 'org_lp');
+    expect(report.outcome, JSON.stringify(report.skipped)).toBe('ran');
+    expect(report.proposals.map((p) => p.clusterId)).toEqual(['classification']);
+    const rows = await listLearningProposals(db.db, 'org_lp');
+    // the reference is the top-quality single on the frontier — the premium
+    // counterfactual the receipts already price, measured on THEIR prompts
+    expect(rows[0]!.incumbentModel).toBe('mock-mid');
+    expect(rows[0]!.suggestedFloor).toBeGreaterThan(0);
+  });
+
   it('refuses without consent or without an incumbent, spending nothing', async () => {
     const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
     expect((await runLearningPeriodForOrg(ctx, 'org_lp')).outcome).toBe('no-incumbent');
