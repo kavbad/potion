@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { loadSuiteV2 } from './ingest/suite-v2.js';
 import { scoreCodeExec } from './code-exec-sandbox.js';
 
-const CODE_EXEC_SUITES = ['code-gen-humaneval-js-v1', 'code-gen-potion-v2', 'code-gen-hard-v1'];
+const CODE_EXEC_SUITES = ['code-gen-humaneval-js-v1', 'code-gen-potion-v2', 'code-gen-hard-v1', 'code-gen-hard-v2'];
 
 describe('code-exec suite self-pass gate', () => {
   for (const suiteId of CODE_EXEC_SUITES) {
@@ -96,6 +96,51 @@ describe('code-gen-hard-v1 shape', () => {
       // enough cases to resolve a partial answer.
       expect(count, `${item.id} has ${count} tests`).toBeGreaterThanOrEqual(8);
     }
+  });
+});
+
+describe('code-gen-hard-v2 shape (A3)', () => {
+  it('42 items: the 30 v1 items plus a 12-item frontier tier, >=8 tests each', () => {
+    const { items, manifest } = loadSuiteV2('code-gen-hard-v2');
+    expect(items).toHaveLength(42);
+    expect(manifest.clusterId).toBe('code-gen');
+    const trap = items.filter((i) => /^cgh-t\d{2}$/.test(i.id));
+    const composed = items.filter((i) => /^cgh-c\d{2}$/.test(i.id));
+    const precision = items.filter((i) => /^cgh-p\d{2}$/.test(i.id));
+    const frontier = items.filter((i) => /^cgh-f\d{2}$/.test(i.id));
+    expect([trap.length, composed.length, precision.length, frontier.length]).toEqual([8, 12, 10, 12]);
+    for (const item of items) {
+      expect(item.scoring.kind).toBe('code-exec');
+      const tests = (item.scoring as { tests: string }).tests;
+      const count = (tests.match(/test\(/g) ?? []).length;
+      expect(count, `${item.id} has ${count} tests`).toBeGreaterThanOrEqual(8);
+    }
+    // The frontier tier's reason to exist: v1 saturated (champion 1.000 across
+    // salted runs, 2026-08-24). Keeping v1's items preserves mid-tier
+    // separation; these gates keep a later edit from quietly dropping the tail.
+  });
+});
+
+describe('classification-hard-v2 shape (A3)', () => {
+  it('40 items in 8 families; a constant guesser still cannot beat 0.45', () => {
+    const { items, manifest } = loadSuiteV2('classification-hard-v2');
+    expect(items).toHaveLength(40);
+    expect(manifest.clusterId).toBe('classification');
+    const byFamily = new Map<string, string[]>();
+    for (const item of items) {
+      expect(item.scoring.kind).toBe('exact');
+      expect(typeof item.reference).toBe('string');
+      const family = item.id.slice(4, 5);
+      byFamily.set(family, [...(byFamily.get(family) ?? []), item.reference as string]);
+    }
+    expect(byFamily.size).toBe(8);
+    let floor = 0;
+    for (const refs of byFamily.values()) {
+      const counts = new Map<string, number>();
+      for (const r of refs) counts.set(r, (counts.get(r) ?? 0) + 1);
+      floor += Math.max(...counts.values());
+    }
+    expect(floor / items.length).toBeLessThanOrEqual(0.45);
   });
 });
 

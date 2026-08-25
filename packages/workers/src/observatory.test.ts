@@ -10,6 +10,7 @@ import {
   isoWeek,
   planLanes,
   rankCandidates,
+  saturationVerdict,
   type LedgerRow,
   type ObservatoryRun,
 } from './observatory.js';
@@ -125,5 +126,42 @@ describe('digestLine — a quiet week says so', () => {
     const loud = { ...base, canaries: [{ ...base.canaries[0]!, verdict: 'drift' as const }], auditions: [{ alias: 'or-x', clusterId: 'extraction', lane: 'extraction/json', why: 'w', spendUsd: 1.1, earnedSlot: true, frontierVersion: 4 }] };
     expect(digestLine(loud)).toMatch(/DRIFT on code-gen\/m/);
     expect(digestLine(loud)).toMatch(/EARNED: or-x on extraction/);
+  });
+});
+
+describe('saturationVerdict — the alarm that says the suite stopped measuring (A3)', () => {
+  it('a champion at 1.0 is a statement about the suite, not the model', () => {
+    const s = saturationVerdict([pt(1.0, 7.3), pt(0.9, 1.1)]);
+    expect(s.verdict).toBe('saturated');
+    expect(s.topQuality).toBe(1.0);
+  });
+  it('0.99 saturates; 0.97 alone is only near', () => {
+    expect(saturationVerdict([pt(0.99, 5)]).verdict).toBe('saturated');
+    expect(saturationVerdict([pt(0.97, 5), pt(0.8, 1)]).verdict).toBe('near');
+  });
+  it('a crowded top at 0.97 saturates: three points within 0.02 cannot be ranked', () => {
+    const s = saturationVerdict([pt(0.97, 5), pt(0.96, 3), pt(0.955, 2), pt(0.7, 0.5)]);
+    expect(s.verdict).toBe('saturated');
+    expect(s.crowdedTop).toBe(3);
+  });
+  it('a healthy spread is ok, and an empty frontier says nothing', () => {
+    expect(saturationVerdict([pt(0.93, 5), pt(0.85, 1)]).verdict).toBe('ok');
+    expect(saturationVerdict([]).verdict).toBe('ok');
+  });
+  it('digestLine shouts hardening-due for saturated clusters only', () => {
+    const run: ObservatoryRun = {
+      week: '2026-W35', at: '2026-08-24T06:00:00Z',
+      envelopeBefore: { monthKey: '2026-08', capUsd: 50, mtdUsd: 0, remainingUsd: 50 },
+      plan: { canaryClusters: [], canaryBudgetUsd: 0, auditions: 0, auditionBudgetUsd: 0, notes: [] },
+      canaries: [], auditions: [],
+      catalogue: { listings: 0, newSinceRegistry: 0, skippedNoPricing: 0, freeTierExcluded: 0, ranked: 0 },
+      saturation: [
+        { clusterId: 'code-gen', topQuality: 1.0, crowdedTop: 2, verdict: 'saturated' },
+        { clusterId: 'creative', topQuality: 0.91, crowdedTop: 1, verdict: 'ok' },
+      ],
+      spendUsd: 0, envelopeAfter: { monthKey: '2026-08', capUsd: 50, mtdUsd: 0, remainingUsd: 50 },
+    };
+    expect(digestLine(run)).toMatch(/INSTRUMENT SATURATED: code-gen \(top 1\.000\) — hardening due/);
+    expect(digestLine(run)).not.toMatch(/creative/);
   });
 });

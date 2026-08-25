@@ -135,6 +135,38 @@ export function driftVerdict(
 }
 
 // ---------------------------------------------------------------------------
+// Saturation (A3, 2026-08-24)
+
+export type SaturationLevel = 'saturated' | 'near' | 'ok';
+
+export interface ClusterSaturation {
+  clusterId: string;
+  /** Best quality on the cluster's current frontier. */
+  topQuality: number;
+  /** Points within 0.02 of the top — a crowded top is the same disease. */
+  crowdedTop: number;
+  verdict: SaturationLevel;
+}
+
+/**
+ * An instrument stops being an instrument the day the champion stops
+ * failing: a suite where the best point sits at ~1.0 cannot rank the next
+ * model, so its crown is a statement about the SUITE's ceiling, not the
+ * model's (found live 2026-08-24: code-gen and classification both pinned
+ * at 1.000 across salted runs). This reads stored frontiers only — $0 —
+ * and alarms so hardening happens on schedule instead of on suspicion.
+ * 'near' is the tripwire; 'saturated' means hardening is due now.
+ */
+export function saturationVerdict(points: FrontierPoint[]): Omit<ClusterSaturation, 'clusterId'> {
+  if (points.length === 0) return { topQuality: Number.NaN, crowdedTop: 0, verdict: 'ok' };
+  const top = points.reduce((m, p) => Math.max(m, p.quality), 0);
+  const crowded = points.filter((p) => p.quality >= top - 0.02).length;
+  const verdict: SaturationLevel =
+    top >= 0.99 ? 'saturated' : top >= 0.97 && crowded >= 3 ? 'saturated' : top >= 0.97 ? 'near' : 'ok';
+  return { topQuality: top, crowdedTop: crowded, verdict };
+}
+
+// ---------------------------------------------------------------------------
 // Auditions — v1 ranking (S7's demand ranking replaces this when it lands)
 
 /** Specialist lanes (OBSERVATORY.md §3): a name pattern → the clusters it
@@ -258,6 +290,8 @@ export interface ObservatoryRun {
   auditions: AuditionResult[];
   /** New listings seen this week (before ranking) — the catalogue's pulse. */
   catalogue: { listings: number; newSinceRegistry: number; skippedNoPricing: number; freeTierExcluded: number; ranked: number };
+  /** A3: instrument-saturation readings per cluster ($0, from stored frontiers). */
+  saturation?: ClusterSaturation[];
   spendUsd: number;
   envelopeAfter: Envelope;
 }
@@ -277,5 +311,9 @@ export function digestLine(run: ObservatoryRun): string {
         (failed > 0 ? ` (${failed} errored)` : ''),
     `spend $${run.spendUsd.toFixed(2)}; month $${run.envelopeAfter.mtdUsd.toFixed(2)} of $${run.envelopeAfter.capUsd}`,
   ];
+  const saturated = (run.saturation ?? []).filter((s) => s.verdict === 'saturated');
+  if (saturated.length > 0) {
+    parts.push(`INSTRUMENT SATURATED: ${saturated.map((s) => `${s.clusterId} (top ${s.topQuality.toFixed(3)})`).join(', ')} — hardening due`);
+  }
   return parts.join(' · ');
 }

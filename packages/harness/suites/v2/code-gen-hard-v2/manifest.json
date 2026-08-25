@@ -1,0 +1,17 @@
+{
+  "suiteId": "code-gen-hard-v2",
+  "clusterId": "code-gen",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "code-gen-hard-v1's 30 items plus a 12-item frontier tier (cgh-f01..f12): exact-spec contracts \u2014 bankers' rounding on strings, semver precedence, code-point reversal, RFC 6901 pointers, deterministic topo order, LFU/LRU cache, greedy wrap with hard-split, half-open interval subtraction, bijective base-26, sliding-window coalescing, BigInt decimal addition, RFC 4180 record parsing; >=8 tests per item, every reference self-pass gated",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "code-exec"
+    ]
+  },
+  "createdAt": "2026-08-24T12:00:00.000-07:00"
+}

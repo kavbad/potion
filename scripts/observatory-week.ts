@@ -60,7 +60,7 @@ const { loadPrices, fetchOpenRouterModels, diffModelListings, createProviders } 
 const W = await import('@potion/workers');
 const {
   frontierPlatformSweepHandler, PLATFORM_OPS_ORG_ID, PLATFORM_SUITE_BY_CLUSTER,
-  isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, rankCandidates, digestLine, isFreeTier, postObservatoryEntry,
+  isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, saturationVerdict, rankCandidates, digestLine, isFreeTier, postObservatoryEntry,
   CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, OBSERVATORY_ENVELOPE_USD, runFrontierNotes, postNoteLine,
 } = W;
 type LedgerRow = W.LedgerRow;
@@ -147,6 +147,21 @@ for (const clusterId of clusters) {
     const msg = e instanceof Error ? e.message : String(e);
     canaries.push({ clusterId, model, strategyHash: target.strategyHash, storedQuality: target.quality, storedCi95: target.evidence?.qualityCi95 ?? 0, observedMean: null, n: 0, verdict: 'inconclusive', spendUsd: 0, error: msg });
     console.log(`  canary ${clusterId.padEnd(22)} ERROR ${msg.slice(0, 140)}`);
+  }
+}
+
+// ---- lane 1a: saturation alarm (A3, 2026-08-24; $0 — stored frontiers only) ----
+// An instrument whose champion never fails has stopped measuring; this lane
+// says so every week instead of waiting for a human to get suspicious.
+type ClusterSaturation = import('@potion/workers').ClusterSaturation;
+const saturation: ClusterSaturation[] = [];
+for (const clusterId of clusters) {
+  const frontier = await getLatestFrontier(handle.db, clusterId, null);
+  if (!frontier || frontier.points.length === 0) continue;
+  const s = saturationVerdict(frontier.points);
+  saturation.push({ clusterId, ...s });
+  if (s.verdict !== 'ok') {
+    console.log(`  saturation ${clusterId.padEnd(22)} ${s.verdict.toUpperCase().padEnd(9)} top ${s.topQuality.toFixed(3)}, ${s.crowdedTop} within 0.02 of it${s.verdict === 'saturated' ? ' — hardening due' : ''}`);
   }
 }
 
@@ -242,7 +257,7 @@ try {
 // ---- the record: nulls are published ----
 const spendUsd = [...canaries, ...budgetCanaries, ...auditions].reduce((s, r) => s + r.spendUsd, 0);
 const run = {
-  week, at: NOW.toISOString(), envelopeBefore, plan, canaries, budgetCanaries, auditions, catalogue, spendUsd,
+  week, at: NOW.toISOString(), envelopeBefore, plan, canaries, budgetCanaries, auditions, catalogue, saturation, spendUsd,
   envelopeAfter: envelopeFor(ledger, NOW),
 };
 if (!DRY) {

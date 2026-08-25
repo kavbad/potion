@@ -1,0 +1,17 @@
+{
+  "suiteId": "classification-hard-v2",
+  "clusterId": "classification",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "classification-hard-v1's 30 items plus two frontier families of five: (g) distinct-defect counting where tone misleads and duplicates must collapse, (h) escalation routing with an exception that inverts and a sender-domain exception to the exception; label sets balanced so a constant guesser stays at or below 0.45",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "exact"
+    ]
+  },
+  "createdAt": "2026-08-24T12:00:00.000-07:00"
+}

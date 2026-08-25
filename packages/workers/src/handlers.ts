@@ -3438,9 +3438,17 @@ export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   // the RETIRED instrument — quality numbers are not comparable across the
   // boundary, and the next platform sweep per cluster re-measures from zero
   // cache. Serving continues on the old frontiers until that sweep publishes.
-  'code-gen': { kind: 'v2', suiteId: 'code-gen-hard-v1' },
+  //
+  // A3 (2026-08-24): code-gen-hard-v1 and classification-hard-v1 saturated in
+  // their turn (champions at 1.000 across salted runs; the G8 judge
+  // calibration was unanswerable on classification because every answerer
+  // aced it). The -v2 suites keep every v1 item and add a frontier tier /
+  // two rule-chain families. Same stated consequence: evidence for these two
+  // clusters re-measures from zero cache, and the weekly Observatory now
+  // carries a saturation alarm so the next ceiling is caught on schedule.
+  'code-gen': { kind: 'v2', suiteId: 'code-gen-hard-v2' },
   extraction: { kind: 'v2', suiteId: 'extraction-hard-v1' },
-  classification: { kind: 'v2', suiteId: 'classification-hard-v1' },
+  classification: { kind: 'v2', suiteId: 'classification-hard-v2' },
   'multi-step-reasoning': { kind: 'v1', suiteId: 'multi-step-reasoning' },
   'rag-answer': { kind: 'v1', suiteId: 'rag-answer' },
   'agentic-tool-use': { kind: 'v1', suiteId: 'agentic-tool-use' },
