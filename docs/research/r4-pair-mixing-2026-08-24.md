@@ -258,3 +258,47 @@ decision, not a leg, and it is where the next R4 spend should go.
 
 **Spent proving all of this: ≈ $4.9.** Every promotion gate held, nothing
 was published, and the production frontier is exactly where it was.
+
+---
+
+## Track-1 rewrite-edit leg (2026-08-24, $5.16): the best-member law holds; the mining method is the real finding
+
+Pre-registered target: beat or-sonnet's pooled runQuality CI-clear —
+aimed at the wrong champion. Fresh, like-for-like, two salted runs:
+
+| strategy | pooled | spread | $/1k | p95 |
+|---|---|---|---|---|
+| **or-claude-opus-5-fast** | **0.9500** | **0.0000** | $29.30 | 7.0 s |
+| pick(sonnet \| opus-fast) | 0.9357 | 0.0286 | $28.65 | 7.0 s |
+| dv(opus-fast → sonnet) | 0.9179 | 0.0071 | $32.36 | 11.9 s |
+| or-sonnet | 0.9107 | 0.0214 | $3.43 | 5.8 s |
+| pick(sonnet \| gpt-mini) | 0.8857 | 0.0286 | $2.50 | 16 s |
+| or-gpt-mini | 0.8571 | 0.0285 | $1.47 | 3.4 s |
+| dv(sonnet → opus-fast) | 0.8285 | 0.0857 | $50.80 | 14 s |
+
+1. **The registered target was met and it does not matter.** The pick beat
+   sonnet (0.9357 vs 0.9107) — but the true best single on fresh readings
+   is opus-fast at 0.9500 with zero run-to-run spread, and every mixture
+   lost to it. The best-member law holds for the third cluster running.
+2. **The rewrite shape lost on a WRITING cluster too.** dv(opus→sonnet)
+   0.9179 < opus alone; the "editing is its native regime" hypothesis is
+   refuted. dv(sonnet→opus) was worse and the most unstable thing measured.
+3. **The methodological finding, now three-for-three: coverage mining from
+   CACHED failures produces dead premises.** code-gen: gpt-full's cached
+   "fails 3 items" → fresh perfect twice. rewrite-edit: opus-fast's cached
+   0.8643 with 8 failures → fresh 0.9500, zero spread. Champion failures
+   are unstable run to run; a hypothesis built on last week's failure map
+   attacks positions the enemy no longer holds. **Standing-lab rule for
+   the hypothesis stage (RESEARCH-DIRECTION stage 2): negative priors and
+   coverage maps must be recency-weighted or freshly re-measured before a
+   leg is funded — the cache screens, it does not aim.**
+4. **The 14-item instrument is too small for CI-clear capability verdicts**
+   (spreads 0.02–0.09 across everything). rewrite-edit joins the A3
+   hardening scope: more items, chosen where strong models disagree.
+5. One candidate VALUE point, underpowered: pick(sonnet|gpt-mini) at
+   0.8857/$2.50 sits between mini and sonnet on quality/cost and is
+   strictly non-dominated on cost — but the margin over mini (0.0286) is
+   inside the noise at this n. Not promotable; noted for re-test on the
+   hardened instrument.
+
+Cumulative capability-mixing spend: ≈ $10. Frontiers untouched throughout.
