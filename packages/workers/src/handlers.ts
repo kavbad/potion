@@ -4223,9 +4223,15 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     let frontierPoints: FrontierPoint[] = [];
     if (aggregates.length > 0) {
       const computed = computeFrontier(aggregates);
-      if (previous !== null && previous.points.length > 0) {
-        // Re-measured-and-dominated is the frontier working; never-re-measured
-        // is evidence loss. Only the second refuses.
+      // The regression guard protects PUBLISHING: it refuses to save a
+      // frontier that silently drops a routed point whose evidence was lost
+      // (containment, timeout). A publish:false run saves nothing, so there
+      // is nothing to protect — found 2026-08-25 when a measurement-only
+      // validation leg died on two flaky carried-forward incumbents AFTER
+      // its spend. Re-measured-and-dominated is the frontier working;
+      // never-re-measured is evidence loss; only the second refuses, and
+      // only where a save would make the loss real.
+      if (payload.publish !== false && previous !== null && previous.points.length > 0) {
         const refusal = frontierRegressionRefusal({
           previousVersion: previous.version,
           pricesVersion: prices.version,
