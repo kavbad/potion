@@ -17,7 +17,7 @@ const STATS = [
   },
   {
     figure: '49%',
-    caption: 'the measured saving across a typical traffic mix, with a quality floor enforced on every request',
+    caption: 'the measured saving across our reference workload mix, with the quality floor enforced on every request',
   },
 ] as const;
 

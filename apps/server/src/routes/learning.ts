@@ -24,6 +24,8 @@ import {
   getFirstApiKeyWithPolicy,
   getPolicyById,
   listLearningProposals,
+  getOrgById,
+  setOrgRouteAllModels,
 } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { Policy } from '@potion/core';
@@ -47,6 +49,25 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
   app.get('/api/incumbents/options', async (req, reply) => {
     if (!req.potionOrg) return reply.code(401).send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
     return reply.send({ roster: incumbentRoster(ctx.prices) });
+  });
+
+  // ---- model-field semantics (migration 0058, external review 2026-08-25) --
+  // GET reflects the org's current mode; PUT flips it (admin). Label-blind
+  // routing (route_all_models=true) is the migration escape hatch for apps
+  // that cannot change their model strings yet — an explicit, visible choice.
+  app.get('/api/org-settings', async (req, reply) => {
+    const org = req.potionOrg!;
+    const row = await getOrgById(db, org.orgId);
+    return reply.send({ routeAllModels: row?.routeAllModels === true });
+  });
+  app.put('/api/org-settings', { preHandler: [requireRole('admin')] }, async (req, reply) => {
+    const org = req.potionOrg!;
+    const parsed = z.object({ routeAllModels: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(openAiError('routeAllModels must be a boolean', 'invalid_request_error'));
+    }
+    await setOrgRouteAllModels(db, org.orgId, parsed.data.routeAllModels);
+    return reply.send({ routeAllModels: parsed.data.routeAllModels });
   });
 
   app.get('/api/incumbents', async (req, reply) => {

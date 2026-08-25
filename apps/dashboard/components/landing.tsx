@@ -169,10 +169,13 @@ export function Landing() {
             Isn&apos;t this what OpenRouter does?
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
-            No. A gateway answers{' '}
-            <span className="font-medium text-ink">how do I call any model?</span> Potion answers{' '}
-            <span className="font-medium text-ink">which model does this request deserve?</span>{' '}
-            Those are different layers, and the second one is where the money is.
+            Less than it used to be — gateways now ship auto-routers, and that is exactly the
+            point. Prediction is becoming free.{' '}
+            <span className="font-medium text-ink">Others predict which model should work.</span>{' '}
+            <span className="font-medium text-ink">
+              Potion measures what actually clears your bar
+            </span>{' '}
+            — and signs the receipt.
           </p>
         </Reveal>
 
@@ -188,10 +191,10 @@ export function Landing() {
                 Potion
               </div>
               {[
-                ['You get', 'Every model, one API', 'The right model for each request'],
-                ['Who chooses', 'You do, once per app', 'The measurements do, per request'],
-                ['Based on', 'Leaderboards, habit, vibes', 'Held-out tests of your kind of work'],
-                ['Quality', 'Whatever you picked', 'A floor your traffic never falls below'],
+                ['You get', 'Every model, one API', 'The measured pick for each kind of work'],
+                ['Who chooses', 'You, or a predictive auto-router', 'Held-out measurement, under your stated bar'],
+                ['Based on', 'Leaderboards and predictions', 'Held-out tests of your kind of work'],
+                ['Quality', 'Whatever the prediction picked', 'Only points measured above your floor are served'],
                 ['After the answer', 'Tokens and a price', 'A receipt: what served it, and why'],
                 ['A new model ships', 'You re-evaluate by hand', 'Measured first, adopted only if it earns it'],
               ].map(([k, a, b]) => (
@@ -213,10 +216,10 @@ export function Landing() {
             {/* phones: the same six rows, stacked */}
             <div className="divide-y divide-[#d9d5cb] sm:hidden">
               {[
-                ['You get', 'Every model, one API', 'The right model for each request'],
-                ['Who chooses', 'You do, once per app', 'The measurements do, per request'],
-                ['Based on', 'Leaderboards, habit, vibes', 'Held-out tests of your kind of work'],
-                ['Quality', 'Whatever you picked', 'A floor your traffic never falls below'],
+                ['You get', 'Every model, one API', 'The measured pick for each kind of work'],
+                ['Who chooses', 'You, or a predictive auto-router', 'Held-out measurement, under your stated bar'],
+                ['Based on', 'Leaderboards and predictions', 'Held-out tests of your kind of work'],
+                ['Quality', 'Whatever the prediction picked', 'Only points measured above your floor are served'],
                 ['After the answer', 'Tokens and a price', 'A receipt: what served it, and why'],
                 ['A new model ships', 'You re-evaluate by hand', 'Measured first, adopted only if it earns it'],
               ].map(([k, a, b]) => (
@@ -252,8 +255,9 @@ export function Landing() {
           customer states the outcome, Potion chooses the means, the trace
           reports what it chose). The commercial story is stronger for it:
           not "you can build cascades", which is work handed to the customer,
-          but "combinations you would never have found serve your traffic
-          under the rule you already set".
+          but "clever ideas are measured before a dollar of yours touches
+          them — including the ones that lost" (the 2026-08-25 mixing
+          verdict, published at /research/the-mixing-verdict, is the beat).
 
           Deliberately NOT the focal point — it sits after the mechanism is
           understood and before the proof, and it is one screen. But it must
@@ -266,31 +270,32 @@ export function Landing() {
         <div className="grid items-start gap-12 lg:grid-cols-2">
           <Reveal>
             <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
-              The frontier is measured weekly, by a machine. Combinations included.
+              The frontier is measured weekly, by a machine. Negatives included.
             </h2>
             <p className="mt-6 text-base leading-relaxed text-soft">
-              Every model sits the same private exam for every kind of work. Then the engine does
-              the part nobody else does: it replays <em>combinations</em> of models against the
-              stored item-level results, so a new way of putting two or three models together is
-              scored in minutes, for nothing, before a dollar is spent on it. New models are
-              auditioned the week they ship. Only what dominates, on quality, cost and speed at
-              once, is published to the frontier your requests are routed from.
+              Every model Potion considers routing to must first earn its place through
+              measurement — the same private exams, per kind of work, with confidence intervals
+              and dates on every point. New models are auditioned the week they ship. Only what
+              dominates on quality, cost and speed at once is published to the frontier your
+              requests are routed from.
             </p>
             <p className="mt-4 text-base leading-relaxed text-soft">
-              A combination is served as one strategy with one hash. Your rule is the same rule
-              you would set anyway, stay above this quality, stay under this cost, and if a
-              combination is the best way to honour it, that is what answers. The receipt says so.
-              What it is made of is not published.
+              The engine also tests the clever ideas, so you never pay for one that does not
+              work. It spent two weeks trying to beat single-model routing with multi-model
+              combinations — pre-registered, budget-capped — and every attempt lost to the best
+              single model. We published all five losses. If the model market ever changes shape
+              so a combination pays, the same machinery will find it, measure it, and only then
+              serve it.
             </p>
             <p className="mt-6 border-l-[3px] border-accent pl-5 text-base font-medium leading-relaxed text-accent">
-              Why this is hard to copy: it needs the measured corpus, the live receipts, and the
-              replay engine in one place, and the corpus compounds every week. There are far more
-              useful combinations than there are models, and almost none of them have been
-              measured by anyone.
+              Why this is hard to copy: the measured corpus, the live receipts, and the replay
+              engine live in one place, and the corpus compounds every week — including the
+              negatives. A router that only reports wins is indistinguishable from a router that
+              does not measure.
             </p>
           </Reveal>
           <Reveal delayMs={120}>
-            <Figure n="4" caption="The weekly loop, with no one in it: measure every model on every kind of work; replay combinations against stored results at no cost; audition new models the week they ship; publish only what dominates; route live traffic with receipts, which feed the next measurement.">
+            <Figure n="4" caption="The weekly loop, with no one in it: measure the models that could earn a route; replay candidates against stored results at no cost; audition new models the week they ship; publish what dominates — and publish what lost; route live traffic with receipts, which feed the next measurement.">
               <ResearchLoop />
             </Figure>
           </Reveal>

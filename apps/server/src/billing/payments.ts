@@ -50,8 +50,10 @@ export interface PaymentsTransport {
   readonly kind: 'stripe' | 'ledger';
   /** Idempotently create the org's payment identity. */
   ensureCustomer(orgId: string, email: string | null, name: string): Promise<PaymentCustomer>;
-  /** A hosted page where the customer enters a card. */
-  startCheckout(customerId: string, returnUrl: string): Promise<CheckoutSession>;
+  /** A hosted page where the customer enters a card. orgId rides the
+   * session as client_reference_id so the completion webhook can bind the
+   * card back to the Potion org without guessing. */
+  startCheckout(customerId: string, returnUrl: string, orgId: string): Promise<CheckoutSession>;
   /** Collect one period's invoice. */
   chargeInvoice(customerId: string, invoice: Invoice): Promise<ChargeResult>;
   /** Verify and parse a webhook. Returns null when the signature fails. */
@@ -71,7 +73,7 @@ export class LedgerPaymentsTransport implements PaymentsTransport {
     return Promise.resolve({ customerId: `local_cus_${orgId}` });
   }
 
-  startCheckout(customerId: string, returnUrl: string): Promise<CheckoutSession> {
+  startCheckout(customerId: string, returnUrl: string, _orgId: string): Promise<CheckoutSession> {
     const sessionId = `local_cs_${randomUUID().slice(0, 8)}`;
     // Points back at the caller with a marker: the dashboard renders the
     // "no payment rails configured yet" state rather than a broken link.
@@ -125,6 +127,19 @@ export class StripePaymentsTransport implements PaymentsTransport {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
+  private async get(path: string): Promise<Record<string, unknown>> {
+    const res = await this.fetchImpl(`${STRIPE_API}${path}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    });
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      const err = (body.error ?? {}) as { message?: string };
+      throw new Error(`stripe ${path}: HTTP ${res.status}${err.message ? ` — ${err.message}` : ''}`);
+    }
+    return body;
+  }
+
   private async post(path: string, form: Record<string, string>, idempotencyKey?: string): Promise<Record<string, unknown>> {
     const res = await this.fetchImpl(`${STRIPE_API}${path}`, {
       method: 'POST',
@@ -155,10 +170,18 @@ export class StripePaymentsTransport implements PaymentsTransport {
     return { customerId: String(body.id) };
   }
 
-  async startCheckout(customerId: string, returnUrl: string): Promise<CheckoutSession> {
+  async startCheckout(customerId: string, returnUrl: string, orgId: string): Promise<CheckoutSession> {
+    // Review 2026-08-25 (external code inspection): three integration bugs
+    // found BEFORE the first real key was pasted. (1) setup mode requires
+    // `currency` for dynamic payment methods; (2) the completion webhook
+    // reads client_reference_id, which nothing set; (3) see chargeInvoice —
+    // an off-session confirm without payment_method hunts the legacy
+    // default_source that Checkout never creates.
     const body = await this.post('/checkout/sessions', {
       mode: 'setup',
       customer: customerId,
+      currency: 'usd',
+      client_reference_id: orgId,
       success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=done`,
       cancel_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=cancelled`,
     });
@@ -169,12 +192,22 @@ export class StripePaymentsTransport implements PaymentsTransport {
     const cents = Math.round(invoice.totals.totalUsd * 100);
     if (cents <= 0) return { externalId: `zero_${invoice.id}`, status: 'paid' };
     try {
+      // Checkout setup mode attaches a modern PaymentMethod, NOT the legacy
+      // default_source an unadorned off-session confirm falls back to — so
+      // the card must be named explicitly or the charge fails the day it is
+      // real. One extra read per month per org.
+      const methods = await this.get(`/customers/${customerId}/payment_methods?type=card&limit=1`);
+      const method = Array.isArray(methods.data) && methods.data[0] ? String((methods.data[0] as { id: unknown }).id) : null;
+      if (!method) {
+        return { externalId: `failed_${invoice.id}`, status: 'failed', error: 'no card payment method on file for this customer' };
+      }
       const body = await this.post(
         '/payment_intents',
         {
           amount: String(cents),
           currency: invoice.currency,
           customer: customerId,
+          payment_method: method,
           confirm: 'true',
           off_session: 'true',
           description: `Potion usage — ${invoice.period}`,

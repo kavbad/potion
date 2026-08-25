@@ -1,3 +1,6 @@
+// SUPERSEDED BY src/billing/payments.ts (R0, 2026-08-24): the real Stripe
+// transport lives there. This stub predates it and survives only for the
+// interfaces old call sites import. See STATE.md.
 // Billing backends (M2 Wave 2, ROADMAP #18) — where generated invoices go.
 //
 //   json-file  the Wave-2 implementation: writes <invoice-id>.json +

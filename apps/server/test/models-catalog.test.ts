@@ -94,10 +94,11 @@ describe('the list says what each id actually IS', () => {
     }
   });
 
-  it('and the claim is TRUE: a pinned model id changes nothing about routing', async () => {
-    // The justification for calling these labels. Two requests with the same
-    // prompt and wildly different `model` values must resolve the SAME
-    // strategy, because the label is not an input to the decision.
+  it('and the claim is TRUE: a named model id PINS — the label means what it says (0058)', async () => {
+    // The 2026-08-25 semantics flip (external review): the old contract —
+    // "the label changes nothing" — violated least surprise for apps using
+    // `model` as an entitlement or eval condition. Now: potion-auto routes,
+    // a known id serves exactly that model, and the trace says pinned.
     const ask = async (model: string) => {
       const res = await app.inject({
         method: 'POST', url: '/v1/chat/completions',
@@ -105,11 +106,12 @@ describe('the list says what each id actually IS', () => {
         payload: { model, messages: [{ role: 'user', content: 'Write a Python function that merges two sorted lists.' }] },
       });
       expect(res.statusCode).toBe(200);
-      return String(res.headers['x-frontier-trace']);
+      return res;
     };
     const asAuto = await ask('potion-auto');
+    expect(String(asAuto.headers['x-frontier-trace'])).not.toContain('policy=pinned');
     const asPinned = await ask('or-opus');
-    const strategyOf = (t: string) => /strategy=([^;]+)/.exec(t)?.[1];
-    expect(strategyOf(asPinned)).toBe(strategyOf(asAuto));
+    expect(String(asPinned.headers['x-frontier-trace'])).toContain('policy=pinned');
+    expect(String(asPinned.headers['x-potion-model'])).toBe('or-opus');
   }, 60_000);
 });

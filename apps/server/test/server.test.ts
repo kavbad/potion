@@ -228,7 +228,7 @@ describe('policy → strategy resolution (known frontier)', () => {
       url: '/v1/chat/completions',
       headers: { authorization: `Bearer ${KEY_A}`, 'content-type': 'application/json' },
       payload: {
-        model: 'x',
+        model: 'potion-auto',
         messages: [{ role: 'user', content: 'zqx jkv wobble gribble flibberty' }],
       },
     });

@@ -45,7 +45,7 @@ export function EvidenceBand() {
             difference is <span className="font-medium text-[#efece4]">two hundred and seventy fold</span>.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-[#d6d3cb]">
-            This is why routing pays: most requests deserve the bottom row, a few genuinely need
+            This is why routing pays: most kinds of work are served from the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
           <p className="mt-6 font-mono text-[11px] leading-relaxed text-[#a8a29e]">

@@ -42,7 +42,7 @@ import {
   SamplingParamsSchema,
   type SamplingParams,
 } from '@potion/core';
-import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
+import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -689,6 +689,36 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // authenticated traffic and link nothing across tenants.
     logBase.promptFp = promptFingerprint(auth.org.orgId, body);
     logBase.sessionFp = sessionFingerprint(auth.org.orgId, (body as { user?: unknown }).user);
+
+    // ---- least-surprise model semantics (external review, 2026-08-25) ----
+    // 'potion-auto' routes. A known model name PINS to exactly that model —
+    // applications use `model` for entitlements, eval conditions, and
+    // explicit choices, and silently rerouting a named model violates least
+    // surprise. An unknown name is a 400, never a silent reroute. Orgs
+    // migrating a label-blind app opt into route-all-models explicitly
+    // (Settings · Controls, migration 0058); the recommended path
+    // ('potion-auto') never pays the org-row read below.
+    let pinnedModel: string | null = null;
+    if (body.model !== 'potion-auto') {
+      const entry = ctx.prices.entries.find((e) => e.alias === body.model || e.model === body.model);
+      const orgRow = await getOrgById(ctx.db.db, auth.org.orgId);
+      const routeAll = orgRow?.routeAllModels === true;
+      if (!routeAll) {
+        if (entry) {
+          pinnedModel = entry.alias;
+        } else {
+          await logRequest({ ...logBase, status: 'unknown_model', latencyMs: elapsed() });
+          return reply.code(400).send(
+            openAiError(
+              `unknown model '${body.model}' — use 'potion-auto' to route by measurement, name a model from /v1/models to pin it, or enable route-all-models in Settings·Controls for label-blind routing`,
+              'invalid_request_error',
+              'unknown_model',
+              'model',
+            ),
+          );
+        }
+      }
+    }
     // ---- M4 #35 budget autopilot (m4-alerts-budget) ----
     // Hard-stop (SPEC §13.7): BEFORE any strategy work, if the org's budget
     // has hard_stop=true and MTD spend ≥ cap → 429 OpenAI-shaped
@@ -986,6 +1016,11 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       app.log.warn(err, 'guarantee override lookup failed — serving the policy-resolved point');
     }
     // ---- end M3 #22 guarantee override ----
+    if (pinnedModel !== null) {
+      // The customer named the model; nothing (guarantee override, reasoning
+      // skip, policy) outranks an explicit pin. fallback=0: this IS the ask.
+      op = { ...op, config: { type: 'single', model: pinnedModel }, fallback: 0 as const };
+    }
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
     const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
@@ -997,7 +1032,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         clusterId,
         strategyHash8: sh.slice(0, 8),
         frontierVersion: op.frontierVersion,
-        policyType: policy.type,
+        policyType: pinnedModel !== null ? 'pinned' : policy.type,
         fallback: op.fallback,
         provenance,
         ...(op.toolConstraint ? { constrained: 'tools' as const } : {}),

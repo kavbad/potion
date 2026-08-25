@@ -17,3 +17,9 @@ export async function getOrgById(db: PotionDb, id: string): Promise<OrgRow | nul
 export async function listOrgs(db: PotionDb): Promise<OrgRow[]> {
   return db.select().from(orgs).orderBy(asc(orgs.createdAt));
 }
+
+/** Model-field semantics toggle (migration 0058): label-blind routing is an
+ * explicit org choice, never a silent default. */
+export async function setOrgRouteAllModels(db: PotionDb, id: string, value: boolean): Promise<void> {
+  await db.update(orgs).set({ routeAllModels: value }).where(eq(orgs.id, id));
+}

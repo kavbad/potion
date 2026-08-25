@@ -6,6 +6,7 @@ import { BudgetCard } from '@/components/budget-card';
 import { FloorCard } from '@/components/floor-card';
 import { FrontierStatus } from '@/components/frontier-status';
 import { IncumbentSettings } from '@/components/incumbent-settings';
+import { ModelSemantics } from '@/components/model-semantics';
 import { PolicyPicker } from '@/components/policy-picker';
 import { SettingsTabs } from '@/components/settings-tabs';
 
@@ -24,6 +25,7 @@ export default function ControlsPage() {
       <PolicyPicker mode="settings" />
       <FloorCard />
       <IncumbentSettings />
+      <ModelSemantics />
       <FrontierStatus />
       <BudgetCard />
     </div>

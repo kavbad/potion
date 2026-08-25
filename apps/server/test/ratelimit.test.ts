@@ -92,7 +92,7 @@ const RAW_SHARED = 'pk_rl_f6_shared';
 const RAW_BURST = 'pk_rl_burst';
 
 const POLICY: Policy = { type: 'max_quality', costCeilingPer1K: 100 };
-const PROMPT = { model: 'potion', messages: [{ role: 'user', content: 'reverse a string in python' }] };
+const PROMPT = { model: 'potion-auto', messages: [{ role: 'user', content: 'reverse a string in python' }] };
 
 let app: FastifyInstance;
 const db = () => app.potion.db.db;
@@ -233,7 +233,7 @@ describe('rate limiting via inject', () => {
 
   it('per-key body limit override (1 KiB): oversized body is 413 pre-parse', async () => {
     const big = {
-      model: 'potion',
+      model: 'potion-auto',
       messages: [{ role: 'user', content: 'x'.repeat(4096) }],
     };
     const res = await chat(RAW_SMALLBODY, big);

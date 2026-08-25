@@ -1,3 +1,5 @@
+> **Point-in-time strategy document (2026-08-24). For current truths see [STATE.md](../STATE.md) — several statements below (e.g. Stripe absent from the tree, mixing as the emitter's core) are SUPERSEDED BY STATE.md.**
+
 # Potion as an inference compiler
 
 **Status: strategy, written 2026-08-23.** The long-horizon companion to

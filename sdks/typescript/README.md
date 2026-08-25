@@ -99,10 +99,12 @@ the raw `body` envelope.
 
 ## Escape hatch
 
-`client.openai` is the wrapped official client — `client.models.list()`,
-`client.embeddings.create(...)`, and every other resource work exactly as
-documented upstream. `client.models` / `client.embeddings` are exposed
-directly for convenience.
+`client.openai` is the wrapped official client, pointed at Potion. The
+resources Potion serves today — chat completions (streaming and tool calls
+included), legacy completions, embeddings, and `models.list()` — work as
+documented upstream. Resources Potion does not serve (Responses, images,
+audio, files, batches) return Potion's 404, not silent emptiness.
+`client.models` / `client.embeddings` are exposed directly for convenience.
 
 ## Development
 

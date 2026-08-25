@@ -58,6 +58,11 @@ export const orgs = pgTable('orgs', {
   /** Trace retention (M5 #36, SPEC §14.3, migration 0015): spans older than
    * N days are purged nightly; 0 = metadata only (attrs redacted). */
   traceRetentionDays: integer('trace_retention_days').notNull().default(30),
+  /** Model-field semantics (external review 2026-08-25, migration 0058):
+   * false (default) = 'potion-auto' routes, a known model name pins, an
+   * unknown name 400s. true = migration mode — every label routes, chosen
+   * explicitly in Settings · Controls. */
+  routeAllModels: boolean('route_all_models').notNull().default(false),
   /**
    * S7 L2 (migration 0042): this org's traffic is excluded from demand
    * cells entirely — not counted, not summed, not staged. Checked at

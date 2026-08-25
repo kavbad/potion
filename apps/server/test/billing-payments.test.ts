@@ -9,7 +9,7 @@ import { createHmac } from 'node:crypto';
 import { sha256 } from '@potion/core';
 import { createOrg, getInvoiceCharge, insertApiKey, upsertBillingCustomer } from '@potion/db';
 import { buildServer } from '../src/server.js';
-import { LedgerPaymentsTransport, verifyStripeSignature } from '../src/billing/payments.js';
+import { LedgerPaymentsTransport, StripePaymentsTransport, verifyStripeSignature } from '../src/billing/payments.js';
 
 const ORG = 'org-billing';
 const ADMIN_KEY = 'pk_billing_admin';
@@ -173,5 +173,57 @@ describe('a REAL signed webhook survives the raw-body path', () => {
       payload: raw.replace('evt_raw2', 'evt_evil'),
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// ---- the three integration bugs the 2026-08-25 external review found ------
+//
+// All three would have surfaced only on the day a real key was pasted:
+// setup-mode Checkout without currency; a completion webhook reading
+// client_reference_id nothing set; an off-session confirm with no
+// payment_method (which hunts the legacy default_source Checkout never
+// creates). Pinned here against a scripted fetch so they stay fixed.
+describe('stripe transport sends what the live API actually needs', () => {
+  function scripted(responses: Array<{ ok: boolean; body: unknown }>): { fetch: typeof fetch; calls: Array<{ url: string; init?: RequestInit }> } {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      const r = responses.shift() ?? { ok: true, body: {} };
+      return { ok: r.ok, status: r.ok ? 200 : 402, json: async () => r.body } as Response;
+    }) as typeof fetch;
+    return { fetch: fetchImpl, calls };
+  }
+
+  it('startCheckout carries currency and client_reference_id', async () => {
+    const { fetch: f, calls } = scripted([{ ok: true, body: { id: 'cs_1', url: 'https://checkout' } }]);
+    const t = new StripePaymentsTransport('sk_test_x', undefined, f);
+    await t.startCheckout('cus_1', 'https://app/settings/billing', 'org-abc');
+    const form = new URLSearchParams(String(calls[0]!.init?.body));
+    expect(form.get('mode')).toBe('setup');
+    expect(form.get('currency')).toBe('usd');
+    expect(form.get('client_reference_id')).toBe('org-abc');
+  });
+
+  it('chargeInvoice names the payment method it found on the customer', async () => {
+    const { fetch: f, calls } = scripted([
+      { ok: true, body: { data: [{ id: 'pm_42' }] } },
+      { ok: true, body: { id: 'pi_1', status: 'succeeded' } },
+    ]);
+    const t = new StripePaymentsTransport('sk_test_x', undefined, f);
+    const r = await t.chargeInvoice('cus_1', { id: 'inv_9', orgId: 'org-abc', period: '2026-08', totals: { totalUsd: 10 }, currency: 'usd' } as never);
+    expect(r.status).toBe('paid');
+    expect(calls[0]!.url).toContain('/customers/cus_1/payment_methods?type=card');
+    const form = new URLSearchParams(String(calls[1]!.init?.body));
+    expect(form.get('payment_method')).toBe('pm_42');
+    expect(form.get('off_session')).toBe('true');
+  });
+
+  it('chargeInvoice fails honestly when no card is on file — no blind confirm', async () => {
+    const { fetch: f, calls } = scripted([{ ok: true, body: { data: [] } }]);
+    const t = new StripePaymentsTransport('sk_test_x', undefined, f);
+    const r = await t.chargeInvoice('cus_1', { id: 'inv_9', orgId: 'org-abc', period: '2026-08', totals: { totalUsd: 10 }, currency: 'usd' } as never);
+    expect(r.status).toBe('failed');
+    expect(r.error).toContain('no card payment method');
+    expect(calls.length).toBe(1); // never attempted the PaymentIntent
   });
 });
