@@ -6,6 +6,7 @@
 // pointed at nothing. Thin client wrapper: fetch current, render the picker.
 import { useEffect, useState } from 'react';
 import { IncumbentPicker, type Incumbents } from '@/components/incumbent-picker';
+import { QualityBar } from '@/components/quality-bar';
 
 export function IncumbentSettings() {
   const [state, setState] = useState<{ loaded: boolean; initial: Incumbents | null }>({ loaded: false, initial: null });
@@ -24,6 +25,7 @@ export function IncumbentSettings() {
         Potion measure your actual work.
       </p>
       <IncumbentPicker initial={state.initial} />
+      {state.initial && <QualityBar admin />}
     </section>
   );
 }

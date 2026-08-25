@@ -25,8 +25,8 @@ import { ApiUnreachable, apiFetch, isSessionExpired, sessionCookieHeader } from 
 import { recoverSession } from '@/lib/recover';
 import { Landing } from '@/components/landing';
 import { SiteShell } from '@/components/site-header';
-import { Onboarding } from '@/components/onboarding';
-import type { ConnectionResponse } from '@/lib/types';
+import { HomeOverview } from '@/components/home-overview';
+import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,9 +50,11 @@ export default async function ConnectPage({
   }
 
   let conn: ConnectionResponse | null = null;
+  let activity: RoutingActivityResponse | null = null;
   let unreachable = false;
   try {
     conn = await apiFetch<ConnectionResponse>('/api/connection');
+    activity = await apiFetch<RoutingActivityResponse>('/api/routing-activity?limit=8').catch(() => null);
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
     // A cookie the API no longer honours — expired, revoked, or from a reset
@@ -86,5 +88,5 @@ export default async function ConnectPage({
     );
   }
 
-  return <Onboarding conn={conn} />;
+  return <HomeOverview conn={conn} initialActivity={activity} />;
 }

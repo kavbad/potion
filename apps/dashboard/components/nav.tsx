@@ -24,7 +24,7 @@ import { usePathname } from 'next/navigation';
  * destination.
  */
 const PRIMARY = [
-  { href: '/', label: 'Home', hint: 'Your key, one line, a request, a receipt' },
+  { href: '/', label: 'Overview', hint: 'What routed, what it cost, what it saved' },
   { href: '/try', label: 'Try a request', hint: 'Send anything; see what Potion chose and why' },
   { href: '/usage', label: 'Usage & savings', hint: 'What you spent, what you would have spent' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, audit' },
