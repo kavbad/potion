@@ -105,10 +105,15 @@ export const FusionConfigSchema = z.object({
    * (including "tests unusable") fall back to judge-pick, then confidence.
    * Measured motivation: judge-pick realized 27% of a pair's oracle
    * headroom on code-gen — the text judge is the bottleneck. */
-  method: z.enum(['judge-pick', 'concat-rank', 'exec-pick']),
+  method: z.enum(['judge-pick', 'concat-rank', 'exec-pick', 'verify-pick']),
   judge: JudgeConfigSchema.optional(),
   /** exec-pick only: the model that writes the tests. */
   testWriter: JudgeConfigSchema.optional(),
+  /** verify-pick (2026-08-25): extraction's exec-pick. The writer derives
+   * the REQUIRED FIELD LIST from the request only; each candidate's JSON is
+   * checked deterministically for those fields (the omission class that
+   * reference-free judges were measured blind to, G8). Same writer fields,
+   * same majority rule, no sandbox. */
   /** exec-pick, selector stabilization (2026-08-25): MULTIPLE independent
    * test-writers ride the same parallel fan-out; a candidate's score is the
    * MEAN pass rate across suites — majority by execution, so one wrong test

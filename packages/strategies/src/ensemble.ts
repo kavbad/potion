@@ -51,6 +51,66 @@ export function buildTestWriterMessages(original: ChatMessage[]): ChatMessage[] 
   ];
 }
 
+/** verify-pick's writer: derive the required FIELD LIST from the request. */
+export function buildFieldWriterMessages(original: ChatMessage[]): ChatMessage[] {
+  return [
+    ...original,
+    {
+      role: 'user',
+      content:
+        'Do NOT answer the request above. Instead, list the fields the request asks to be extracted or returned. ' +
+        'Respond with ONLY a JSON array of the field names, exactly as the request names them (same casing/wording), ' +
+        'no markdown fences, no prose. Example: ["order_number","issue","urgency"]',
+    },
+  ];
+}
+
+/** Generic fence strip (any language tag) for JSON payloads — the shared
+ * stripCodeFences only recognizes js fences, by design. */
+function stripAnyFence(text: string): string {
+  return text
+    .trim()
+    .replace(/^```[a-z0-9_-]*\s*\n?/i, '')
+    .replace(/\n?\s*```$/, '')
+    .trim();
+}
+
+/** Normalize a field name for matching: lowercase, alphanumerics only. */
+function normField(k: string): string {
+  return k.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Parse a writer's field list; null when it is not a usable string array. */
+export function parseFieldList(text: string): string[] | null {
+  try {
+    const v = JSON.parse(stripAnyFence(text)) as unknown;
+    if (!Array.isArray(v) || v.length === 0) return null;
+    const fields = v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+    return fields.length > 0 ? fields : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Deterministic structural check: fraction of required fields present as
+ * keys in the candidate's parsed JSON (top level). Unparseable → -1
+ * ("cannot attest") — the exact omission class reference-free judges were
+ * measured blind to (G8), checked without any reference.
+ */
+export function fieldCoverage(candidateText: string, required: string[]): number {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripAnyFence(candidateText));
+  } catch {
+    return -1;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return -1;
+  const keys = new Set(Object.keys(parsed as Record<string, unknown>).map(normField));
+  const hit = required.filter((r) => keys.has(normField(r))).length;
+  return hit / required.length;
+}
+
 export async function runEnsemble(
   strategy: EnsembleConfig,
   messages: ChatMessage[],
@@ -62,29 +122,32 @@ export async function runEnsemble(
   const total = zeroUsage();
 
   const execPick = strategy.fusion.method === 'exec-pick';
+  const verifyPick = strategy.fusion.method === 'verify-pick';
   // Selector stabilization (2026-08-25): one wrong test suite used to BE the
   // verdict. With N independent writers the candidate score is the mean pass
   // rate across suites — majority by execution. testWriters wins over the
   // legacy singular field; writer 0 keeps the singular field's seed so every
-  // existing single-writer shape stays cache-identical.
-  const writers = execPick
+  // existing single-writer shape stays cache-identical. verify-pick shares
+  // the writer plumbing; its writers derive field lists instead of tests.
+  const writers = execPick || verifyPick
     ? strategy.fusion.testWriters && strategy.fusion.testWriters.length > 0
       ? strategy.fusion.testWriters
       : strategy.fusion.testWriter
         ? [strategy.fusion.testWriter]
         : []
     : [];
-  if (execPick && writers.length === 0) {
-    throw new Error("ensemble fusion 'exec-pick' requires fusion.testWriter or fusion.testWriters");
+  if ((execPick || verifyPick) && writers.length === 0) {
+    throw new Error(`ensemble fusion '${strategy.fusion.method}' requires fusion.testWriter or fusion.testWriters`);
   }
 
-  // exec-pick's test-writers need only the request, so they ride the same
-  // parallel fan-out as the candidates — zero added latency on the happy path.
+  // The writers need only the request, so they ride the same parallel
+  // fan-out as the candidates — zero added latency on the happy path.
+  const buildWriterMessages = verifyPick ? buildFieldWriterMessages : buildTestWriterMessages;
   const [candidates, writerOutcomes] = await Promise.all([
     Promise.all(strategy.models.map((model, i) => callModel(model, messages, ctx, baseSeed + i))),
     Promise.all(
       writers.map((w, wi) =>
-        callModel(w.model, buildTestWriterMessages(messages), ctx, baseSeed + strategy.models.length + 1 + wi),
+        callModel(w.model, buildWriterMessages(messages), ctx, baseSeed + strategy.models.length + 1 + wi),
       ),
     ),
   ]);
@@ -99,12 +162,13 @@ export async function runEnsemble(
     });
   });
 
-  if (execPick) {
+  if (execPick || verifyPick) {
+    const writerPrefix = verifyPick ? 'field-writer' : 'test-writer';
     const suites: string[] = [];
     writerOutcomes.forEach((o, wi) => {
       addUsageParallel(total, o.usage);
       trace.push({
-        stage: writers.length === 1 ? 'test-writer' : `test-writer-${wi}`,
+        stage: writers.length === 1 ? writerPrefix : `${writerPrefix}-${wi}`,
         model: writers[wi]!.model,
         text: o.text,
         usage: o.usage,
@@ -115,17 +179,30 @@ export async function runEnsemble(
     // structural failure or zero registered cases → -1 = "cannot attest".
     // A candidate whose own code fails to load earns its -1 in every suite;
     // a suite broken for everyone gives everyone the same -1 — no bias.
+    // verify-pick's check is deterministic field coverage — no sandbox at all.
     const scores: number[] = new Array<number>(candidates.length).fill(0);
     const verdicts: string[] = candidates.map(() => '');
     for (let wi = 0; wi < suites.length; wi++) {
+      const fields = verifyPick ? parseFieldList(suites[wi]!) : null;
       for (let ci = 0; ci < candidates.length; ci++) {
-        const report = await runCodeWithTests(stripCodeFences(candidates[ci]!.text), suites[wi]!);
-        const unusable = report.error !== undefined || report.total === 0;
-        const rate = unusable ? -1 : report.passed / report.total;
+        let rate: number;
+        let verdict: string;
+        if (verifyPick) {
+          if (fields === null) {
+            rate = -1;
+            verdict = 'error(unusable field list)';
+          } else {
+            rate = fieldCoverage(candidates[ci]!.text, fields);
+            verdict = rate < 0 ? 'error(unparseable json)' : `${Math.round(rate * fields.length)}/${fields.length}`;
+          }
+        } else {
+          const report = await runCodeWithTests(stripCodeFences(candidates[ci]!.text), suites[wi]!);
+          const unusable = report.error !== undefined || report.total === 0;
+          rate = unusable ? -1 : report.passed / report.total;
+          verdict = unusable ? `error(${(report.error ?? 'no cases').slice(0, 60)})` : `${report.passed}/${report.total}`;
+        }
         scores[ci]! += rate / suites.length;
-        verdicts[ci] +=
-          (wi > 0 ? '+' : '') +
-          (unusable ? `error(${(report.error ?? 'no cases').slice(0, 60)})` : `${report.passed}/${report.total}`);
+        verdicts[ci] += (wi > 0 ? '+' : '') + verdict;
       }
     }
     const top = Math.max(...scores);
@@ -154,11 +231,11 @@ export async function runEnsemble(
       }
     }
     trace.push({
-      stage: 'fusion-exec',
-      model: 'sandbox',
+      stage: verifyPick ? 'fusion-verify' : 'fusion-exec',
+      model: verifyPick ? 'field-check' : 'sandbox',
       text: candidates[index]!.text,
       usage: zeroUsage(),
-      decision: `exec-pick:${index};${how}`,
+      decision: `${strategy.fusion.method}:${index};${how}`,
     });
     return { text: candidates[index]!.text, trace, usage: total };
   }

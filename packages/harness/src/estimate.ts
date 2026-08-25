@@ -137,7 +137,7 @@ export function estimateCalls(
       // exec-pick (R4): every test-writer answers the request-derived wire at
       // the answer ceiling; the judge is the tie-break and fires in the
       // worst case, so it is priced whenever configured.
-      if (strategy.fusion.method === 'exec-pick') {
+      if (strategy.fusion.method === 'exec-pick' || strategy.fusion.method === 'verify-pick') {
         const writers = strategy.fusion.testWriters?.length
           ? strategy.fusion.testWriters
           : strategy.fusion.testWriter
@@ -147,7 +147,7 @@ export function estimateCalls(
           calls.push({ model: w.model, inputTokens: baseInputTokens, outputTokens: OUT });
         }
       }
-      if ((strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick') && strategy.fusion.judge) {
+      if ((strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick' || strategy.fusion.method === 'verify-pick') && strategy.fusion.judge) {
         calls.push({
           model: strategy.fusion.judge.model,
           inputTokens: baseInputTokens + strategy.models.length * EMBED,
@@ -367,7 +367,7 @@ export function projectStrategyP95Ms(
       // sandbox runs are sequential per candidate at the hard wall bound;
       // the tie-judge fires in the worst case whenever configured.
       const execWriters =
-        strategy.fusion.method === 'exec-pick'
+        strategy.fusion.method === 'exec-pick' || strategy.fusion.method === 'verify-pick'
           ? (strategy.fusion.testWriters?.length
               ? strategy.fusion.testWriters
               : strategy.fusion.testWriter
@@ -380,7 +380,7 @@ export function projectStrategyP95Ms(
           ? strategy.models.length * Math.max(1, execWriters.length) * (CODE_EXEC_TIMEOUT_MS + CODE_EXEC_WALL_SLACK_MS)
           : 0;
       const judge =
-        (strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick') && strategy.fusion.judge
+        (strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick' || strategy.fusion.method === 'verify-pick') && strategy.fusion.judge
           ? L(strategy.fusion.judge.model)
           : 0;
       return sum([fanout, sandbox, judge]);
