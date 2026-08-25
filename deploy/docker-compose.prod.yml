@@ -54,6 +54,11 @@ services:
       # Reasoning models known at boot (2026-08-23): skipped before the call
       # under a small output budget; the server also learns new ones live.
       POTION_REASONING_MODELS: ${POTION_REASONING_MODELS:-}
+      # R0 go-live paste point: set these in /opt/potion/.env.prod and the
+      # payments transport switches from 'ledger' to Stripe on next deploy.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      POTION_SUPPORT_EMAIL: ${POTION_SUPPORT_EMAIL:-}
       # NODE_ENV=production flips OFF the dev-auth bypass — real sessions and
       # api keys are required. The Dockerfile runtime stage sets it; repeated
       # here so it is visible at the deployment boundary.

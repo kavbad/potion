@@ -130,3 +130,48 @@ describe('the ledger transport itself', () => {
     expect(t.verifyWebhook()).toBeNull();
   });
 });
+
+describe('a REAL signed webhook survives the raw-body path', () => {
+  // Separate server: paymentsFromEnv must select the Stripe transport, and
+  // the signature must verify over the RAW bytes fastify received — the
+  // exact thing a parsed-then-restringified body breaks (key order).
+  let app2: FastifyInstance;
+  const secret = 'whsec_rawbody_test';
+  beforeAll(async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_neverdialled';
+    process.env.STRIPE_WEBHOOK_SECRET = secret;
+    app2 = await buildServer({ seed: false });
+  });
+  afterAll(async () => {
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    await app2.close();
+  });
+
+  it('accepts the signed raw body — including whitespace no re-stringify would reproduce', async () => {
+    const raw = '{ "id": "evt_raw",   "type": "payment_intent.succeeded", "data": { "object": { "id": "pi_raw" } } }';
+    const t = Math.floor(Date.now() / 1000);
+    const sig = `t=${t},v1=${createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex')}`;
+    const res = await app2.inject({
+      method: 'POST',
+      url: '/webhooks/stripe',
+      headers: { 'content-type': 'application/json', 'stripe-signature': sig },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ received: true });
+  });
+
+  it('refuses a tampered byte even with a fresh timestamp', async () => {
+    const raw = '{"id":"evt_raw2","type":"payment_intent.succeeded"}';
+    const t = Math.floor(Date.now() / 1000);
+    const sig = `t=${t},v1=${createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex')}`;
+    const res = await app2.inject({
+      method: 'POST',
+      url: '/webhooks/stripe',
+      headers: { 'content-type': 'application/json', 'stripe-signature': sig },
+      payload: raw.replace('evt_raw2', 'evt_evil'),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

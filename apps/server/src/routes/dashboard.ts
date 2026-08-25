@@ -30,6 +30,7 @@ import {
   getClusterByIdForOrg,
   type OrgContext,
   type PotionDb,
+  insertCustodyAudit,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -504,6 +505,16 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
         name: policyName,
         orgId: org.orgId,
         policyId: id,
+      });
+      // Same custody trail as POST /api/api-keys (walkthrough seam's
+      // sibling): a key is a key however it was minted. Ids only.
+      await insertCustodyAudit(db, {
+        id: `ca-${randomUUID().slice(0, 8)}`,
+        orgId: org.orgId,
+        actor: org.userId ?? 'api-key:admin',
+        action: 'issue',
+        providerKeyId: null,
+        metadata: { apiKeyId: boundKeyId, name: policyName, via: 'policy-create' },
       });
     }
 

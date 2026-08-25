@@ -133,7 +133,14 @@ export function registerBillingRoutes(
    * used to mark invoices paid. Under the ledger transport verification
    * always fails, which is the correct posture for a server with no rails.
    */
-  app.post('/webhooks/stripe', { config: { rawBody: true } }, async (req, reply) => {
+  // Registered in its OWN fastify scope with a string content-type parser:
+  // the signature is over Stripe's raw bytes, and a re-stringified parse is
+  // NOT those bytes (key order, whitespace). Without this every real
+  // signature would fail — found by asking "what breaks the day the keys
+  // are pasted" before the keys existed.
+  void app.register(async (scoped) => {
+    scoped.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => done(null, body));
+    scoped.post('/webhooks/stripe', async (req, reply) => {
     const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
     const evt = payments.verifyWebhook(raw, req.headers['stripe-signature'] as string | undefined);
     if (!evt) return reply.code(400).send({ error: { message: 'signature verification failed', type: 'invalid_request_error' } });
@@ -151,6 +158,7 @@ export function registerBillingRoutes(
       }
     }
     return reply.send({ received: true });
+    });
   });
 
   /** Charge one period. Admin-only and idempotent per (org, period). */
