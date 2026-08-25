@@ -80,8 +80,8 @@ Work: harness identity; endpoint and cron triggers, then Slack and email; standi
 Done when: a harness runs on a schedule with its own budget and its own ledger, visible in the product.
 
 **Step 15 — North-star run.**
-Work: recruit a real non-engineer; observe and record them assembling an OpenClaw-class standing harness — hosted, permissioned, metered — without touching a terminal. Every failure becomes a work item; the step repeats until they succeed.
-Done when: the recording exists and the person succeeded unassisted.
+Work: recruit a real non-engineer; observe and record them assembling an OpenClaw-class standing harness — hosted, permissioned, metered — without touching a terminal, **and starting the trust clock** (direction update 2026-08-24, `docs/LAB-DIRECTION.md`): the run must produce a real supervised track record with at least one check-in-pore approval and one rejection persisted and visible on the form. Every failure becomes a work item; the step repeats until they succeed.
+Done when: the recording exists, the person succeeded unassisted, and the harness carries a persisted supervised track record (≥1 pore approval, ≥1 pore rejection) rendered on the living form from real trust-record data.
 
 **Step 16 — Pro instruments.**
 Work: the bench — replay any run, inspect the exact per-step context the model saw, fork from any step and re-run; the proving ground — promote any run to a golden pair, derived suites, replay-on-change with confidence intervals, champion/challenger as a Lab-side pattern over existing suite and verdict machinery (touchpoint 3); close zoom — full slot panels, two-way spec sync, bring-your-own-editor.

@@ -740,3 +740,31 @@ accessibility surface; run-page narration text now lives in the report
 and panels rather than a primary timeline; the felt-sample anomaly beads
 await a 0036↔harness link (recorded spec deviation); per-edit catalog
 rows ride the same retention story as dial moves.
+
+---
+
+## 2026-08-24 — Direction updates recorded (docs only)
+
+Two operator direction updates recorded, no product code touched:
+
+1. **Potion Lab product identity** (`docs/LAB-DIRECTION.md`): the Lab is
+   the full lifecycle of a harness as an employee — build → supervise →
+   graduate → run alone → improve untouched — with graduation purchased
+   per action class by evidence and adjudicated by the calibrated
+   instrument. All Step 1–12 artifacts stand; the build remains paused;
+   Gate A remains the gate. Step 15's north-star run amended: the
+   non-engineer's harness must also start the trust clock (≥1 pore
+   approval, ≥1 rejection, persisted and rendered).
+2. **The standing laboratory** (`docs/RESEARCH-DIRECTION.md`): the
+   autonomous inference-science loop as the platform's third leg —
+   taxonomy → hypotheses → capped experiments → suite-leg adjudication →
+   gated publication — with the defensibility thesis, the publication
+   boundary, and the honest limits recorded. The three un-backfillable
+   prerequisites are DONE (migrations 0055/0056 + the contract clause in
+   both legal drafts). `docs/INFERENCE-COMPILER.md` carries the addendum
+   binding the measurement-asymmetry rule on every research stage.
+
+Named future steps (unnumbered, placement operator-decided): Graduation
+Ladder (in LAB-DIRECTION), Task-Shape Atlas, Exploration Engine, Findings
+Registry (in RESEARCH-DIRECTION). Commit: see the direction-update commit
+on this date.

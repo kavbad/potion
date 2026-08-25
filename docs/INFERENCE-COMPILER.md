@@ -283,3 +283,25 @@ has a measurement attached.
 Track B capability mixing B1–B4 — the detailed version of R2–R5),
 `docs/AUDIT-2026-08-22.md` (ranked state of everything), `FRONTIER.md` (what
 the frontier is, in plain language).*
+
+---
+
+## Addendum (2026-08-24): the standing laboratory, and the asymmetry rule
+
+**The standing laboratory (`docs/RESEARCH-DIRECTION.md`) is the mechanism
+by which this compiler's cost model and pass library improve.** The
+taxonomy → hypothesis → experiment → adjudication → publication loop is
+how new points reach frontiers and how negative priors prune what the
+compiler will never emit; the R2–G8 campaign of 2026-08-24 was one manual
+turn of that loop, and the laboratory is its institutionalization.
+
+**The measurement-asymmetry rule is binding on every research stage:
+the suite leg adjudicates; the serve leg screens.** Measured basis
+(2026-08-24): reference-anchored judging correlates perfectly with
+deterministic truth; reference-free judging is structurally blind to
+omission-class defects. No serve-time signal — confidence self-report,
+classifier margin, or a bare judge — may adjudicate a finding, a
+promotion, or a graduation. Publication into frontiers inherits every
+existing gate: the regression guard, the CI promotion gate, and operator
+sign-off for novel shapes.
+
