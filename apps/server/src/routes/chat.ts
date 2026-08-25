@@ -52,6 +52,7 @@ import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
 import { learnFromAnswer, tooSmallForReasoning } from '../routing/reasoning.js';
 import { unwrapJsonFences, wantsJson } from '../routing/json-mode.js';
+import { taskShapeOf } from '../routing/task-shape.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -662,7 +663,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const execMaxOutputTokens = body.max_tokens !== undefined ? resolveMaxOutputTokens(body.max_tokens) : undefined;
     // Pre-auth log fields: unattributed → default org (see above). Replaced
     // with the authenticated org as soon as the key resolves.
-    const logBase: NewRequestLog = { orgId: DEFAULT_ORG_ID, model: body.model };
+    // Flywheel (0055): the content-free shape is derivable only NOW (content
+    // is not retained), and the signals array is shared BY REFERENCE across
+    // every {...logBase} spread — pushes later in the request are visible to
+    // whichever insert runs. [] on a completed request = recorded silence.
+    const implicitSignals: string[] = [];
+    const logBase: NewRequestLog = {
+      orgId: DEFAULT_ORG_ID,
+      model: body.model,
+      taskShape: { ...taskShapeOf(body) },
+      implicitSignals,
+    };
 
     // ---- 2. auth: Bearer → api_keys row → its policy ----
     const auth = await authenticate(ctx.db.db, bearerToken(req.headers.authorization));
@@ -950,6 +961,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
     const { frontier, provenance, latency } = chosen;
     let op = chosen.op;
+    if (op.fallbackReason !== undefined) implicitSignals.push(`fallback_${op.fallbackReason}`);
     // A known reasoning model under a small output budget is skipped BEFORE
     // the call (routing/reasoning.ts); the trace says so.
     let skippedReasoning: string | null = null;
@@ -1209,6 +1221,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             result = await execute(next.config, messages, sseCtx);
             if (next.config.type === 'single') learnFromAnswer(next.config.model, result, execBase.maxOutputTokens);
             emptyAnswerRetry = true;
+            implicitSignals.push('retry_empty_answer');
           }
         }
       } catch (err) {
@@ -1251,6 +1264,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
+      if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
         ...logBase,
         status: 'ok',
@@ -1384,6 +1398,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
+      if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
         ...logBase,
         status: 'ok',
@@ -1411,13 +1426,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           if (next.config.type === 'single') learnFromAnswer(next.config.model, result, execBase.maxOutputTokens);
           servedConfig = next.config;
           emptyAnswerRetry = true;
+          implicitSignals.push('retry_empty_answer');
         }
       }
       // JSON mode honored at the edge (routing/json-mode.ts): a fenced object
       // is unwrapped when what is inside parses; nothing else is touched.
       if (wantsJson(body.response_format) && result.text !== '') {
         const unwrapped = unwrapJsonFences(result.text);
-        if (unwrapped !== result.text) result = { ...result, text: unwrapped };
+        if (unwrapped !== result.text) {
+          implicitSignals.push('json_fence_unwrapped');
+          result = { ...result, text: unwrapped };
+        }
       }
       if (wantStream) {
         // Documented contract: non-streamable multi-call strategies (anything
@@ -1436,6 +1455,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // more on the next point after an empty answer — routing/empty answer).
       if (emptyAnswerRetry) void reply.header('x-frontier-trace', `${trace};retry=empty_answer`);
       void reply.header('x-potion-model', strategyModelLabel(servedConfig));
+      if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
         ...logBase,
         status: 'ok',

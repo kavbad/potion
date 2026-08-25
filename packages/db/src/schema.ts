@@ -433,6 +433,14 @@ export const requestLogs = pgTable('request_logs', {
   /** TRUE when the served cluster was chosen by the quality-safe tiebreak
    * between two near-equal centroid matches (routing/ambiguity.ts). */
   clusterTiebreak: boolean('cluster_tiebreak'),
+  /** Flywheel (0055): content-free structural fingerprint, stamped at serve
+   * time — counts, buckets, hashed tool signature; NEVER request text. */
+  taskShape: jsonb('task_shape').$type<Record<string, unknown>>(),
+  /** Flywheel (0055): serving-path observations for this request. [] =
+   * completed with nothing observed (recorded silence); NULL = row predates
+   * instrumentation. The distinction is what makes the honesty term
+   * computable. */
+  implicitSignals: text('implicit_signals').array(),
   /**
    * Content-free request structure (`RequestShape`, core/shape.ts): turn
    * count, system flag, tool count, tool_choice MODE, stream flag, the

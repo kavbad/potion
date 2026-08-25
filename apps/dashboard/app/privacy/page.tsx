@@ -26,7 +26,10 @@ export default function PrivacyPage() {
             <span className="text-ink">Request metadata.</span> For every API request: timestamps, token
             counts, cost, the model and routing decision that served it, and the kind of work it was
             classified as. This is what your receipts, usage page, and savings figures are built from. It
-            does not include the text of the request or the answer.
+            does not include the text of the request or the answer. It also includes content-free
+            structural features — message and tool counts, size buckets, a hashed tool signature — and
+            markers for what the serving path observed (a retry, a fallback), which never contain your
+            text and exist so routing can improve on the shape of work rather than its content.
           </p>
           <p>
             <span className="text-ink">Content, only where you choose it.</span> Prompts pass through us to
