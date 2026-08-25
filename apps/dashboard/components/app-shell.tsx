@@ -1,12 +1,17 @@
 import { Nav } from '@/components/nav';
 import { Mark } from '@/components/mark';
 import { MobileBar } from '@/components/mobile-nav';
+import { FirstRunGate } from '@/components/first-run';
 
 /** The signed-in frame, in the lab style: paper, a hairline rail, the product nav. Chosen per page by ChromeSwitch.
  * Below md the rail folds into MobileBar (P1-5); main keeps min-w-0 so wide tables scroll instead of stretching the page. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#f4f2ec] md:flex">
+      {/* First-run: a session user who has never answered the one question
+          meets it before any page. Overlay, so it covers every route the
+          shell wraps; the API is deliberately not gated. */}
+      <FirstRunGate />
       <MobileBar />
       <aside className="hidden w-60 shrink-0 border-r border-[#d9d5cb] px-6 py-8 md:block">
         <a href="/" className="mb-10 flex items-center gap-2">
