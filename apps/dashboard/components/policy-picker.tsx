@@ -39,7 +39,7 @@ const CARDS: Array<{
   },
 ];
 
-export function PolicyPicker() {
+export function PolicyPicker({ mode = 'connect' }: { mode?: 'connect' | 'settings' } = {}) {
   const [kind, setKind] = useState<PolicyKind>('max_quality');
   const [ceiling, setCeiling] = useState('1.00');
   const [floor, setFloor] = useState(0.8);
@@ -72,7 +72,7 @@ export function PolicyPicker() {
       const res = await fetch('/api/policies', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ policy: p, createKey: true }),
+        body: JSON.stringify(mode === 'settings' ? { policy: p, rebindKeys: true } : { policy: p, createKey: true }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? `HTTP ${res.status}`);
@@ -194,7 +194,7 @@ export function PolicyPicker() {
           disabled={busy}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {busy ? 'Applying…' : 'Apply policy & create API key'}
+          {busy ? 'Applying…' : mode === 'settings' ? 'Apply to my keys' : 'Apply policy & create API key'}
         </button>
         {error && <span className="text-sm text-warn">{error}</span>}
       </div>
@@ -204,8 +204,18 @@ export function PolicyPicker() {
           <div>
             <h2 className="text-lg font-medium text-ink">Policy live</h2>
             <p className="mt-1 text-sm text-soft">
-              <span className="font-mono text-xs">{created.policy.id}</span> is bound to a fresh
-              API key. Save the key now — it is shown exactly once.
+              {mode === 'settings' ? (
+                <>
+                  <span className="font-mono text-xs">{created.policy.id}</span> now governs every
+                  active key{typeof created.keysRebound === 'number' ? ` (${created.keysRebound} rebound)` : ''} — your
+                  code does not change.
+                </>
+              ) : (
+                <>
+                  <span className="font-mono text-xs">{created.policy.id}</span> is bound to a fresh
+                  API key. Save the key now — it is shown exactly once.
+                </>
+              )}
             </p>
           </div>
 

@@ -21,7 +21,7 @@ export default function ControlsPage() {
         follows from these three.
       </p>
       <SettingsTabs />
-      <PolicyPicker />
+      <PolicyPicker mode="settings" />
       <FloorCard />
       <IncumbentSettings />
       <FrontierStatus />

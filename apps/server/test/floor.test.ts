@@ -75,3 +75,46 @@ describe('the org-wide floor', () => {
     expect(policy?.config).toMatchObject({ type: 'compound', qualityFloor: 0.9, p95Ms: 800 });
   });
 });
+
+// POST /api/policies rebindKeys (surface review 2026-08-24): the settings
+// "Apply to my keys" — a new policy row governs every live key, riders
+// survive, no key is minted, and the raw-key field never appears.
+describe('policy apply with rebindKeys', () => {
+  it('rebinds every live key, carries riders, and mints nothing', async () => {
+    const db = app.potion.db.db;
+    // Give the current policy a shadow rider so the carry is observable.
+    await insertPolicy(db, {
+      id: 'pol-floor-rider',
+      orgId: ORG,
+      name: 'with rider',
+      config: { type: 'min_cost', qualityFloor: 0.9, shadow: { compare: ['max_quality'] } },
+    });
+    const rebindOld = await app.inject({
+      method: 'POST',
+      url: '/api/policies',
+      headers: { authorization: `Bearer ${ADMIN_KEY}`, 'content-type': 'application/json' },
+      payload: { policy: { type: 'max_quality', costCeilingPer1K: 2 }, rebindKeys: true },
+    });
+    expect(rebindOld.statusCode).toBe(201);
+    const body = rebindOld.json();
+    expect(body.keysRebound).toBeGreaterThanOrEqual(2);
+    expect(body.apiKey).toBeUndefined();
+    expect(body.boundKeyId).toBeNull();
+    const admin = await getApiKeyById(db, ORG, 'key-floor-admin');
+    const serve = await getApiKeyById(db, ORG, 'key-floor-serve');
+    expect(admin!.policyId).toBe(body.policy.id);
+    expect(serve!.policyId).toBe(body.policy.id);
+    const stored = await getPolicyById(db, ORG, body.policy.id as string);
+    expect(stored!.config.type).toBe('max_quality');
+  });
+
+  it('a serve-scoped key may not rebind', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/policies',
+      headers: { authorization: `Bearer ${SERVE_KEY}`, 'content-type': 'application/json' },
+      payload: { policy: { type: 'min_cost', qualityFloor: 0.8 }, rebindKeys: true },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});

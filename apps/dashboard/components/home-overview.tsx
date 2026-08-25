@@ -130,8 +130,8 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
           <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
             <Stat label="Today — requests" value={String(current.today.requests)} />
             <Stat label="Today — cost" value={usd(current.today.costUsd)} />
-            <Stat label="Month-to-date — cost" value={usd(current.mtd.costUsd)} />
-            <Stat label="Saved month-to-date" value={savedMtd > 0 ? usd(savedMtd) : '—'} accent={savedMtd > 0} />
+            <Stat label="This month — cost" value={usd(current.mtd.costUsd)} />
+            <Stat label="This month — saved" value={savedMtd > 0 ? usd(savedMtd) : '—'} accent={savedMtd > 0} />
           </div>
         )}
 

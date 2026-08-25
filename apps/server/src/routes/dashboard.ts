@@ -21,6 +21,7 @@ import {
   DEFAULT_ORG_ID,
   getApiKeyById,
   getFirstApiKeyWithPolicy,
+  listApiKeys,
   getPolicyById,
   listPolicies,
   insertApiKey,
@@ -454,6 +455,10 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
       /** Convenience: create a NEW api key with this policy bound. Returns
        * the raw key exactly once. */
       createKey: z.boolean().optional(),
+      /** Settings semantics (surface review 2026-08-24): bind EVERY live
+       * key to the new policy, carrying the current policy's shadow and
+       * guarantee riders — same mechanics as PUT /api/floor. */
+      rebindKeys: z.boolean().optional(),
     });
     const parsed = BodySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -462,13 +467,13 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
         .join('; ');
       return reply.code(400).send(openAiError(message, 'invalid_request_error'));
     }
-    const { policy, name, keyId, createKey } = parsed.data;
+    const { policy, name, keyId, createKey, rebindKeys } = parsed.data;
     const org = req.potionOrg!; // resolved by the dashboard auth hook (#14)
     // G2.3: key lifecycle is the ADMIN domain (parity with POST
     // /api/api-keys). Plain policy creation stays member+; minting a new
     // key or rebinding an existing one requires admin — a serve-scoped
     // api key (role 'member' since the role split) is refused here.
-    if ((createKey || keyId !== undefined) && !roleAtLeast(org.role, 'admin')) {
+    if ((createKey || rebindKeys || keyId !== undefined) && !roleAtLeast(org.role, 'admin')) {
       return reply
         .code(403)
         .send(
@@ -481,8 +486,23 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     }
     const id = `pol-${randomUUID().slice(0, 8)}`;
     const policyName = name ?? `${policy.type}-${id.slice(4)}`;
+    // Riders (shadow, guarantee) are orthogonal to the policy SHAPE: a
+    // settings rebind must not silently drop them (PUT /api/floor precedent).
+    let effective = policy;
+    if (rebindKeys) {
+      const first = await getFirstApiKeyWithPolicy(db, org.orgId);
+      const current = first?.policyId ? ((await getPolicyById(db, org.orgId, first.policyId))?.config ?? null) : null;
+      effective = { ...policy, ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
+    }
     // Tenant scope (M2 #13): the policy row lives in the resolved org.
-    await insertPolicy(db, { id, orgId: org.orgId, name: policyName, config: policy });
+    await insertPolicy(db, { id, orgId: org.orgId, name: policyName, config: effective });
+
+    let keysRebound = 0;
+    if (rebindKeys) {
+      const live = (await listApiKeys(db, org.orgId)).filter((k) => !k.revokedAt);
+      for (const k of live) await updateApiKeyPolicy(db, org.orgId, k.id, id);
+      keysRebound = live.length;
+    }
 
     let boundKeyId: string | null = null;
     let rawKey: string | undefined;
@@ -519,8 +539,9 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     }
 
     return reply.code(201).send({
-      policy: { id, name: policyName, config: policy },
+      policy: { id, name: policyName, config: effective },
       boundKeyId,
+      keysRebound,
       ...(rawKey !== undefined ? { apiKey: rawKey } : {}),
     });
   });

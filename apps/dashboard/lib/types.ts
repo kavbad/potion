@@ -166,6 +166,8 @@ export interface WorkloadResponse {
 export interface PolicyResponse {
   policy: { id: string; name: string; config: Policy };
   boundKeyId: string | null;
+  /** Settings apply (rebindKeys): how many live keys now follow the policy. */
+  keysRebound?: number;
   apiKey?: string;
 }
 
