@@ -111,11 +111,11 @@ test("all same", () => assertDeepEqual(dedupeBy(["x","x"], x => x), ["x"]));`,
     steps: [
       {
         clusterId: 'summarization',
-        prompt: `Restate this informal spec as 3-5 numbered, precise requirements (inputs, outputs, edge cases). Spec: ${spec}\n\nRespond with only the numbered list.`,
+        prompt: `Restate this informal spec as 3-5 numbered, precise requirements (inputs, outputs, edge cases). Requirement 1 MUST state the exact function name and parameter list verbatim from the spec. Spec: ${spec}\n\nRespond with only the numbered list.`,
       },
       {
         clusterId: 'code-gen',
-        prompt: `Implement exactly this specification in JavaScript:\n{{prev}}\n\nRespond with ONLY the function source, no markdown fences, no explanation.`,
+        prompt: `Implement exactly this specification in JavaScript, using EXACTLY the function name and parameters stated in requirement 1:\n{{prev}}\n\nRespond with ONLY the function source (a function declaration, not an arrow assignment), no markdown fences, no explanation.`,
       },
       {
         clusterId: 'code-review',
