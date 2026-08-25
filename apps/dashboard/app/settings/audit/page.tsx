@@ -82,12 +82,15 @@ export default async function AuditPage({
   return (
     <PageShell>
       {/* export form — native GET navigation to the dashboard proxy, which
-          streams the attachment through */}
+          streams the attachment through. The dates scope the EXPORT; the
+          table below always shows the most recent 100 events (surface
+          review 2026-08-24: unlabeled, this read as a broken filter). */}
       <form
         method="get"
         action="/api/audit/export.jsonl"
         className="mb-8 flex flex-wrap items-end gap-3"
       >
+        <span className="w-full text-xs text-faint">Export a window (JSONL):</span>
         <label className="text-xs text-faint">
           From
           <input
@@ -117,7 +120,7 @@ export default async function AuditPage({
 
       <section className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
-          <h2 className="text-lg font-medium text-ink">Recent events</h2>
+          <h2 className="text-lg font-medium text-ink">Recent events <span className="text-xs font-normal text-faint">(most recent 100 — use the export above for a window)</span></h2>
           <span className="text-xs text-faint">latest {data.events.length}</span>
         </div>
         {data.events.length === 0 ? (

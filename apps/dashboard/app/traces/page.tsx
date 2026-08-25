@@ -55,7 +55,10 @@ export default async function TracesPage({
   const retention = await apiFetch<TraceRetentionResponse>('/api/traces/retention').catch(
     () => null,
   );
-  const me = await apiFetch<MeResponse>('/api/auth/me').catch(() => null);
+  // Server-side apiFetch talks to the API server directly: the route is
+  // /auth/me there (/api/auth/me is the browser-facing Next proxy). The old
+  // path 404ed silently, so admin controls never rendered for anyone.
+  const me = await apiFetch<MeResponse>('/auth/me').catch(() => null);
   const isAdmin = me?.role === 'admin';
   const frontiers = await apiFetch<FrontierListResponse>('/api/frontiers').catch(() => null);
   const agentClusters = (frontiers?.clusters ?? []).filter((c) =>

@@ -1,16 +1,7 @@
-import { PolicyPicker } from '@/components/policy-picker';
-
-export const dynamic = 'force-dynamic';
+// /policy merged into /settings/controls (2026-08-24 surface review): one
+// page for every lever. The redirect keeps old links and bookmarks working.
+import { redirect } from 'next/navigation';
 
 export default function PolicyPage() {
-  return (
-    <div className="max-w-4xl">
-      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Set a policy</h1>
-      <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        One knob, three ways to turn it. Potion re-points your key at the right spot on every
-        cluster&apos;s frontier — your code never changes.
-      </p>
-      <PolicyPicker />
-    </div>
-  );
+  redirect('/settings/controls');
 }

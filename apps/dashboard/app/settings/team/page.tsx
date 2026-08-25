@@ -42,7 +42,7 @@ export default function TeamPage() {
 
   const open = invites.filter((i) => i.status === 'open');
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="max-w-3xl">
       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Settings · Team</div>
       <h1 className="mt-2 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Who can sign in</h1>
       <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-soft">

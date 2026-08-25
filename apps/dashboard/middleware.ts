@@ -9,11 +9,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 // M4 #31: /share/f|/share/r are PUBLIC read-only pages (the st_… token is
 // the credential). /api/share (mint/list/revoke) stays guarded — it is an
 // /api/* path, not a /share/* one.
-// M4b #32: /leaderboard is PUBLIC (live-verified recipes only) — no proxy
-// route needed; the page fetches /api/leaderboard server-side.
 // /api/docs-ask is PUBLIC: "Ask the docs" on the signed-out /docs page. It
 // spends the dashboard's own key, never the visitor's, and is rate-limited.
-const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/leaderboard', '/docs', '/home', '/hero-lab', '/research', '/terms', '/privacy', '/status', '/sitemap.xml', '/robots.txt'];
+// (2026-08-24 surface review: /leaderboard and /hero-lab removed with their
+// pages — a smaller anonymous surface needs no other justification.)
+const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/docs', '/home', '/research', '/terms', '/privacy', '/status', '/sitemap.xml', '/robots.txt'];
 
 // '/' is public (the landing page) and MUST be matched exactly. It cannot go
 // in OPEN_PREFIXES: every path startsWith('/'), so one entry there would make

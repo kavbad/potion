@@ -32,10 +32,13 @@ const PRIMARY = [
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
 ];
 
-/** Instruments. Real, reachable, and deliberately out of the way. */
+/** Instruments. Real, reachable, and deliberately out of the way.
+ * (2026-08-24 surface review: /policy merged into Settings · Controls;
+ * /frontiers — the measured evidence itself — was reachable from nowhere,
+ * which was a discoverability bug, not restraint.) */
 const ADVANCED = [
-  { href: '/policy', label: 'Quality floor (policy)' },
   { href: '/build', label: 'Help me choose a policy' },
+  { href: '/frontiers', label: 'Frontiers (the evidence)' },
   { href: '/reports', label: 'Savings report' },
   { href: '/traces', label: 'Receipts (traces)' },
   { href: '/settings/audit', label: 'Audit trail' },

@@ -12,11 +12,15 @@
 import { usePathname } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 
-/** Routes that are signed-out surfaces by nature, whatever cookie is present. */
+/** Routes that are signed-out surfaces by nature, whatever cookie is present.
+ * /terms, /privacy and /status render their own SiteShell — without this
+ * entry a signed-in visitor got the app rail wrapped around the public
+ * chrome (double chrome, found in the 2026-08-24 surface review). */
 export function isSignedOutSurface(path: string): boolean {
   return (
-    path.startsWith('/login') || path.startsWith('/home') || path.startsWith('/hero-lab') ||
-    path.startsWith('/research') || path.startsWith('/docs') || path.startsWith('/share/')
+    path.startsWith('/login') || path.startsWith('/home') ||
+    path.startsWith('/research') || path.startsWith('/docs') || path.startsWith('/share/') ||
+    path.startsWith('/terms') || path.startsWith('/privacy') || path.startsWith('/status')
   );
 }
 

@@ -1,7 +1,8 @@
 // /usage — metered usage + billing (M2 Wave 2, ROADMAP #17/#18). Server
 // component: date-range picker (native GET form), stacked bar of
-// requests/day by cluster, per-cluster cost table, invoice download, and a
-// native POST button that triggers the idempotent usage rollup.
+// requests/day by cluster, per-cluster cost table, CSV export, and a native
+// POST button that triggers the idempotent usage rollup. Invoices and the
+// card on file live in Settings · Billing (2026-08-24 surface review).
 import { UsageChart } from '@/components/usage-chart';
 import { FrontierStatus } from '@/components/frontier-status';
 import { ApiUnreachable } from '@/lib/api';
@@ -55,7 +56,6 @@ export default async function UsagePage({
     throw e;
   }
 
-  const invoicePeriod = to.slice(0, 7); // the month containing the range end
   const windowTotals = byCluster.rows.reduce(
     (acc, r) => ({ requests: acc.requests + r.requests, costUsd: acc.costUsd + r.costUsd }),
     { requests: 0, costUsd: 0 },
@@ -112,9 +112,6 @@ export default async function UsagePage({
           Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date, billed to this account and not counted in the cost above.
         </p>
       )}
-      <div className="hidden">
-      </div>
-
       {/* stacked bar: requests/day by cluster */}
       <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">
@@ -163,20 +160,10 @@ export default async function UsagePage({
         )}
       </section>
 
-      {/* invoice + rollup */}
+      {/* exports; invoices and the card live in Settings · Billing */}
       <section className="border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
-        <h2 className="mb-2 text-lg font-medium text-ink">Billing</h2>
-        <p className="mb-6 text-sm leading-relaxed text-soft">
-          Pricing v1 is pass-through plus a configurable margin (default 0%). Invoices are
-          generated offline as Stripe-ready JSON + a print-friendly HTML render.
-        </p>
+        <h2 className="mb-2 text-lg font-medium text-ink">Exports</h2>
         <div className="flex flex-wrap items-center gap-3">
-          <a
-            href={`/api/usage/invoice?period=${invoicePeriod}&format=html`}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            Download invoice — {invoicePeriod}
-          </a>
           <a
             href={`/api/usage/export.csv?${qs}`}
             className="rounded-md border border-line bg-paper px-4 py-2 text-sm text-soft transition-colors hover:text-ink"
@@ -191,6 +178,9 @@ export default async function UsagePage({
               Refresh rollup
             </button>
           </form>
+          <a href="/settings/billing" className="text-sm text-accent underline">
+            Invoices &amp; payment → Settings · Billing
+          </a>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-faint">
           Historical rows come from the daily batch rollup (usage_daily); the rollup is
@@ -214,10 +204,10 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Usage &amp; billing</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Usage &amp; savings</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        What your key actually served: requests, tokens, and cost per cluster per day — and the
-        invoice it adds up to.
+        What your key actually served: requests, tokens, and cost per cluster per day — and what
+        the same work would have cost without Potion.
       </p>
       <FrontierStatus />
       {children}

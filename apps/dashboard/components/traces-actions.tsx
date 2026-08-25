@@ -3,7 +3,7 @@
 // M5 (#36): admin islands for the traces page — run clustering + set retention.
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { postOrThrow } from './recipe-actions';
+import { postOrThrow } from '@/lib/post';
 
 export function TraceClusterButton() {
   const router = useRouter();

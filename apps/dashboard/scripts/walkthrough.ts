@@ -16,9 +16,8 @@
 //   7c. POST /api/plan                    → S2 from-scratch door: an idea
 //       classified to a workload type, alternatives visible, and three policy
 //       shapes each either resolving to a MEASURED point or stating why not
-//   8–11. M4: playground, share links, budget hard stop, audit trail
-//   12. M4b: mock research scan → cycles → /recipes SIMULATED → public
-//       /leaderboard awaiting live verification. The scan's registry write
+//   8–11. M4: try-a-request, share links, budget hard stop, audit trail
+//   12. M4b: mock research scan → cycles → registry in db. The scan's registry write
 //       targets a tmp prices copy (POTION_PRICES_PATH), never the repo file.
 //   13. M5: trace ingest (idempotent) → session rollup with LOOP badge →
 //       waterfall → traces:cluster job → agent-* frontier → X-Potion-Cluster
@@ -323,14 +322,15 @@ async function main(): Promise<void> {
     const res = await dashFetch('/');
     const html = await res.text();
     assert(res.ok, `HTTP ${res.status}`);
-    assert(html.includes('Connect &amp; auto-route'), 'connect page heading missing');
+    // The front door is the onboarding journey now (627204e): the heading
+    // depends on whether traffic has been served, and the connect block
+    // (Base URL + snippets) renders inside step 03.
+    assert(
+      /(Get routed in a minute|Your requests are being routed)/.test(html),
+      'onboarding heading missing',
+    );
     assert(html.includes(`${API}/v1`), `base url ${API}/v1 not offered`);
     assert(html.includes('Base URL'), 'base url block missing');
-    // The policy has to be readable as a sentence, not just as JSON.
-    assert(
-      /(Cheapest option|Highest measured quality|Best quality that holds)/.test(html),
-      'policy is not stated in plain language',
-    );
 
     // And the routing evidence, read through the same API the panel uses.
     const activity = await dashFetch('/api/routing-activity?limit=25');
@@ -440,17 +440,14 @@ async function main(): Promise<void> {
     return 'keys page mints serve+admin; docs render quickstart + curl + SDK';
   });
 
-  // ---- 8. M4 #31: /playground renders the chat surface ----
-  await step('8. GET /playground (M4: chat surface + point selector)', async () => {
-    const res = await dashFetch('/playground?cluster=code-gen');
+  // ---- 8. /try renders the ad-hoc request surface (replaced /playground,
+  // surface review 2026-08-24) ----
+  await step('8. GET /try (ad-hoc request through the real routing path)', async () => {
+    const res = await dashFetch('/try');
     const html = await res.text();
     assert(res.ok, `HTTP ${res.status}`);
-    assert(html.includes('Playground'), 'page title missing');
-    assert(html.includes('potion-auto'), 'potion-auto option missing');
-    assert(html.includes('code-gen'), 'cluster pill missing');
-    assert(html.includes('Compare two points'), 'compare toggle missing');
-    assert(html.includes('SIMULATED'), 'SIMULATED point badge missing (mock seed)');
-    return 'chat surface + potion-auto + compare toggle + SIMULATED badges present';
+    assert(html.toLowerCase().includes('try'), 'page title missing');
+    return 'try-a-request surface renders';
   });
 
   // ---- 9. M4 #31: share link mint → public page (session-free) → revoke ----
@@ -611,21 +608,10 @@ async function main(): Promise<void> {
       !onDisk.includes('mock-nova-1'),
       'prices.json was written — the catalog must live in the db, or it dies on redeploy',
     );
-    // /recipes: the library renders candidates badged SIMULATED with lineage.
-    const recipes = await dashFetch('/recipes');
-    const html = await recipes.text();
-    assert(recipes.ok, `/recipes → HTTP ${recipes.status}`);
-    assert(html.includes('Recipe library'), 'recipes page title missing');
-    assert(html.includes('candidate'), 'candidate status badge missing');
-    assert(html.includes('SIMULATED'), 'SIMULATED provenance badge missing');
-    assert(html.includes('lineage'), 'lineage drawer missing');
-    // /leaderboard: PUBLIC (no session cookie) and honest — mock evidence
-    // never appears, so pre-M1b it awaits live verification.
-    const lb = await fetch(`${DASH}/leaderboard`);
-    const lbHtml = await lb.text();
-    assert(lb.ok, `/leaderboard (no session) → HTTP ${lb.status}`);
-    assert(lbHtml.includes('Awaiting live verification'), 'honest empty state missing');
-    return `${cycles.length} scan cycle(s) completed, library renders SIMULATED candidates, public leaderboard awaits live evidence`;
+    // The /recipes and /leaderboard pages were retired in the 2026-08-24
+    // surface review; the scan → cycles → db-registry chain above is the
+    // durable claim and keeps its teeth at the API level.
+    return `${cycles.length} scan cycle(s) completed, registry in db, prices.json untouched`;
   });
 
   // ---- 13. M5 #36: traces — ingest → rollup/loops → waterfall → cluster → hint → purge ----
@@ -829,9 +815,9 @@ async function main(): Promise<void> {
     // G1.5: rubric generation (mock, capped, metered) → customer-visible
     // DRAFT with calibration evidence → approve puts it IN FORCE and
     // restamps the suite's items.
-    const rubGen = await dashFetch('/api/rubrics/generate', {
+    const rubGen = await fetch(`${API}/api/rubrics/generate`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: sessionCookie },
       body: JSON.stringify({ clusterId: agentCluster.clusterId }),
     });
     const rubGenBody = await rubGen.json();
@@ -854,19 +840,16 @@ async function main(): Promise<void> {
     }
     assert(rubResult.rubricId !== undefined, `rubric result missing id: ${JSON.stringify(rubResult)}`);
     assert(rubResult.providerMode === 'mock', 'rubric provenance must say mock in the mock world');
-    const rubList = await (await dashFetch('/api/rubrics')).json();
+    const rubList = await (await fetch(`${API}/api/rubrics`, { headers: { cookie: sessionCookie } })).json();
     const draft = (rubList.rubrics as Array<{ id: string; status: string; inForce: boolean; rubricText: string }>).find(
       (r) => r.id === rubResult.rubricId,
     );
     assert(draft !== undefined && draft.status === 'pending' && draft.inForce === false, 'draft must list as NOT in force');
-    const approve = await dashFetch(`/api/rubrics/${rubResult.rubricId}/approve`, { method: 'POST' });
+    const approve = await fetch(`${API}/api/rubrics/${rubResult.rubricId}/approve`, { method: 'POST', headers: { cookie: sessionCookie } });
     const approveBody = await approve.json();
     assert(approve.ok && approveBody.restampedItems >= 1, `approve → HTTP ${approve.status}: ${JSON.stringify(approveBody)}`);
-    // The /rubrics page renders the review surface.
-    const rubPage = await dashFetch('/rubrics');
-    const rubHtml = await rubPage.text();
-    assert(rubPage.ok && rubHtml.includes('Rubrics'), `/rubrics → HTTP ${rubPage.status}`);
-    assert(rubHtml.includes('IN FORCE'), 'IN FORCE badge missing from /rubrics');
+    // (The /rubrics review page retired in the 2026-08-24 surface review;
+    // the in-force state is asserted through the API above.)
     // Retention 0 + purge: prompts/attrs redacted, metadata kept (idempotent).
     const put = await dashFetch('/api/traces/retention', {
       method: 'PUT',

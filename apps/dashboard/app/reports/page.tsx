@@ -306,9 +306,9 @@ function RetentionSection({ report }: { report: GuaranteeReportDto }) {
       {report.legacyPath && (
         <div className="mb-4 rounded-lg border border-dashed border-line px-6 py-8 text-center text-sm text-faint">
           No incumbent designated yet — retention is unavailable and guarantees use the legacy
-          absolute-floor path. Designate your current production strategy as the incumbent (
-          <code className="font-mono">POST /api/guarantee/clusters/:clusterId/incumbent</code>
-          ) to switch this workload to retention verdicts.
+          absolute-floor path. Name what you use today in{' '}
+          <a href="/settings/controls" className="text-accent underline">Settings · Controls</a>{' '}
+          to switch this workload to retention verdicts.
         </div>
       )}
       {report.entries.length === 0 ? (

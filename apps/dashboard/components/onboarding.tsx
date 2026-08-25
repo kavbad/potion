@@ -152,7 +152,7 @@ export function Onboarding({ conn: initial, admin = true }: { conn: ConnectionRe
             {conn.policy && (
               <p className="font-mono text-[11px] leading-relaxed text-faint">
                 your rule: <span className="text-ink">{conn.policy.description}</span> ·{' '}
-                <Link href="/policy" className="text-accent underline">change it</Link>
+                <Link href="/settings/controls" className="text-accent underline">change it</Link>
               </p>
             )}
           </div>

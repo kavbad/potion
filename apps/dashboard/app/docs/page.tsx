@@ -17,7 +17,7 @@
 // It still states the two things that surprise people, because both are
 // load-bearing and neither is guessable: `model` is a LABEL, and appearing in
 // the catalogue is not the same as being routable.
-import { apiFetch, sessionCookieHeader } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { CopyBlock } from '@/components/copy-block';
 import { SiteShell } from '@/components/site-header';
 import { AgentInstructions } from '@/components/agent-instructions';
@@ -95,7 +95,6 @@ export default async function DocsPage() {
   } catch {
     conn = null;
   }
-  const signedIn = (await sessionCookieHeader()) !== undefined;
   // Signed out there is no connection response; never hand out a stale host.
   const base = conn?.baseUrl ?? process.env.POTION_PUBLIC_API_URL ?? 'https://api.withpotion.com';
 
@@ -398,11 +397,8 @@ export default async function DocsPage() {
     </div>
   );
 
-  // Signed in, the app shell is already around this page. Signed out, it needs
-  // its own chrome — otherwise a public docs page renders as a bare column.
-  // Always the public frame: /docs is a signed-out surface (app/template.tsx),
-  // so it never arrives inside the app rail — signed-in readers still get
-  // their personalised base URL and policy in the body.
-  void signedIn;
+  // Always the public frame: /docs is a signed-out surface, so it never
+  // arrives inside the app rail — signed-in readers still get their
+  // personalised base URL and policy in the body.
   return <SiteShell current="docs"><div className="mx-auto max-w-5xl px-6 py-14">{body}</div></SiteShell>;
 }

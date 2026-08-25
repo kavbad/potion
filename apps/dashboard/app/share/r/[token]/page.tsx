@@ -118,7 +118,20 @@ export default async function SharedReportPage({
                     {a.deltaUsd > 0 ? `−${formatUsd(a.deltaUsd)}` : `+${formatUsd(-a.deltaUsd)}`}
                   </td>
                   <td className="py-2 pr-4 text-right text-faint">{a.sampleSize}</td>
-                  <td className="py-2 text-right text-faint">{confidenceHint(a.confidence)}</td>
+                  <td className="py-2 text-right">
+                    <span
+                      title={confidenceHint(a.confidence)}
+                      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        a.confidence === 'high'
+                          ? 'border-accent bg-accent-soft text-accent'
+                          : a.confidence === 'medium'
+                            ? 'border-line bg-paper text-soft'
+                            : 'border-warn bg-amber-50 text-warn'
+                      }`}
+                    >
+                      {a.confidence}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
