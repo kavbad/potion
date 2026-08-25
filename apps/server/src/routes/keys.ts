@@ -46,7 +46,8 @@
 // api-key credentials additionally need the 'admin' scope); POST /api/keys
 // stays member+ per the Wave-2 RBAC matrix (connecting a key is a member
 // action); reads are viewer+ via the dashboard auth hook.
-import { randomUUID } from 'node:crypto';
+import {
+  randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { sha256, type ProviderId } from '@potion/core';
@@ -64,7 +65,7 @@ import {
   rotateProviderKey,
   setProviderKeyStatus,
   touchProviderKeyValidation,
-  type ProviderKeyRow, listPolicies, insertPolicy } from '@potion/db';
+  type ProviderKeyRow, listPolicies, insertPolicy, insertCustodyAudit } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -437,6 +438,17 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
       ...(env !== undefined ? { env } : {}),
       ...(expiresAt !== undefined ? { expiresAt: new Date(expiresAt) } : {}),
     });
+    // Walkthrough seam (2026-08-24): the serving-key mint joins the custody
+    // trail /settings/audit promises. Metadata carries ids and names only —
+    // never key material.
+    await insertCustodyAudit(db, {
+      id: `ca-${randomUUID().slice(0, 8)}`,
+      orgId: org.orgId,
+      actor: org.userId ?? `api-key:${req.potionOrg?.orgId ?? 'admin'}`,
+      action: 'issue',
+      providerKeyId: null,
+      metadata: { apiKeyId: id, name, scopes: scopes ?? 'serve', env: env ?? 'live' },
+    });
     return reply.code(201).send({
       id,
       name,
@@ -477,6 +489,14 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
     }
     if (!key.revokedAt) {
       await revokeApiKey(db, org.orgId, id, new Date());
+      await insertCustodyAudit(db, {
+        id: `ca-${randomUUID().slice(0, 8)}`,
+        orgId: org.orgId,
+        actor: org.userId ?? 'api-key:admin',
+        action: 'revoke',
+        providerKeyId: null,
+        metadata: { apiKeyId: id, name: key.name },
+      });
     }
     const next = (await getApiKeyById(db, org.orgId, id))!;
     return reply.send({ id: next.id, revokedAt: next.revokedAt });

@@ -520,7 +520,7 @@ export const providerKeys = pgTable(
  * every encrypt (register), decrypt (serving path), rotate, revoke and
  * validate writes a row. metadata NEVER carries key material.
  */
-export type CustodyAction = 'encrypt' | 'decrypt' | 'rotate' | 'revoke' | 'validate';
+export type CustodyAction = 'encrypt' | 'decrypt' | 'rotate' | 'revoke' | 'validate' | 'issue';
 export const CUSTODY_ACTIONS: readonly CustodyAction[] = [
   'encrypt',
   'decrypt',

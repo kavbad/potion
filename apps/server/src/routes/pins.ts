@@ -162,7 +162,9 @@ export function registerPinRoutes(app: FastifyInstance, ctx: PotionContext): voi
         fromVersion: from.version,
         toVersion: to.version,
         at: to.createdAt,
-        narrative: diff.narrative,
+        // diffFrontiers returns one sentence per movement; the card renders
+        // a paragraph, so join here rather than concatenating unspaced in JSX.
+        narrative: Array.isArray(diff.narrative) ? diff.narrative.join(' ') : diff.narrative,
         appeared: diff.appeared.length,
         vanished: diff.vanished.length,
       });
