@@ -111,3 +111,50 @@ export function taskShapeOf(body: unknown): TaskShape {
     hasTemperature: typeof b.temperature === 'number',
   };
 }
+
+/** Flywheel (0056): the answer-side twin. Content-free: sizes, counts,
+ * validity flags, the answering stage's TYPE — never text. */
+export function answerShapeOf(
+  result: { text: string; toolCalls?: unknown[]; finishReason?: string },
+  opts: { jsonRequested: boolean; strategyType?: string },
+): Record<string, unknown> {
+  let jsonValid: boolean | null = null;
+  if (opts.jsonRequested) {
+    try {
+      JSON.parse(result.text);
+      jsonValid = true;
+    } catch {
+      jsonValid = false;
+    }
+  }
+  return {
+    v: 1,
+    chars: result.text.length,
+    toolCallsN: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+    finishReason: result.finishReason ?? null,
+    jsonValid,
+    strategyType: opts.strategyType ?? null,
+  };
+}
+
+/**
+ * Flywheel (0056): a per-org-salted one-way prompt fingerprint. The org id
+ * is part of the hash, so identical prompts in different orgs produce
+ * unrelated fingerprints — repeats are measurable inside a tenant and
+ * unlinkable across tenants. 16 hex chars: a repeat-rate counter, not an
+ * identifier space worth attacking.
+ */
+export function promptFingerprint(orgId: string, body: unknown): string | null {
+  const b = (body ?? {}) as { messages?: unknown };
+  if (!Array.isArray(b.messages) || b.messages.length === 0) return null;
+  const text = (b.messages as Array<{ role?: unknown; content?: unknown }>)
+    .map((m) => `${String(m.role ?? '')} ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')}`)
+    .join('');
+  return sha256(`fp1|${orgId}|${text}`).slice(0, 16);
+}
+
+/** Flywheel (0056): the caller's `user` field, hashed with the org id. */
+export function sessionFingerprint(orgId: string, user: unknown): string | null {
+  if (typeof user !== 'string' || user.length === 0) return null;
+  return sha256(`sf1|${orgId}|${user}`).slice(0, 16);
+}

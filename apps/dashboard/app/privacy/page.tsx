@@ -28,8 +28,10 @@ export default function PrivacyPage() {
             classified as. This is what your receipts, usage page, and savings figures are built from. It
             does not include the text of the request or the answer. It also includes content-free
             structural features — message and tool counts, size buckets, a hashed tool signature — and
-            markers for what the serving path observed (a retry, a fallback), which never contain your
-            text and exist so routing can improve on the shape of work rather than its content.
+            markers for what the serving path observed (a retry, a fallback), and one-way fingerprints
+            salted per organization — used only to count repeats and link a caller&rsquo;s own session,
+            never linkable across customers and never reversible to text. None of it contains your
+            content; it exists so routing can improve on the shape of work rather than its substance.
           </p>
           <p>
             <span className="text-ink">Content, only where you choose it.</span> Prompts pass through us to

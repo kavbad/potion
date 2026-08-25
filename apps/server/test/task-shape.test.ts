@@ -118,3 +118,59 @@ describe('the row: stamped shape + recorded silence', () => {
     expect((rows[0]!.taskShape as Record<string, unknown>).msgs).toBe(1);
   });
 });
+
+describe('the 0056 stamps: answer shape and fingerprints', () => {
+  it('answerShapeOf is content-free and sees JSON validity', async () => {
+    const { answerShapeOf } = await import('../src/routing/task-shape.js');
+    const marker = 'ZekrilbanTheHiddenAnswer';
+    const good = answerShapeOf({ text: `{"plan":"${marker}"}`, finishReason: 'stop' }, { jsonRequested: true, strategyType: 'single' });
+    expect(JSON.stringify(good)).not.toContain(marker);
+    expect(good).toMatchObject({ jsonValid: true, strategyType: 'single', finishReason: 'stop' });
+    const bad = answerShapeOf({ text: `Sure! Here is JSON: {"a":1}` }, { jsonRequested: true });
+    expect(bad.jsonValid).toBe(false);
+    const noJson = answerShapeOf({ text: 'plain prose' }, { jsonRequested: false });
+    expect(noJson.jsonValid).toBeNull();
+  });
+
+  // NOTE: this is a UNIT test of the salting function, not a server
+  // tenancy probe — the isolation-fixture gate covers route-level tests.
+  it('promptFingerprint: deterministic per salt, unrelated across salts, never the text', async () => {
+    const { promptFingerprint } = await import('../src/routing/task-shape.js');
+    const body = { messages: [{ role: 'user', content: 'the secret merger with Vexacorp' }] };
+    const a1 = promptFingerprint('org-a', body);
+    const a2 = promptFingerprint('org-a', body);
+    const b1 = promptFingerprint('org-b', body);
+    expect(a1).toBe(a2);
+    expect(a1).not.toBe(b1);
+    expect(a1).toMatch(/^[0-9a-f]{16}$/);
+    expect(a1).not.toContain('Vexacorp');
+    expect(promptFingerprint('org-a', { messages: [] })).toBeNull();
+  });
+
+  it('sessionFingerprint hashes the user field per org; absent user → null', async () => {
+    const { sessionFingerprint } = await import('../src/routing/task-shape.js');
+    expect(sessionFingerprint('org-a', 'end-user-42')).toMatch(/^[0-9a-f]{16}$/);
+    expect(sessionFingerprint('org-a', 'end-user-42')).not.toBe(sessionFingerprint('org-b', 'end-user-42'));
+    expect(sessionFingerprint('org-a', undefined)).toBeNull();
+    expect(sessionFingerprint('org-a', '')).toBeNull();
+  });
+
+  it('the row carries all three: fp stamped, session null without user, answer_shape on success', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+      payload: { model: 'potion', messages: [{ role: 'user', content: 'Summarize the quarterly Vexacorp numbers.' }], user: 'sess-99' },
+    });
+    expect(res.statusCode).toBe(200);
+    const db = app.potion.db.db;
+    const rows = await db.select().from(requestLogs).where(eq(requestLogs.orgId, ORG)).orderBy(desc(requestLogs.id)).limit(1);
+    const row = rows[0]!;
+    expect(row.promptFp).toMatch(/^[0-9a-f]{16}$/);
+    expect(row.sessionFp).toMatch(/^[0-9a-f]{16}$/);
+    const shape = row.answerShape as Record<string, unknown>;
+    expect(shape).toMatchObject({ v: 1 });
+    expect(typeof shape.chars).toBe('number');
+    expect(JSON.stringify(shape)).not.toContain('Vexacorp');
+  });
+});

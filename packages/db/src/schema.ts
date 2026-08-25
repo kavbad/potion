@@ -441,6 +441,14 @@ export const requestLogs = pgTable('request_logs', {
    * instrumentation. The distinction is what makes the honesty term
    * computable. */
   implicitSignals: text('implicit_signals').array(),
+  /** Flywheel (0056): the ANSWER's structure — length, tool calls, JSON
+   * validity when JSON was requested, answering stage. Content-free. */
+  answerShape: jsonb('answer_shape').$type<Record<string, unknown>>(),
+  /** Flywheel (0056): per-org-salted one-way prompt fingerprint. Links
+   * repeats within an org; links nothing across orgs; reverses to nothing. */
+  promptFp: text('prompt_fp'),
+  /** Flywheel (0056): hashed caller session (`user` param + org). */
+  sessionFp: text('session_fp'),
   /**
    * Content-free request structure (`RequestShape`, core/shape.ts): turn
    * count, system flag, tool count, tool_choice MODE, stream flag, the

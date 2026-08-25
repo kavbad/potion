@@ -52,7 +52,7 @@ import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
 import { learnFromAnswer, tooSmallForReasoning } from '../routing/reasoning.js';
 import { unwrapJsonFences, wantsJson } from '../routing/json-mode.js';
-import { taskShapeOf } from '../routing/task-shape.js';
+import { answerShapeOf, promptFingerprint, sessionFingerprint, taskShapeOf } from '../routing/task-shape.js';
 import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
@@ -685,6 +685,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
     logBase.apiKeyId = auth.key.id;
     logBase.orgId = auth.org.orgId; // tenant scope (M2 #13)
+    // Flywheel (0056): salted with the REAL org id, so these exist only for
+    // authenticated traffic and link nothing across tenants.
+    logBase.promptFp = promptFingerprint(auth.org.orgId, body);
+    logBase.sessionFp = sessionFingerprint(auth.org.orgId, (body as { user?: unknown }).user);
     // ---- M4 #35 budget autopilot (m4-alerts-budget) ----
     // Hard-stop (SPEC §13.7): BEFORE any strategy work, if the org's budget
     // has hard_stop=true and MTD spend ≥ cap → 429 OpenAI-shaped
@@ -1267,6 +1271,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
         ...logBase,
+        answerShape: answerShapeOf(result, { jsonRequested: wantsJson(body.response_format), strategyType: op.config.type }),
         status: 'ok',
         usage: result.usage,
         latencyMs: elapsed(),
@@ -1401,6 +1406,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
         ...logBase,
+        answerShape: answerShapeOf(result, { jsonRequested: wantsJson(body.response_format), strategyType: op.config.type }),
         status: 'ok',
         usage: result.usage,
         latencyMs: elapsed(),
@@ -1458,6 +1464,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
         ...logBase,
+        answerShape: answerShapeOf(result, { jsonRequested: wantsJson(body.response_format), strategyType: op.config.type }),
         status: 'ok',
         usage: result.usage,
         latencyMs: elapsed(),
