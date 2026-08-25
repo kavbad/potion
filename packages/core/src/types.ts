@@ -125,6 +125,8 @@ export interface FusionConfig {
   judge?: JudgeConfig;
   /** exec-pick only: the model that writes request-derived tests. */
   testWriter?: JudgeConfig;
+  /** exec-pick: independent test-writers voting by execution (majority). */
+  testWriters?: JudgeConfig[];
 }
 
 export type StrategyConfig =

@@ -121,3 +121,99 @@ describe("ensemble fusion: 'exec-pick'", () => {
     expect(last).toContain('Do not define or include the implementation');
   });
 });
+
+// ---- majority-by-execution (selector stabilization, 2026-08-25) ----------
+//
+// One wrong test suite used to BE the verdict. With testWriters, the score
+// is the mean pass rate across suites: a wrong suite is half the vote.
+describe("ensemble fusion: 'exec-pick' with multiple test-writers", () => {
+  const WRONG_TESTS =
+    // A wrong belief about the spec: asserts subtraction. GOOD fails it, BAD passes.
+    "test('adds', () => assertDeepEqual(add(2, 3), -1));\n" +
+    "test('adds negatives', () => assertDeepEqual(add(-1, -2), 1));";
+  const BROKEN_TESTS = 'this is not javascript at all {{{';
+
+  it('a wrong suite is outvoted: good wins 2/2+0/2 over bad 0/2+2/2 on the tie-break judge? no — means tie, judge decides', async () => {
+    // Symmetric disagreement IS a mean tie (good: (1 + 0)/2, bad: (0 + 1)/2)
+    // → the judge breaks it, exactly the old tie path.
+    const ctx = scriptedCtx({ 'bad-m': BAD, 'good-m': GOOD, w1: TESTS, w2: WRONG_TESTS, judge: 'PICK: 1' });
+    const r = await execute(
+      ensemble(['bad-m', 'good-m'], {
+        method: 'exec-pick',
+        testWriters: [{ model: 'w1' }, { model: 'w2' }],
+        judge: { model: 'judge' },
+      }),
+      MESSAGES,
+      ctx,
+    );
+    const fusion = r.trace.find((t) => t.stage === 'fusion-exec')!;
+    expect(fusion.decision).toContain('tie-judge');
+    expect(r.trace.some((t) => t.stage === 'test-writer-0')).toBe(true);
+    expect(r.trace.some((t) => t.stage === 'test-writer-1')).toBe(true);
+  });
+
+  it('a BROKEN suite is outvoted, not decisive: the usable suite picks good', async () => {
+    const ctx = scriptedCtx({ 'bad-m': BAD, 'good-m': GOOD, w1: BROKEN_TESTS, w2: TESTS, judge: 'PICK: 0' });
+    const r = await execute(
+      ensemble(['bad-m', 'good-m'], {
+        method: 'exec-pick',
+        testWriters: [{ model: 'w1' }, { model: 'w2' }],
+        judge: { model: 'judge' },
+      }),
+      MESSAGES,
+      ctx,
+    );
+    // bad: (-1 + 0)/2 = -0.5 · good: (-1 + 1)/2 = 0 → good wins WITHOUT the judge.
+    expect(r.text).toBe(GOOD);
+    const fusion = r.trace.find((t) => t.stage === 'fusion-exec')!;
+    expect(fusion.decision).toContain('exec-pick:1');
+    expect(fusion.decision).not.toContain('tie-judge');
+  });
+
+  it('a partially-wrong suite is outvoted by a correct one', async () => {
+    // w2 gets one case right and one wrong: good scores (2/2 + 1/2)/2 = 0.75,
+    // bad scores (0/2 + 1/2)/2 = 0.25 → good wins outright.
+    const HALF_WRONG =
+      "test('adds', () => assertDeepEqual(add(2, 3), 5));\n" +
+      "test('adds negatives', () => assertDeepEqual(add(-1, -2), 1));";
+    const ctx = scriptedCtx({ 'bad-m': BAD, 'good-m': GOOD, w1: TESTS, w2: HALF_WRONG, judge: 'PICK: 0' });
+    const r = await execute(
+      ensemble(['bad-m', 'good-m'], {
+        method: 'exec-pick',
+        testWriters: [{ model: 'w1' }, { model: 'w2' }],
+        judge: { model: 'judge' },
+      }),
+      MESSAGES,
+      ctx,
+    );
+    expect(r.text).toBe(GOOD);
+    expect(r.trace.find((t) => t.stage === 'fusion-exec')!.decision).not.toContain('tie-judge');
+  });
+
+  it('single-writer shapes behave exactly as before (stage name, verdicts, seed path)', async () => {
+    const ctx = scriptedCtx({ 'bad-m': BAD, 'good-m': GOOD, writer: TESTS });
+    const r = await execute(
+      ensemble(['bad-m', 'good-m'], { method: 'exec-pick', testWriter: { model: 'writer' } }),
+      MESSAGES,
+      ctx,
+    );
+    expect(r.text).toBe(GOOD);
+    expect(r.trace.some((t) => t.stage === 'test-writer')).toBe(true);
+    expect(r.trace.some((t) => t.stage === 'test-writer-0')).toBe(false);
+  });
+
+  it('all suites broken degrades honestly: every score -1, tie across all, judge decides', async () => {
+    const ctx = scriptedCtx({ 'bad-m': BAD, 'good-m': GOOD, w1: BROKEN_TESTS, w2: BROKEN_TESTS, judge: 'PICK: 1' });
+    const r = await execute(
+      ensemble(['bad-m', 'good-m'], {
+        method: 'exec-pick',
+        testWriters: [{ model: 'w1' }, { model: 'w2' }],
+        judge: { model: 'judge' },
+      }),
+      MESSAGES,
+      ctx,
+    );
+    expect(r.trace.find((t) => t.stage === 'fusion-exec')!.decision).toContain('tie-judge');
+    expect(r.text).toBe(GOOD); // judge PICKed 1 among tied [0,1]
+  });
+});

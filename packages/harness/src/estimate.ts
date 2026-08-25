@@ -134,11 +134,18 @@ export function estimateCalls(
         inputTokens: baseInputTokens,
         outputTokens: OUT,
       }));
-      // exec-pick (R4): the test-writer answers the request-derived wire at
+      // exec-pick (R4): every test-writer answers the request-derived wire at
       // the answer ceiling; the judge is the tie-break and fires in the
       // worst case, so it is priced whenever configured.
-      if (strategy.fusion.method === 'exec-pick' && strategy.fusion.testWriter) {
-        calls.push({ model: strategy.fusion.testWriter.model, inputTokens: baseInputTokens, outputTokens: OUT });
+      if (strategy.fusion.method === 'exec-pick') {
+        const writers = strategy.fusion.testWriters?.length
+          ? strategy.fusion.testWriters
+          : strategy.fusion.testWriter
+            ? [strategy.fusion.testWriter]
+            : [];
+        for (const w of writers) {
+          calls.push({ model: w.model, inputTokens: baseInputTokens, outputTokens: OUT });
+        }
       }
       if ((strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick') && strategy.fusion.judge) {
         calls.push({
@@ -359,13 +366,18 @@ export function projectStrategyP95Ms(
       // exec-pick's test-writer rides the candidate fan-out (parallel); the
       // sandbox runs are sequential per candidate at the hard wall bound;
       // the tie-judge fires in the worst case whenever configured.
-      const fanout =
-        strategy.fusion.method === 'exec-pick' && strategy.fusion.testWriter
-          ? par([...strategy.models.map((m) => L(m)), L(strategy.fusion.testWriter.model)])
-          : par(strategy.models.map((m) => L(m)));
+      const execWriters =
+        strategy.fusion.method === 'exec-pick'
+          ? (strategy.fusion.testWriters?.length
+              ? strategy.fusion.testWriters
+              : strategy.fusion.testWriter
+                ? [strategy.fusion.testWriter]
+                : [])
+          : [];
+      const fanout = par([...strategy.models.map((m) => L(m)), ...execWriters.map((w) => L(w.model))]);
       const sandbox =
         strategy.fusion.method === 'exec-pick'
-          ? strategy.models.length * (CODE_EXEC_TIMEOUT_MS + CODE_EXEC_WALL_SLACK_MS)
+          ? strategy.models.length * Math.max(1, execWriters.length) * (CODE_EXEC_TIMEOUT_MS + CODE_EXEC_WALL_SLACK_MS)
           : 0;
       const judge =
         (strategy.fusion.method === 'judge-pick' || strategy.fusion.method === 'exec-pick') && strategy.fusion.judge

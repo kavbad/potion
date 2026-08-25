@@ -62,16 +62,31 @@ export async function runEnsemble(
   const total = zeroUsage();
 
   const execPick = strategy.fusion.method === 'exec-pick';
-  const testWriter = strategy.fusion.testWriter;
-  if (execPick && !testWriter) throw new Error("ensemble fusion 'exec-pick' requires fusion.testWriter");
+  // Selector stabilization (2026-08-25): one wrong test suite used to BE the
+  // verdict. With N independent writers the candidate score is the mean pass
+  // rate across suites — majority by execution. testWriters wins over the
+  // legacy singular field; writer 0 keeps the singular field's seed so every
+  // existing single-writer shape stays cache-identical.
+  const writers = execPick
+    ? strategy.fusion.testWriters && strategy.fusion.testWriters.length > 0
+      ? strategy.fusion.testWriters
+      : strategy.fusion.testWriter
+        ? [strategy.fusion.testWriter]
+        : []
+    : [];
+  if (execPick && writers.length === 0) {
+    throw new Error("ensemble fusion 'exec-pick' requires fusion.testWriter or fusion.testWriters");
+  }
 
-  // exec-pick's test-writer needs only the request, so it rides the same
+  // exec-pick's test-writers need only the request, so they ride the same
   // parallel fan-out as the candidates — zero added latency on the happy path.
-  const [candidates, testsOutcome] = await Promise.all([
+  const [candidates, writerOutcomes] = await Promise.all([
     Promise.all(strategy.models.map((model, i) => callModel(model, messages, ctx, baseSeed + i))),
-    execPick
-      ? callModel(testWriter!.model, buildTestWriterMessages(messages), ctx, baseSeed + strategy.models.length + 1)
-      : Promise.resolve(null),
+    Promise.all(
+      writers.map((w, wi) =>
+        callModel(w.model, buildTestWriterMessages(messages), ctx, baseSeed + strategy.models.length + 1 + wi),
+      ),
+    ),
   ]);
   candidates.forEach((c, i) => {
     addUsageParallel(total, c.usage);
@@ -85,23 +100,33 @@ export async function runEnsemble(
   });
 
   if (execPick) {
-    addUsageParallel(total, testsOutcome!.usage);
-    trace.push({
-      stage: 'test-writer',
-      model: testWriter!.model,
-      text: testsOutcome!.text,
-      usage: testsOutcome!.usage,
+    const suites: string[] = [];
+    writerOutcomes.forEach((o, wi) => {
+      addUsageParallel(total, o.usage);
+      trace.push({
+        stage: writers.length === 1 ? 'test-writer' : `test-writer-${wi}`,
+        model: writers[wi]!.model,
+        text: o.text,
+        usage: o.usage,
+      });
+      suites.push(stripCodeFences(o.text));
     });
-    const tests = stripCodeFences(testsOutcome!.text);
     // Sandbox runs are sequential (one worker at a time, same as the scorer);
     // structural failure or zero registered cases → -1 = "cannot attest".
-    const scores: number[] = [];
-    const verdicts: string[] = [];
-    for (const c of candidates) {
-      const report = await runCodeWithTests(stripCodeFences(c.text), tests);
-      const unusable = report.error !== undefined || report.total === 0;
-      scores.push(unusable ? -1 : report.passed / report.total);
-      verdicts.push(unusable ? `error(${(report.error ?? 'no cases').slice(0, 60)})` : `${report.passed}/${report.total}`);
+    // A candidate whose own code fails to load earns its -1 in every suite;
+    // a suite broken for everyone gives everyone the same -1 — no bias.
+    const scores: number[] = new Array<number>(candidates.length).fill(0);
+    const verdicts: string[] = candidates.map(() => '');
+    for (let wi = 0; wi < suites.length; wi++) {
+      for (let ci = 0; ci < candidates.length; ci++) {
+        const report = await runCodeWithTests(stripCodeFences(candidates[ci]!.text), suites[wi]!);
+        const unusable = report.error !== undefined || report.total === 0;
+        const rate = unusable ? -1 : report.passed / report.total;
+        scores[ci]! += rate / suites.length;
+        verdicts[ci] +=
+          (wi > 0 ? '+' : '') +
+          (unusable ? `error(${(report.error ?? 'no cases').slice(0, 60)})` : `${report.passed}/${report.total}`);
+      }
     }
     const top = Math.max(...scores);
     const tied = scores.map((s, i) => (s === top ? i : -1)).filter((i) => i >= 0);

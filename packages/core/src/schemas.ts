@@ -109,6 +109,12 @@ export const FusionConfigSchema = z.object({
   judge: JudgeConfigSchema.optional(),
   /** exec-pick only: the model that writes the tests. */
   testWriter: JudgeConfigSchema.optional(),
+  /** exec-pick, selector stabilization (2026-08-25): MULTIPLE independent
+   * test-writers ride the same parallel fan-out; a candidate's score is the
+   * MEAN pass rate across suites — majority by execution, so one wrong test
+   * suite is half the vote instead of the whole verdict. Exact ties still
+   * fall to the judge. Takes precedence over testWriter when non-empty. */
+  testWriters: z.array(JudgeConfigSchema).min(1).max(3).optional(),
 });
 
 export const StrategyConfigSchema = z.discriminatedUnion('type', [
