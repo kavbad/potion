@@ -1,0 +1,18 @@
+{
+  "suiteId": "journey-e2e-v1",
+  "clusterId": "journey",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "The journey-equivalence experiment's nine multi-step journeys (2026-08-25), promoted to a permanent instrument: three families (support-ticket pipeline extract→classify→reply→report; code pipeline spec-tighten→implement→harden; data pipeline extract→reason→extract), 2–4 steps each, every step's output feeding the next. Task completion is the atomic outcome: only the FINAL artifact is scored, deterministically (field-contains / code-exec) — no judge anywhere. Constraints are carried forward explicitly in step prompts (the constraint-erosion lesson: run 1 of the experiment lost a function-name contract at a restate step in every arm until the spec pinned it).",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "field-contains",
+      "code-exec"
+    ]
+  },
+  "createdAt": "2026-08-25T20:30:00.000-07:00"
+}

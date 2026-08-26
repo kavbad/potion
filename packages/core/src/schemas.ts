@@ -248,6 +248,10 @@ export const ScoringMethodSchema = z.discriminatedUnion('kind', [
     scale: z.tuple([z.number(), z.number()]),
   }),
   z.object({ kind: z.literal('tool-call'), expect: z.object({ name: z.string(), arguments: z.record(z.unknown()).optional() }) }),
+  z.object({
+    kind: z.literal('field-contains'),
+    fields: z.record(z.union([z.string(), z.array(z.string()).nonempty()])),
+  }),
 ]);
 
 export const EvalItemSchema = z.object({
@@ -258,6 +262,11 @@ export const EvalItemSchema = z.object({
   tools: z.array(ToolSchema).optional(),
   reference: z.unknown().optional(),
   scoring: ScoringMethodSchema,
+  /** Journey follow-on steps (prompt = step 1); see EvalItem.journeySteps. */
+  journeySteps: z
+    .array(z.object({ clusterId: z.string(), prompt: z.string().min(1) }))
+    .min(1)
+    .optional(),
 });
 
 export const PriceEntrySchema = z.object({

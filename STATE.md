@@ -80,8 +80,12 @@ half-width; 42/42 now reports a ≥-bound, not ±0.000) · locked
 confirmation-suite mechanism DONE (manifest `locked` flag, fail-closed in
 loadSuiteV2, `--confirmation`/suitePurpose unlock; first locked suites get
 authored at instrument enlargement by splitting new items dev/holdout) ·
-NEXT: journey-completion as a first-class scorer · targeted messy-corpus
-seed (real scanned PDFs, noisy audio).
+journey completion as a first-class instrument DONE (one journey = one
+EvalItem: `journeySteps` chain with {{prev}} templating, same strategy every
+step, only the FINAL artifact scored — `field-contains` dotted-path scorer
+promoted from the experiment; suite journey-e2e-v1, 9 journeys, cluster
+'journey', deterministic ends only; preflight prices every step) · NEXT:
+targeted messy-corpus seed (real scanned PDFs, noisy audio).
 
 ## North star
 

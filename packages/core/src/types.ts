@@ -181,7 +181,15 @@ export type ScoringMethod =
    * Full credit for the expected name with every expected argument present
    * and equal; half credit for the right name with different arguments;
    * zero for text or another tool. */
-  | { kind: 'tool-call'; expect: { name: string; arguments?: Record<string, unknown> } };
+  | { kind: 'tool-call'; expect: { name: string; arguments?: Record<string, unknown> } }
+  /** JOURNEY instrument (eval-review adoption, 2026-08-25): deterministic
+   * end-artifact check proven in the journey-equivalence experiment. The
+   * answer must parse as JSON; each dotted path must resolve to a value that
+   * case-insensitively CONTAINS one of the accepted spellings (an extraction
+   * saying "Sept 3" or "September 3" is legitimately correct either way).
+   * Score = matched paths / total paths. The check IS the reference — no
+   * separate reference field. */
+  | { kind: 'field-contains'; fields: Record<string, string | string[]> };
 
 export interface EvalItem {
   id: string;
@@ -192,6 +200,18 @@ export interface EvalItem {
   tools?: Tool[];
   reference?: unknown;
   scoring: ScoringMethod;
+  /**
+   * JOURNEY item (eval-review adoption, 2026-08-25): task completion as the
+   * atomic outcome. `prompt` is STEP 1; these are the follow-on steps, run
+   * in order with the SAME strategy, each prompt templated with earlier
+   * outputs ({{prev}} = last output, {{prevN}} = N+1 steps back). Only the
+   * FINAL output is scored (item.scoring); usage sums over every step, and
+   * latency is whole-job wall time — a journey that fails at step 4 after
+   * three perfect steps scores what the customer got: a failed job. Step
+   * clusterIds document what kind of work each step is (and let a routed
+   * arm replay the journey later); the harness itself does not route.
+   */
+  journeySteps?: Array<{ clusterId: string; prompt: string }>;
 }
 
 export interface EvalResult {

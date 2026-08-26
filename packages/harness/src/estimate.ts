@@ -286,10 +286,21 @@ export function estimateItemCostUsd(
   judgeOutputTokens: number = PROTOCOL_OUTPUT_TOKENS,
 ): number {
   const base = inputTokensOf(item);
-  const strategyCost = estimateCalls(strategy, base, answerOutputTokens).reduce(
-    (a, c) => a + estimateCallCostUsd(c, prices),
-    0,
-  );
+  const costOf = (inputTokens: number): number =>
+    estimateCalls(strategy, inputTokens, answerOutputTokens).reduce(
+      (a, c) => a + estimateCallCostUsd(c, prices),
+      0,
+    );
+  let strategyCost = costOf(base);
+  // JOURNEY items (2026-08-25): every follow-on step is a real strategy call
+  // the preflight must price, or the belt understates — theater. Each step's
+  // input is its template plus whatever {{prevN}} injects; the injected text
+  // is unknown before the run, so bound every reference at a full answer
+  // (answerOutputTokens each) — an upper bound by construction.
+  for (const step of item.journeySteps ?? []) {
+    const refs = step.prompt.match(/\{\{prev\d*\}\}/g)?.length ?? 0;
+    strategyCost += costOf(Math.ceil(step.prompt.length / 4) + refs * answerOutputTokens);
+  }
   // llm-judge items are scored once per (strategy × item) → one judge call
   // each; preflight must project that spend (M1b — previously omitted).
   return strategyCost + estimateItemJudgeCostUsd(item, prices, answerOutputTokens, judgeOutputTokens);

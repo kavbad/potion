@@ -111,6 +111,49 @@ function coerceField(value: unknown, type: 'string' | 'number' | 'boolean' | 'ar
   }
 }
 
+/**
+ * JOURNEY end-artifact check (eval-review adoption, 2026-08-25) — promoted
+ * verbatim from the journey-equivalence experiment's proven scorer. Strips a
+ * markdown fence, parses JSON, resolves each dotted path, and matches
+ * case-insensitively by CONTAINS against the accepted spellings. Score =
+ * matched paths / total; unparseable → 0. Deterministic, no reference field:
+ * the fields object IS the check.
+ */
+export function scoreFieldContains(
+  answer: string,
+  scoring: Extract<ScoringMethod, { kind: 'field-contains' }>,
+): number {
+  const paths = Object.keys(scoring.fields);
+  if (paths.length === 0) return 0;
+  const stripped = answer
+    .trim()
+    .replace(/^```[a-z0-9_-]*\s*\n?/i, '')
+    .replace(/\n?\s*```$/, '')
+    .trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch {
+    return 0;
+  }
+  let hit = 0;
+  for (const [path, want] of Object.entries(scoring.fields)) {
+    let cur: unknown = parsed;
+    for (const part of path.split('.')) {
+      if (cur === null || typeof cur !== 'object') {
+        cur = undefined;
+        break;
+      }
+      cur = (cur as Record<string, unknown>)[part];
+    }
+    if (cur === undefined) continue;
+    const hay = String(cur).toLowerCase();
+    const accepted = (Array.isArray(want) ? want : [want]).map((w) => w.toLowerCase());
+    if (hay !== '' && accepted.some((w) => hay.includes(w))) hit += 1;
+  }
+  return hit / paths.length;
+}
+
 /** score = matched fields / total schema fields; unparseable answer → 0. */
 export function scoreFieldMatch(
   answer: string,
@@ -301,6 +344,8 @@ export async function scoreAnswer(
     }
     case 'tool-call':
       return { quality: scoreToolCall(toolCalls, scoring.expect), scorer: 'tool-call' };
+    case 'field-contains':
+      return { quality: scoreFieldContains(answer, scoring), scorer: 'field-contains' };
     case 'llm-judge': {
       if (!deps) throw new Error('llm-judge scoring requires ScorerDeps (providers + prices)');
       // G1.7: judge completion budget (verbose live judges truncate at the

@@ -26,6 +26,7 @@ import {
 } from '@potion/providers';
 import { createResolver, execute } from '@potion/strategies';
 import { aggregateResults } from './aggregate.js';
+import { executeJourney } from './journey.js';
 import { BudgetCapError, projectRunCostUsd } from './estimate.js';
 import { loadSuitesV2 } from './ingest/suite-v2.js';
 import { crossCheckItem, type SuiteManifest } from './ingest/manifest.js';
@@ -593,7 +594,22 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         }
         let outcome, quality, scorer, scorerUsage;
         try {
-          outcome = await execute(strategy, item.prompt, item.tools !== undefined ? { ...ctx, params: { tools: item.tools } } : ctx);
+          const stepCtx = item.tools !== undefined ? { ...ctx, params: { tools: item.tools } } : ctx;
+          // JOURNEY items (2026-08-25): the same strategy answers every
+          // step; only the final artifact is scored; usage sums over steps
+          // (whole-job cost and wall time). trace stays [] — per-step
+          // confidence is not a journey-level signal.
+          outcome =
+            item.journeySteps !== undefined
+              ? {
+                  ...(await executeJourney(item, async (messages) => {
+                    const r = await execute(strategy, messages, stepCtx);
+                    return { text: r.text, usage: r.usage };
+                  })),
+                  trace: [] as never[],
+                  toolCalls: undefined,
+                }
+              : await execute(strategy, item.prompt, stepCtx);
           ({ quality, scorer, scorerUsage } = await scoreAnswer(
             item,
             outcome.text,

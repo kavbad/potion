@@ -18,7 +18,7 @@ import {
 
 export type ScoringKind = ScoringMethod['kind'];
 
-export const ScoringKindSchema = z.enum(['exact', 'code-exec', 'field-match', 'llm-judge', 'tool-call']);
+export const ScoringKindSchema = z.enum(['exact', 'code-exec', 'field-match', 'llm-judge', 'tool-call', 'field-contains']);
 
 /** Where the suite's items came from. Conservative license bookkeeping:
  * anything uncertain must be marked "verify before shipping to customers"
@@ -74,6 +74,9 @@ export type SuiteSource = z.infer<typeof SuiteSourceSchema>;
 // (policy is a lint for authored data, not a security boundary).
 
 export const CLUSTER_ALLOWED_SCORING: Readonly<Record<string, readonly ScoringKind[]>> = {
+  // Journey suites (task completion as the atomic outcome, 2026-08-25):
+  // deterministic end-artifact checks only — no judge may score a journey.
+  journey: ['field-contains', 'code-exec', 'exact', 'field-match'],
   'code-gen': ['code-exec'],
   'code-review': ['code-exec', 'llm-judge'],
   extraction: ['field-match', 'exact'],
