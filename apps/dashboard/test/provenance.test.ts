@@ -39,7 +39,7 @@ describe('badge rules — only live evidence may badge LIVE', () => {
 
 describe('clusterProvenanceSummary', () => {
   it('summarizes live / simulated / mixed / empty', () => {
-    expect(clusterProvenanceSummary(cluster(3, 0))).toBe('LIVE — all 3 points from live providers');
+    expect(clusterProvenanceSummary(cluster(3, 0))).toBe('all 3 points from live providers');
     expect(clusterProvenanceSummary(cluster(0, 3))).toMatch(/^SIMULATED — 3 of 3 points/);
     expect(clusterProvenanceSummary(cluster(1, 1))).toBe('MIXED — 1 live, 1 simulated of 2 points');
     expect(clusterProvenanceSummary(cluster(0, 0))).toMatch(/^NO EVIDENCE/);

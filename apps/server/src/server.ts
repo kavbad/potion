@@ -258,6 +258,11 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   const worker = await runWorker({
     queue,
     db: ctx.db,
+    // The worker holds the SAME prices path the context resolved — never its
+    // own env/default fallback. A diverging worker is how the pre-S5 scan
+    // writer (alive in any stale @potion/workers dist) reached the repo
+    // prices.json while the context sat safely on a tmp copy.
+    pricesPath: ctx.pricesPath,
     ...(artifacts !== undefined ? { artifacts } : {}),
     // M5 #36: traces:cluster embeds first-user-messages with the platform's
     // dimension-guarded embedder (mock by default, OpenAI post-M1b).

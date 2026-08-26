@@ -161,14 +161,16 @@ export default async function FrontiersPage({
             </div>
           </div>
           <div className="bg-[#fbfaf7] px-3.5 py-2.5">
-            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">certification · evidence age</div>
+            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">certification</div>
             <div className="mt-1 text-ink">
               {cert ? (
                 <span className={cert.status === 'certified' ? 'text-kept' : 'text-refuse'}>{cert.status}</span>
               ) : (
                 <span className="text-faint">none yet</span>
               )}
-              {evidenceAgeDays !== null && <span className="text-faint"> · {evidenceAgeDays === 0 ? 'today' : `${evidenceAgeDays}d ago`}</span>}
+              {evidenceAgeDays !== null && (
+                <span className="text-faint"> · evidence {evidenceAgeDays === 0 ? 'measured today' : `${evidenceAgeDays}d old`}</span>
+              )}
             </div>
           </div>
         </div>

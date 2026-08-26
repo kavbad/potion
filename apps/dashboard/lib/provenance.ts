@@ -28,7 +28,7 @@ export function clusterProvenanceSummary(cluster: FrontierClusterDto): string {
   const { live, simulated } = cluster.provenance;
   const total = live + simulated;
   if (total === 0) return 'NO EVIDENCE — frontier has no points';
-  if (simulated === 0) return `LIVE — all ${total} point${total === 1 ? '' : 's'} from live providers`;
+  if (simulated === 0) return `all ${total} point${total === 1 ? '' : 's'} from live providers`;
   if (live === 0) {
     return `SIMULATED — ${simulated} of ${total} point${total === 1 ? '' : 's'} measured on mock providers (or unlabeled)`;
   }

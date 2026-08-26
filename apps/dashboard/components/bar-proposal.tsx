@@ -17,7 +17,12 @@ interface Proposal {
   servingModel: string | null;
   servingQuality: number | null;
   servingCostPer1K: number | null;
-  retention: number | null;
+  /** Bootstrap retention verdict: an OBJECT ({mean, ci95, pairs, …}) from
+   * the learning period — typed as a bare number here until 2026-08-25,
+   * which made `.toFixed` throw in render the moment a real org had a live
+   * proposal (the operator's Today crash; the demo org never had one, so
+   * every browser pass missed it and the SSR fixtures encoded the lie). */
+  retention: { mean: number; ci95?: [number, number] } | number | null;
   suggestedFloor: number;
   projectedSaving: number | null;
   items: number;
@@ -26,6 +31,13 @@ interface Proposal {
 }
 
 const usd = (n: number): string => (n < 1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+
+/** Normalize the retention field: object (live shape), bare number, or null. */
+function retentionOf(r: Proposal['retention']): { mean: number; ci95?: [number, number] } | null {
+  if (r === null) return null;
+  if (typeof r === 'number') return Number.isFinite(r) ? { mean: r } : null;
+  return typeof r.mean === 'number' && Number.isFinite(r.mean) ? r : null;
+}
 
 export function BarProposal({ initialProposals, initialAdmin }: { initialProposals?: Proposal[]; initialAdmin?: boolean } = {}) {
   const [proposals, setProposals] = useState<Proposal[]>(initialProposals ?? []);
@@ -40,8 +52,8 @@ export function BarProposal({ initialProposals, initialAdmin }: { initialProposa
       fetch('/api/auth/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     if (me) setAdmin((me as { role?: string }).role === 'admin');
-    const list = ((learning as { proposals?: Proposal[] } | null)?.proposals ?? []).filter(
-      (p) => p.status === 'proposed' && p.appliedAt === null,
+    const list = ((learning as { proposals?: Array<Proposal | null> } | null)?.proposals ?? []).filter(
+      (p): p is Proposal => p !== null && p.status === 'proposed' && p.appliedAt === null,
     );
     setProposals(list);
   }, []);
@@ -106,7 +118,14 @@ export function BarProposal({ initialProposals, initialAdmin }: { initialProposa
         ) : (
           <>, re-verified on fresh items.</>
         )}
-        {p.retention !== null && <> Measured retention vs your baseline: <span className="font-medium text-ink">{p.retention.toFixed(2)}</span>.</>}
+        {(() => {
+          const r = retentionOf(p.retention);
+          if (!r) return null;
+          return (
+            <> Measured retention vs your baseline: <span className="font-medium text-ink">{r.mean.toFixed(2)}</span>
+              {r.ci95 ? <span className="text-faint"> (95% CI {r.ci95[0].toFixed(2)}–{r.ci95[1].toFixed(2)})</span> : null}.</>
+          );
+        })()}
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {admin ? (

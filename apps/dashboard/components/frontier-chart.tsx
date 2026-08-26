@@ -18,6 +18,7 @@ import {
 import {
   QUALITY_TICKS,
   Y_DOMAIN,
+  describeStrategy,
   dominatedRects,
   formatDollars,
   qualityWord,
@@ -25,7 +26,8 @@ import {
   xDomain,
   type ChartPoint,
 } from '@/lib/frontier-chart';
-import type { FrontierResponse } from '@/lib/types';
+import type { Policy } from '@potion/core';
+import type { FrontierPointDto, FrontierResponse, OperatingPointDto } from '@/lib/types';
 
 const COLORS = {
   accent: '#0f766e', // teal-700 — the one accent (frontier line + dots)
@@ -172,7 +174,7 @@ export function FrontierChart({ data }: { data: FrontierResponse }) {
             strokeWidth={2.5}
             ifOverflow="extendDomain"
             label={{
-              value: 'You are here',
+              value: `You are here · quality ${op.quality.toFixed(3)} · ${formatDollars(op.costPer1K)}/1K`,
               position: 'top',
               fill: COLORS.ink,
               fontSize: 12,
@@ -181,6 +183,8 @@ export function FrontierChart({ data }: { data: FrontierResponse }) {
           />
         )}
       </ScatterChart>
+
+      {op && <WhyThisPoint op={op} points={data.frontier.points} />}
 
       {/* legend — plain language, per the design brief */}
       <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-faint">
@@ -201,5 +205,61 @@ export function FrontierChart({ data }: { data: FrontierResponse }) {
         </span>
       </div>
     </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// WHY THIS POINT (2026-08-25, operator question rendered as product: "why are
+// we using the most expensive model based on the chart"). The marker is
+// selectPoint(policy) — the router obeying the org's own rule — but the chart
+// compresses thousandths of quality into one visual band, so a max-quality
+// pick LOOKS like buying the same quality for more money. The page must say
+// what the rule chose and what the alternative costs; a chart that leaves the
+// owner asking "why" has failed at its one job.
+
+function ruleInWords(policy: Policy): string {
+  switch (policy.type) {
+    case 'max_quality':
+      return `highest measured quality under $${policy.costCeilingPer1K.toFixed(2)}/1K`;
+    case 'min_cost':
+      return `cheapest point at or above your ${policy.qualityFloor.toFixed(2)} bar`;
+    case 'latency_bound':
+      return `highest quality within ${policy.p95Ms} ms p95`;
+    case 'compound':
+      return `cheapest above your ${policy.qualityFloor.toFixed(2)} bar within ${policy.p95Ms} ms p95`;
+  }
+}
+
+function WhyThisPoint({ op, points }: { op: OperatingPointDto; points: FrontierPointDto[] }) {
+  const floor =
+    op.policy.type === 'min_cost' || op.policy.type === 'compound' ? op.policy.qualityFloor : null;
+  // The alternative worth naming: the cheapest point that clears the bar
+  // (or the cheapest point at all when the rule has no bar).
+  const qualifying = points.filter((pt) => (floor === null ? true : pt.quality >= floor));
+  const cheapest = qualifying.reduce<FrontierPointDto | null>(
+    (best, pt) => (best === null || pt.costPer1K < best.costPer1K ? pt : best),
+    null,
+  );
+  const isCheapest = cheapest !== null && cheapest.strategyHash === op.strategyHash;
+  return (
+    <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-soft">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">why this point · </span>
+      Your rule is <span className="font-medium text-ink">{ruleInWords(op.policy)}</span>
+      {op.fallback === 1 ? ' — no point qualified, so this is the fallback serve' : ''}.{' '}
+      {isCheapest ? (
+        <>This is already the cheapest point that qualifies.</>
+      ) : cheapest !== null && cheapest.costPer1K < op.costPer1K ? (
+        <>
+          The cheapest {floor !== null ? 'point above your bar' : 'point on the line'} is{' '}
+          <span className="font-medium text-ink">{describeStrategy(cheapest.strategyConfig)}</span> at{' '}
+          {formatDollars(cheapest.costPer1K)}/1K — measured quality {cheapest.quality.toFixed(3)} vs{' '}
+          {op.quality.toFixed(3)} here ({(op.quality - cheapest.quality) >= 0 ? '−' : '+'}
+          {Math.abs(op.quality - cheapest.quality).toFixed(3)}). Your rule prefers quality, so it buys
+          this one; switch the rule in{' '}
+          <a href="/settings/controls" className="text-accent underline">Controls</a> to take the cheaper point.
+        </>
+      ) : null}
+    </p>
   );
 }
