@@ -43,6 +43,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { requireRole } from '../auth.js';
 import { sha256, type Frontier } from '@potion/core';
 import {
   createLabRun,
@@ -72,6 +73,13 @@ import {
   type TaxonomyCluster,
 } from '@potion/lab-gen';
 import { harnessSpecHash } from '@potion/lab-spec';
+import {
+  acceptGraduation,
+  getActionGrant,
+  listActionGrants,
+  listLabStepsForHarness,
+} from '@potion/db';
+import { extractPoreEvidence, runGraduationPass } from '@potion/lab-runtime';
 import {
   applyDialPosition,
   dialViews,
@@ -1200,4 +1208,101 @@ export function registerLabRoutes(
     const jobId = await opts.queue.enqueue('lab:grant-revoke', { orgId: org.orgId, connectorId: id });
     return reply.send({ connectorId: id, status: 'revoked', already: !cut, providerRevocationJobId: jobId });
   });
+
+  // ================= L-G3 — the permission ledger (direction v2) =========
+  //
+  // GET is a pure read of the STORED grants plus an evidence rollup; the
+  // evaluation pass (which may auto-tighten — fail closed) runs on the
+  // admin POST, which the ledger UI fires on view. Accept is the ONLY
+  // loosening path and is org-guarded before it touches the grant.
+
+  /** act/read per tool from the superpower catalog; unknown stays
+   * undefined and tiers fail closed downstream. */
+  function classifyTool(actionClass: string): 'read' | 'act' | undefined {
+    for (const pkg of CATALOG) {
+      const tool = pkg.tools.find((t) => t.name === actionClass);
+      if (tool) return tool.action;
+    }
+    return undefined;
+  }
+
+  // ---- GET /api/lab/harnesses/:hash/grants (viewer) — the ledger ----
+  app.get('/api/lab/harnesses/:hash/grants', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    const grants = await listActionGrants(db, org.orgId, row.harnessHash);
+    const steps = await listLabStepsForHarness(db, org.orgId, row.harnessHash);
+    const byClass = extractPoreEvidence(
+      steps.map((s0) => ({ payload: s0.payload as StepPayload, createdAt: s0.createdAt })),
+    );
+    const rollup = (cls: string) => {
+      const ev = byClass.get(cls) ?? [];
+      const count = (o: string) => ev.filter((e) => e.outcome === o).length;
+      return {
+        n: ev.length,
+        approved: count('approved'),
+        edited: count('edited'),
+        rejected: count('rejected'),
+        lastAt: ev.length > 0 ? ev[ev.length - 1]!.at : null,
+      };
+    };
+    // Classes observed in traffic but not yet granted rows appear too — the
+    // ledger must show what the harness DOES, not only what was recorded.
+    const known = new Set(grants.map((g) => g.actionClass));
+    const ungranted = [...byClass.keys()].filter((c) => !known.has(c));
+    return reply.send({
+      harnessHash: row.harnessHash,
+      grants: grants.map((g) => ({
+        id: g.id,
+        actionClass: g.actionClass,
+        riskTier: g.riskTier,
+        state: g.state,
+        auditRate: g.auditRate,
+        stateReason: g.stateReason,
+        grantedAt: g.grantedAt,
+        revokedAt: g.revokedAt,
+        evidence: rollup(g.actionClass),
+      })),
+      observedUngranted: ungranted.map((c) => ({ actionClass: c, evidence: rollup(c) })),
+    });
+  });
+
+  // ---- POST /api/lab/harnesses/:hash/grants/evaluate (admin) ----
+  app.post(
+    '/api/lab/harnesses/:hash/grants/evaluate',
+    { preHandler: [requireRole('admin')] },
+    async (req: FastifyRequest, reply) => {
+      const org = req.potionOrg!;
+      const row = await ownHarness(req);
+      if (row === null) return reply.code(404).send(notFound);
+      const result = await runGraduationPass({
+        db,
+        orgId: org.orgId,
+        harnessHash: row.harnessHash,
+        classify: classifyTool,
+      });
+      return reply.send(result);
+    },
+  );
+
+  // ---- POST /api/lab/grants/:id/accept (admin) — the ONLY loosening ----
+  app.post(
+    '/api/lab/grants/:id/accept',
+    { preHandler: [requireRole('admin')] },
+    async (req: FastifyRequest, reply) => {
+      const org = req.potionOrg!;
+      const { id } = req.params as { id: string };
+      const grant = await getActionGrant(db, org.orgId, id);
+      if (grant === null) return reply.code(404).send(notFound);
+      const body = z.object({ auditRate: z.number().min(0).max(1).optional() }).safeParse(req.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: { message: 'invalid auditRate', type: 'invalid_request_error' } });
+      try {
+        const updated = await acceptGraduation(db, grant.id, body.data.auditRate !== undefined ? { auditRate: body.data.auditRate } : {});
+        return reply.send({ id: updated.id, actionClass: updated.actionClass, state: updated.state, auditRate: updated.auditRate, grantedAt: updated.grantedAt });
+      } catch (e) {
+        return reply.code(409).send({ error: { message: e instanceof Error ? e.message : 'refused', type: 'invalid_request_error', code: 'never_graduates' } });
+      }
+    },
+  );
 }

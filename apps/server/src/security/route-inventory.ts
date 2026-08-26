@@ -88,6 +88,7 @@ export interface RouteInventoryRow {
     | 'labHarness'
     | 'labRun'
     | 'labGrant'
+  | 'labActionGrant'
     | 'invite'
     | 'none';
   crossOrgProbe?: CrossOrgProbe;
@@ -197,6 +198,12 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'DELETE', path: '/api/lab/memory/:hash/:key', surface: 'api', mutating: true, guard: 'admin', probeUrl: `/api/lab/memory/${'0'.repeat(64)}/probekey`, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
   // ---- Step 9 (the derived form) additive routes ----
   { method: 'GET', path: '/api/lab/harnesses/:hash/runs', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  // L-G3 (Lab direction v2): the permission ledger. GET is a pure read;
+  // evaluate runs the graduation pass (auto-tighten may write — fail
+  // closed); accept is the ONLY loosening path, org-guarded by id.
+  { method: 'GET', path: '/api/lab/harnesses/:hash/grants', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/harnesses/:hash/grants/evaluate', surface: 'api', mutating: true, guard: 'admin', probeUrl: `/api/lab/harnesses/${'0'.repeat(64)}/grants/evaluate`, probeBody: {}, tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/lab/grants/:id/accept', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/lab/grants/lag-000000000000/accept', probeBody: {}, tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'labActionGrant', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/lab/harnesses/:hash/edit', surface: 'api', mutating: true, guard: 'member', probeUrl: `/api/lab/harnesses/${'0'.repeat(64)}/edit`, probeBody: { ops: [{ op: 'add-rule', rule: 'probe rule' }] }, notes: 'plain-language spec patch → NEW content-addressed catalog row (dial-motion precedent)', tenancyClass: 'org-param', resourceParam: ':hash', seededResource: 'labHarness', crossOrgProbe: { expect: 'uniform-404' } },
   // ---- Step 10 (connectors + token custody) additive routes ----
   { method: 'GET', path: '/api/lab/connectors', surface: 'api', mutating: false, guard: 'viewer', notes: 'catalog + this org’s grant STATUSES; envelope columns never selected (lab-grants.ts projection); the grant-absence sweep drives EVERY inventory row against a seeded token', tenancyClass: 'org-list', seededResource: 'labGrant', crossOrgProbe: { expect: 'org-list-absent' } },

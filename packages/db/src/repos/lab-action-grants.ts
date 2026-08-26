@@ -111,6 +111,19 @@ export async function acceptGraduation(
   return (await db.select().from(labActionGrants).where(eq(labActionGrants.id, grantId)))[0]!;
 }
 
+/** Org-scoped single-grant fetch — the accept route's tenancy guard. */
+export async function getActionGrant(
+  db: PotionDb,
+  orgId: string,
+  grantId: string,
+): Promise<LabActionGrantRow | null> {
+  const rows = await db
+    .select()
+    .from(labActionGrants)
+    .where(and(eq(labActionGrants.id, grantId), eq(labActionGrants.orgId, orgId)));
+  return rows[0] ?? null;
+}
+
 /** Every step for a harness across ALL its runs, in run/seq order — the
  * evidence source for graduation (L-G2). */
 export async function listLabStepsForHarness(

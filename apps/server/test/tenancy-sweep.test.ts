@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import {
+  ensureActionGrant,
   DEFAULT_ORG_ID,
   clusters,
   createMembership,
@@ -72,6 +73,7 @@ const UNKNOWN: Record<string, string> = {
   labHarness: 'f'.repeat(64),
   labRun: 'run-neverexist',
   labGrant: 'grant-neverexist',
+  labActionGrant: 'lag-000000000000',
 };
 
 let app: FastifyInstance;
@@ -282,6 +284,13 @@ beforeAll(async () => {
     harnessName: 'sweep harness',
     spec: labSpec,
   });
+
+  // L-G3: an action grant (the permission ledger) in ORG_A — the accept
+  // route must 404 uniformly for ORG_B on this id.
+  const actionGrant = await ensureActionGrant(db(), {
+    orgId: ORG_A, harnessHash: seeded.labHarness!, actionClass: 'crm:lookup', riskTier: 'reversible-read',
+  });
+  seeded.labActionGrant = actionGrant.id;
 
   // Lab Step 10: a superpower grant in ORG_A (the /api/lab/connectors
   // org-list arm — its id must never surface in ORG_B's response).

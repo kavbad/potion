@@ -56,7 +56,7 @@ clears your bar.*
 - **Frontier Notes**: publish weekly, autonomously, under the fail-closed
   redaction gate. The operator's formal yes/no on autonomy is still pending;
   current default is publish.
-- **Potion Lab**: UNPAUSED (2026-08-26, operator order; external review integrated). Direction v2: graduated autonomy purchased with evidence — risk-aware graduation (4 tiers incl. never-graduates), no scalar trust score (permission ledger), tighten-automatic/loosen-by-proposal, sampled audit never graduates away, OpenClaw as first external runtime target. L-G1 (trust record + evaluator) + L-G2 (pore evidence extraction, edit-upgrade labels, asymmetric grant repo, end-to-end pass) SHIPPED; next L-G3 ledger rendering → L-G4 OpenClaw adapter.
+- **Potion Lab**: UNPAUSED (2026-08-26, operator order; external review integrated). Direction v2: graduated autonomy purchased with evidence — risk-aware graduation (4 tiers incl. never-graduates), no scalar trust score (permission ledger), tighten-automatic/loosen-by-proposal, sampled audit never graduates away, OpenClaw as first external runtime target. L-G1 (evaluator) + L-G2 (evidence extraction) + L-G3 (permission ledger: 3 org-guarded routes + the can-act-alone/asks-first/blocked UI, no scalar trust score, view = evaluation moment) SHIPPED; next L-G4 OpenClaw adapter.
 
 ## Current blockers (all operator-side)
 

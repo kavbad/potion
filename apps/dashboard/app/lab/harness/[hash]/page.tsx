@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { fetchOrRecover } from '@/lib/recover';
 import { LabFormView } from '@/components/lab-form-view';
 import { ConnectorPanel } from '@/components/lab-actions';
+import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import type { HarnessDto, MemoryDto } from '@potion/lab-form';
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +50,8 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
           surface="harness"
         />
       )}
+      {/* L-G3: the permission ledger — permission as the output of evidence. */}
+      {harness.spec !== null ? <LabPermissionLedger harnessHash={harness.harnessHash} role={me.role} /> : null}
       {/* Step 10: the filament's control surface — connect heals, revoke cuts. */}
       {harness.spec !== null && harness.spec.superpowers.length > 0 ? <ConnectorPanel /> : null}
     </main>
