@@ -6,8 +6,10 @@ import {
   BOOTSTRAP_RESAMPLES,
   bootstrapCi,
   bootstrapMeanCi,
+  jeffreysCi,
   mulberry32,
   quantileNearestRank,
+  regularizedIncompleteBeta,
   seedFromString,
 } from './stats.js';
 
@@ -184,5 +186,54 @@ describe('bootstrapCi over an arbitrary statistic', () => {
     const viaSortInPlace = bootstrapCi(values, (xs) => [...xs].sort((a, b) => a - b).at(-1)!, 5);
     expect(viaCopy.ci95[1]).toBeLessThanOrEqual(viaSortInPlace.ci95[1]);
     expect(values).toEqual([3, 1, 4, 1, 5, 9, 2, 6]); // input untouched
+  });
+});
+
+describe('jeffreysCi (boundary-honest quality intervals, 2026-08-25)', () => {
+  // Reference values verified against TWO independent implementations
+  // (continued-fraction here; Simpson integration of the Beta pdf with a
+  // singularity-removing substitution in the review's verification pass).
+  // 10/10 also matches the published Jeffreys binomial interval (~0.783).
+  it('42/42 is a ≥-bound, not certainty — the finding that motivated this', () => {
+    const [lo, hi] = jeffreysCi(Array<number>(42).fill(1));
+    expect(hi).toBe(1);
+    expect(lo).toBeCloseTo(0.9423, 4);
+  });
+  it('matches published Jeffreys at 10/10', () => {
+    const [lo, hi] = jeffreysCi(Array<number>(10).fill(1));
+    expect(hi).toBe(1);
+    expect(lo).toBeCloseTo(0.7828, 4);
+  });
+  it('0/25 pins lo=0 with honest upper width', () => {
+    const [lo, hi] = jeffreysCi(Array<number>(25).fill(0));
+    expect(lo).toBe(0);
+    expect(hi).toBeCloseTo(0.0947, 4);
+  });
+  it('mid-range 35/50 both sides', () => {
+    const [lo, hi] = jeffreysCi([...Array<number>(35).fill(1), ...Array<number>(15).fill(0)]);
+    expect(lo).toBeCloseTo(0.5645, 4);
+    expect(hi).toBeCloseTo(0.8131, 4);
+  });
+  it('fractional scores ride as partial successes', () => {
+    const [lo, hi] = jeffreysCi([0.5, 0.5, 0.5, 0.5]); // s=2 of n=4
+    const [blo, bhi] = jeffreysCi([1, 1, 0, 0]);
+    expect(lo).toBeCloseTo(blo, 12);
+    expect(hi).toBeCloseTo(bhi, 12);
+  });
+  it('n=1 is wide, n=0 is vacuous [0,1], and the interval always brackets the mean', () => {
+    const [lo1, hi1] = jeffreysCi([1]);
+    expect(hi1).toBe(1);
+    expect(lo1).toBeLessThan(0.6); // a single success proves very little
+    expect(jeffreysCi([])).toEqual([0, 1]);
+    for (const scores of [[1, 1, 0.25], [0.9, 0.8], [0, 0, 1]]) {
+      const m = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const [lo, hi] = jeffreysCi(scores);
+      expect(lo).toBeLessThanOrEqual(m);
+      expect(hi).toBeGreaterThanOrEqual(m);
+    }
+  });
+  it('regularizedIncompleteBeta hits exact closed forms', () => {
+    expect(regularizedIncompleteBeta(0.25, 1, 1)).toBeCloseTo(0.25, 12); // uniform
+    expect(regularizedIncompleteBeta(0.5, 2, 2)).toBeCloseTo(0.5, 12); // symmetric
   });
 });

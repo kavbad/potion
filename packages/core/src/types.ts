@@ -255,6 +255,17 @@ export interface FrontierPointEvidence {
   toolsMeasured?: boolean;
   qualityCi95: number;
   /**
+   * Generalized-Jeffreys 95% interval on the quality mean — a [lo, hi] PAIR
+   * for the same reason latencyP95Ci95 is one: the sampling distribution is
+   * asymmetric at the [0, 1] boundary, and a half-width asserts a symmetry
+   * that does not hold (a 42/42 champion is a ≥-bound, not certainty).
+   * qualityCi95 remains the CONSERVATIVE half-width max(mean−lo, hi−mean)
+   * so every legacy `mean − ci` reading stays a valid lower bound. Absent =
+   * pre-2026-08-25 rows (whose stored qualityCi95 may be a normal-theory
+   * width, including the degenerate ±0.000 at ceiling).
+   */
+  qualityCi?: [number, number];
+  /**
    * G2.6 latency provenance — the same discipline quality already carried, so
    * a latency-bounded selection is auditable, not merely asserted.
    *
@@ -292,6 +303,8 @@ export interface StrategyAggregate {
   strategyConfig: StrategyConfig;
   qualityMean: number;
   qualityCi95: number;
+  /** [lo, hi] generalized-Jeffreys pair — see FrontierPointEvidence.qualityCi. */
+  qualityCi?: [number, number];
   n: number;
   costPer1K: number; // USD per 1000 requests
   latencyP50: number;

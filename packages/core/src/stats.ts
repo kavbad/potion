@@ -110,3 +110,113 @@ export function bootstrapMeanCi(
 export function seedFromString(s: string): number {
   return parseInt(sha256(s).slice(0, 8), 16) >>> 0;
 }
+
+// ---------------------------------------------------------------------------
+// Bounded-score uncertainty (eval-review adoption, 2026-08-25)
+
+/** Lanczos log-gamma (g=7, n=9) — standard coefficients, |err| < 1e-13. */
+function logGamma(z: number): number {
+  const g = [
+    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ];
+  if (z < 0.5) {
+    // reflection
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z);
+  }
+  const x = z - 1;
+  let a = 0.99999999999980993;
+  for (let i = 0; i < g.length; i++) a += g[i]! / (x + i + 1);
+  const t = x + 7.5;
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+/** Continued fraction for the regularized incomplete beta (Lentz method). */
+function betaContinuedFraction(x: number, a: number, b: number): number {
+  const TINY = 1e-30;
+  const qab = a + b;
+  const qap = a + 1;
+  const qam = a - 1;
+  let c = 1;
+  let d = 1 - (qab * x) / qap;
+  if (Math.abs(d) < TINY) d = TINY;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= 300; m++) {
+    const m2 = 2 * m;
+    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < TINY) d = TINY;
+    c = 1 + aa / c;
+    if (Math.abs(c) < TINY) c = TINY;
+    d = 1 / d;
+    h *= d * c;
+    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < TINY) d = TINY;
+    c = 1 + aa / c;
+    if (Math.abs(c) < TINY) c = TINY;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < 3e-15) break;
+  }
+  return h;
+}
+
+/** Regularized incomplete beta I_x(a, b) — the Beta(a, b) CDF at x. */
+export function regularizedIncompleteBeta(x: number, a: number, b: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lnFront =
+    logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x);
+  const front = Math.exp(lnFront);
+  // Use the CF on the side where it converges fast.
+  if (x < (a + 1) / (a + b + 2)) return (front * betaContinuedFraction(x, a, b)) / a;
+  return 1 - (front * betaContinuedFraction(1 - x, b, a)) / b;
+}
+
+/** Inverse Beta(a, b) CDF by bisection — monotone, so plain bisection is
+ *  exact enough (90 halvings ≈ 1e-27 interval) and cannot diverge. */
+export function betaInvCdf(p: number, a: number, b: number): number {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 90; i++) {
+    const mid = (lo + hi) / 2;
+    if (regularizedIncompleteBeta(mid, a, b) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * 95% interval for a mean of BOUNDED [0, 1] scores — the generalized
+ * Jeffreys interval: posterior Beta(s + ½, n − s + ½) with s = Σ scores,
+ * quantiles at 2.5% / 97.5%. For binary scores this is exactly the Jeffreys
+ * binomial interval; fractional scores are treated as partial successes
+ * (quasi-binomial).
+ *
+ * WHY (eval-review finding, verified in code 2026-08-25): the normal-theory
+ * half-width 1.96·σ/√n collapses to ±0.000 on a constant sample, so a 42/42
+ * champion was reported as CERTAIN quality 1.000 — but 42/42 means "no
+ * failures observed among 42 tasks", a ≥-bound. Our own doctrine said so in
+ * prose while this module said otherwise in numbers. Jeffreys keeps honest
+ * width at the boundary (x = n → lower bound < 1, upper pinned to 1) and its
+ * boundary conventions are standard: x = 0 pins lo = 0, x = n pins hi = 1.
+ *
+ * Deterministic by construction — no resampling, so no seed to store.
+ * Overdispersion across task families is NOT modeled here; the follow-up is
+ * a task-family bootstrap where family metadata exists.
+ */
+export function jeffreysCi(scores: number[]): [number, number] {
+  const n = scores.length;
+  if (n === 0) return [0, 1];
+  const s = scores.reduce((acc, q) => acc + Math.min(1, Math.max(0, q)), 0);
+  const a = s + 0.5;
+  const b = n - s + 0.5;
+  const lo = s <= 0 ? 0 : betaInvCdf(0.025, a, b);
+  const hi = s >= n ? 1 : betaInvCdf(0.975, a, b);
+  return [lo, hi];
+}

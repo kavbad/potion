@@ -41,6 +41,8 @@ export function strategyLabel(cfg: StrategyConfig): string {
 interface CliArgs {
   suites: string[];
   suitesV2: string[];
+  /** Final promotion reading against a LOCKED confirmation suite. */
+  confirmation: boolean;
   strategies: StrategyConfig[];
   cap: number;
   provider: 'mock' | 'live';
@@ -65,7 +67,7 @@ interface CliArgs {
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30, judgeMaxTokens: undefined, referenceAnchored: false, judgeModel: undefined };
+  const args: CliArgs = { suites: [], suitesV2: [], strategies: [], cap: NaN, provider: 'mock', calibrate: false, resume: false, simulatedOk: false, maxOutputTokens: undefined, judges: [], calibrateAnswerer: undefined, calibrateN: 30, judgeMaxTokens: undefined, referenceAnchored: false, judgeModel: undefined, confirmation: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--') continue; // pnpm forwards the script separator literally
@@ -80,6 +82,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case '--suite-v2':
         args.suitesV2.push(next());
+        break;
+      case '--confirmation':
+        args.confirmation = true;
         break;
       case '--strategy': {
         const raw: unknown = JSON.parse(next());
@@ -168,7 +173,10 @@ export function formatResultsTable(summary: RunSummary): string {
       [
         String(agg.clusterId).padEnd(12),
         strategyLabel(agg.strategyConfig).padEnd(42),
-        `${fmt(agg.qualityMean)} ± ${fmt(agg.qualityCi95)}`.padEnd(22),
+        (agg.qualityCi
+          ? `${fmt(agg.qualityMean)} [${fmt(agg.qualityCi[0])},${fmt(agg.qualityCi[1])}]`
+          : `${fmt(agg.qualityMean)} ± ${fmt(agg.qualityCi95)}`
+        ).padEnd(22),
         String(agg.n).padStart(3),
         `$${agg.costPer1K.toFixed(2)}`.padStart(9),
         String(Math.round(agg.latencyP50)).padStart(8),
@@ -213,6 +221,7 @@ export async function main(argv: string[]): Promise<number> {
       {
         suiteIds: args.suites,
         suiteV2Ids: args.suitesV2,
+        ...(args.confirmation ? { suitePurpose: 'confirmation' as const } : {}),
         strategies: args.strategies,
         budgetCapUsd: args.cap,
         provider: args.provider,
@@ -255,7 +264,7 @@ export async function main(argv: string[]): Promise<number> {
             if (resolved.simulated && !args.simulatedOk) throw new SimulatedSuiteError([resolved.suiteId]);
             return loadSuiteFile(resolved.path, resolved.suiteId);
           })()
-        : loadSuiteV2(args.suitesV2[0]!).items
+        : loadSuiteV2(args.suitesV2[0]!, undefined, args.confirmation ? 'confirmation' : 'search').items
       ).slice(0, args.calibrateN);
       calClusterId = items[0]?.clusterId ?? null;
       const prices = loadPrices().table;

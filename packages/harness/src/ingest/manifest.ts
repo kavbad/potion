@@ -52,6 +52,16 @@ export const SuiteManifestSchema = z.object({
   items: z.union([z.string().min(1), z.array(EvalItemSchema).nonempty()]),
   scoring: SuiteScoringDefaultsSchema,
   createdAt: z.string().datetime({ offset: true }),
+  /**
+   * Confirmation suite (eval-review adoption, 2026-08-25). A locked suite is
+   * reserved for FINAL promotion readings: search tooling (sweeps, legs,
+   * hardening passes) must never evaluate against it, or repeated candidate
+   * selection gradually overfits the instrument — the winner's measured score
+   * is optimistically biased simply because it won the search. Enforced
+   * fail-closed in loadSuiteV2: loading a locked suite throws unless the
+   * caller declares purpose 'confirmation'.
+   */
+  locked: z.boolean().optional(),
 });
 
 export type SuiteManifest = z.infer<typeof SuiteManifestSchema>;

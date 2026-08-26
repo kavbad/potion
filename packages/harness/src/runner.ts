@@ -61,6 +61,9 @@ export interface RunOptions {
   /** v2 suites (suites/v2/<id>/manifest.json + items) loaded through the v2
    * loader with manifest cross-checks (ROADMAP M1a). */
   suiteV2Ids?: string[];
+  /** 'confirmation' unlocks LOCKED suites for the final promotion reading;
+   * everything else runs as 'search' and locked suites refuse to load. */
+  suitePurpose?: 'search' | 'confirmation';
   strategies: StrategyConfig[];
   budgetCapUsd: number;
   provider?: 'mock' | 'live';
@@ -431,7 +434,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
   // the learning period's per-kind-of-work suites ('learn-…', 2026-08-22).
   const derivedIds = v2Ids.filter((id) => id.startsWith('agent-') || id.startsWith('learn-'));
   const authoredIds = v2Ids.filter((id) => !id.startsWith('agent-') && !id.startsWith('learn-'));
-  const v2Suites = loadSuitesV2(authoredIds, deps.suitesV2Dir);
+  const v2Suites = loadSuitesV2(authoredIds, deps.suitesV2Dir, opts.suitePurpose ?? 'search');
   const derivedItems: EvalItem[] = [];
   if (derivedIds.length > 0) {
     if (!deps.db) {

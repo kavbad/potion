@@ -51,8 +51,12 @@ describe('aggregateResults', () => {
     const agg = aggregateResults('code-gen', 'sh', { type: 'single', model: 'mock-cheap' }, results, 'v1');
     expect(agg.n).toBe(4);
     expect(agg.qualityMean).toBe(0.5);
-    // σ = sqrt(1/3), CI95 = 1.96·σ/√4
-    expect(agg.qualityCi95).toBeCloseTo((1.96 * Math.sqrt(1 / 3)) / 2, 10);
+    // Jeffreys: s=2, n=4 → Beta(2.5, 2.5), symmetric about 0.5
+    expect(agg.qualityCi).toBeDefined();
+    expect(agg.qualityCi![0]).toBeCloseTo(0.122754, 5);
+    expect(agg.qualityCi![1]).toBeCloseTo(0.877246, 5);
+    // half-width = max distance from the mean to either bound
+    expect(agg.qualityCi95).toBeCloseTo(0.877246 - 0.5, 5);
     // mean cost 0.0025 × 1000
     expect(agg.costPer1K).toBeCloseTo(2.5, 10);
     // latencies [300,600,300,1800] sorted [300,300,600,1800]: p50 rank 2 → 300, p95 rank 4 → 1800
@@ -61,10 +65,23 @@ describe('aggregateResults', () => {
     expect(agg.pricesVersion).toBe('v1');
   });
 
-  it('CI95 is 0 for a single sample', () => {
+  it('a single sample is honestly WIDE, never certain (2026-08-25 boundary fix)', () => {
     const agg = aggregateResults('extraction', 'sh', { type: 'single', model: 'mock-mid' }, [fakeResult(0.8, 0, 900)], 'v1');
-    expect(agg.qualityCi95).toBe(0);
     expect(agg.qualityMean).toBe(0.8);
+    // Jeffreys with n=1, s=0.8 → Beta(1.3, 0.7): one observation proves little
+    expect(agg.qualityCi![0]).toBeCloseTo(0.079735, 5);
+    expect(agg.qualityCi![1]).toBeCloseTo(0.996153, 5);
+    expect(agg.qualityCi95).toBeGreaterThan(0.5);
+  });
+
+  it('a perfect 42/42 reports a ≥-bound, not ±0.000 — the finding that forced this change', () => {
+    const results = Array.from({ length: 42 }, () => fakeResult(1, 0.001, 300));
+    const agg = aggregateResults('code-gen', 'sh', { type: 'single', model: 'mock-cheap' }, results, 'v1');
+    expect(agg.qualityMean).toBe(1);
+    expect(agg.qualityCi![1]).toBe(1);
+    expect(agg.qualityCi![0]).toBeCloseTo(0.9423, 4);
+    expect(agg.qualityCi95).toBeCloseTo(1 - 0.9423, 3); // the old code said 0 here
+    expect(agg.evidence?.qualityCi).toEqual(agg.qualityCi);
   });
 
   it('costPer1K includes judge scoring cost (M1b: judge cost lives inside usage.costUsd)', () => {

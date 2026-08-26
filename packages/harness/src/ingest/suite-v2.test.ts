@@ -107,3 +107,56 @@ describe('loadSuiteV2 (failure modes, tmp dirs)', () => {
     expect(items[0]!.id).toBe('x-01');
   });
 });
+
+describe('locked confirmation suites (eval-review adoption, 2026-08-25)', () => {
+  const root = mkdtempSync(`${tmpdir()}/potion-suites-locked-`);
+
+  function writeSuite(id: string, manifest: unknown, items: string) {
+    const dir = `${root}/${id}`;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(`${dir}/manifest.json`, JSON.stringify(manifest));
+    writeFileSync(`${dir}/items.jsonl`, items);
+  }
+
+  const item = JSON.stringify({
+    id: 'lk-01',
+    clusterId: 'extraction',
+    prompt: [{ role: 'user', content: 'EVAL: lk-01\nextract' }],
+    reference: { a: 'b' },
+    scoring: { kind: 'field-match', schema: { a: 'string' } },
+  }) + '\n';
+  const manifest = (id: string, locked: boolean) => ({
+    suiteId: id,
+    clusterId: 'extraction',
+    version: '1.0.0',
+    source: { kind: 'authored', name: 'test', license: 'Proprietary' },
+    items: 'items.jsonl',
+    scoring: { allowed: ['field-match'] },
+    createdAt: '2026-08-25T00:00:00.000Z',
+    ...(locked ? { locked: true } : {}),
+  });
+
+  it('a locked suite REFUSES the default (search) purpose — fail-closed', () => {
+    writeSuite('locked-conf', manifest('locked-conf', true), item);
+    expect(() => loadSuiteV2('locked-conf', root)).toThrow(/LOCKED \(confirmation-only\)/);
+    expect(() => loadSuiteV2('locked-conf', root, 'search')).toThrow(/must not/);
+  });
+
+  it('a locked suite loads under the explicit confirmation purpose', () => {
+    const { manifest: m, items } = loadSuiteV2('locked-conf', root, 'confirmation');
+    expect(m.locked).toBe(true);
+    expect(items).toHaveLength(1);
+  });
+
+  it('an unlocked suite is untouched by the gate under both purposes', () => {
+    writeSuite('open-suite', manifest('open-suite', false), item);
+    expect(loadSuiteV2('open-suite', root).items).toHaveLength(1);
+    expect(loadSuiteV2('open-suite', root, 'confirmation').items).toHaveLength(1);
+  });
+
+  it('no checked-in platform suite is accidentally locked (search must keep working)', () => {
+    // Every current platform suite predates the flag; locking one is a
+    // deliberate act at authoring time, never a side effect of this change.
+    expect(() => loadSuiteV2('code-gen-hard-v2')).not.toThrow();
+  });
+});

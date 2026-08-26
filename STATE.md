@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-25 (redesign S1–S4 shipped: primitives, Receipts, Evidence, Savings + the Monday Brief; final nav)._
+_Last updated: 2026-08-25 (redesign S1–S4 shipped; eval-review adoptions landing: Jeffreys boundary-honest quality intervals + locked confirmation-suite mechanism)._
 
 ## What Potion is (current thesis)
 
@@ -73,7 +73,15 @@ rides the same composition), final nav (Today · Receipts · Evidence ·
 Savings · Try · Settings · Docs). Next: instrument enlargement
 (extraction, rewrite-edit) · then per the roadmap ledger in
 `tasks/todo.md` (the ledger is append-only history; this file is the
-summary).
+summary). Eval-quality queue (second external review, adopted 2026-08-25):
+boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
+aggregate + frontier evidence; qualityCi95 kept as the conservative
+half-width; 42/42 now reports a ≥-bound, not ±0.000) · locked
+confirmation-suite mechanism DONE (manifest `locked` flag, fail-closed in
+loadSuiteV2, `--confirmation`/suitePurpose unlock; first locked suites get
+authored at instrument enlargement by splitting new items dev/holdout) ·
+NEXT: journey-completion as a first-class scorer · targeted messy-corpus
+seed (real scanned PDFs, noisy audio).
 
 ## North star
 

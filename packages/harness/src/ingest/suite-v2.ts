@@ -42,7 +42,18 @@ function parseItemsJsonl(text: string, suiteId: string): EvalItem[] {
   return items;
 }
 
-export function loadSuiteV2(suiteId: string, dir: string = SUITES_V2_DIR): LoadedSuiteV2 {
+/** Why a suite is being loaded. 'search' (the default) covers everything that
+ *  selects or tunes strategies — sweeps, legs, hardening, ad-hoc CLI runs.
+ *  'confirmation' is ONLY the final promotion reading. Locked suites load
+ *  exclusively under 'confirmation' — fail-closed at the loader so no search
+ *  path can touch a confirmation instrument by accident. */
+export type SuiteLoadPurpose = 'search' | 'confirmation';
+
+export function loadSuiteV2(
+  suiteId: string,
+  dir: string = SUITES_V2_DIR,
+  purpose: SuiteLoadPurpose = 'search',
+): LoadedSuiteV2 {
   if (!SUITE_ID_RE.test(suiteId)) {
     throw new Error(`invalid suite id '${suiteId}' (expected [a-z0-9-]+)`);
   }
@@ -70,6 +81,14 @@ export function loadSuiteV2(suiteId: string, dir: string = SUITES_V2_DIR): Loade
     );
   }
 
+  if (manifest.locked === true && purpose !== 'confirmation') {
+    throw new Error(
+      `v2 suite '${suiteId}' is LOCKED (confirmation-only): search tooling must not ` +
+        `evaluate against it. Pass purpose 'confirmation' only from the final ` +
+        `promotion reading.`,
+    );
+  }
+
   const items =
     typeof manifest.items === 'string'
       ? parseItemsJsonl(readFileSync(`${suiteDir}/${manifest.items}`, 'utf8'), suiteId)
@@ -84,6 +103,10 @@ export function loadSuiteV2(suiteId: string, dir: string = SUITES_V2_DIR): Loade
   return { manifest, items };
 }
 
-export function loadSuitesV2(suiteIds: string[], dir: string = SUITES_V2_DIR): LoadedSuiteV2[] {
-  return suiteIds.map((id) => loadSuiteV2(id, dir));
+export function loadSuitesV2(
+  suiteIds: string[],
+  dir: string = SUITES_V2_DIR,
+  purpose: SuiteLoadPurpose = 'search',
+): LoadedSuiteV2[] {
+  return suiteIds.map((id) => loadSuiteV2(id, dir, purpose));
 }

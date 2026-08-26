@@ -1,10 +1,13 @@
 // Per-strategy aggregation (SPEC §5 StrategyAggregate):
-//   qualityMean / qualityCi95 = 1.96·σ/√n (σ = SAMPLE stdev, n−1; n<2 → 0)
+//   qualityMean; qualityCi = generalized-Jeffreys 95% [lo, hi] (honest at the
+//   [0,1] boundary — a constant 42/42 sample is a ≥-bound, not certainty);
+//   qualityCi95 = the conservative half-width max(mean−lo, hi−mean)
 //   costPer1K   = mean(usage.costUsd) × 1000
 //   latencyP50/P95 = nearest-rank percentiles over per-item usage.latencyMs.
 import {
   BOOTSTRAP_RESAMPLES,
   bootstrapCi,
+  jeffreysCi,
   quantileNearestRank,
   seedFromString,
   sha256,
@@ -47,7 +50,9 @@ export function aggregateResults(
   const n = results.length;
   const qualities = results.map((r) => r.quality);
   const latencies = results.map((r) => r.usage.latencyMs);
-  const sd = sampleStd(qualities);
+  const qCi = jeffreysCi(qualities);
+  const qMean = mean(qualities);
+  const qHalf = n > 0 ? Math.max(qMean - qCi[0], qCi[1] - qMean) : 0;
   // G2.6 provenance parity: a latency-driven selection must be as auditable as
   // a quality-driven one, so the p95 ships with its own n, CI and seed rather
   // than as a bare scalar. Seeded from the evidence itself (same shape as the
@@ -67,8 +72,9 @@ export function aggregateResults(
     clusterId,
     strategyHash,
     strategyConfig,
-    qualityMean: mean(qualities),
-    qualityCi95: n > 1 ? (1.96 * sd) / Math.sqrt(n) : 0,
+    qualityMean: qMean,
+    qualityCi95: qHalf,
+    ...(n > 0 ? { qualityCi: qCi } : {}),
     n,
     costPer1K: mean(results.map((r) => r.usage.costUsd)) * 1000,
     latencyP50: percentileNearestRank(latencies, 50),
@@ -84,7 +90,8 @@ export function aggregateResults(
             cacheKeys: results.map((r) => r.cacheKey),
             runIds: [...new Set(results.map((r) => r.runId))],
             n,
-            qualityCi95: n > 1 ? (1.96 * sd) / Math.sqrt(n) : 0,
+            qualityCi95: qHalf,
+            qualityCi: qCi,
             latencyN: n,
             latencyP95Ci95: latencyCi!.ci95,
             latencySeed,
