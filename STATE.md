@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-26 (canonical host = withpotion.com — app.* and www 301 path-preserving; Answer Engine C1–C3 live)._
+_Last updated: 2026-08-26 (instrument campaign: extraction-hard-v2 messy tier VALIDATED + first LOCKED holdout live + first journey frontier measured — gpt-mini ties gpt-full on whole jobs at 5.6× less; canonical host = withpotion.com)._
 
 ## What Potion is (current thesis)
 
