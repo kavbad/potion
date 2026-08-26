@@ -23,7 +23,7 @@ import {
 } from '@potion/db';
 import { runEval } from '@potion/harness';
 import { computeFrontier, loadCurrentFrontier, saveFrontier } from '@potion/pareto';
-import { type PotionContext } from './context.js';
+import { DEFAULT_PRICES_PATH, type PotionContext } from './context.js';
 
 /** Well-known demo key (documented; deterministic so the quickstart works on
  * any fresh boot). Only its sha256 is stored.
@@ -159,9 +159,7 @@ export async function seedIfEmpty(
       resume: true,
       simulatedOk: true,
     },
-    // ctx.pricesPath, not DEFAULT_PRICES_PATH: the seed reads the same table
-    // the boot resolved (under vitest, the isolated copy — never the repo file).
-    { db: ctx.db, pricesPath: ctx.pricesPath },
+    { db: ctx.db, pricesPath: DEFAULT_PRICES_PATH },
   );
   for (const clusterId of SEED_CLUSTERS) {
     // Platform-scope ratchet (Lab Step 5, the G1.7 taint rule extended to

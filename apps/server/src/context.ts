@@ -5,9 +5,6 @@
 // Boot completes with ZERO network and ZERO services: PGlite + mock provider
 // + mock embedder are the defaults; live providers/embeddings only engage
 // when the matching *_API_KEY env vars are present.
-import { copyFileSync, mkdtempSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PriceTable, ProviderId, ProviderMode, StrategyConfig } from '@potion/core';
 import { DemandAccumulator, sha256 } from '@potion/core';
@@ -75,36 +72,6 @@ export const DEFAULT_PRICES_PATH = fileURLToPath(
   new URL('../../../prices.json', import.meta.url),
 );
 
-/**
- * The prices path a boot will actually hold — and under vitest, NEVER the
- * committed repo file.
- *
- * Third contamination recurrence (2026-08-25): the pre-S5 research:scan
- * handler wrote its merged table to ctx.pricesPath, and although S5 removed
- * that write from SOURCE, apps/server loads @potion/workers through its
- * dist — a stale build resurrects the byte-writer, and any boot whose
- * prices path resolved to the repo default handed it the committed file.
- * Individually protecting each test (tmp copy + POTION_PRICES_PATH) proved
- * unenforceable three times; this makes the isolation structural. A test
- * that PASSES an explicit tmp path keeps it; one that resolves to the repo
- * file — by default, by env, or explicitly — gets a content-identical
- * throwaway copy instead. Reads are unchanged; writes can no longer reach
- * the repo. Production (no VITEST) is untouched.
- */
-function isolatePricesPathForTests(resolved: string): string {
-  if (process.env.VITEST === undefined) return resolved;
-  let isRepoFile: boolean;
-  try {
-    isRepoFile = realpathSync(resolved) === realpathSync(DEFAULT_PRICES_PATH);
-  } catch {
-    return resolved; // nonexistent path: let loadPrices report it
-  }
-  if (!isRepoFile) return resolved;
-  const copy = join(mkdtempSync(join(tmpdir(), 'potion-prices-isolated-')), 'prices.json');
-  copyFileSync(resolved, copy);
-  return copy;
-}
-
 /** Strategy used when the assigned cluster has NO frontier yet (e.g.
  * 'general') on a MOCK server: a plain mid-tier single. Documented
  * fallback; requests served this way carry `fallback=1` and `frontier=v0`
@@ -170,11 +137,6 @@ export interface OrgProviders {
 export interface PotionContext {
   db: DbHandle;
   prices: PriceTable;
-  /** The prices.json this boot resolved (and, under vitest, an isolated tmp
-   * copy — never the committed repo file). runWorker MUST receive this same
-   * path: the worker resolving its own default is how the pre-S5 scan
-   * writer reached the repo file three times (2026-08-22 → 2026-08-25). */
-  pricesPath: string;
   providers: Record<ProviderId, Provider>;
   resolve: (model: string) => { provider: Provider; entry: PriceTable['entries'][number] };
   /** BYOK custody boundary (encrypt/decrypt/rotate + custody_audit). */
@@ -395,13 +357,9 @@ export function pgliteDataDirFromUrl(url: string | undefined): string | null {
 
 export async function buildContext(opts: ContextOptions = {}): Promise<PotionContext> {
   const log = opts.log ?? (() => {});
-  // Resolved ONCE and carried on ctx: routes, the worker runtime, and any
-  // future consumer must share this exact path (see isolatePricesPathForTests
-  // for why the repo file is never it under vitest).
-  const pricesPath = isolatePricesPathForTests(
+  const { table: seedPrices } = loadPrices(
     opts.pricesPath ?? process.env.POTION_PRICES_PATH ?? DEFAULT_PRICES_PATH,
   );
-  const { table: seedPrices } = loadPrices(pricesPath);
 
   const externalDb = opts.db !== undefined;
   const db = opts.db ?? (await createDb(opts.dbUrl));
@@ -614,7 +572,6 @@ export async function buildContext(opts: ContextOptions = {}): Promise<PotionCon
   const ctx: PotionContext = {
     db,
     prices,
-    pricesPath,
     providers,
     resolve: platformResolve,
     custody,
