@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-26 (instrument campaign COMPLETE: extraction-hard-v2 + rewrite-edit-hard-v1 validated live, two LOCKED holdouts, first journey frontier — campaign total $3.98; canonical host = withpotion.com)._
+_Last updated: 2026-08-26 (LAB UNPAUSED: direction v2 + L-G1 trust record/graduation evaluator shipped; instrument campaign complete; canonical host = withpotion.com)._
 
 ## What Potion is (current thesis)
 
@@ -56,7 +56,7 @@ clears your bar.*
 - **Frontier Notes**: publish weekly, autonomously, under the fail-closed
   redaction gate. The operator's formal yes/no on autonomy is still pending;
   current default is publish.
-- **Potion Lab**: PAUSED. Gate A (first design partner) remains the gate.
+- **Potion Lab**: UNPAUSED (2026-08-26, operator order; external review integrated). Direction v2: graduated autonomy purchased with evidence — risk-aware graduation (4 tiers incl. never-graduates), no scalar trust score (permission ledger), tighten-automatic/loosen-by-proposal, sampled audit never graduates away, OpenClaw as first external runtime target. L-G1 (trust record + evaluator) SHIPPED; next L-G2 evidence extraction → L-G3 ledger rendering → L-G4 OpenClaw adapter.
 
 ## Current blockers (all operator-side)
 

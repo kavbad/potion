@@ -1700,6 +1700,40 @@ export const labHarnesses = pgTable(
   (t) => [primaryKey({ columns: [t.orgId, t.harnessHash] })],
 );
 
+
+/** L-G1 (Lab direction v2, 2026-08-26): the trust record — the CURRENT
+ * permission per (harness, action class), with provenance. Evidence is
+ * computed from records, never stored as a scalar. The write asymmetry is
+ * the product: tightening is automatic, loosening requires an accepted
+ * graduation proposal (enforced at the repo/API layer). */
+export type LabGrantState = 'supervised' | 'autonomous' | 'blocked';
+export type LabRiskTier = 'reversible-read' | 'reversible-act' | 'irreversible-act' | 'never-graduates';
+export const labActionGrants = pgTable(
+  'lab_action_grants',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    harnessHash: text('harness_hash').notNull(),
+    actionClass: text('action_class').notNull(),
+    riskTier: text('risk_tier').$type<LabRiskTier>().notNull(),
+    state: text('state').$type<LabGrantState>().notNull().default('supervised'),
+    /** Mandatory sampling for autonomous classes — floored, never 0:
+     * unaudited autonomy is unmeasured autonomy. Supervised = 1. */
+    auditRate: doublePrecision('audit_rate').notNull().default(1),
+    stateReason: text('state_reason'),
+    grantedAt: timestamp('granted_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /** suite_certifications id when a graduation rode a certification. */
+    certificationId: text('certification_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('lab_action_grants_identity_idx').on(t.orgId, t.harnessHash, t.actionClass)],
+);
+export type LabActionGrantRow = typeof labActionGrants.$inferSelect;
+
 export type LabHarnessRow = typeof labHarnesses.$inferSelect;
 
 /** Lab Step 10: superpower grants (0038) — the first REVERSIBLE secret

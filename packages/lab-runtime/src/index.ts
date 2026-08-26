@@ -28,3 +28,4 @@ export {
   type SuperpowerUnavailable,
   type ToolCallError,
 } from './mcp-tools.js';
+export * from './graduation.js';
