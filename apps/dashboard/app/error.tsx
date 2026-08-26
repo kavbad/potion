@@ -14,7 +14,11 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
         Your data and requests are unaffected — this is a display failure. Trying again usually works;
         if it keeps happening, email kavon@mutiny.ai{error.digest ? ' and mention the code below' : ''}.
       </p>
-      {error.digest && <p className="mt-3 font-mono text-[11px] text-faint">{error.digest}</p>}
+      {(error.digest || error.message) && (
+        <p className="mt-3 max-w-md text-center font-mono text-[11px] leading-relaxed text-faint">
+          {error.digest ?? String(error.message).slice(0, 140)}
+        </p>
+      )}
       <div className="mt-8 flex gap-3">
         <button type="button" onClick={reset} className="bg-ink px-4 py-2 text-[12px] font-medium text-[#f4f2ec] hover:opacity-85">
           Try again

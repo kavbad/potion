@@ -40,7 +40,7 @@ export function FrontierStatus() {
   if (clusters.length === 0) return null;
 
   const byCluster = new Map<string, Proposal>();
-  for (const p of state.proposals) {
+  for (const p of state.proposals.filter(Boolean)) {
     const prev = byCluster.get(p.clusterId);
     // an applied bar outranks an open proposal for display
     if (!prev || (prev.status !== 'applied' && p.status === 'applied')) byCluster.set(p.clusterId, p);
