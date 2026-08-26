@@ -7,7 +7,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteShell } from '@/components/site-header';
-import { answerPageBySlug, fetchPublicAnswers, verdictFor, type PublicAnswerCluster } from '@/lib/answers';
+import { answerPageBySlug, comparisonPairs, fetchPublicAnswers, verdictFor, type PublicAnswerCluster } from '@/lib/answers';
 import { siteOrigin } from '@/lib/research';
 
 export const dynamic = 'force-dynamic';
@@ -145,6 +145,19 @@ export default async function AnswerPage({ params }: Params) {
           frontier v{cluster.version} · measured {cluster.measuredAt.slice(0, 10)} · live provider calls only —
           simulated evidence never appears on this page
         </p>
+
+        {comparisonPairs(cluster).length > 0 && (
+          <>
+            <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Head to head</h2>
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-[13.5px]">
+              {comparisonPairs(cluster).map((pr) => (
+                <Link key={pr.versus} href={`/answers/${page.slug}/${pr.versus}`} className="text-accent underline underline-offset-2">
+                  {pr.a.label} vs {pr.b.label}
+                </Link>
+              ))}
+            </p>
+          </>
+        )}
 
         <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Questions</h2>
         <div className="mt-4 space-y-6">

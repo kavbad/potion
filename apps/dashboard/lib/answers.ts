@@ -11,9 +11,19 @@ export interface PublicAnswerPoint {
   vendor: string | null;
   masked: boolean;
   kind: 'model' | 'combination';
+  /** URL-stable model slug from the server (null when masked). */
+  slug: string | null;
   quality: number;
   costPer1K: number;
   latencyP95: number;
+}
+export interface PublicModelEntry {
+  slug: string;
+  label: string;
+  vendor: string | null;
+  inputPer1M: number;
+  outputPer1M: number;
+  appearances: Array<{ clusterId: string; clusterName: string; quality: number; costPer1K: number; latencyP95: number }>;
 }
 export interface PublicAnswerCluster {
   clusterId: string;
@@ -24,6 +34,7 @@ export interface PublicAnswerCluster {
 }
 export interface PublicAnswers {
   clusters: PublicAnswerCluster[];
+  models: PublicModelEntry[];
   pricesVersion: string;
   generatedAt: string;
 }
@@ -209,5 +220,56 @@ export function verdictFor(c: PublicAnswerCluster): string {
     `${cheapest.quality.toFixed(3)} measured quality vs ${top.toFixed(3)} at the top` +
     (spread && spread >= 2 ? `, with a ${spread.toFixed(0)}× price spread across the measured frontier` : '') +
     ` (frontier v${c.version}).`
+  );
+}
+
+// ---- C2: comparisons ------------------------------------------------------
+
+export interface ComparisonPair {
+  /** URL segment: "<a>-vs-<b>" with a/b in slug alphabetical order. */
+  versus: string;
+  a: PublicAnswerPoint;
+  b: PublicAnswerPoint;
+}
+
+/** Every publishable pairwise comparison for a cluster: BOTH sides must be
+ * unmasked live-measured models — the thin-page rule, structurally. */
+export function comparisonPairs(c: PublicAnswerCluster): ComparisonPair[] {
+  const named = c.points.filter((p) => !p.masked && p.slug !== null && p.kind === 'model');
+  const out: ComparisonPair[] = [];
+  for (let i = 0; i < named.length; i++) {
+    for (let j = i + 1; j < named.length; j++) {
+      const [a, b] = [named[i]!, named[j]!].sort((x, y) => x.slug!.localeCompare(y.slug!));
+      out.push({ versus: `${a!.slug}-vs-${b!.slug}`, a: a!, b: b! });
+    }
+  }
+  return out;
+}
+
+export function pairByVersus(c: PublicAnswerCluster, versus: string): ComparisonPair | null {
+  return comparisonPairs(c).find((p) => p.versus === versus) ?? null;
+}
+
+/** The comparison verdict — dated, numeric, extractable, honest about noise. */
+export function comparisonVerdict(c: PublicAnswerCluster, pair: ComparisonPair): string {
+  const date = new Date(c.measuredAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const [hi, lo] = pair.a.quality >= pair.b.quality ? [pair.a, pair.b] : [pair.b, pair.a];
+  const dq = hi.quality - lo.quality;
+  const [cheap, dear] = pair.a.costPer1K <= pair.b.costPer1K ? [pair.a, pair.b] : [pair.b, pair.a];
+  const ratio = cheap.costPer1K > 0 ? dear.costPer1K / cheap.costPer1K : null;
+  const money = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
+  if (dq < 0.005) {
+    return (
+      `As of ${date}, ${pair.a.label} and ${pair.b.label} measure within 0.005 quality of each other on ` +
+      `${c.name.toLowerCase()} (${pair.a.quality.toFixed(3)} vs ${pair.b.quality.toFixed(3)})` +
+      (ratio && ratio >= 1.5 ? ` — but ${cheap.label} costs ${money(cheap.costPer1K)}/1K requests vs ${money(dear.costPer1K)}, ${ratio.toFixed(1)}× less for the same measured result.` : '.')
+    );
+  }
+  return (
+    `As of ${date}, ${hi.label} measures ${hi.quality.toFixed(3)} on ${c.name.toLowerCase()} vs ` +
+    `${lo.quality.toFixed(3)} for ${lo.label} (+${dq.toFixed(3)})` +
+    (hi.costPer1K > lo.costPer1K && lo.costPer1K > 0
+      ? `, at ${(hi.costPer1K / lo.costPer1K).toFixed(1)}× the price (${money(hi.costPer1K)} vs ${money(lo.costPer1K)} per 1K requests).`
+      : `, and it is also the cheaper option (${money(hi.costPer1K)} vs ${money(lo.costPer1K)} per 1K requests).`)
   );
 }

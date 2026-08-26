@@ -99,3 +99,23 @@ describe('float precision (the prod refusal of 2026-08-25)', () => {
     expect(/[0-9a-f]{16,64}/.test(res.body)).toBe(false);
   });
 });
+
+describe('C2: slugs + the per-model pricing section', () => {
+  it('unmasked points carry stable slugs; masked carry null', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/public/answers' });
+    const ex = (res.json() as { clusters: Array<{ clusterId: string; points: Array<{ slug: string | null; masked: boolean }> }> })
+      .clusters.find((c) => c.clusterId === 'extraction')!;
+    expect(ex.points.find((p) => !p.masked)!.slug).toBe('gpt-4-1-mini');
+    for (const p of ex.points.filter((x) => x.masked)) expect(p.slug).toBeNull();
+  });
+
+  it('models section prices every unmasked model with its appearances; embargoed absent', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/public/answers' });
+    const body = res.json() as { models: Array<{ slug: string; inputPer1M: number; appearances: Array<{ clusterId: string }> }> };
+    const mini = body.models.find((m) => m.slug === 'gpt-4-1-mini');
+    expect(mini).toBeDefined();
+    expect(mini!.inputPer1M).toBeGreaterThan(0);
+    expect(mini!.appearances.some((a) => a.clusterId === 'extraction')).toBe(true);
+    expect(body.models.some((m) => m.slug.includes('solar'))).toBe(false);
+  });
+});

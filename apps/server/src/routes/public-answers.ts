@@ -26,9 +26,22 @@ export interface PublicAnswerPoint {
   /** true = name withheld (embargoed model or combination strategy). */
   masked: boolean;
   kind: 'model' | 'combination';
+  /** URL-stable model slug (C2): version-date suffixes stripped so a model
+   * refresh never churns a comparison URL. null when masked. */
+  slug: string | null;
   quality: number;
   costPer1K: number;
   latencyP95: number;
+}
+
+/** Per-model public pricing + everywhere it appears on a live frontier (C2). */
+export interface PublicModelEntry {
+  slug: string;
+  label: string;
+  vendor: string | null;
+  inputPer1M: number;
+  outputPer1M: number;
+  appearances: Array<{ clusterId: string; clusterName: string; quality: number; costPer1K: number; latencyP95: number }>;
 }
 
 export interface PublicAnswerCluster {
@@ -37,6 +50,18 @@ export interface PublicAnswerCluster {
   version: number;
   measuredAt: string;
   points: PublicAnswerPoint[];
+}
+
+/** Stable public slug for a model display name: lowercase, dots→dashes,
+ *  trailing version-date segments stripped ("gpt-4.1-mini-2025-04-14" →
+ *  "gpt-4-1-mini"; "claude-haiku-4-5-20251001" → "claude-haiku-4-5"). */
+export function modelSlug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/-20\d{2}-\d{2}-\d{2}$/, '')
+    .replace(/-20\d{6}$/, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function hitsEmbargo(s: string): boolean {
@@ -80,8 +105,11 @@ export function registerPublicAnswersRoutes(app: FastifyInstance, ctx: PotionCon
         version: frontier.version,
         measuredAt: frontier.createdAt,
         points: live
-          .map((p) => ({
-            ...publicPointLabel(p.strategyConfig as StrategyConfig, ctx.prices),
+          .map((p) => {
+            const named = publicPointLabel(p.strategyConfig as StrategyConfig, ctx.prices);
+            return {
+            ...named,
+            slug: named.masked ? null : modelSlug(named.label),
             // Rounded for publication — full-precision floats serialize as
             // 16+ digit runs, which (a) claim precision the measurement does
             // not have and (b) trip the redaction sweep's hash pattern. The
@@ -89,11 +117,34 @@ export function registerPublicAnswersRoutes(app: FastifyInstance, ctx: PotionCon
             quality: Math.round(p.quality * 10000) / 10000,
             costPer1K: Math.round(p.costPer1K * 1e6) / 1e6,
             latencyP95: Math.round(p.latencyP95),
-          }))
+            };
+          })
           .sort((a, b) => a.costPer1K - b.costPer1K),
       });
     }
-    const payload = { clusters, pricesVersion: ctx.prices.version, generatedAt: new Date().toISOString() };
+    // C2: the per-model view — every UNMASKED model on any included
+    // frontier, with its list prices and everywhere it appears. Same embargo
+    // rules; the sweep below covers this section too.
+    const models = new Map<string, PublicModelEntry>();
+    for (const c of clusters) {
+      for (const pt of c.points) {
+        if (pt.masked || pt.slug === null) continue;
+        let entry = models.get(pt.slug);
+        if (!entry) {
+          const priced = ctx.prices.entries.find((e) => modelSlug(e.model) === pt.slug && !hitsEmbargo(e.alias) && !hitsEmbargo(e.model));
+          if (!priced) continue;
+          entry = { slug: pt.slug, label: pt.label, vendor: pt.vendor, inputPer1M: priced.inputPer1M, outputPer1M: priced.outputPer1M, appearances: [] };
+          models.set(pt.slug, entry);
+        }
+        entry.appearances.push({ clusterId: c.clusterId, clusterName: c.name, quality: pt.quality, costPer1K: pt.costPer1K, latencyP95: pt.latencyP95 });
+      }
+    }
+    const payload = {
+      clusters,
+      models: [...models.values()].sort((a, b) => a.slug.localeCompare(b.slug)),
+      pricesVersion: ctx.prices.version,
+      generatedAt: new Date().toISOString(),
+    };
     // The belt: nothing embargoed leaves this route, or nothing leaves at all.
     const leaks = findLeaks(JSON.stringify(payload));
     if (leaks.length > 0) {

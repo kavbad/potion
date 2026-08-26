@@ -71,7 +71,7 @@ export default async function ResearchIndex() {
         {latest ? (
           <article className="mt-10 border border-[#c4bfb2] bg-[#fbfaf7] px-7 py-6">
             <div className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-              <span className="text-accent">latest issue · {latest.week}</span>
+              <span className="text-accent">{latest.kind === 'daily' ? 'daily note' : 'latest issue'} · {latest.week}</span>
               <span>{latest.publishedAt.slice(0, 10)}</span>
             </div>
             <h2 className="mt-3 text-[1.7rem] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">
@@ -79,11 +79,17 @@ export default async function ResearchIndex() {
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-soft">{latest.summary}</p>
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-dashed border-[#d9d5cb] pt-3 font-mono text-[11px] text-faint">
-              <span>{latest.facts.numbers.canaries} canaries</span>
-              <span className="text-kept">{latest.facts.numbers.clustersHeld} held</span>
-              <span>{latest.facts.numbers.clustersMoved} moved</span>
-              <span>{latest.facts.numbers.candidatesMeasured} new models measured</span>
-              <Link href={`/research/${latest.slug}`} className="ml-auto text-accent">read the issue →</Link>
+              {latest.facts ? (
+                <>
+                  <span>{latest.facts.numbers.canaries} canaries</span>
+                  <span className="text-kept">{latest.facts.numbers.clustersHeld} held</span>
+                  <span>{latest.facts.numbers.clustersMoved} moved</span>
+                  <span>{latest.facts.numbers.candidatesMeasured} new models measured</span>
+                </>
+              ) : (
+                <span>a short note — published because the measured truth changed</span>
+              )}
+              <Link href={`/research/${latest.slug}`} className="ml-auto text-accent">read {latest.kind === 'daily' ? 'the note' : 'the issue'} →</Link>
             </div>
           </article>
         ) : (
@@ -123,7 +129,7 @@ export default async function ResearchIndex() {
             {rest.map((i) => (
               <article key={i.slug} className="border-b border-dashed border-[#d9d5cb] py-4">
                 <div className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-faint">
-                  {i.week} · {i.publishedAt.slice(0, 10)}
+                  {i.week} · {i.publishedAt.slice(0, 10)}{i.kind === 'daily' ? ' · daily note' : ''}
                 </div>
                 <h3 className="mt-1 text-[17px] font-semibold leading-snug tracking-tight text-ink">
                   <Link href={`/research/${i.slug}`} className="hover:text-accent">{i.title}</Link>

@@ -28,6 +28,55 @@ export default async function IssuePage({ params }: Params) {
   const { slug } = await params;
   const i = getIssue(slug);
   if (!i) notFound();
+
+  // C3: a DAILY note renders compact — masthead, verdict, body paragraphs —
+  // never the weekly scaffolding (whose sections would be hollow).
+  if (i.kind === 'daily' || !i.facts) {
+    const origin2 = siteOrigin();
+    const url2 = `${origin2}/research/${i.slug}`;
+    const dailyLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: i.title,
+      description: i.summary,
+      datePublished: i.publishedAt,
+      dateModified: i.publishedAt,
+      author: { '@type': 'Organization', name: 'Potion Research', url: `${origin2}/research` },
+      publisher: { '@type': 'Organization', name: 'Potion', url: origin2 },
+      mainEntityOfPage: url2,
+      url: url2,
+      isPartOf: { '@type': 'Blog', name: RESEARCH_TITLE, url: `${origin2}/research` },
+    };
+    return (
+      <SiteShell current="research">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(dailyLd) }} />
+        <main className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
+          <header>
+            <div className="border-t-2 border-ink" />
+            <div className="mt-[3px] border-t border-ink" />
+            <nav className="mt-4 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint">
+              <Link href="/research" className="text-ink hover:text-accent">{RESEARCH_TITLE}</Link>
+              <span>daily note · {i.publishedAt.slice(0, 10)}</span>
+            </nav>
+          </header>
+          <h1 className="mt-6 text-[1.9rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-[2.4rem]">{i.title}</h1>
+          <div className="mt-3 font-mono text-[11px] text-faint">{i.byline}</div>
+          {(i.body ?? i.summary).split('\n\n').map((para) => (
+            <p key={para.slice(0, 40)} className="mt-6 text-[16px] leading-relaxed text-ink">{para}</p>
+          ))}
+          <p className="mt-8 border-t border-dashed border-[#d9d5cb] pt-4 text-[13.5px] leading-relaxed text-soft">
+            {i.plain} The current numbers live on{' '}
+            <Link href="/answers" className="text-accent underline">the measured answers</Link>; the method is{' '}
+            <Link href="/research/methodology" className="text-accent underline">public</Link>.
+          </p>
+          <nav className="mt-10 border-t border-line pt-5 font-mono text-[12px]">
+            <Link href="/research" className="text-accent hover:underline">← all of Frontier Notes</Link>
+          </nav>
+        </main>
+      </SiteShell>
+    );
+  }
+
   const f = i.facts;
   const origin = siteOrigin();
   const url = `${origin}/research/${i.slug}`;
