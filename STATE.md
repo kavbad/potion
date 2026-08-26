@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-25 (Answer Engine C1 live: /answers public measured pages + Frontier Notes masthead redesign + methodology; eval queue items 1–3 shipped)._
+_Last updated: 2026-08-26 (Answer Engine C1–C3 live: measured answers + head-to-head comparisons + measured pricing pages + the daily note on cron — publishes only when the measured truth changes)._
 
 ## What Potion is (current thesis)
 
