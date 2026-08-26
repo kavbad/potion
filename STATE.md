@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-26 (instrument campaign: extraction-hard-v2 messy tier VALIDATED + first LOCKED holdout live + first journey frontier measured — gpt-mini ties gpt-full on whole jobs at 5.6× less; canonical host = withpotion.com)._
+_Last updated: 2026-08-26 (instrument campaign COMPLETE: extraction-hard-v2 + rewrite-edit-hard-v1 validated live, two LOCKED holdouts, first journey frontier — campaign total $3.98; canonical host = withpotion.com)._
 
 ## What Potion is (current thesis)
 
