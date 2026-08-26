@@ -143,7 +143,7 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
   }
 
   // ---- capability evidence under boundary-honest uncertainty ----
-  const scores = inWindow.map((e) => (isFailure(e) ? 0 : 1));
+  const scores: number[] = inWindow.map((e) => (isFailure(e) ? 0 : 1));
   const successes = scores.reduce((s, x) => s + x, 0);
   const [lower] = jeffreysCi(scores);
 
