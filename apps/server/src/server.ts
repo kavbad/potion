@@ -56,6 +56,7 @@ import { checkReadiness } from './readiness.js';
 // ---- end M3 #27 HA imports ----
 // ---- M4 #31 share (m4-playground) — appended imports ----
 import { registerShareRoutes } from './routes/share.js';
+import { registerPublicAnswersRoutes } from './routes/public-answers.js';
 import { registerPlaygroundRoutes } from './routes/playground.js';
 import { registerLearningRoutes } from './routes/learning.js';
 import { registerInviteRoutes } from './routes/invites.js';
@@ -338,6 +339,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // see the /api/public/ exemption in auth.ts). POST /api/playground/chat
   // executes a chosen frontier point directly, org-scoped, SSE-streamed.
   registerShareRoutes(app, ctx);
+  registerPublicAnswersRoutes(app, ctx);
   registerPlaygroundRoutes(app, ctx);
   registerLearningRoutes(app, ctx, { queue });
   registerInviteRoutes(app, ctx);

@@ -13,7 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // spends the dashboard's own key, never the visitor's, and is rate-limited.
 // (2026-08-24 surface review: /leaderboard and /hero-lab removed with their
 // pages — a smaller anonymous surface needs no other justification.)
-const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/docs', '/home', '/research', '/terms', '/privacy', '/status', '/sitemap.xml', '/robots.txt'];
+const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/docs', '/home', '/research', '/answers', '/md/', '/llms.txt', '/llms-full.txt', '/terms', '/privacy', '/status', '/sitemap.xml', '/robots.txt'];
 
 // '/' is public (the landing page) and MUST be matched exactly. It cannot go
 // in OPEN_PREFIXES: every path startsWith('/'), so one entry there would make

@@ -206,6 +206,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
 
   // ---- /api public exemptions (hook-level carve-outs) ----
   { method: 'GET', path: '/api/public/share/:token/frontier', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "the TOKEN is the credential; unknown/revoked tokens 404 uniformly (share.test.ts)" } },
+  { method: 'GET', path: '/api/public/answers', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "PLATFORM frontiers only, live-only, redaction-swept fail-closed (public-answers.test.ts) — no tenant data exists on this route" } },
   { method: 'GET', path: '/api/public/share/:token/report', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'public', crossOrgProbe: { expect: 'skip', skipReason: "as above; org identity comes from the token row, redacted by default" } },
   { method: 'GET', path: '/api/leaderboard', surface: 'api', mutating: false, guard: 'public', tenancyClass: 'shared-global', crossOrgProbe: { expect: 'skip', skipReason: "public platform leaderboard — opt-in orgs only, platform clusters pinned" } },
 

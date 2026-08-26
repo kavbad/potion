@@ -74,11 +74,22 @@ export default async function IssuePage({ params }: Params) {
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <main className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
-        <nav className="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
-          <Link href="/research" className="hover:text-accent">{RESEARCH_TITLE}</Link> · {i.week} · {i.publishedAt.slice(0, 10)}
-        </nav>
-        <h1 className="mt-4 text-3xl font-semibold leading-[1.12] tracking-tight text-ink sm:text-[2.5rem]">{i.title}</h1>
-        <div className="mt-4 font-mono text-[11px] text-faint">{i.byline}</div>
+        <header>
+          <div className="border-t-2 border-ink" />
+          <div className="mt-[3px] border-t border-ink" />
+          <nav className="mt-4 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint">
+            <Link href="/research" className="text-ink hover:text-accent">{RESEARCH_TITLE}</Link>
+            <span>{i.week} · {i.publishedAt.slice(0, 10)}</span>
+          </nav>
+        </header>
+        <h1 className="mt-6 text-[2.1rem] font-semibold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[2.9rem]">{i.title}</h1>
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-faint">
+          <span>{i.byline}</span>
+          <span>·</span>
+          <Link href="/research/methodology" className="text-accent underline underline-offset-2">method</Link>
+          <span>·</span>
+          <Link href="/answers" className="text-accent underline underline-offset-2">the measured answers</Link>
+        </div>
 
         <section className="mt-8 rounded-2xl border border-accent/30 bg-accent-soft/40 px-6 py-5">
           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">In plain words</div>
@@ -109,7 +120,11 @@ export default async function IssuePage({ params }: Params) {
               {f.frontier.map((c) => (
                 <tr key={c.clusterId} className="border-b border-line/60 last:border-0">
                   <td className="px-4 py-2 text-ink">{c.clusterId}</td>
-                  <td className={`px-4 py-2 ${c.verdict === 'drift' ? 'text-red-700' : c.verdict === 'ok' ? 'text-accent' : 'text-faint'}`}>{verdictWord(c.verdict)}</td>
+                  <td className="px-4 py-2">
+                    <span className={`inline-block border px-1.5 py-px text-[10px] uppercase tracking-[0.1em] ${c.verdict === 'drift' ? 'border-refuse text-refuse' : c.verdict === 'ok' ? 'border-kept text-kept' : 'border-line text-faint'}`}>
+                      {verdictWord(c.verdict)}
+                    </span>
+                  </td>
                   <td className="px-4 py-2 text-ink">{c.pick}</td>
                   <td className="px-4 py-2 text-soft">{q3(c.storedQuality)} ± {q3(c.storedCi95)}</td>
                   <td className="px-4 py-2 text-soft">{c.observedMean === null ? '—' : q3(c.observedMean)} <span className="text-faint">n={c.n}</span></td>
@@ -154,10 +169,23 @@ export default async function IssuePage({ params }: Params) {
         </ul>
 
         <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Numbers</h2>
-        <p className="mt-3 font-mono text-[12px] leading-relaxed text-soft">
-          {f.numbers.canaries} canaries · {f.numbers.clustersHeld} held · {f.numbers.clustersMoved} moved · {f.numbers.inconclusive} inconclusive · {f.numbers.itemsGraded} items graded ·{' '}
-          {f.numbers.candidatesScreened} listings screened · {f.numbers.candidatesMeasured} measured · ${f.numbers.spendUsd.toFixed(2)} spent
-        </p>
+        <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden border border-[#d9d5cb] bg-[#d9d5cb] sm:grid-cols-4">
+          {[
+            [String(f.numbers.canaries), 'canaries run'],
+            [String(f.numbers.clustersHeld), 'frontiers held'],
+            [String(f.numbers.clustersMoved), 'frontiers moved'],
+            [String(f.numbers.itemsGraded), 'items graded'],
+            [String(f.numbers.candidatesScreened), 'listings screened'],
+            [String(f.numbers.candidatesMeasured), 'new models measured'],
+            [String(f.numbers.inconclusive), 'inconclusive'],
+            [`$${f.numbers.spendUsd.toFixed(2)}`, 'measurement spend'],
+          ].map(([n, l]) => (
+            <div key={l} className="bg-[#fbfaf7] px-4 py-3">
+              <div className="font-mono text-[1.15rem] font-semibold tabular-nums text-ink">{n}</div>
+              <div className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-faint">{l}</div>
+            </div>
+          ))}
+        </div>
 
         <h2 className="mt-12 text-xl font-semibold tracking-tight text-ink">Questions</h2>
         <dl className="mt-4 space-y-5">
@@ -174,8 +202,11 @@ export default async function IssuePage({ params }: Params) {
         </p>
 
         {i.writer?.receipt && (
-          <div className="mt-10 border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Written through Potion</div>
+          <div className="mt-10 border border-dashed border-[#b8b3a6] bg-[#fbfaf7] px-5 py-4">
+            <div className="flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+              <span>Potion · receipt</span>
+              <span className="border border-kept px-1.5 py-px text-kept">served</span>
+            </div>
             <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
               This issue was drafted by sending one request to Potion&apos;s own API, the same way a customer would. The receipt that came back: kind of work{' '}
               <span className="font-mono text-ink">{i.writer.receipt.cluster}</span>, strategy <span className="font-mono text-ink">{i.writer.receipt.strategy8}</span>, policy{' '}

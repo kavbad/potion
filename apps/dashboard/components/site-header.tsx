@@ -40,6 +40,9 @@ export function SiteHeader({ current }: { current?: 'docs' | 'research' }) {
           >
             Research
           </Link>
+          <Link href="/answers" className="text-soft transition-colors hover:text-ink">
+            Answers
+          </Link>
         </nav>
         <div className="flex items-center gap-2.5 justify-self-end text-sm">
           <a
@@ -72,6 +75,7 @@ export function SiteFooter() {
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <Link href="/docs" className="transition-colors hover:text-[#faf9f6]">Docs</Link>
           <Link href="/research" className="transition-colors hover:text-[#faf9f6]">Research</Link>
+          <Link href="/answers" className="transition-colors hover:text-[#faf9f6]">Answers</Link>
           <Link href="/terms" className="transition-colors hover:text-[#faf9f6]">Terms</Link>
           <Link href="/privacy" className="transition-colors hover:text-[#faf9f6]">Privacy</Link>
           <Link href="/status" className="transition-colors hover:text-[#faf9f6]">Status</Link>
