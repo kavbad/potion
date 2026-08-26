@@ -322,12 +322,11 @@ async function main(): Promise<void> {
     const res = await dashFetch('/');
     const html = await res.text();
     assert(res.ok, `HTTP ${res.status}`);
-    // The front door is the onboarding journey now (627204e): the heading
-    // depends on whether traffic has been served, and the connect block
-    // (Base URL + snippets) renders inside step 03.
+    // S2: the routing state's hero is the kept counter (TodayPulse); the
+    // connect state keeps its onboarding heading. Either is a healthy '/'.
     assert(
-      /(Get routed in a minute|Your requests are being routed)/.test(html),
-      'onboarding heading missing',
+      /(Get routed in a minute|kept so far|kept this month)/.test(html),
+      'front-door hero missing (neither connect heading nor the kept counter)',
     );
     assert(html.includes(`${API}/v1`), `base url ${API}/v1 not offered`);
     assert(html.includes('Base URL'), 'base url block missing');

@@ -546,8 +546,12 @@ export interface RoutingActivityRow {
   ts: string;
   status: string | null;
   model: string | null;
+  /** S2 (0060): the model that actually answered; null on pre-0060 rows. */
+  servedModel: string | null;
   latencyMs: number | null;
   costUsd: number | null;
+  /** Serve-time counterfactual for this request; null when not recorded. */
+  baselineCostUsd: number | null;
   clusterId: string | null;
   strategy: string | null;
   frontierVersion: number | null;

@@ -1023,6 +1023,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
+    // S2 (0060): the ledger's "served by" — stamped once here, rides every
+    // later insert via the logBase spread.
+    logBase.servedModel = strategyModelLabel(op.config as { type: string; model?: string });
     const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
     if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);

@@ -16,25 +16,13 @@ import Link from 'next/link';
 import { CopyBlock } from '@/components/copy-block';
 import { ServingKeys } from '@/components/serving-keys';
 import { TryRequest, type Receipt } from '@/components/try-request';
+import { TodayPulse } from '@/components/today-pulse';
 import { ReceiptCard } from '@/components/primitives';
 import { FIRST_RECEIPT_KEY } from '@/components/first-run';
 import { RoutingProof } from '@/components/routing-proof';
 import { FrontierStatus } from '@/components/frontier-status';
 import { AgentInstructions } from '@/components/agent-instructions';
-import type { ConnectionResponse, RoutingActivityResponse, UsageCurrentResponse } from '@/lib/types';
-
-function usd(n: number): string {
-  return n < 1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
-}
-
-function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
-      <div className="text-xs text-faint">{label}</div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${accent ? 'text-accent' : 'text-ink'}`}>{value}</div>
-    </div>
-  );
-}
+import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 function ClustersDisclosure({ conn }: { conn: ConnectionResponse }) {
   return (
@@ -56,7 +44,6 @@ function ClustersDisclosure({ conn }: { conn: ConnectionResponse }) {
 export function HomeOverview({ conn: initial, initialActivity = null }: { conn: ConnectionResponse; initialActivity?: RoutingActivityResponse | null }) {
   const [conn, setConn] = useState(initial);
   const [activity, setActivity] = useState<RoutingActivityResponse | null>(initialActivity);
-  const [current, setCurrent] = useState<UsageCurrentResponse | null>(null);
   const [trial, setTrial] = useState<Receipt | null>(null);
   // S1: the first-run flow stores its printed receipt; Today opens with it —
   // there is no empty dashboard anywhere in the journey.
@@ -82,12 +69,6 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
       .then((b: RoutingActivityResponse | null) => { if (b) setActivity(b); })
       .catch(() => null);
   }, [tick]);
-  useEffect(() => {
-    fetch('/api/usage/current', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((b: UsageCurrentResponse | null) => setCurrent(b))
-      .catch(() => setCurrent(null));
-  }, [tick]);
 
   const hasKey = conn.servingKeys.some((k) => !k.revokedAt);
   // "Routing" means the SERVING log carries decisions — a trial request in
@@ -95,26 +76,9 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
   const routing = (activity?.summary?.withRoutingDecision ?? 0) > 0 || trial !== null;
 
   if (routing) {
-    const savedMtd = current ? Math.max(0, (current.mtd.baselineCostUsd ?? 0) - current.mtd.costUsd) : 0;
     return (
       <div className="max-w-4xl">
-        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Overview</div>
-        <h1 className="mt-3 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
-          Your requests are being routed.
-        </h1>
-        <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-soft">
-          Every answer carries a receipt: what kind of work it was, which measured model got it, and
-          what that cost against the premium model.
-        </p>
-
-        {current && (
-          <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Stat label="Today — requests" value={String(current.today.requests)} />
-            <Stat label="Today — cost" value={usd(current.today.costUsd)} />
-            <Stat label="This month — cost" value={usd(current.mtd.costUsd)} />
-            <Stat label="This month — saved" value={savedMtd > 0 ? usd(savedMtd) : '—'} accent={savedMtd > 0} />
-          </div>
-        )}
+        <TodayPulse />
 
         {/* the S1 contract in one quiet line each: where traffic points, and under what rule */}
         <p className="mt-4 font-mono text-[11px] leading-relaxed text-faint">
@@ -129,7 +93,8 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
         <div className="mt-6"><FrontierStatus /></div>
 
         <p className="mt-8 text-sm text-soft">
-          <Link href="/try" className="text-accent underline">Try a request</Link>
+          <Link href="/receipts" className="text-accent underline">Receipts</Link>
+          {' · '}<Link href="/try" className="text-accent underline">Try a request</Link>
           {' · '}<Link href="/usage" className="text-accent underline">Usage &amp; savings</Link>
           {' · '}<Link href="/frontiers" className="text-accent underline">Frontiers — the evidence</Link>
         </p>

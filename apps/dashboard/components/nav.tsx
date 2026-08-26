@@ -24,7 +24,8 @@ import { usePathname } from 'next/navigation';
  * destination.
  */
 const PRIMARY = [
-  { href: '/', label: 'Overview', hint: 'What routed, what it cost, what it saved' },
+  { href: '/', label: 'Today', hint: 'What routed, what it cost, what it saved' },
+  { href: '/receipts', label: 'Receipts', hint: 'Every token, accounted for' },
   { href: '/try', label: 'Try a request', hint: 'Send anything; see what Potion chose and why' },
   { href: '/usage', label: 'Usage & savings', hint: 'What you spent, what you would have spent' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, audit' },
@@ -40,7 +41,7 @@ const ADVANCED = [
   { href: '/build', label: 'Help me choose a policy' },
   { href: '/frontiers', label: 'Frontiers (the evidence)' },
   { href: '/reports', label: 'Savings report' },
-  { href: '/traces', label: 'Receipts (traces)' },
+  { href: '/traces', label: 'Journeys (agent traces)' },
   { href: '/settings/audit', label: 'Audit trail' },
   { href: '/support', label: 'Support' },
 ];

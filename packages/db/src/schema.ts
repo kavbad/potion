@@ -420,6 +420,9 @@ export const requestLogs = pgTable('request_logs', {
    * choosing between at the time.
    */
   baselineCostUsd: doublePrecision('baseline_cost_usd'),
+  /** S2 (migration 0060): the model that actually answered — stamped at
+   * serve time from the resolved strategy; NULL on pre-0060 rows. */
+  servedModel: text('served_model'),
   /**
    * THE DEMAND SIGNAL (S7 L1, migration 0041). The assigner's own evidence
    * for the routing label beside it: cosine to the winning centroid, the
