@@ -17,6 +17,7 @@ import { CopyBlock } from '@/components/copy-block';
 import { ServingKeys } from '@/components/serving-keys';
 import { TryRequest, type Receipt } from '@/components/try-request';
 import { TodayPulse } from '@/components/today-pulse';
+import { BarProposal } from '@/components/bar-proposal';
 import { ReceiptCard } from '@/components/primitives';
 import { FIRST_RECEIPT_KEY } from '@/components/first-run';
 import { RoutingProof } from '@/components/routing-proof';
@@ -79,6 +80,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
     return (
       <div className="max-w-4xl">
         <TodayPulse />
+        <BarProposal />
 
         {/* the S1 contract in one quiet line each: where traffic points, and under what rule */}
         <p className="mt-4 font-mono text-[11px] leading-relaxed text-faint">

@@ -75,6 +75,27 @@ export default async function FrontiersPage({
   );
   const activeBreach = activeBreachForCluster(guaranteeStatus, selected);
 
+  // S3 (Evidence): the trust facts beside the chart — pin state, movement
+  // count, certification verdict, evidence age. Every read is tolerant; a
+  // hiccup on any one never takes the page down.
+  interface PinRow { clusterId: string; servedVersion: number | null; pinned: { version: number } | null; holdingBack: boolean }
+  interface LogEntry { clusterId: string; toVersion: number }
+  interface CertRow { clusterId: string; active: boolean; status: string }
+  const [pinsBody, logBody, certsBody] = await Promise.all([
+    apiFetch<{ pins: PinRow[] }>('/api/pins').catch(() => null),
+    apiFetch<{ entries: LogEntry[] }>('/api/frontier-changelog').catch(() => null),
+    apiFetch<{ certifications: CertRow[] }>('/api/certifications').catch(() => null),
+  ]);
+  const pin = (pinsBody?.pins ?? []).find((r) => r.clusterId === selected) ?? null;
+  const movements = (logBody?.entries ?? []).filter((e) => e.clusterId === selected).length;
+  const cert = (certsBody?.certifications ?? []).find((c) => c.clusterId === selected && c.active) ?? null;
+  const evidenceAgeDays = data.frontier.createdAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(data.frontier.createdAt).getTime()) / 86_400_000))
+    : null;
+  const floorOfPolicy = (pol: { qualityFloor?: number; clusterFloors?: Record<string, number> } | undefined, cid: string): number | null =>
+    pol?.clusterFloors?.[cid] ?? pol?.qualityFloor ?? null;
+  const floorNow = floorOfPolicy(data.operatingPoint?.policy as never, selected);
+
   return (
     <PageShell>
       {/* cluster selector — plain links, no JS required */}
@@ -117,6 +138,39 @@ export default async function FrontiersPage({
           {/* guarantee breach badge (M3 #22): amber when an unresolved
               rollback/alert incident exists for this cluster */}
           {activeBreach ? <GuaranteeBadge incident={activeBreach} /> : null}
+        </div>
+
+        {/* S3: the evidence rail — the facts a skeptic asks for, in one row */}
+        <div className="mb-6 grid grid-cols-2 gap-px border border-[#d9d5cb] bg-[#d9d5cb] font-mono text-[11px] sm:grid-cols-4">
+          <div className="bg-[#fbfaf7] px-3.5 py-2.5">
+            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">your bar</div>
+            <div className="mt-1 text-ink">{floorNow !== null ? `never below ${floorNow.toFixed(2)}` : 'set a policy'}</div>
+          </div>
+          <div className="bg-[#fbfaf7] px-3.5 py-2.5">
+            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">pin</div>
+            <div className="mt-1 text-ink">
+              {pin?.pinned ? `frozen at v${pin.pinned.version}${pin.holdingBack ? ' · holding back a move' : ''}` : 'following newest'}{' '}
+              <a href="/settings/frontier" className="text-accent underline">change</a>
+            </div>
+          </div>
+          <div className="bg-[#fbfaf7] px-3.5 py-2.5">
+            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">movements</div>
+            <div className="mt-1 text-ink">
+              {movements === 0 ? 'none recorded' : `${movements} logged`}{' '}
+              <a href="/settings/frontier" className="text-accent underline">log</a>
+            </div>
+          </div>
+          <div className="bg-[#fbfaf7] px-3.5 py-2.5">
+            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">certification · evidence age</div>
+            <div className="mt-1 text-ink">
+              {cert ? (
+                <span className={cert.status === 'certified' ? 'text-kept' : 'text-refuse'}>{cert.status}</span>
+              ) : (
+                <span className="text-faint">none yet</span>
+              )}
+              {evidenceAgeDays !== null && <span className="text-faint"> · {evidenceAgeDays === 0 ? 'today' : `${evidenceAgeDays}d ago`}</span>}
+            </div>
+          </div>
         </div>
 
         <FrontierChart data={data} />
@@ -260,10 +314,11 @@ function PointRow({ point }: { point: FrontierPointDto }) {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Frontiers</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Evidence</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        Every dot is a strategy Potion measured on your kind of workload. Up and to the left is
-        better: better answers for less money.
+        The measurements behind your routing, per kind of work. Every dot is a strategy Potion
+        measured on your workload — up and to the left is better — with your bar, your pin, the
+        movement log, and the certification verdict beside the chart.
       </p>
       {children}
     </div>

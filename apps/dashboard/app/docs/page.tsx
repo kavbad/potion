@@ -128,6 +128,11 @@ export default async function DocsPage() {
           is drawn from this page's prose only (lib/docs-text.ts) and the
           receipt under it is the real x-frontier-trace — the product doing
           the thing the section below describes. */}
+      <nav className="mb-10 border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-4 text-[12.5px] leading-relaxed text-soft">
+        <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">On this page</span>
+        <a href="#quickstart" className="text-accent underline">Quickstart</a> · <a href="#agent" className="text-accent underline">Hand it to your agent</a> · <a href="#auth" className="text-accent underline">Authentication</a> · <a href="#model" className="text-accent underline">The model field</a> · <a href="#trace" className="text-accent underline">The decision header</a> · <a href="#receipts" className="text-accent underline">Receipts &amp; kept</a> · <a href="#policies" className="text-accent underline">Policies</a> · <a href="#controls" className="text-accent underline">Bar, floor, pins</a> · <a href="#workloads" className="text-accent underline">Workload types</a> · <a href="#compat" className="text-accent underline">Streaming</a> · <a href="#errors" className="text-accent underline">Errors</a> · <a href="#limits" className="text-accent underline">Limits</a> · <a href="#pricing" className="text-accent underline">Pricing</a> · <a href="#traces-api" className="text-accent underline">Agent journeys</a> · <a href="#api" className="text-accent underline">API reference</a> · <a href="#honest" className="text-accent underline">Things worth knowing</a>
+      </nav>
+
       <Section id="ask" title="Ask the docs">
         <p className="text-sm leading-relaxed text-soft">
           A question about anything on this page, answered from this page, served through Potion as{' '}
@@ -207,13 +212,24 @@ export default async function DocsPage() {
         </p>
       </Section>
 
-      <Section id="model" title="The model field is a label, not a choice">
+      <Section id="model" title="The model field means what it says">
         <p className="text-sm leading-relaxed text-soft">
-          Potion reads each request, works out which kind of work it is, and selects a strategy from
-          the measured frontier under your policy. Whatever you put in <code className="font-mono text-xs">model</code>{' '}
-          is echoed back and recorded, and is <span className="font-medium text-ink">not</span> an input
-          to that decision. <code className="font-mono text-xs">potion-auto</code> is the documented
-          convention; sending a specific model id will not pin it.
+          Three cases, no surprises. <code className="font-mono text-xs">potion-auto</code>{' '}
+          <span className="font-medium text-ink">routes</span>: Potion classifies the request and
+          serves the measured pick under your policy. A{' '}
+          <span className="font-medium text-ink">known model name pins</span>: exactly that model
+          answers, the trace says <code className="font-mono text-xs">policy=pinned</code>, and
+          nothing overrides your explicit choice. An{' '}
+          <span className="font-medium text-ink">unknown name is an error</span>{' '}
+          (<code className="font-mono text-xs">400 unknown_model</code>) — never a silent reroute.
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          Migrating an app whose model strings you cannot change yet? Flip{' '}
+          <span className="font-medium text-ink">migration mode</span> in{' '}
+          <a href="/settings/controls" className="text-accent underline">Settings · Controls</a>{' '}
+          (or <code className="font-mono text-xs">PUT /api/org-settings</code>) and every label
+          routes like <code className="font-mono text-xs">potion-auto</code> — an explicit,
+          org-level choice. The receipt always names what actually answered.
         </p>
       </Section>
 
@@ -233,13 +249,34 @@ export default async function DocsPage() {
               <Row k="cluster" v="The workload type the prompt was classified into." />
               <Row k="strategy" v="First 8 characters of the selected strategy hash — the exact configuration served, resolvable in Frontiers." />
               <Row k="frontier" v="Which published frontier version the choice came from. It increments when new evidence republishes." />
-              <Row k="policy" v={<>The rule that selected the point: <code className="font-mono">min_cost</code>, <code className="font-mono">max_quality</code>, <code className="font-mono">latency_bound</code> or <code className="font-mono">compound</code>.</>} />
+              <Row k="policy" v={<>The rule that selected the point: <code className="font-mono">min_cost</code>, <code className="font-mono">max_quality</code>, <code className="font-mono">latency_bound</code>, <code className="font-mono">compound</code> — or <code className="font-mono">pinned</code>, when you named the model yourself.</>} />
               <Row k="fallback" v={<><span className="font-medium text-soft">0</span> means a measured frontier existed and your policy selected a point on it. <span className="font-medium text-soft">1</span> means it did not, and the request rode the default strategy — the honest signal that Potion has nothing measured for this work yet.</>} />
               <Row k="provenance" v={<><span className="font-medium text-soft">live</span> means the evidence behind the choice came from real provider runs. Anything else means it did not, and should not be treated as a measurement.</>} />
+              <Row k="x-potion-model" v={<>A sibling header naming the model that actually answered — also stamped onto your request log as <code className="font-mono">served_model</code>, so the ledger never guesses.</>} />
               <Row k="constrained" v={<>Present only as <code className="font-mono">constrained=tools</code>, when the request carried <code className="font-mono">tools</code> and your policy&apos;s optimum was a prompt-transforming strategy. Selection narrowed to single-model points, which the tool contract requires. Your policy&apos;s bound still held — a quality floor, cost ceiling or latency bound is never breached by narrowing, only its optimum is — so <code className="font-mono">fallback</code> stays 0.</>} />
             </tbody>
           </table>
         </div>
+      </Section>
+
+      <Section id="receipts" title="Receipts and the kept line">
+        <p className="text-sm leading-relaxed text-soft">
+          Every token, accounted for. Each served request becomes a row on{' '}
+          <a href="/receipts" className="text-accent underline">Receipts</a>: when it ran, the kind
+          of work, the model that answered, what it cost — and what your named baseline{' '}
+          <span className="font-medium text-ink">would</span> have cost, recorded{' '}
+          <span className="font-medium text-ink">at serve time</span> from real token counts, never
+          reconstructed later. The difference is the <span className="font-semibold text-kept">kept</span>{' '}
+          line, and the month&rsquo;s kept lines sum to the savings figure on Today — the same number,
+          all the way up.
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          Programmatic access: <code className="font-mono text-xs">GET /api/routing-activity</code>{' '}
+          returns the rows (<code className="font-mono text-xs">servedModel</code>,{' '}
+          <code className="font-mono text-xs">costUsd</code>,{' '}
+          <code className="font-mono text-xs">baselineCostUsd</code>, the parsed trace, and a
+          summary that counts only requests which carried a routing decision).
+        </p>
       </Section>
 
       <Section id="policies" title="Policies">
@@ -268,6 +305,28 @@ export default async function DocsPage() {
           label="Rebind this key's policy"
           text={`curl -X POST ${base}/v1/policies \\\n  -H "Authorization: Bearer $POTION_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"type":"min_cost","qualityFloor":0.8}'`}
         />
+      </Section>
+
+      <Section id="controls" title="Your bar, your floor, your pins">
+        <p className="text-sm leading-relaxed text-soft">
+          <span className="font-medium text-ink">Name what you use today</span>{' '}
+          (<code className="font-mono text-xs">PUT /api/incumbents</code>) and your quality bar
+          becomes a measurement against <em>your own model on your own traffic</em> rather than a
+          number we picked. Potion samples consented requests (capped per kind of work, personal
+          data redacted), measures, and then <span className="font-medium text-ink">proposes your
+          bar</span> — the proposal appears on Today and applies in one click
+          (<code className="font-mono text-xs">POST /api/learning/proposals/:id/apply</code>).
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          <span className="font-medium text-ink">The floor</span>{' '}
+          (<code className="font-mono text-xs">PUT /api/floor</code>) sets the org-wide quality
+          minimum and rebinds every live key.{' '}
+          <span className="font-medium text-ink">Pins</span>{' '}
+          (<code className="font-mono text-xs">GET/PUT/DELETE /api/pins</code>) freeze the exact
+          frontier version serving a workload — useful while you run your own comparisons — and{' '}
+          <code className="font-mono text-xs">GET /api/frontier-changelog</code> narrates every
+          movement in plain English, including what a pin is holding back.
+        </p>
       </Section>
 
       <Section id="workloads" title="Workload types">
@@ -326,6 +385,9 @@ export default async function DocsPage() {
               <Row k="401 invalid_api_key" v="The key is unknown, revoked or expired." />
               <Row k="403" v={<>The key is valid but its scope does not cover this call — provisioning with a <code className="font-mono">serve</code> key rather than <code className="font-mono">serve+admin</code>.</>} />
               <Row k="413" v="The request body exceeds the accepted size." />
+              <Row k="400 unknown_model" v={<>The <code className="font-mono">model</code> value is neither <code className="font-mono">potion-auto</code> nor a model Potion serves. Name one from <code className="font-mono">/v1/models</code>, or enable migration mode.</>} />
+              <Row k="400 cluster_not_found" v={<>An explicit <code className="font-mono">X-Potion-Cluster</code> hint named a cluster that does not exist.</>} />
+              <Row k="403 insufficient_role" v={<>The call needs a higher role — minting keys, rebinding policies, applying proposals and flipping org settings are admin actions.</>} />
               <Row k="429 rate_limit_exceeded" v="Too many requests. Back off and retry." />
               <Row k="429 budget_exceeded" v="Your spend cap would be crossed by this call. Refused BEFORE the provider is called, so it costs nothing." />
               <Row k="503 service_unavailable" v="No upstream could serve the request." />
@@ -365,8 +427,43 @@ export default async function DocsPage() {
           <Endpoint method="GET" path="/api/routing-activity" note="Recent requests with the routing decision each one got." />
           <Endpoint method="GET / POST" path="/api/api-keys" note="List or mint keys. Minting requires serve+admin." />
           <Endpoint method="GET / PUT" path="/api/budgets" note="Spending cap and hard stop. admin" />
-          <Endpoint method="GET" path="/api/usage" note="Requests, tokens and spend." />
+          <Endpoint method="GET" path="/api/usage" note="Requests, tokens and spend; /api/usage/current for the live day; /api/usage/invoice for the period invoice." />
+          <Endpoint method="PUT" path="/api/incumbents" note="Name what you use today; starts consented measurement. admin" />
+          <Endpoint method="GET" path="/api/learning" note="Sampling progress and bar proposals; POST /api/learning/proposals/:id/apply accepts one. admin to apply" />
+          <Endpoint method="PUT" path="/api/floor" note="Org-wide quality floor; rebinds every live key. admin" />
+          <Endpoint method="GET / PUT / DELETE" path="/api/pins/:clusterId" note="Freeze or release the frontier version serving a workload. admin to change" />
+          <Endpoint method="GET" path="/api/frontier-changelog" note="Every frontier movement, narrated." />
+          <Endpoint method="GET" path="/api/certifications" note="Suite certifications — what is vouched for, and what was refused." />
+          <Endpoint method="GET / PUT" path="/api/org-settings" note="Model-field semantics: migration mode on or off. admin to change" />
+          <Endpoint method="POST" path="/v1/traces" note="Agent spans in; priced, loop-flagged, clustered into agent-* workloads." />
+          <Endpoint method="GET / PUT" path="/api/traces/retention" note="Span retention in days; 0 keeps metadata only. admin to change" />
+          <Endpoint method="GET" path="/api/audit" note="Key custody, sign-ins and incidents, one chronology; /api/audit/export.jsonl for a window. admin" />
         </ul>
+      </Section>
+
+      <Section id="pricing" title="Pricing: aligned by construction">
+        <p className="text-sm leading-relaxed text-soft">
+          Model costs pass through <span className="font-medium text-ink">at cost</span>. Potion&rsquo;s
+          revenue is a <span className="font-medium text-ink">share of the savings your receipts
+          verify</span> — the same serve-time counterfactual described above, summed per period. If
+          Potion saves you nothing, it earns nothing above cost. The invoice
+          (<code className="font-mono text-xs">GET /api/usage/invoice</code>,{' '}
+          <a href="/settings/billing" className="text-accent underline">Settings · Billing</a>)
+          itemises model cost, verified savings, and the share — the bill and the proof are the same
+          numbers.
+        </p>
+      </Section>
+
+      <Section id="traces-api" title="Agent journeys">
+        <p className="text-sm leading-relaxed text-soft">
+          Agent workloads send spans to <code className="font-mono text-xs">POST /v1/traces</code>{' '}
+          with the same bearer key. Potion prices every span, flags tool-call loops, and clusters
+          redacted sessions into <code className="font-mono text-xs">agent-*</code> workloads that
+          grow their own frontiers. Pin a request to one explicitly with the{' '}
+          <code className="font-mono text-xs">X-Potion-Cluster</code> header. Retention is yours:
+          <code className="font-mono text-xs">PUT /api/traces/retention</code> (0 = metadata only;
+          prompts and attributes are redacted on purge).
+        </p>
       </Section>
 
       <Section id="honest" title="Things worth knowing">
