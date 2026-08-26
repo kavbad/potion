@@ -1,0 +1,17 @@
+{
+ "suiteId": "rewrite-edit-hard-v1",
+ "clusterId": "rewrite-edit",
+ "version": "1.0.0",
+ "source": {
+  "kind": "authored",
+  "name": "The 14 flat rewrite-edit items ported verbatim plus a 14-item CONSTRAINT-PRESERVATION tier (rwh-01..14) targeting the measured failure mode: silent constraint-dropping. Each new rubric carries the explicit checklist (verbatim tokens, caps warnings, quoted material, redaction markers, numbers-that-look-wrong-but-are-right); rubric-anchored judging \u2014 the judge sees the answer key. must-preserve tokens script-verified verbatim against each source text.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "llm-judge"
+  ]
+ },
+ "createdAt": "2026-08-26T13:00:00.000-07:00"
+}

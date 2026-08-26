@@ -1,0 +1,18 @@
+{
+ "suiteId": "rewrite-confirm-v1",
+ "clusterId": "rewrite-edit",
+ "version": "1.0.0",
+ "source": {
+  "kind": "authored",
+  "name": "LOCKED confirmation holdout for rewrite-edit (rwc-01..06): constraint-preservation items reserved for final promotion readings; search tooling cannot load this suite.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "llm-judge"
+  ]
+ },
+ "locked": true,
+ "createdAt": "2026-08-26T13:00:00.000-07:00"
+}

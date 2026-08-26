@@ -255,3 +255,32 @@ describe('extraction-confirm-v1 (the first LOCKED holdout)', () => {
     expect(items.every((it) => it.scoring.kind === 'field-match')).toBe(true);
   });
 });
+
+describe('rewrite-edit-hard-v1 shape (the constraint tier, 2026-08-26)', () => {
+  it('28 items: 14 flat items ported + 14 rubric-anchored constraint items', () => {
+    const { items, manifest } = loadSuiteV2('rewrite-edit-hard-v1');
+    expect(items).toHaveLength(28);
+    expect(manifest.clusterId).toBe('rewrite-edit');
+    const tier = items.slice(14);
+    expect(tier.every((it) => it.id.startsWith('rwh-'))).toBe(true);
+    for (const item of items) {
+      expect(item.scoring.kind).toBe('llm-judge');
+      const s = item.scoring as { rubric: string; judgeModel: string; scale: [number, number] };
+      expect(s.judgeModel).toBe('judge-class');
+      expect(s.scale).toEqual([0, 10]);
+      // Rubric-anchored: every rubric carries its checklist and the shared scale.
+      expect(s.rubric).toContain('Criteria:');
+      expect(s.rubric).toContain('General scale:');
+    }
+  });
+});
+
+describe('rewrite-confirm-v1 (LOCKED holdout)', () => {
+  it('refuses search purpose; loads 6 items under confirmation', () => {
+    expect(() => loadSuiteV2('rewrite-confirm-v1')).toThrow(/LOCKED/);
+    const { items, manifest } = loadSuiteV2('rewrite-confirm-v1', undefined, 'confirmation');
+    expect(manifest.locked).toBe(true);
+    expect(items).toHaveLength(6);
+    expect(items.every((it) => it.id.startsWith('rwc-'))).toBe(true);
+  });
+});

@@ -3460,7 +3460,11 @@ export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   'agentic-tool-use': { kind: 'v1', suiteId: 'agentic-tool-use' },
   'code-review': { kind: 'v2', suiteId: 'code-review-hard-v1' },
   creative: { kind: 'v1', suiteId: 'creative' },
-  'rewrite-edit': { kind: 'v1', suiteId: 'rewrite-edit' },
+  // 2026-08-26 (instrument campaign): rewrite-edit-hard-v1 ports the 14
+  // flat items and adds a 14-item constraint-preservation tier (silent
+  // constraint-dropping is the measured failure mode). Evidence re-measures
+  // from zero at the next sweep. rewrite-confirm-v1 (LOCKED) sits beside it.
+  'rewrite-edit': { kind: 'v2', suiteId: 'rewrite-edit-hard-v1' },
   summarization: { kind: 'v1', suiteId: 'summarization' },
 };
 
