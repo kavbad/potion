@@ -83,3 +83,19 @@ describe('GET /api/public/answers', () => {
     expect(/[0-9a-f]{16,64}/.test(res.body)).toBe(false); // no hashes of any kind
   });
 });
+
+describe('float precision (the prod refusal of 2026-08-25)', () => {
+  it('full-precision floats never reach the payload — they trip the hash pattern and overclaim', async () => {
+    const db = app.potion.db.db;
+    await saveFrontier(db, 'rag-answer', [
+      pt('rag-answer', PUBLIC_SINGLE, 0.9841666666666666, 0.0033178861788617887, 'live'),
+      pt('rag-answer', { type: 'single', model: 'gemini-flash-class' }, 0.7, 0.001, 'live'),
+    ], 'manual', 'test-prices');
+    const res = await app.inject({ method: 'GET', url: '/api/public/answers' });
+    expect(res.statusCode).toBe(200); // the sweep no longer fires on digits
+    const c = (res.json() as { clusters: Array<{ clusterId: string; points: Array<{ quality: number }> }> })
+      .clusters.find((x) => x.clusterId === 'rag-answer')!;
+    expect(c.points.some((p) => p.quality === 0.9842)).toBe(true);
+    expect(/[0-9a-f]{16,64}/.test(res.body)).toBe(false);
+  });
+});

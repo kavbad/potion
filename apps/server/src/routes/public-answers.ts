@@ -82,9 +82,13 @@ export function registerPublicAnswersRoutes(app: FastifyInstance, ctx: PotionCon
         points: live
           .map((p) => ({
             ...publicPointLabel(p.strategyConfig as StrategyConfig, ctx.prices),
-            quality: p.quality,
-            costPer1K: p.costPer1K,
-            latencyP95: p.latencyP95,
+            // Rounded for publication — full-precision floats serialize as
+            // 16+ digit runs, which (a) claim precision the measurement does
+            // not have and (b) trip the redaction sweep's hash pattern. The
+            // sweep firing on raw floats is what caught this.
+            quality: Math.round(p.quality * 10000) / 10000,
+            costPer1K: Math.round(p.costPer1K * 1e6) / 1e6,
+            latencyP95: Math.round(p.latencyP95),
           }))
           .sort((a, b) => a.costPer1K - b.costPer1K),
       });
@@ -93,6 +97,12 @@ export function registerPublicAnswersRoutes(app: FastifyInstance, ctx: PotionCon
     // The belt: nothing embargoed leaves this route, or nothing leaves at all.
     const leaks = findLeaks(JSON.stringify(payload));
     if (leaks.length > 0) {
+      // Private log carries the WHY so the refusal is diagnosable; the
+      // response stays a bare 500 — fail closed, explain nothing publicly.
+      app.log.error(
+        { leaks: leaks.slice(0, 6).map((l) => ({ kind: l.kind, why: l.why, offset: l.offset })) },
+        'public-answers: payload failed the redaction sweep',
+      );
       reply.code(500);
       return reply.send({ error: { message: 'public payload failed the redaction sweep', type: 'server_error' } });
     }
