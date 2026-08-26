@@ -74,8 +74,9 @@ export async function runWorker(opts: RunWorkerOptions): Promise<WorkerHandle> {
     db: dbHandle.db,
     dbHandle,
     artifacts: opts.artifacts,
-    // POTION_PRICES_PATH lets research:scan persist registry diffs to a
-    // non-default (e.g. tmp/walkthrough) prices.json without code changes.
+    // Read-only since S5 (research:scan writes registry ROWS, not this
+    // file). The server passes its own resolved ctx.pricesPath here; the
+    // env/default fallback exists for standalone worker deployments.
     pricesPath: opts.pricesPath ?? process.env.POTION_PRICES_PATH ?? DEFAULT_PRICES_PATH,
     suitesDir: opts.suitesDir,
     // M5 #36: traces:cluster needs the platform embedder; suite synthesis
