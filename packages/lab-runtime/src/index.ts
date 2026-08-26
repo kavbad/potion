@@ -29,3 +29,5 @@ export {
   type ToolCallError,
 } from './mcp-tools.js';
 export * from './graduation.js';
+export * from './evidence.js';
+export * from './apply-graduation.js';
