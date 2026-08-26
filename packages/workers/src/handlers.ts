@@ -3446,8 +3446,14 @@ export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   // two rule-chain families. Same stated consequence: evidence for these two
   // clusters re-measures from zero cache, and the weekly Observatory now
   // carries a saturation alarm so the next ceiling is caught on schedule.
+  // 2026-08-26 (instrument campaign): extraction-hard-v2 adds a 16-item
+  // MESSY TIER (OCR damage, layout debris, competing candidates — the eval
+  // review's real-world gap) on top of hard-v1's 24. Same consequence as
+  // every adoption above: extraction evidence re-measures from zero cache.
+  // extraction-confirm-v1 (LOCKED) exists beside it for final promotion
+  // readings only — the sweep can never load it.
   'code-gen': { kind: 'v2', suiteId: 'code-gen-hard-v2' },
-  extraction: { kind: 'v2', suiteId: 'extraction-hard-v1' },
+  extraction: { kind: 'v2', suiteId: 'extraction-hard-v2' },
   classification: { kind: 'v2', suiteId: 'classification-hard-v2' },
   'multi-step-reasoning': { kind: 'v1', suiteId: 'multi-step-reasoning' },
   'rag-answer': { kind: 'v1', suiteId: 'rag-answer' },

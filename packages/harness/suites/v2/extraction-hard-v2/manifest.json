@@ -1,0 +1,17 @@
+{
+ "suiteId": "extraction-hard-v2",
+ "clusterId": "extraction",
+ "version": "1.1.0",
+ "source": {
+  "kind": "authored",
+  "name": "extraction-hard-v1's 24 adversarial items plus a 16-item MESSY TIER (exh2-m01..m16) \u2014 the real-world failure modes the 2026-08-25 eval review named: OCR character damage copied verbatim into references, collapsed table columns, page furniture interleaved with facts, competing candidate values (pre-credit vs post-credit totals, superseded emails, re-triaged severities), redactions, unit conversions, European number formats, bilingual labels, self-correcting transcripts. Authored mess, clean provenance; every string reference script-verified verbatim against its document, every computed number derived in a comment. | 1.1.0 (2026-08-26): exh-07 -> exh-07r \u2014 the blank closing balance collided with the not-stated-means-empty contract rule (no model in 28 ever fully passed); the key now says compute it. New id so no cached cell can masquerade as a fresh measurement.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "field-match"
+  ]
+ },
+ "createdAt": "2026-08-26T10:00:00.000-07:00"
+}

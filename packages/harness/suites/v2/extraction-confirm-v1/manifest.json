@@ -1,0 +1,18 @@
+{
+ "suiteId": "extraction-confirm-v1",
+ "clusterId": "extraction",
+ "version": "1.0.0",
+ "source": {
+  "kind": "authored",
+  "name": "The first LOCKED confirmation suite (eval-review adoption item 2): 8 messy-tier holdout items (exc-01..08) reserved for FINAL promotion readings. Search tooling cannot load this suite (loadSuiteV2 refuses without the confirmation purpose); hardening passes must never read these items. Same authoring discipline as extraction-hard-v2.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "field-match"
+  ]
+ },
+ "locked": true,
+ "createdAt": "2026-08-26T10:00:00.000-07:00"
+}

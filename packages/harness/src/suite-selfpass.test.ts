@@ -219,3 +219,39 @@ describe('code-review-hard-v1 shape', () => {
     }
   });
 });
+
+describe('extraction-hard-v2 shape (the messy tier, 2026-08-26)', () => {
+  it('40 items: all 24 v1 items verbatim + 16 messy-tier items with 6 fields each', () => {
+    const { items, manifest } = loadSuiteV2('extraction-hard-v2');
+    expect(items).toHaveLength(40);
+    expect(manifest.clusterId).toBe('extraction');
+    const v1 = loadSuiteV2('extraction-hard-v1').items;
+    for (const [i, old] of v1.entries()) {
+      expect(items[i]!.id).toBe(old.id);
+      expect(items[i]!.reference).toEqual(old.reference);
+    }
+    const messy = items.slice(24);
+    expect(messy.every((it) => it.id.startsWith('exh2-m'))).toBe(true);
+    for (const item of messy) {
+      expect(item.scoring.kind).toBe('field-match');
+      const schema = (item.scoring as { schema: Record<string, string> }).schema;
+      expect(Object.keys(schema)).toHaveLength(6);
+      expect(Object.keys(item.reference as Record<string, unknown>).sort()).toEqual(
+        Object.keys(schema).sort(),
+      );
+    }
+  });
+});
+
+describe('extraction-confirm-v1 (the first LOCKED holdout)', () => {
+  it('refuses the default (search) purpose — the sweep can never read it', () => {
+    expect(() => loadSuiteV2('extraction-confirm-v1')).toThrow(/LOCKED/);
+  });
+  it('loads under confirmation: 8 messy holdout items, field-match only', () => {
+    const { items, manifest } = loadSuiteV2('extraction-confirm-v1', undefined, 'confirmation');
+    expect(manifest.locked).toBe(true);
+    expect(items).toHaveLength(8);
+    expect(items.every((it) => it.id.startsWith('exc-'))).toBe(true);
+    expect(items.every((it) => it.scoring.kind === 'field-match')).toBe(true);
+  });
+});

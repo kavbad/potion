@@ -1,17 +1,17 @@
 {
-  "suiteId": "extraction-hard-v1",
-  "clusterId": "extraction",
-  "version": "1.0.0",
-  "source": {
-    "kind": "authored",
-    "name": "Potion-authored adversarial extraction (24 items, 8 fields each: distractor identifiers, superseded values, computed fields, absent-but-mentioned fields, order-inverted arrays, negated booleans; every string reference verified verbatim against its document and every computed number independently re-derived)",
-    "license": "Proprietary (Potion-authored)"
-  },
-  "items": "items.jsonl",
-  "scoring": {
-    "allowed": [
-      "field-match"
-    ]
-  },
-  "createdAt": "2026-08-19T12:00:00.000-07:00"
+ "suiteId": "extraction-hard-v1",
+ "clusterId": "extraction",
+ "version": "1.1.0",
+ "source": {
+  "kind": "authored",
+  "name": "Potion-authored adversarial extraction (24 items, 8 fields each: distractor identifiers, superseded values, computed fields, absent-but-mentioned fields, order-inverted arrays, negated booleans; every string reference verified verbatim against its document and every computed number independently re-derived) | 1.1.0 (2026-08-26): exh-07 -> exh-07r \u2014 the blank closing balance collided with the not-stated-means-empty contract rule (no model in 28 ever fully passed); the key now says compute it. New id so no cached cell can masquerade as a fresh measurement.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "field-match"
+  ]
+ },
+ "createdAt": "2026-08-19T12:00:00.000-07:00"
 }
