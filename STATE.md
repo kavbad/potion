@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-25 (pricing v2 decided; positioning depth folded into the redesign track)._
+_Last updated: 2026-08-25 (redesign S1–S4 shipped: primitives, Receipts, Evidence, Savings + the Monday Brief; final nav)._
 
 ## What Potion is (current thesis)
 
@@ -65,10 +65,15 @@ findings clause) · the partner name.
 
 ## Current work queue (mine, in order)
 
-Signed-in product redesign from first principles (design brief FIRST) ·
-instrument enlargement (extraction, rewrite-edit) · then per the roadmap
-ledger in `tasks/todo.md` (the ledger is append-only history; this file is
-the summary).
+Redesign track COMPLETE (2026-08-25): brief v4 built S1–S4 — receipt
+primitives + printed first-run, Receipts ledger with live tail, Today's
+pulse + bar proposal, Evidence rail, docs overhaul, Savings with the kept
+counterfactual, the Monday Brief (in-product; emailed edition deferred,
+rides the same composition), final nav (Today · Receipts · Evidence ·
+Savings · Try · Settings · Docs). Next: instrument enlargement
+(extraction, rewrite-edit) · then per the roadmap ledger in
+`tasks/todo.md` (the ledger is append-only history; this file is the
+summary).
 
 ## North star
 
