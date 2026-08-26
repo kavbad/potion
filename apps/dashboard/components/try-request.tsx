@@ -7,6 +7,7 @@
 // streams back, and the receipt shows what ran and why. Nothing simulated:
 // provenance is badged straight from the server's meta chunk.
 import { useState } from 'react';
+import { ReceiptCard } from '@/components/primitives';
 
 export type Rule = 'policy' | 'cost' | 'quality' | 'latency';
 export interface Alternative { rule: 'cost' | 'quality' | 'latency'; model: string | null; strategy_hash: string | null; quality: number | null; cost_per_1k: number | null; p95_ms: number | null }
@@ -56,6 +57,68 @@ function usd(n: number): string {
   return n < 1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
 }
 
+/** The routing call, extracted (S1): one request through the real serving
+ * path, streaming deltas + the receipt. Shared by Try and the first-run
+ * flow so the two never drift. */
+export async function routeOnce(
+  text: string,
+  rule: Rule,
+  cb: { onDelta?: (acc: string) => void; onReceipt?: (r: Receipt) => void; onError?: (msg: string) => void },
+): Promise<void> {
+  const res = await fetch('/api/playground/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ clusterId: 'auto', auto: true, ...(rule !== 'policy' ? { optimizeFor: rule } : {}), messages: [{ role: 'user', content: text }] }),
+  });
+  if (!res.ok || !res.body) {
+    const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    cb.onError?.(body?.error?.message ?? `request failed (${res.status})`);
+    return;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let acc = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      for (const obj of sseObjects(frame)) {
+        const choices = obj.choices as { delta?: { content?: string } }[] | undefined;
+        if (choices && choices.length > 0) {
+          const c = choices[0]?.delta?.content;
+          if (c) {
+            acc += c;
+            cb.onDelta?.(acc);
+          }
+        } else if (obj.usage) {
+          cb.onReceipt?.({
+            clusterId: typeof obj.cluster_id === 'string' ? obj.cluster_id : null,
+            clusterConfidence: typeof obj.cluster_confidence === 'number' ? obj.cluster_confidence : null,
+            strategyHash: typeof obj.strategy_hash === 'string' ? obj.strategy_hash : null,
+            model: typeof obj.model === 'string' ? obj.model : null,
+            quality: typeof obj.quality === 'number' ? obj.quality : null,
+            costPer1K: typeof obj.cost_per_1k === 'number' ? obj.cost_per_1k : null,
+            p95Ms: typeof obj.p95_ms === 'number' ? obj.p95_ms : null,
+            rule: (typeof obj.rule === 'string' ? obj.rule : 'policy') as Rule,
+            floor: typeof obj.floor === 'number' ? obj.floor : null,
+            alternatives: Array.isArray(obj.alternatives) ? (obj.alternatives as Alternative[]) : [],
+            provenance: typeof obj.provenance === 'string' ? obj.provenance : null,
+            costUsd: typeof obj.cost_usd === 'number' ? obj.cost_usd : null,
+            latencyMs: typeof obj.latency_ms === 'number' ? obj.latency_ms : null,
+          });
+        } else if (obj.error) {
+          cb.onError?.((obj.error as { message?: string }).message ?? 'stream error');
+        }
+      }
+    }
+  }
+}
+
 export function TryRequest({ onReceipt }: { onReceipt?: (r: Receipt) => void } = {}) {
   const [rule, setRule] = useState<Rule>('policy');
   const [lastPrompt, setLastPrompt] = useState('');
@@ -74,60 +137,14 @@ export function TryRequest({ onReceipt }: { onReceipt?: (r: Receipt) => void } =
     setReceipt(null);
     setError(null);
     try {
-      const res = await fetch('/api/playground/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ clusterId: 'auto', auto: true, ...(withRule !== 'policy' ? { optimizeFor: withRule } : {}), messages: [{ role: 'user', content: p }] }),
+      await routeOnce(p, withRule, {
+        onDelta: setAnswer,
+        onReceipt: (r) => {
+          setReceipt(r);
+          onReceipt?.(r);
+        },
+        onError: setError,
       });
-      if (!res.ok || !res.body) {
-        const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        setError(body?.error?.message ?? `request failed (${res.status})`);
-        return;
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      let acc = '';
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buf.indexOf('\n\n')) >= 0) {
-          const frame = buf.slice(0, idx);
-          buf = buf.slice(idx + 2);
-          for (const obj of sseObjects(frame)) {
-            const choices = obj.choices as { delta?: { content?: string } }[] | undefined;
-            if (choices && choices.length > 0) {
-              const c = choices[0]?.delta?.content;
-              if (c) {
-                acc += c;
-                setAnswer(acc);
-              }
-            } else if (obj.usage) {
-              const r: Receipt = {
-                clusterId: typeof obj.cluster_id === 'string' ? obj.cluster_id : null,
-                clusterConfidence: typeof obj.cluster_confidence === 'number' ? obj.cluster_confidence : null,
-                strategyHash: typeof obj.strategy_hash === 'string' ? obj.strategy_hash : null,
-                model: typeof obj.model === 'string' ? obj.model : null,
-                quality: typeof obj.quality === 'number' ? obj.quality : null,
-                costPer1K: typeof obj.cost_per_1k === 'number' ? obj.cost_per_1k : null,
-                p95Ms: typeof obj.p95_ms === 'number' ? obj.p95_ms : null,
-                rule: (typeof obj.rule === 'string' ? obj.rule : 'policy') as Rule,
-                floor: typeof obj.floor === 'number' ? obj.floor : null,
-                alternatives: Array.isArray(obj.alternatives) ? (obj.alternatives as Alternative[]) : [],
-                provenance: typeof obj.provenance === 'string' ? obj.provenance : null,
-                costUsd: typeof obj.cost_usd === 'number' ? obj.cost_usd : null,
-                latencyMs: typeof obj.latency_ms === 'number' ? obj.latency_ms : null,
-              };
-              setReceipt(r);
-              onReceipt?.(r);
-            } else if (obj.error) {
-              setError((obj.error as { message?: string }).message ?? 'stream error');
-            }
-          }
-        }
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -201,35 +218,10 @@ export function TryRequest({ onReceipt }: { onReceipt?: (r: Receipt) => void } =
         <div className="border-b border-line px-5 py-5 lg:border-b-0 lg:border-r">
           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">receipt</div>
           {receipt ? (
-            <dl className="mt-4 space-y-3.5 font-mono text-xs">
-              <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">kind of work</dt>
-                <dd className="mt-1 text-ink">
-                  {receipt.clusterId ?? '—'}
-                  {receipt.clusterConfidence !== null && <span className="ml-1 text-faint">{receipt.clusterConfidence.toFixed(2)}</span>}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">routed to</dt>
-                <dd className="mt-1 break-all text-[13px] text-accent">{receipt.model ?? (receipt.strategyHash ? receipt.strategyHash.slice(0, 8) : '—')}</dd>
-                {receipt.quality !== null && (
-                  <dd className="mt-0.5 text-soft">scores {receipt.quality.toFixed(2)} on this kind of work{receipt.floor !== null ? ` · floor ${receipt.floor.toFixed(2)}` : ''}</dd>
-                )}
-              </div>
-              <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">this request</dt>
-                <dd className="mt-1 text-soft">
-                  {receipt.costUsd !== null ? `$${receipt.costUsd.toFixed(5)}` : '—'} · {receipt.latencyMs !== null ? `${Math.round(receipt.latencyMs)} ms` : '—'}
-                  {receipt.costPer1K !== null ? ` · ${usd(receipt.costPer1K)} per 1k` : ''}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">rule · evidence</dt>
-                <dd className="mt-1 text-soft">
-                  {receipt.rule === 'policy' ? 'your rule' : `optimize for ${receipt.rule}`} · <span className={receipt.provenance === 'live' ? 'text-accent' : 'text-warn'}>{receipt.provenance ?? '—'}</span>
-                </dd>
-              </div>
-            </dl>
+            <div className="mt-4" key={`${receipt.strategyHash ?? ''}-${receipt.latencyMs ?? 0}`}>
+              {/* one object everywhere (S1): the receipt prints here too */}
+              <ReceiptCard r={receipt} subtitle="this request · just now" printing />
+            </div>
           ) : (
             <p className="mt-4 font-mono text-xs leading-relaxed text-soft">
               the same routing your API key gets — what ran, and why, appears here

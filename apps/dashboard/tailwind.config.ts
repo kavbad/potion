@@ -23,6 +23,14 @@ const config: Config = {
           soft: '#ccfbf1', // teal-100 — accent wash
         },
         warn: '#b45309', // amber-700 — alerts
+        kept: {
+          DEFAULT: '#0E5B43', // ledger green — ONLY for kept money and held bars
+          soft: '#DFEDE4',
+        },
+        refuse: {
+          DEFAULT: '#A03B25', // the refusal stamp — worn, never hidden
+          soft: '#F5E3DC',
+        },
       },
       boxShadow: {
         /* The glaze's single elevation: every raised artefact wears exactly

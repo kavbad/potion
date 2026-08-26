@@ -247,19 +247,31 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
         floor = floorOf(clusterId);
       }
     }
-    if (!frontier || frontier.points.length === 0) {
+    // An unmeasured cluster must not kill the FIRST experience (found by the
+    // S1 browser pass, 2026-08-25: a fresh org's sample request classified
+    // into a frontier-less cluster and died at the aha). Parity with /v1:
+    // serve the documented default strategy, honestly marked fallback=1 —
+    // the receipt says "not measured yet", never a 404.
+    const unmeasured = !frontier || frontier.points.length === 0;
+    // The fallback applies ONLY to auto-classified requests (a real taxonomy
+    // id the classifier chose). An EXPLICITLY named cluster that has no
+    // frontier keeps its 404 — a typo must error, not silently serve.
+    if (unmeasured && body.clusterId !== 'auto') {
       return reply
         .code(404)
         .send(openAiError(`no frontier for cluster '${clusterId}'`, 'invalid_request_error'));
     }
-    const alternatives = alternativesFor(frontier.points, floor);
-    const ruled = body.optimizeFor ? pickUnderRule(frontier.points, body.optimizeFor, floor) : null;
-    const resolved = await resolvePlaygroundPoint(
-      ctx,
-      org.orgId,
-      frontier,
-      ruled ? { strategyHash: ruled.strategyHash, auto: false } : body,
-    );
+    type PlaygroundResolved = Exclude<Awaited<ReturnType<typeof resolvePlaygroundPoint>>, { error: string }>;
+    const alternatives = unmeasured ? [] : alternativesFor(frontier!.points, floor);
+    const ruled = !unmeasured && body.optimizeFor ? pickUnderRule(frontier!.points, body.optimizeFor, floor) : null;
+    const resolved = unmeasured
+      ? ({ config: fallbackStrategyFor(ctx.providerMode, ctx.prices), fallback: 1 as const, point: null } as PlaygroundResolved)
+      : await resolvePlaygroundPoint(
+          ctx,
+          org.orgId,
+          frontier!,
+          ruled ? { strategyHash: ruled.strategyHash, auto: false } : body,
+        );
     if ('error' in resolved) {
       return reply.code(404).send(openAiError(resolved.error, 'invalid_request_error', 'not_found'));
     }
@@ -271,7 +283,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     const trace = traceHeaderValue({
       clusterId,
       strategyHash8: sh.slice(0, 8),
-      frontierVersion: frontier.version,
+      frontierVersion: frontier?.version ?? 0,
       policyType: 'playground',
       fallback: resolved.fallback,
       provenance,
