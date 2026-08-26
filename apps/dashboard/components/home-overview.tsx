@@ -18,6 +18,7 @@ import { ServingKeys } from '@/components/serving-keys';
 import { TryRequest, type Receipt } from '@/components/try-request';
 import { TodayPulse } from '@/components/today-pulse';
 import { BarProposal } from '@/components/bar-proposal';
+import { WeeklyBrief } from '@/components/weekly-brief';
 import { ReceiptCard } from '@/components/primitives';
 import { FIRST_RECEIPT_KEY } from '@/components/first-run';
 import { RoutingProof } from '@/components/routing-proof';
@@ -81,6 +82,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
       <div className="max-w-4xl">
         <TodayPulse />
         <BarProposal />
+        <WeeklyBrief />
 
         {/* the S1 contract in one quiet line each: where traffic points, and under what rule */}
         <p className="mt-4 font-mono text-[11px] leading-relaxed text-faint">
@@ -96,9 +98,9 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
 
         <p className="mt-8 text-sm text-soft">
           <Link href="/receipts" className="text-accent underline">Receipts</Link>
+          {' · '}<Link href="/frontiers" className="text-accent underline">Evidence</Link>
+          {' · '}<Link href="/usage" className="text-accent underline">Savings</Link>
           {' · '}<Link href="/try" className="text-accent underline">Try a request</Link>
-          {' · '}<Link href="/usage" className="text-accent underline">Usage &amp; savings</Link>
-          {' · '}<Link href="/frontiers" className="text-accent underline">Frontiers — the evidence</Link>
         </p>
 
         <ClustersDisclosure conn={conn} />

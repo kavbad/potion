@@ -67,6 +67,8 @@ interface UsageClusterSlice {
   outputTokens: number;
   costUsd: number;
   platformCostUsd: number;
+  /** S4 (0059): serve-time counterfactual, summed. */
+  baselineCostUsd: number;
 }
 
 function sliceOf(r: UsageDailyRow): UsageClusterSlice {
@@ -77,10 +79,11 @@ function sliceOf(r: UsageDailyRow): UsageClusterSlice {
     outputTokens: r.outputTokens,
     costUsd: r.costUsd,
     platformCostUsd: r.platformCostUsd,
+    baselineCostUsd: r.baselineCostUsd,
   };
 }
 
-const ZERO = { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0 };
+const ZERO = { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0, baselineCostUsd: 0 };
 
 function addSlice(
   acc: typeof ZERO,
@@ -92,6 +95,7 @@ function addSlice(
     outputTokens: acc.outputTokens + s.outputTokens,
     costUsd: acc.costUsd + s.costUsd,
     platformCostUsd: acc.platformCostUsd + s.platformCostUsd,
+    baselineCostUsd: acc.baselineCostUsd + s.baselineCostUsd,
   };
 }
 
@@ -116,7 +120,7 @@ export function shapeByCluster(rows: UsageDailyRow[]) {
   const clusters = new Map<string, UsageClusterSlice & { avgCostPer1K: number }>();
   for (const r of rows) {
     const s = sliceOf(r);
-    const acc = clusters.get(r.clusterId) ?? { ...s, requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0, avgCostPer1K: 0 };
+    const acc = clusters.get(r.clusterId) ?? { ...s, requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0, baselineCostUsd: 0, avgCostPer1K: 0 };
     const next = addSlice(acc, s);
     clusters.set(r.clusterId, { clusterId: r.clusterId, ...next, avgCostPer1K: 0 });
   }

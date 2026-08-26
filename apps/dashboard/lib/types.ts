@@ -202,11 +202,13 @@ export interface UsageDayRowDto {
   costUsd: number;
   platformCostUsd: number;
   clusters: UsageClusterSliceDto[];
+  baselineCostUsd?: number;
 }
 
 /** group_by=cluster row: whole-window totals per cluster + avg $/1K. */
 export interface UsageClusterRowDto extends UsageClusterSliceDto {
   avgCostPer1K: number;
+  baselineCostUsd?: number;
 }
 
 export interface UsageByDayResponse {

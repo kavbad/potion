@@ -26,10 +26,10 @@ import { usePathname } from 'next/navigation';
 const PRIMARY = [
   { href: '/', label: 'Today', hint: 'What routed, what it cost, what it saved' },
   { href: '/receipts', label: 'Receipts', hint: 'Every token, accounted for' },
-  { href: '/try', label: 'Try a request', hint: 'Send anything; see what Potion chose and why' },
-  { href: '/usage', label: 'Usage & savings', hint: 'What you spent, what you would have spent' },
-  { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, audit' },
-  { href: '/settings/team', label: 'Team', hint: 'Members and invites' },
+  { href: '/frontiers', label: 'Evidence', hint: 'The measurements behind your routing' },
+  { href: '/usage', label: 'Savings', hint: 'What you kept, verified per receipt' },
+  { href: '/try', label: 'Try', hint: 'Send anything; watch the receipt happen' },
+  { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, team, audit' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
 ];
 
@@ -38,11 +38,9 @@ const PRIMARY = [
  * /frontiers — the measured evidence itself — was reachable from nowhere,
  * which was a discoverability bug, not restraint.) */
 const ADVANCED = [
-  { href: '/build', label: 'Help me choose a policy' },
-  { href: '/frontiers', label: 'Frontiers (the evidence)' },
-  { href: '/reports', label: 'Savings report' },
+  { href: '/reports', label: 'Guarantee report' },
   { href: '/traces', label: 'Journeys (agent traces)' },
-  { href: '/settings/audit', label: 'Audit trail' },
+  { href: '/build', label: 'Help me choose a policy' },
   { href: '/support', label: 'Support' },
 ];
 

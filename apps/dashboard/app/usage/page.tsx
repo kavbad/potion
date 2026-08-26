@@ -57,9 +57,14 @@ export default async function UsagePage({
   }
 
   const windowTotals = byCluster.rows.reduce(
-    (acc, r) => ({ requests: acc.requests + r.requests, costUsd: acc.costUsd + r.costUsd }),
-    { requests: 0, costUsd: 0 },
+    (acc, r) => ({
+      requests: acc.requests + r.requests,
+      costUsd: acc.costUsd + r.costUsd,
+      baselineUsd: acc.baselineUsd + (r.baselineCostUsd ?? 0),
+    }),
+    { requests: 0, costUsd: 0, baselineUsd: 0 },
   );
+  const windowKept = Math.max(0, windowTotals.baselineUsd - windowTotals.costUsd);
 
   return (
     <PageShell>
@@ -90,7 +95,8 @@ export default async function UsagePage({
           Apply
         </button>
         <span className="text-xs text-faint">
-          {formatInt(windowTotals.requests)} requests · {formatUsd(windowTotals.costUsd)} in window
+          {formatInt(windowTotals.requests)} requests · {formatUsd(windowTotals.costUsd)} spent
+          {windowKept > 0 && <> · <span className="font-medium text-kept">{formatUsd(windowKept)} kept</span></>}
         </span>
       </form>
 
@@ -138,6 +144,7 @@ export default async function UsagePage({
                 <th className="py-2 pr-4 text-right font-medium">Requests</th>
                 <th className="py-2 pr-4 text-right font-medium">Tokens (in / out)</th>
                 <th className="py-2 pr-4 text-right font-medium">Cost</th>
+                <th className="py-2 pr-4 text-right font-medium">Kept</th>
                 <th className="py-2 text-right font-medium">Avg $/1K</th>
               </tr>
             </thead>
@@ -150,6 +157,9 @@ export default async function UsagePage({
                     {formatInt(r.inputTokens)} / {formatInt(r.outputTokens)}
                   </td>
                   <td className="py-2.5 pr-4 text-right tabular-nums text-ink">{formatUsd(r.costUsd)}</td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums font-medium text-kept">
+                    {(r.baselineCostUsd ?? 0) > r.costUsd ? formatUsd((r.baselineCostUsd ?? 0) - r.costUsd) : '—'}
+                  </td>
                   <td className="py-2.5 text-right tabular-nums text-soft">
                     {r.requests > 0 ? `$${r.avgCostPer1K.toFixed(3)}` : '—'}
                   </td>
@@ -204,10 +214,10 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Usage &amp; savings</h1>
+      <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Savings</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        What your key actually served: requests, tokens, and cost per cluster per day — and what
-        the same work would have cost without Potion.
+        What you spent, what you would have spent, and what you kept — per kind of work, per day,
+        verified receipt by receipt.
       </p>
       <FrontierStatus />
       {children}
