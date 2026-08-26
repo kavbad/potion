@@ -17,5 +17,5 @@ jobs:
           echo "readyz: $code"; test "$code" = "200"
       - name: Dashboard home
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.withpotion.com/home)
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://withpotion.com/home)
           echo "home: $code"; test "$code" = "200"

@@ -59,7 +59,7 @@ export function registerInviteRoutes(app: FastifyInstance, ctx: PotionContext, o
     }
     const inviter = org.userId ? await getUserById(db, org.userId) : null;
     const invite = await createInvite(db, { orgId: org.orgId, email, role, invitedBy: inviter?.email ?? 'admin' });
-    const appUrl = opts.appUrl ?? process.env.POTION_APP_URL ?? 'https://app.withpotion.com';
+    const appUrl = opts.appUrl ?? process.env.POTION_APP_URL ?? 'https://withpotion.com';
     const orgRow = await getOrgById(db, org.orgId);
     try {
       await sendEmailFromEnv().sendEmail({

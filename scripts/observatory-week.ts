@@ -306,7 +306,7 @@ if (!DRY) {
       ledgerAppend({ at: NOW.toISOString(), week, lane: 'canary', spendUsd: notes.issue.writer.costUsd, detail: `frontier-notes/${notes.issue.writer.model}` });
     }
     if (process.env.NOTION_API_KEY && process.env.NOTION_PAGE_ID) {
-      console.log(await postNoteLine({ token: process.env.NOTION_API_KEY, pageId: process.env.NOTION_PAGE_ID }, `${notes.digest} · ${process.env.POTION_APP_URL ?? 'https://app.withpotion.com'}/research/${notes.issue.slug}`));
+      console.log(await postNoteLine({ token: process.env.NOTION_API_KEY, pageId: process.env.NOTION_PAGE_ID }, `${notes.digest} · ${process.env.POTION_APP_URL ?? 'https://withpotion.com'}/research/${notes.issue.slug}`));
     }
   } catch (e) {
     console.log(`frontier notes: failed — ${e instanceof Error ? e.message : String(e)}`);

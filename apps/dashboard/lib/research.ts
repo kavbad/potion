@@ -60,5 +60,5 @@ export function getIssue(slug: string): Issue | null {
 export const RESEARCH_TITLE = 'Frontier Notes';
 export const RESEARCH_TAGLINE = 'Weekly measurements of which AI models are cheapest at a given quality, and what routing between them saves.';
 export function siteOrigin(): string {
-  return (process.env.POTION_APP_URL ?? 'https://app.withpotion.com').replace(/\/$/, '');
+  return (process.env.POTION_APP_URL ?? 'https://withpotion.com').replace(/\/$/, '');
 }

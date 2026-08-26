@@ -117,7 +117,7 @@ export function registerBillingRoutes(
       });
       const session = await payments.startCheckout(
         customer.customerId,
-        parsed.data.returnUrl ?? `${process.env.POTION_APP_URL ?? 'https://app.withpotion.com'}/settings/billing`,
+        parsed.data.returnUrl ?? `${process.env.POTION_APP_URL ?? 'https://withpotion.com'}/settings/billing`,
         org.orgId,
       );
       return reply.send({ url: session.url, sessionId: session.sessionId, transport: payments.kind });

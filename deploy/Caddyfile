@@ -24,14 +24,19 @@
 	}
 }
 
-{$POTION_APP_SITE} {
+# The APEX is the canonical host (2026-08-26, SEO/AEO cutover): content
+# authority, citations, and cookies all consolidate on the bare domain.
+# www joins it here rather than redirecting so both stay warm; Caddy holds
+# certs for both. api.<domain> is untouched — API subdomains are correct.
+{$POTION_ROOT_SITE}, www.{$POTION_ROOT_SITE} {
 	encode gzip
 	reverse_proxy dashboard:3001
 }
 
-# The bare domain and www: a person typing withpotion.com lands on the
-# landing page rather than a refused connection. Redirect (not a third
-# copy of the app) so there is exactly one canonical host for cookies.
-{$POTION_ROOT_SITE}, www.{$POTION_ROOT_SITE} {
-	redir https://{$POTION_APP_SITE}/home permanent
+# app.<domain>: the FORMER canonical host. Path-preserving permanent
+# redirect so every link, bookmark, and page indexed before the cutover
+# lands on its apex twin — never on a landing page that threw the path
+# away (the exact failure this cutover retires).
+{$POTION_APP_SITE} {
+	redir https://{$POTION_ROOT_SITE}{uri} permanent
 }

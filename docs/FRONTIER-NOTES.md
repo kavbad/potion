@@ -2,7 +2,7 @@
 
 **What it is.** Every Monday, after the Observatory's weekly run and the
 mixing lane's replay pass, Potion publishes one issue of *Frontier Notes* at
-`app.withpotion.com/research`. It is written by a model from the week's
+`withpotion.com/research`. It is written by a model from the week's
 measured artifacts, checked by a deterministic redaction pass, and goes live
 without a human in the loop (operator decision 2026-08-22; a review gate can
 be switched on with `FRONTIER_NOTES_GATE=1`, which holds the issue as a draft

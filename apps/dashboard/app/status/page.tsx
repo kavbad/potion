@@ -45,7 +45,7 @@ export default async function StatusPage() {
           </div>
           <div className="flex items-baseline justify-between px-5 py-4">
             <div>
-              <div className="text-[14px] text-ink">Dashboard — app.withpotion.com</div>
+              <div className="text-[14px] text-ink">Dashboard — withpotion.com</div>
               <div className="mt-0.5 text-[12px] text-soft">You are reading a page it just rendered</div>
             </div>
             <span className="font-mono text-[12px] text-accent">operational</span>
