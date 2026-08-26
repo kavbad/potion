@@ -7,7 +7,7 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-26 (Answer Engine C1–C3 live: measured answers + head-to-head comparisons + measured pricing pages + the daily note on cron — publishes only when the measured truth changes)._
+_Last updated: 2026-08-26 (canonical host = withpotion.com — app.* and www 301 path-preserving; Answer Engine C1–C3 live)._
 
 ## What Potion is (current thesis)
 
