@@ -26,11 +26,16 @@
 
 # The APEX is the canonical host (2026-08-26, SEO/AEO cutover): content
 # authority, citations, and cookies all consolidate on the bare domain.
-# www joins it here rather than redirecting so both stay warm; Caddy holds
-# certs for both. api.<domain> is untouched — API subdomains are correct.
-{$POTION_ROOT_SITE}, www.{$POTION_ROOT_SITE} {
+# api.<domain> is untouched — API subdomains are correct.
+{$POTION_ROOT_SITE} {
 	encode gzip
 	reverse_proxy dashboard:3001
+}
+
+# www and the former app host: path-preserving permanent redirects. ONE
+# canonical host serves content; every other name points at it.
+www.{$POTION_ROOT_SITE} {
+	redir https://{$POTION_ROOT_SITE}{uri} permanent
 }
 
 # app.<domain>: the FORMER canonical host. Path-preserving permanent
