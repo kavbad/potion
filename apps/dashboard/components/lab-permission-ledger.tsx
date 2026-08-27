@@ -8,7 +8,7 @@
 // auto-tighten (fail closed) — the UI then shows exactly that.
 import { useCallback, useEffect, useState } from 'react';
 
-interface GrantEvidence { n: number; approved: number; edited: number; rejected: number; lastAt: string | null }
+interface GrantEvidence { n: number; approved: number; edited: number; rejected: number; situations?: number; lastAt: string | null }
 export interface GrantRow {
   id: string;
   actionClass: string;
@@ -39,6 +39,8 @@ function EvidenceLine({ e }: { e: GrantEvidence }) {
     <span className="font-mono text-[12px] text-faint">
       {e.n} observed · {e.approved} approved{e.edited > 0 ? ` · ${e.edited} edited` : ''}
       {e.rejected > 0 ? ` · ${e.rejected} rejected` : ''}
+      {/* breadth, not just volume — narrow records earn slowly by design */}
+      {e.situations !== undefined && e.situations > 0 ? ` · ${e.situations} distinct situation${e.situations === 1 ? '' : 's'}` : ''}
       {e.lastAt ? ` · last ${new Date(e.lastAt).toLocaleDateString()}` : ''}
     </span>
   );

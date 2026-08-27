@@ -55,9 +55,11 @@ export function extractPoreEvidence(steps: EvidenceStep[]): Map<string, ActionEv
           openRejections[idx]!.evidence.outcome = 'edited';
           openRejections.splice(idx, 1);
         }
-        push(pending.cls, { at: step.createdAt, outcome: 'approved', highStakes: false });
+        // situation = the Step-12 fingerprint: WHICH version of the action
+        // was observed. The evaluator's diversity dimension reads it.
+        push(pending.cls, { at: step.createdAt, outcome: 'approved', highStakes: false, situation: pending.argsHash });
       } else {
-        const evidence: ActionEvidence = { at: step.createdAt, outcome: 'rejected', highStakes: false };
+        const evidence: ActionEvidence = { at: step.createdAt, outcome: 'rejected', highStakes: false, situation: pending.argsHash };
         push(pending.cls, evidence);
         openRejections.push({ cls: pending.cls, argsHash: pending.argsHash, evidence });
       }

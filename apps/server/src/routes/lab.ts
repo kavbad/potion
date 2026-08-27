@@ -1258,6 +1258,9 @@ export function registerLabRoutes(
         approved: count('approved'),
         edited: count('edited'),
         rejected: count('rejected'),
+        // Diversity (v3): how many distinct input situations the record
+        // spans — the ledger shows breadth, not just volume.
+        situations: new Set(ev.map((e) => e.situation ?? 'unfingerprinted')).size,
         lastAt: ev.length > 0 ? ev[ev.length - 1]!.at : null,
       };
     };

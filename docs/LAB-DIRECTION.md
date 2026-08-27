@@ -1,4 +1,4 @@
-# Potion Lab — direction (v2, 2026-08-26)
+# Potion Lab — direction (v3, 2026-08-27)
 
 **Status: product identity, revised after external review (operator-shared
 2026-08-26) and UNPAUSED by operator order the same day** ("start working
@@ -8,6 +8,106 @@ ladder closed). Companion to `docs/LAB-BUILD-PLAN.md` (the step ladder) and
 three legs). v1 (2026-08-24) is preserved in git history; every v1
 commitment that survives is restated here so this file stays the whole
 truth.
+
+## v3 (2026-08-27): the operator's evidence-density doctrine
+
+A second operator review sharpened v2. The corrections are law:
+
+**1. The key property of a good Potion worker is not that the work is
+simple. It is that the work creates repeated opportunities to accumulate
+trustworthy evidence.** The four properties of the strongest workers:
+high-frequency execution · repeatable action classes · observable outcomes
+· mostly reversible consequences. Complexity is not the disqualifier —
+sparse evidence is. A moderately sophisticated reconciliation worker doing
+500 workflows/week beats a trivial task done twice a month.
+
+**2. The measured clusters are a launch constraint, not the product
+boundary.** Today: workers are born only inside the live measurement
+surface (the honest-stop refusal). The long-term loop is: create a worker →
+identify required action classes → determine what is already measurable →
+BUILD OR ADAPT THE MISSING INSTRUMENTS → supervise → accumulate → graduate.
+Potion must eventually expand its measurement surface around the worker,
+not only create workers inside it. (Queued: the honest stop should become a
+measurement request, not a dead end.)
+
+**3. Thresholds are priors; the statistics are the requirement.** minN
+25/80/250 and the floors are defaults. The binding gate is (and already
+was) the Jeffreys lower confidence bound against the tier floor — encode
+the statistical requirement, never let a count become the requirement and
+the rationale get lost. The fuller rule permission approximates:
+`permission = evidence quality × evidence coverage × consequence ×
+reversibility × uncertainty`. Observation count is only one input.
+
+**4. Diversity is an evidence dimension (BUILT, this rev).** 25 nearly
+identical successful actions may prove very little; 25 spanning edge cases
+and distinct input distributions prove much more. The evaluator now runs
+the EARNING side on effective evidence: successes cap per distinct
+situation (REPEAT_EVIDENCE_CAP, a documented prior), failures are never
+capped, and the autonomous drift check stays on raw evidence — the cap
+governs what can buy trust, never what can revoke it. The ledger shows
+breadth ("n observed · k distinct situations"), and hold reasons name
+narrowness.
+
+**5. Speed of graduation is an emergent property, never a promise.** The
+product may say "you have enough volume that this action may graduate
+quickly" — never "volume guarantees graduation." A week of the same easy
+case is not coverage of the real distribution.
+
+**6. The read/write heuristic is ICP guidance, not the product statement.**
+The general rule: frequent + measurable + low-consequence actions graduate
+fastest; sparse or high-consequence actions remain supervised longer,
+potentially forever. Reading a CRM record graduates almost immediately;
+drafting an email quickly; updating a field slower; sending externally
+needs materially stronger evidence; issuing a refund may stay supervised;
+wiring money never graduates. That gradient IS the trust model working.
+
+**7. Archetype ranking (commercial).** The PAPERWORK WORKER is the
+cleanest first commercial archetype: maps to the hardest-won instruments
+(extraction-hard-v2 messy tier), objectively validatable outputs, high
+volume, reversible acts, measurable ROI. The inbox worker is excellent
+dogfood but "AI inbox assistant" is crowded — the valuable version owns a
+specific OPERATIONAL inbox with measurable cost of error. The watcher is
+structurally perfect but commercially weak while generic — it must ship as
+domain-specific workers (compliance / portfolio / procurement / revenue-ops
+/ incident watchers) where missing something has a price.
+
+**8. OpenClaw integration must carry the full causal chain.** Trust-gating
+an external runtime is only as strong as the reconstruction: which worker
+(and which VERSION) acted, which action class, what arguments, what side
+effect, whether approval was required and interception worked, the
+downstream result, whether the outcome was later reversed or corrected, and
+whether the action falls inside the distribution autonomy was earned on.
+Shipped: session↔harness binding, fingerprinted check-ins, argsHash,
+outcome steps, audit-sample marking. QUEUED: a reversal/correction
+reporting path (the 'reversed' outcome has no external inlet yet) and a
+distribution-membership check at pore time (an autonomous allow for a
+situation unlike anything in the earned record should escalate, not run).
+
+**9. Graduation is not the end of the loop — supervision must improve the
+worker.** The full loop to build toward: work → observe interventions and
+failures → identify recurring failure modes → diagnose harness/spec/tooling
+→ propose a harness change → REPLAY historical cases old-vs-new → prove
+improvement → deploy a new worker version → re-evaluate the permissions the
+change touches → continue. A rejection is a defect report. An edit is
+training/eval data. A repeated intervention pattern is a change proposal.
+A new worker version must prove itself against historical work before
+inheriting trust (edits already orphan provenance and change the hash —
+the trust record must not silently transfer).
+
+**The product, summarized (operator's words, adopted):** Potion Lab
+creates persistent workers for work that produces enough evidence to
+measure them. They begin supervised; they earn individual permissions as
+evidence accumulates; high-risk permissions may remain supervised forever;
+production performance is continuously audited; drift revokes autonomy;
+human intervention becomes structured evidence; repeated intervention
+triggers worker improvement; new versions prove themselves against
+historical work before inheriting trust. The launch wedge is high-volume
+repetitive operations because that is where the machine compounds fastest
+— but the ceiling is a system that can create a worker, teach it through
+real work, determine exactly what it can be trusted to do, improve it from
+its mistakes, and progressively reduce supervision without ever confusing
+volume with trust.
+
 
 ## What Potion Lab is
 

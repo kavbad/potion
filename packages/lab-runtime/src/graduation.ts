@@ -48,6 +48,15 @@ export interface ActionEvidence {
   /** True when this record came from mandatory sampling of an already-
    * autonomous class — the label stream that never degrades with trust. */
   fromAudit?: boolean;
+  /**
+   * Input-situation identity (the Step-12 fingerprint / argsHash): WHICH
+   * version of this action was observed. Diversity of situations is an
+   * evidence dimension — 25 approvals of the same identical call are not 25
+   * independent proofs (direction v3). Missing values collapse into one
+   * shared bucket, which is the conservative reading: unattributed evidence
+   * cannot claim to span the distribution.
+   */
+  situation?: string;
 }
 
 export interface GraduationInput {
@@ -69,6 +78,11 @@ export interface EvidenceSummary {
   successLower95: number;
   windowDays: number;
   highStakesFailures: number;
+  /** Distinct input situations the evidence spans (see REPEAT_EVIDENCE_CAP). */
+  distinctSituations: number;
+  /** Observations that actually counted toward the earning interval after
+   * the per-situation repeat cap. */
+  effectiveN: number;
 }
 
 /** Per-tier requirements — the risk-awareness, as data. minN and the floor
@@ -84,6 +98,45 @@ export const TIER_RULES: Readonly<
 /** Autonomous classes are ALWAYS sampled — unaudited autonomy is unmeasured
  * autonomy. The floor is permanent; nothing lowers it to 0. */
 export const AUDIT_RATE_FLOOR = 0.05;
+
+/**
+ * Diversity prior (direction v3): toward EARNING autonomy, at most this many
+ * successful observations of the SAME input situation count as evidence.
+ * Repeats beyond it are real work but not new proof — "25 nearly identical
+ * successful actions may prove very little". A prior, not a magic number:
+ * the binding requirement stays the interval lower bound over the effective
+ * evidence. Failures are NEVER capped — every failure is signal — and the
+ * autonomous drift re-check runs on RAW evidence: the cap governs what can
+ * buy trust, never what can revoke it.
+ */
+export const REPEAT_EVIDENCE_CAP = 5;
+
+/** The earning-side view of an evidence window: all failures, successes
+ * capped per situation at REPEAT_EVIDENCE_CAP. */
+export function effectiveEvidence(evidence: ActionEvidence[]): {
+  scores: number[];
+  rawN: number;
+  effectiveN: number;
+  distinctSituations: number;
+} {
+  const successPerSituation = new Map<string, number>();
+  const situations = new Set<string>();
+  const scores: number[] = [];
+  for (const e of evidence) {
+    const sit = e.situation ?? 'unfingerprinted';
+    situations.add(sit);
+    if (isFailure(e)) {
+      scores.push(0);
+      continue;
+    }
+    const seen = successPerSituation.get(sit) ?? 0;
+    if (seen < REPEAT_EVIDENCE_CAP) {
+      successPerSituation.set(sit, seen + 1);
+      scores.push(1);
+    }
+  }
+  return { scores, rawN: evidence.length, effectiveN: scores.length, distinctSituations: situations.size };
+}
 
 /** Recent-window trigger for automatic re-tightening: any reversal, or ≥2
  * rejections/edits within the recency window. */
@@ -143,31 +196,41 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
   }
 
   // ---- capability evidence under boundary-honest uncertainty ----
-  const scores: number[] = inWindow.map((e) => (isFailure(e) ? 0 : 1));
-  const successes = scores.reduce((s, x) => s + x, 0);
-  const [lower] = jeffreysCi(scores);
-
   if (state === 'autonomous') {
-    // Standing re-evaluation: the record still clears its floor, or tighten.
-    if (inWindow.length > 0 && lower < rules.lowerFloor) {
+    // Standing re-evaluation on RAW evidence: the drift check's job is to
+    // catch problems, and every raw observation is signal — the diversity
+    // cap governs earning, never revocation.
+    const rawScores: number[] = inWindow.map((e) => (isFailure(e) ? 0 : 1));
+    const [rawLower] = jeffreysCi(rawScores);
+    if (inWindow.length > 0 && rawLower < rules.lowerFloor) {
       return {
         kind: 'tighten',
-        why: `validated lower bound ${lower.toFixed(3)} fell below the ${tier} floor ${rules.lowerFloor}`,
+        why: `validated lower bound ${rawLower.toFixed(3)} fell below the ${tier} floor ${rules.lowerFloor}`,
       };
     }
     return { kind: 'hold', why: 'autonomous and holding its floor — standing sampled audit continues' };
   }
 
-  if (inWindow.length < rules.minN) {
+  // Earning runs on EFFECTIVE evidence (direction v3): repeats of the same
+  // situation stop accumulating trust past the cap, so a narrow distribution
+  // cannot buy autonomy on volume alone.
+  const eff = effectiveEvidence(inWindow);
+  const successes = eff.scores.reduce((s, x) => s + x, 0);
+  const [lower] = jeffreysCi(eff.scores);
+
+  if (eff.effectiveN < rules.minN) {
+    const narrowed = eff.rawN > eff.effectiveN
+      ? ` (${eff.rawN} observed across ${eff.distinctSituations} distinct situation(s) — repeats past ${REPEAT_EVIDENCE_CAP} per situation don't accumulate trust)`
+      : '';
     return {
       kind: 'hold',
-      why: `${inWindow.length} of ${rules.minN} observations required for ${tier} — keep supervising`,
+      why: `${eff.effectiveN} of ${rules.minN} effective observations required for ${tier}${narrowed} — keep supervising`,
     };
   }
   if (lower < rules.lowerFloor) {
     return {
       kind: 'hold',
-      why: `lower bound ${lower.toFixed(3)} below the ${tier} floor ${rules.lowerFloor} (n=${inWindow.length}) — evidence, not enough of it`,
+      why: `lower bound ${lower.toFixed(3)} below the ${tier} floor ${rules.lowerFloor} (effective n=${eff.effectiveN} across ${eff.distinctSituations} situations) — evidence, not enough of it`,
     };
   }
 
@@ -175,8 +238,8 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
   return {
     kind: 'propose-graduate',
     why:
-      `${inWindow.length} observed actions in ${rules.windowDays}d, validated lower bound ` +
-      `${lower.toFixed(3)} ≥ ${rules.lowerFloor}, no high-stakes failures — a human may now grant autonomy ` +
+      `${eff.effectiveN} effective observations across ${eff.distinctSituations} distinct situations in ${rules.windowDays}d, ` +
+      `validated lower bound ${lower.toFixed(3)} ≥ ${rules.lowerFloor}, no high-stakes failures — a human may now grant autonomy ` +
       `(standing audit rate ≥ ${AUDIT_RATE_FLOOR})`,
     evidence: {
       n: inWindow.length,
@@ -184,6 +247,8 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
       successLower95: lower,
       windowDays: rules.windowDays,
       highStakesFailures: 0,
+      distinctSituations: eff.distinctSituations,
+      effectiveN: eff.effectiveN,
     },
   };
 }

@@ -5,18 +5,31 @@ import { describe, expect, it } from 'vitest';
 import {
   AUDIT_RATE_FLOOR,
   auditRateFor,
+  effectiveEvidence,
   graduationDecision,
+  REPEAT_EVIDENCE_CAP,
   type ActionEvidence,
 } from './graduation.js';
 
 const NOW = new Date('2026-08-26T12:00:00Z');
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000);
 
+// Each fabricated observation is a DISTINCT situation unless a test pins
+// sameness — the diversity dimension (v3) is what the narrow-distribution
+// tests exercise explicitly.
+let sitCounter = 0;
 function ev(
   outcome: ActionEvidence['outcome'],
-  opts: { highStakes?: boolean; at?: Date; fromAudit?: boolean } = {},
+  opts: { highStakes?: boolean; at?: Date; fromAudit?: boolean; situation?: string } = {},
 ): ActionEvidence {
-  return { at: opts.at ?? daysAgo(5), outcome, highStakes: opts.highStakes ?? false, fromAudit: opts.fromAudit };
+  sitCounter += 1;
+  return {
+    at: opts.at ?? daysAgo(5),
+    outcome,
+    highStakes: opts.highStakes ?? false,
+    fromAudit: opts.fromAudit,
+    situation: opts.situation ?? `sit-${sitCounter}`,
+  };
 }
 
 const many = (n: number, f: () => ActionEvidence) => Array.from({ length: n }, f);
@@ -114,5 +127,48 @@ describe('the audit floor: unaudited autonomy is unmeasured autonomy', () => {
     const d = graduationDecision({ tier: 'reversible-act', state: 'supervised', evidence: stale, now: NOW });
     expect(d.kind).toBe('hold');
     expect(d.why).toContain('0 of 80');
+  });
+});
+
+describe('diversity (v3): volume is not trust', () => {
+  it('“25 nearly identical successful actions may prove very little” — 40 approvals of ONE situation hold', () => {
+    const narrow = many(40, () => ev('approved', { situation: 'same-call' }));
+    const d = graduationDecision({ tier: 'reversible-read', state: 'supervised', evidence: narrow, now: NOW });
+    expect(d.kind).toBe('hold');
+    expect(d.why).toContain('distinct situation');
+    // The SAME count spread across distinct situations proposes.
+    const diverse = many(40, () => ev('approved'));
+    const d2 = graduationDecision({ tier: 'reversible-read', state: 'supervised', evidence: diverse, now: NOW });
+    expect(d2.kind).toBe('propose-graduate');
+    if (d2.kind === 'propose-graduate') {
+      expect(d2.evidence.distinctSituations).toBe(40);
+      expect(d2.evidence.effectiveN).toBe(40);
+    }
+  });
+
+  it('unattributed evidence collapses into one shared bucket — conservative by construction', () => {
+    const unattributed: ActionEvidence[] = Array.from({ length: 40 }, () => ({
+      at: daysAgo(5), outcome: 'approved', highStakes: false,
+    }));
+    const d = graduationDecision({ tier: 'reversible-read', state: 'supervised', evidence: unattributed, now: NOW });
+    expect(d.kind).toBe('hold');
+  });
+
+  it('the cap governs earning, never signal: failures are never discounted', () => {
+    const eff = effectiveEvidence([
+      ...many(10, () => ev('approved', { situation: 'same' })),
+      ...many(10, () => ev('rejected', { situation: 'same' })),
+    ]);
+    // successes cap at REPEAT_EVIDENCE_CAP; every failure counts.
+    expect(eff.scores.filter((s) => s === 1).length).toBe(REPEAT_EVIDENCE_CAP);
+    expect(eff.scores.filter((s) => s === 0).length).toBe(10);
+    expect(eff.distinctSituations).toBe(1);
+  });
+
+  it('an autonomous class is never tightened for narrowness — raw evidence drives the drift check', () => {
+    const narrow = many(300, () => ev('validated', { situation: 'same-call', fromAudit: true }));
+    const d = graduationDecision({ tier: 'reversible-act', state: 'autonomous', evidence: narrow, now: NOW });
+    expect(d.kind).toBe('hold');
+    expect(d.why).toContain('holding its floor');
   });
 });
