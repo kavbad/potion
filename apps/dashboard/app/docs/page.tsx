@@ -130,7 +130,7 @@ export default async function DocsPage() {
           the thing the section below describes. */}
       <nav className="mb-10 border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-4 text-[12.5px] leading-relaxed text-soft">
         <span className="mr-2 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">On this page</span>
-        <a href="#quickstart" className="text-accent underline">Quickstart</a> · <a href="#agent" className="text-accent underline">Hand it to your agent</a> · <a href="#auth" className="text-accent underline">Authentication</a> · <a href="#model" className="text-accent underline">The model field</a> · <a href="#trace" className="text-accent underline">The decision header</a> · <a href="#receipts" className="text-accent underline">Receipts &amp; kept</a> · <a href="#policies" className="text-accent underline">Policies</a> · <a href="#controls" className="text-accent underline">Bar, floor, pins</a> · <a href="#workloads" className="text-accent underline">Workload types</a> · <a href="#compat" className="text-accent underline">Streaming</a> · <a href="#errors" className="text-accent underline">Errors</a> · <a href="#limits" className="text-accent underline">Limits</a> · <a href="#pricing" className="text-accent underline">Pricing</a> · <a href="#traces-api" className="text-accent underline">Agent journeys</a> · <a href="#api" className="text-accent underline">API reference</a> · <a href="#honest" className="text-accent underline">Things worth knowing</a>
+        <a href="#quickstart" className="text-accent underline">Quickstart</a> · <a href="#agent" className="text-accent underline">Hand it to your agent</a> · <a href="#auth" className="text-accent underline">Authentication</a> · <a href="#model" className="text-accent underline">The model field</a> · <a href="#trace" className="text-accent underline">The decision header</a> · <a href="#receipts" className="text-accent underline">Receipts &amp; kept</a> · <a href="#policies" className="text-accent underline">Policies</a> · <a href="#first-weeks" className="text-accent underline">The first two weeks</a> · <a href="#controls" className="text-accent underline">Bar, floor, pins</a> · <a href="#workloads" className="text-accent underline">Workload types</a> · <a href="#compat" className="text-accent underline">Streaming</a> · <a href="#errors" className="text-accent underline">Errors</a> · <a href="#limits" className="text-accent underline">Limits</a> · <a href="#pricing" className="text-accent underline">Pricing</a> · <a href="#traces-api" className="text-accent underline">Agent journeys</a> · <a href="#api" className="text-accent underline">API reference</a> · <a href="#honest" className="text-accent underline">Things worth knowing</a>
       </nav>
 
       <Section id="ask" title="Ask the docs">
@@ -316,6 +316,22 @@ export default async function DocsPage() {
           label="Rebind this key's policy"
           text={`curl -X POST ${base}/v1/policies \\\n  -H "Authorization: Bearer $POTION_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"type":"min_cost","qualityFloor":0.8}'`}
         />
+      </Section>
+
+      <Section id="first-weeks" title="The first two weeks">
+        <p className="text-sm leading-relaxed text-soft">
+          <span className="font-medium text-ink">Your router works on day one</span> — v1 routes
+          every request on Potion&rsquo;s own live measurements, under your quality bar. Then, over
+          your first week or two of traffic, Potion reads a small, redacted, capped sample of your
+          requests (an explicit setting, off with one switch) and measures models on{' '}
+          <em>your</em> actual work. When coverage fills for a kind of work, Potion{' '}
+          <span className="font-medium text-ink">proposes your own quality bar</span> for it — you
+          accept or ignore; nothing changes silently. Each accepted bar recompiles your router as a
+          new version with the change written on it. Starting from scratch, with no incumbent to
+          measure against, the arc is identical — your work is measured against a strong default
+          bar instead. The <a href="/router" className="text-accent underline">Router page</a>{' '}
+          shows live where you are in this arc.
+        </p>
       </Section>
 
       <Section id="controls" title="Your bar, your floor, your pins">

@@ -268,6 +268,18 @@ export function FirstRunGate() {
                 )}
               </div>
             </div>
+            {/* The one story the user must leave with (comprehension pass):
+                works day one → read for 1–2 weeks → becomes yours. The
+                from-scratch variant answers "but I have nothing to measure". */}
+            <div className="mt-5 border border-[#d9d5cb] bg-white px-4 py-3.5">
+              <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">how this works</div>
+              <ol className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-soft">
+                <li><span className="font-medium text-ink">It works today.</span> v1 routes every request on Potion&rsquo;s live measurements, under your bar — nothing to wait for.</li>
+                <li><span className="font-medium text-ink">Weeks 1–2: Potion reads your traffic.</span> A small, redacted, capped sample of your requests is measured to learn what <em>your</em> work is and which models are good enough at it.
+                  {choice === 'scratch' ? ' Starting from scratch, there’s no old model to beat — your work is measured against a strong default bar; the arc is the same.' : ''}</li>
+                <li><span className="font-medium text-ink">Then it becomes yours.</span> Potion proposes your own quality bar per kind of work — you accept or ignore, nothing changes silently — and your router recompiles as a new version with the change written on it.</li>
+              </ol>
+            </div>
             <div className="mt-6 flex items-center gap-4">
               <button type="button" onClick={() => setBeat('try')} className="bg-ink px-5 py-2.5 text-[13px] font-medium text-[#f4f2ec] hover:opacity-90">
                 Continue

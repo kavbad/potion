@@ -24,6 +24,7 @@ import { FIRST_RECEIPT_KEY } from '@/components/first-run';
 import { RoutingProof } from '@/components/routing-proof';
 import { FrontierStatus } from '@/components/frontier-status';
 import { AgentInstructions } from '@/components/agent-instructions';
+import { RouterArc } from '@/components/router-arc';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 function ClustersDisclosure({ conn }: { conn: ConnectionResponse }) {
@@ -121,6 +122,10 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
         Point your existing client at Potion and keep everything else. Then you will see, on a
         receipt, what Potion chose for each request and what that saved.
       </p>
+
+      <div className="mt-8">
+        <RouterArc hasTraffic={false} />
+      </div>
 
       <div className="mt-10 space-y-10">
         <section className="border-t border-[#d9d5cb] pt-8">

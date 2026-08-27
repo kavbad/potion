@@ -9,6 +9,7 @@
 import Link from 'next/link';
 import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
+import { RouterArc } from '@/components/router-arc';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,11 +45,14 @@ const money = (v: number | null) => (v === null ? '—' : `$${v.toFixed(4)}`);
 export default async function RouterPage() {
   let data: RouterResponse | null = null;
   let unreachable = false;
+  let hasTraffic = false;
   try {
     data = await fetchOrRecover<RouterResponse>('/api/router');
+    const activity = await fetchOrRecover<{ summary: { withRoutingDecision: number } }>('/api/routing-activity?limit=1');
+    hasTraffic = activity.summary.withRoutingDecision > 0;
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
-    else throw e;
+    else if (data === null) throw e;
   }
 
   return (
@@ -91,6 +95,11 @@ export default async function RouterPage() {
               </p>
             )}
           </section>
+
+          {/* ---- the arc: how this becomes YOURS (comprehension pass) ---- */}
+          <div className="mt-8">
+            <RouterArc hasTraffic={hasTraffic} />
+          </div>
 
           {/* ---- the assignments: where each kind of work routes, and why ---- */}
           <section className="mt-8">
