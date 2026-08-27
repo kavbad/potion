@@ -103,10 +103,16 @@ export function Landing() {
           {/* R2 repositioning (operator-endorsed line, 2026-08-27): the
               router is the product. The bill promise is not removed — it
               moved one breath down and stays verbatim in the bullets. */}
-          <h1 className="mt-8 text-[3.2rem] font-medium leading-[1.02] tracking-[-0.035em] text-ink sm:text-[4.25rem] lg:text-[5.25rem]">
-            Your inference is unique.{' '}
+          {/* Two sentences ≈ twice the old headline's length, so the scale
+              steps down a rung (operator: "resize so the tagline fits") and
+              each sentence takes its own line; the mark stays under the
+              LAST words only, as the original design had it. */}
+          <h1 className="mt-8 text-[2.35rem] font-medium leading-[1.08] tracking-[-0.03em] text-ink sm:text-[3.3rem] lg:text-[4.1rem]">
+            Your inference is unique.
+            <br className="hidden sm:block" />{' '}
+            Your router should{' '}
             <span className="relative inline-block">
-              Your router should be&nbsp;too.
+              be&nbsp;too.
               {/* the graduation mark, at headline scale: beneath the words,
                   never through them (a strike reads as negation) */}
               <span aria-hidden className="absolute bottom-[-0.06em] left-[-0.02em] right-[0.06em] flex items-end">
