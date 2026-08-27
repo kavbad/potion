@@ -61,9 +61,35 @@ look or feel generational."* The lesson is recorded as law:
 - `/lab` — the roster: hire card hero (paper, shadow), specimen cards with
   trust-at-a-glance.
 - `/lab/harness/[hash]` — the specimen: identity header, newborn guide,
-  the instrument in a framed viewport, permission ledger, connections
-  (declared accounts first, honest connectability), OpenClaw wiring card.
-- `/lab/run/[id]` — the run seen through the instrument, framed the same.
+  THE WORKBENCH CONSOLE, permission ledger, connections (declared accounts
+  first, honest connectability), OpenClaw wiring card.
+- `/lab/run/[id]` — the same console with the run attached.
+
+## The workbench console (v3.1, 2026-08-27 — the organism is retired)
+
+The abstract living-form canvas failed its only test: the operator looked
+at it and said "i still dont know what im looking at." From first
+principles, the worker's primary surface exists to answer four questions
+at a glance, and now it does, in words and numbers:
+
+1. **What is this worker** — the anatomy rail: mission, brain (with the
+   quality dial), budget, accounts, rules, memory. Every value is the live
+   parameter; every edit goes through the real routes.
+2. **What is it doing** — the work feed: the durable step record narrated
+   plainly (thought / action / asked you), timestamped, each model step
+   carrying its metered-or-est cost and its SIMULATED badge when honest.
+3. **What is it asking** — the question card, full-width, warn-bordered,
+   with "every answer lands on the permission record as evidence."
+4. **What is it costing** — the fuel bar: metered truth against the hard
+   cap; est. spend labeled separately, never blended.
+
+What survived the organism: everything but the paint — the audited
+deriveFormState derivation, the 1.5s durable-row poll, typed staleness,
+metered/est duality, the brain-only truth, frozen-spec live runs, and the
+pixel-to-parameter law (now value-to-parameter: the audit map ships as a
+collapsible provenance panel on the console itself). Rules carried
+forward: no invented motion, no decoration without data, state chips in
+plain language ("waiting for your answer", "stopped at the budget cap").
 
 ---
 

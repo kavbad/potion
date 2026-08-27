@@ -4,7 +4,7 @@
 // the form's overlay through the same real routes as Step 8.
 import Link from 'next/link';
 import { fetchOrRecover } from '@/lib/recover';
-import { LabFormView } from '@/components/lab-form-view';
+import { LabConsole } from '@/components/lab-console';
 import type { HarnessDto, MemoryDto, RunDto } from '@potion/lab-form';
 
 export const dynamic = 'force-dynamic';
@@ -28,9 +28,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         {' · '}<Link href={`/lab/harness/${run.harnessHash}`} className="text-soft hover:text-accent">{harness.name}</Link>
         {' · '}run <code className="normal-case">{id.slice(0, 12)}…</code>
       </nav>
-      <div className="overflow-hidden rounded-lg border border-[#d9d5cb] shadow-paper">
-        <LabFormView harness={harness} memory={memory} runId={id} initialRun={run} role={me.role} surface="run" />
-      </div>
+      <LabConsole harness={harness} memory={memory} runId={id} initialRun={run} role={me.role} surface="run" />
     </main>
   );
 }

@@ -7,7 +7,7 @@
 // primary editing surface.
 import Link from 'next/link';
 import { fetchOrRecover } from '@/lib/recover';
-import { LabFormView } from '@/components/lab-form-view';
+import { LabConsole } from '@/components/lab-console';
 import { ConnectorPanel } from '@/components/lab-actions';
 import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import { BenchLabel, CARD, LabStage, SpecimenMark } from '@/components/lab-bench';
@@ -161,11 +161,11 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
           {/* ---- the newborn guide: a next step before any instrument ---- */}
           {latest === null ? <WhatHappensNow spec={harness.spec} /> : null}
 
-          {/* ---- the instrument: the one dark element, set into paper ---- */}
+          {/* ---- the workbench console: what it is, does, asks, costs ---- */}
           <section className="mt-8">
-            <BenchLabel right="every pixel derives from a real parameter">The living form</BenchLabel>
-            <div className="mt-3 overflow-hidden rounded-lg border border-[#d9d5cb] shadow-paper">
-              <LabFormView
+            <BenchLabel right="every value derives from a real parameter">The worker, live</BenchLabel>
+            <div className="mt-3">
+              <LabConsole
                 harness={harness}
                 memory={memory}
                 runId={latest?.runId ?? null}
