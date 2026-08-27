@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
 import { RouterArc } from '@/components/router-arc';
+import { RouterPriorities } from '@/components/router-priorities';
+import type { Policy } from '@potion/core';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +34,7 @@ interface RouterResponse {
   routerHash: string;
   mintedAt: string;
   document: {
-    policy: { description: string } | null;
+    policy: { description: string; config?: Policy } | null;
     assignments: Assignment[];
     changes: string[];
     interpreted?: { summary: string; mix: Array<{ clusterId: string; share: number }> };
@@ -48,10 +50,12 @@ export default async function RouterPage() {
   let data: RouterResponse | null = null;
   let unreachable = false;
   let hasTraffic = false;
+  let role: 'admin' | 'member' | 'viewer' = 'viewer';
   try {
     data = await fetchOrRecover<RouterResponse>('/api/router');
     const activity = await fetchOrRecover<{ summary: { withRoutingDecision: number } }>('/api/routing-activity?limit=1');
     hasTraffic = activity.summary.withRoutingDecision > 0;
+    role = (await fetchOrRecover<{ role: 'admin' | 'member' | 'viewer' }>('/auth/me')).role;
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
     else if (data === null) throw e;
@@ -117,6 +121,16 @@ export default async function RouterPage() {
               </p>
             )}
           </section>
+
+          {/* ---- O2: steer by outcome — the frontier as a control ---- */}
+          <div className="mt-8">
+            <RouterPriorities
+              currentPolicy={data.document.policy?.config ?? null}
+              currentAssignments={data.document.assignments}
+              currentExpected={data.document.expected ?? null}
+              role={role}
+            />
+          </div>
 
           {/* ---- the arc: how this becomes YOURS (comprehension pass) ---- */}
           <div className="mt-8">

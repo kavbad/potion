@@ -36,6 +36,7 @@ import {
   getOrgById,
   revokeApiKey,
   upsertRouterInterpretation,
+  getRouterInterpretation,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -46,6 +47,7 @@ import type { PotionContext } from '../context.js';
 import { publicBaseUrl } from '../public-url.js';
 import { highestQualityPoint } from './chat.js';
 import { assignmentsUnderPolicy, compileAndMintRouter, expectedForMix } from '../routing/compile-router.js';
+import { describePolicy } from './connection.js';
 import { scanRawValue } from '@potion/lab-spec';
 import { routerModelName } from '../routing/router-slug.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
@@ -728,6 +730,39 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
           };
         })
         .filter((x) => x !== null),
+      expected,
+    });
+  });
+
+  // ================= O2 — ADJUST PRIORITIES (the what-if) =================
+  //
+  // POST /api/router/whatif — a CANDIDATE policy in, the router it would
+  // compile out. Pure: nothing is minted, nothing is persisted; the same
+  // serve-path functions that build the real router answer the question, so
+  // the preview and production cannot disagree. The user learns the
+  // frontier by playing with outcomes — quality up, watch cost and the
+  // composition respond — and applying goes through POST /api/policies
+  // (rebindKeys), which recompiles the real router as a new version.
+  app.post('/api/router/whatif', async (req, reply) => {
+    const body = z.object({ policy: PolicySchema }).safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(openAiError('a valid policy is required', 'invalid_request_error'));
+    }
+    const orgId = req.potionOrg!.orgId;
+    const candidate = body.data.policy;
+    const assignments = await assignmentsUnderPolicy(ctx, db, orgId, candidate, (m) => app.log.warn(m));
+    const interp = await getRouterInterpretation(db, orgId);
+    const expected = interp === null ? null : await expectedForMix(db, orgId, assignments, interp.mix);
+    return reply.send({
+      description: describePolicy(candidate),
+      assignments: assignments.map((a) => ({
+        clusterId: a.clusterId,
+        label: a.strategy.label,
+        quality: a.quality,
+        costPer1K: a.costPer1K,
+        latencyP95: a.latencyP95,
+        fallback: a.fallback,
+      })),
       expected,
     });
   });

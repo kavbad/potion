@@ -234,3 +234,58 @@ describe('potion/<slug> — the router as a serving alias', () => {
     expect(data[1]!.id).toBe('potion-auto');
   });
 });
+
+describe('O2 — the what-if: candidate policy in, the router it would compile out', () => {
+  it('the quality floor moves the assignment, and the preview math is the frontier\u2019s', async () => {
+    // Two points on the frontier: the slider now has something to choose.
+    await saveFrontier(
+      h.db, 'summarization',
+      [livePoint('mock-cheap', 0.85, 0.012), livePoint('mock-mid', 0.93, 0.05)],
+      'recompute', 'pv-o2',
+    );
+    const whatif = (policy: unknown) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/router/whatif',
+        headers: { cookie: COOKIE, 'content-type': 'application/json' },
+        payload: { policy },
+      });
+
+    const low = await whatif({ type: 'min_cost', qualityFloor: 0.8 });
+    expect(low.statusCode, low.body).toBe(200);
+    const lowBody = low.json() as { assignments: Array<{ clusterId: string; label: string }>; expected: { savingsPct: number; costPer1K: number } | null };
+    expect(lowBody.assignments.find((a) => a.clusterId === 'summarization')!.label).toBe('mock-cheap');
+    // The O1 interpretation exists for this org, so the mix-weighted
+    // projection is present — and cheap-vs-best-scorer is a real saving.
+    expect(lowBody.expected).not.toBeNull();
+    expect(lowBody.expected!.savingsPct).toBeGreaterThan(0.5);
+
+    const high = await whatif({ type: 'min_cost', qualityFloor: 0.92 });
+    const highBody = high.json() as { assignments: Array<{ clusterId: string; label: string }>; expected: { costPer1K: number } | null };
+    expect(highBody.assignments.find((a) => a.clusterId === 'summarization')!.label).toBe('mock-mid');
+    expect(highBody.expected!.costPer1K).toBeGreaterThan(lowBody.expected!.costPer1K);
+  });
+
+  it('a what-if mints NOTHING — the real router version is untouched by previews', async () => {
+    const before = (await getRouter()).json() as RouterBody;
+    await app.inject({
+      method: 'POST',
+      url: '/api/router/whatif',
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: { policy: { type: 'min_cost', qualityFloor: 0.99 } },
+    });
+    const after = (await getRouter()).json() as RouterBody;
+    expect(after.version).toBe(before.version);
+  });
+
+  it('an invalid candidate is a 400, never a crash', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/router/whatif',
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: { policy: { type: 'nonsense' } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+

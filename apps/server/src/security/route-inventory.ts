@@ -133,6 +133,8 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'GET', path: '/api/router', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },
   // O1: description → interpreted mix + instant reveal; writes the org's own interpretation row only.
   { method: 'POST', path: '/api/onboarding/interpret', surface: 'api', mutating: true, guard: 'member', probeBody: { description: 'an app that summarizes documents' }, tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },
+  // O2: candidate policy → the router it would compile. Pure read over org-preferred frontiers; mints nothing.
+  { method: 'POST', path: '/api/router/whatif', surface: 'api', mutating: false, guard: 'viewer', probeBody: { policy: { type: 'min_cost', qualityFloor: 0.8 } }, tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/routing-activity', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   // S2 — "what are you building?". POST but READ-ONLY: it classifies text and
   // reads the caller's org-preferred frontier, creating nothing. Guard is
