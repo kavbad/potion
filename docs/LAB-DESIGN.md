@@ -1,9 +1,73 @@
-# Potion Lab — the design language (2026-08-26)
+# Potion Lab — the design language (v2, 2026-08-27)
 
 **Operator mandate: Lab must look and feel like a generational product.**
-This brief records the identity before the build applies it; the redesign
-track's laws carry over (day-2-first, restraint, one theater moment, no
-decoration without data).
+
+## v2: daylight (what changed and why)
+
+v1 built the Lab as a deep-ink bench — the workshop after hours. The
+operator's verdict on the built page was decisive (2026-08-27): *"this
+entire page is kind of hard to read cause its so dark, and it does not
+look or feel generational."* The lesson is recorded as law:
+
+> **Pages you READ live on paper. Dark is reserved for the instrument.**
+> A reading surface on a dark ground reads as gloom, not craft. The one
+> legitimately dark element is the organism's viewport (lab-form) — a
+> screen SET INTO the paper, the way every serious instrument mounts its
+> display. The organism stays the light source *inside its own glass*.
+
+## The identity: one paper house, one dark instrument
+
+- **The whole product is one room now**: warm paper, ink, hairlines, mono
+  provenance labels — the Lab uses the same tokens as the ledger and the
+  research pages (`ink/soft/faint/line/accent/kept/refuse`, paper cards
+  `#fbfaf7` on `#d9d5cb`).
+- **The instrument viewport** (lab-form canvas) keeps its own deep ground
+  and its policy-derived palette. The shell never borrows the organism's
+  tints for furniture; they mean things.
+- Lab identity carries in: the specimen mark (hash-hue ring), the trust
+  line, the graduation pulse, and the instrument itself — not in a dark
+  shell.
+
+## The laws (carried from v1, plus the new ones)
+
+1. **Pixel-to-parameter, everywhere.** Chips, dates, counts, tiers — every
+   rendered mark derives from a real parameter. No decoration without data.
+2. **Paper stays paper.** The permission ledger, receipts, reports are
+   light paper cards — now at home on a light page.
+3. **One theater moment: graduation.** The single kept-green pulse on a
+   grant (`.lab-graduate`), reduced-motion safe. Nothing else animates for
+   drama.
+4. **The hire moment is ONE question** — the job in plain words, with the
+   refinements quiet beneath it.
+5. **Every field explains itself** (operator, 2026-08-27): an InfoDot on
+   each hire field, plain-language, truthful to the code (the worth field
+   shows its real derived cap live).
+6. **Every question the product asks must be answerable where it is
+   asked.** A cluster-uncertain draft renders its candidates as clickable
+   answers; a missing-evidence gap renders as an honest stop, visually
+   distinct, with nothing to answer.
+7. **No instant teleports.** Creation renders as the birth sequence —
+   staged reveal of the REAL derivation (mission, name, cluster, frontier
+   evidence, cap, accounts, supervision), then the operator walks to the
+   worker. Pacing is presentation; every line is data.
+8. **A newborn page leads with the next step.** "What happens now" (connect
+   → trial → answer → earn) renders until the first run exists, with the
+   brain-only truth stated before the trial button, not after.
+9. **Legibility floor** (house rule 2026-08-26): mono labels ≥ ~12px,
+   tracking pulled in when raised.
+
+## The surfaces
+
+- `/lab` — the roster: hire card hero (paper, shadow), specimen cards with
+  trust-at-a-glance.
+- `/lab/harness/[hash]` — the specimen: identity header, newborn guide,
+  the instrument in a framed viewport, permission ledger, connections
+  (declared accounts first, honest connectability), OpenClaw wiring card.
+- `/lab/run/[id]` — the run seen through the instrument, framed the same.
+
+---
+
+## Appendix: v1 (deep-ink bench, superseded 2026-08-27)
 
 ## The identity: the bench and the organisms
 

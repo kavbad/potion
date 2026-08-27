@@ -336,13 +336,33 @@ export function LabFormView({
           </div>
         ) : null}
         {runId === null || (run !== null && TERMINAL.has(run.state)) ? (
-          <button onClick={() => void startTrial()} disabled={busy} data-testid="form-start-trial" style={{ marginTop: 6 }}>
-            run a trial
-          </button>
+          <>
+            <button
+              onClick={() => void startTrial()}
+              disabled={busy}
+              data-testid="form-start-trial"
+              style={{ marginTop: 6, border: '1px solid #2a3346', background: '#e6ebf4', color: '#0b0e14', padding: '5px 12px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              run a supervised trial
+            </button>
+            {(() => {
+              // Honesty at the button: a trial with unconnected accounts is
+              // brain-only, and the operator hears it BEFORE pressing run.
+              const severed = state.filaments
+                .filter((f) => f.connection !== 'connected')
+                .map((f) => f.id);
+              return severed.length > 0 ? (
+                <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.5, color: '#d9c26a' }} data-testid="brain-only-note">
+                  brain-only — {severed.join(', ')} not connected: it reasons and drafts, touches nothing real
+                </div>
+              ) : null;
+            })()}
+          </>
         ) : (
           <button
             onClick={() => runId !== null && void fetch(`/api/lab/runs/${runId}/kill`, { method: 'POST' })}
-            style={{ marginTop: 6 }} data-testid="form-kill"
+            style={{ marginTop: 6, border: '1px solid #5c2733', background: 'transparent', color: '#ff9daf', padding: '5px 12px', cursor: 'pointer' }}
+            data-testid="form-kill"
           >
             stop this run
           </button>

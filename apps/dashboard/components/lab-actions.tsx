@@ -26,17 +26,138 @@ export function NotConnectedBadge() {
 }
 
 // ---------------------------------------------------------------------------
-// Interview form (the Step 6 four questions, one plain form)
+// InfoDot — the click-to-understand affordance on every field (operator
+// feedback 2026-08-27: labels must explain themselves without squinting).
+// Sits OUTSIDE the <label> element so opening it never focuses the field.
+// ---------------------------------------------------------------------------
+
+export function InfoDot({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  // Anchor side decided at open time from the dot's real position, so a
+  // dot near the right viewport edge opens leftward instead of clipping.
+  const [side, setSide] = useState<'left' | 'right'>('left');
+  const btn = useRef<HTMLButtonElement | null>(null);
+  return (
+    <span className="relative inline-block">
+      <button
+        ref={btn}
+        type="button"
+        aria-label={`What does “${label}” mean?`}
+        aria-expanded={open}
+        onClick={() => {
+          const r = btn.current?.getBoundingClientRect();
+          if (r) setSide(r.left + 300 > window.innerWidth ? 'right' : 'left');
+          setOpen((o) => !o);
+        }}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-faint font-mono text-[11px] leading-none text-faint hover:border-accent hover:text-accent"
+        data-testid={`info-${label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}
+      >
+        i
+      </button>
+      {open ? (
+        <span
+          role="note"
+          className={`absolute top-6 z-20 block w-72 border border-[#c4bfb2] bg-white px-4 py-3 text-left font-sans text-[13px] font-normal normal-case leading-relaxed tracking-normal text-soft shadow-paper ${side === 'right' ? 'right-0' : 'left-0'}`}
+        >
+          {children}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Interview form (the Step 6 four questions, one plain form) — daylight,
+// self-explaining, and CLOSED-LOOP: a cluster-uncertain draft renders its
+// candidates as clickable answers that resubmit with clusterChoice; a
+// missing-evidence gap renders as the honest stop it is (nothing to answer).
 // ---------------------------------------------------------------------------
 
 interface GenerateResponse {
   kind?: 'complete' | 'draft' | 'refused';
   harnessHash?: string;
-  gaps?: Array<{ code: string; question?: string }>;
+  name?: string;
+  clusterId?: string;
+  spec?: {
+    mission?: { goal?: string };
+    fuel?: { maxUsdPerRun?: number };
+    superpowers?: Array<{ id: string }>;
+  };
+  sidecar?: { choices?: Array<{ basis?: { frontierVersion?: number; strategyHash?: string } }> };
+  gaps?: Array<{ code: string; question?: string; candidates?: string[]; clusterId?: string }>;
   reason?: string;
   detail?: string;
   error?: { message?: string };
 }
+
+/** Mirrors @potion/lab-gen fuelFromWorth (WORTH_TO_FUEL_RATIO 0.25,
+ * cent-rounded, clamped [$0.05, $5]) — a display preview only; the server
+ * derives the real cap. */
+function fuelPreview(worthUsd: number): number | null {
+  if (!Number.isFinite(worthUsd) || worthUsd <= 0) return null;
+  return Math.min(Math.max(Math.round(worthUsd * 0.25 * 100) / 100, 0.05), 5);
+}
+
+/** The birth sequence — the moment between "Hire" and the specimen page.
+ * Every line is a REAL parameter from the 201 response revealing in order;
+ * nothing is invented and nothing spins. The operator walks to the worker
+ * instead of being teleported. */
+function BirthSequence({ body }: { body: GenerateResponse }) {
+  const basis = body.sidecar?.choices?.[0]?.basis;
+  const powers = body.spec?.superpowers ?? [];
+  const lines: Array<{ k: string; v: string }> = [
+    { k: 'mission understood', v: body.spec?.mission?.goal ?? '—' },
+    { k: 'named', v: body.name ?? '—' },
+    { k: 'kind of work', v: body.clusterId ?? '—' },
+    {
+      k: 'brain chosen from live evidence',
+      v: basis ? `frontier v${basis.frontierVersion} · strategy ${(basis.strategyHash ?? '').slice(0, 8)}` : '—',
+    },
+    {
+      k: 'spending cap',
+      v: body.spec?.fuel?.maxUsdPerRun !== undefined ? `$${body.spec.fuel.maxUsdPerRun.toFixed(2)} per run · hard stop` : '—',
+    },
+    powers.length > 0
+      ? { k: 'accounts declared', v: `${powers.map((p) => p.id).join(', ')} — asks you before every external action` }
+      : { k: 'external touch', v: 'none — this worker only thinks and writes' },
+    { k: 'born', v: 'fully supervised — autonomy must be earned, per kind of action' },
+  ];
+  const [shown, setShown] = useState(1);
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setShown(lines.length);
+      return;
+    }
+    const t = setInterval(() => setShown((n) => (n >= lines.length ? n : n + 1)), 420);
+    return () => clearInterval(t);
+  }, [lines.length]);
+  return (
+    <div className="mt-4" data-testid="birth-sequence">
+      <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-accent">your worker, as it was built</div>
+      <dl className="mt-3 border-l-2 border-accent/30 pl-4">
+        {lines.slice(0, shown).map((l) => (
+          <div key={l.k} className="py-1.5">
+            <dt className="font-mono text-[12px] uppercase tracking-[0.12em] text-faint">{l.k}</dt>
+            <dd className="mt-0.5 text-[14px] leading-snug text-ink">{l.v}</dd>
+          </div>
+        ))}
+      </dl>
+      {shown >= lines.length && body.harnessHash ? (
+        <a
+          href={`/lab/harness/${body.harnessHash}?born=1`}
+          className="mt-4 inline-block bg-ink px-5 py-2.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90"
+          data-testid="birth-open"
+        >
+          Meet {body.name ?? 'your worker'} →
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+const FIELD_CLS =
+  'w-full border border-[#c4bfb2] bg-white px-3 py-2 font-mono text-[13px] text-ink placeholder:text-faint focus:border-accent focus:outline-none';
+const LABEL_ROW = 'flex items-center gap-1.5 font-mono text-[12px] uppercase tracking-[0.13em] text-soft';
 
 export function InterviewForm() {
   const router = useRouter();
@@ -47,8 +168,9 @@ export function InterviewForm() {
   const [worth, setWorth] = useState('1');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [born, setBorn] = useState<GenerateResponse | null>(null);
 
-  const submit = useCallback(async () => {
+  const submit = useCallback(async (clusterChoice?: string) => {
     setBusy(true);
     setResult(null);
     try {
@@ -62,114 +184,195 @@ export function InterviewForm() {
             ...(kind === 'task' && done ? { doneDefinition: done } : {}),
             accounts: accounts.split(',').map((s) => s.trim()).filter(Boolean),
             worthUsd: Number(worth),
+            ...(clusterChoice !== undefined ? { clusterChoice } : {}),
           },
         }),
       });
       const body = (await res.json()) as GenerateResponse;
-      setResult(body);
       if (res.status === 201 && body.harnessHash) {
-        router.push(`/lab/harness/${body.harnessHash}`);
+        setBorn(body); // the birth sequence, then the operator walks over
+        router.prefetch(`/lab/harness/${body.harnessHash}`);
+      } else {
+        setResult(body);
       }
     } finally {
       setBusy(false);
     }
   }, [goal, kind, done, accounts, worth, router]);
 
-  // The bench styling (LAB-DESIGN.md): the hire moment is ONE question —
-  // "describe the job" — with the refinements quiet beneath it. Same logic,
-  // same testids; only the clothes changed.
-  const field =
-    'w-full border bg-[#0b0e14] px-3 py-2 font-mono text-[13px] text-[#e6ebf4] placeholder:text-[#5c6678] focus:outline-none';
-  const fieldStyle = { borderColor: '#2a3346' } as const;
-  const label = 'block font-mono text-[11.5px] uppercase tracking-[0.13em] text-[#5c6678]';
+  if (born !== null) return <BirthSequence body={born} />;
+
+  const cap = fuelPreview(Number(worth));
+  const gaps = result?.gaps ?? [];
+  const clusterGap = gaps.find((g) => g.code === 'cluster-uncertain');
+  const evidenceGaps = gaps.filter((g) => g.code !== 'cluster-uncertain');
+
   return (
     <div className="mt-4" data-testid="interview-form">
-      <label className={label}>
-        the job, in your words
+      <div>
+        <div className={LABEL_ROW}>
+          <label htmlFor="lab-q-goal">the job, in your words</label>
+          <InfoDot label="the job">
+            Describe the job in plain words, like you would to a new hire. Potion reads this and
+            builds the worker around it: what kind of work it is, which measured models fit it, and
+            what &ldquo;done&rdquo; means. You are not writing a prompt — you are describing a job.
+          </InfoDot>
+        </div>
         <textarea
+          id="lab-q-goal"
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           rows={2}
           placeholder="Watch our portfolio companies, research meaningful updates, draft me a daily brief…"
-          className={`${field} mt-1.5 resize-none text-[15px]`}
-          style={fieldStyle}
+          className={`${FIELD_CLS} mt-1.5 resize-none text-[15px]`}
           data-testid="q-goal"
         />
-      </label>
+      </div>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <label className={label}>
-          one-off or standing
+        <div>
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-kind">one-off or standing</label>
+            <InfoDot label="one-off or standing">
+              A <b>one-off task</b> runs, finishes, and reports done. A <b>standing mission</b> never
+              finishes: it works in cycles (each cycle is a &ldquo;check&rdquo;), keeps memory
+              between checks, and checks in with you partway through its budget.
+            </InfoDot>
+          </div>
           <select
+            id="lab-q-kind"
             value={kind}
             onChange={(e) => setKind(e.target.value as 'task' | 'standing')}
-            className={`${field} mt-1.5`}
-            style={fieldStyle}
+            className={`${FIELD_CLS} mt-1.5`}
             data-testid="q-kind"
           >
             <option value="task">one-off task</option>
             <option value="standing">standing mission</option>
           </select>
-        </label>
-        <label className={label}>
-          accounts it touches
+        </div>
+        <div>
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-accounts">accounts it touches</label>
+            <InfoDot label="accounts it touches">
+              Name the outside services this job needs — gmail, github, slack. Naming them here only
+              puts them on the worker&rsquo;s record: <b>nothing is connected yet</b>, and the worker
+              asks you before every external action. You connect accounts on the worker&rsquo;s page
+              after it is born.
+            </InfoDot>
+          </div>
           <input
+            id="lab-q-accounts"
             value={accounts}
             onChange={(e) => setAccounts(e.target.value)}
             placeholder="github, slack — or none"
-            className={`${field} mt-1.5`}
-            style={fieldStyle}
+            className={`${FIELD_CLS} mt-1.5`}
             data-testid="q-accounts"
           />
-        </label>
-        <label className={label}>
-          one {kind === 'task' ? 'run' : 'check'} is worth ($)
+        </div>
+        <div>
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-worth">one {kind === 'task' ? 'run' : 'check'} is worth ($)</label>
+            <InfoDot label="worth">
+              What one completed {kind === 'task' ? 'run of this job' : 'check of this mission'} is
+              worth <b>to you</b>, in dollars. It sets the worker&rsquo;s hard spending cap — a
+              quarter of the worth per {kind === 'task' ? 'run' : 'check'} (between $0.05 and $5) —
+              so the work is never allowed to cost more than a fraction of what it&rsquo;s worth. A
+              {' '}{kind === 'task' ? 'run' : 'check'} that hits the cap stops. You can change this
+              anytime.
+            </InfoDot>
+          </div>
           <input
+            id="lab-q-worth"
             value={worth}
             onChange={(e) => setWorth(e.target.value)}
-            className={`${field} mt-1.5`}
-            style={fieldStyle}
+            className={`${FIELD_CLS} mt-1.5`}
             data-testid="q-worth"
           />
-        </label>
+          <p className="mt-1 font-mono text-[12px] text-faint">
+            {cap !== null
+              ? <>→ hard spending cap ≈ ${cap.toFixed(2)} per {kind === 'task' ? 'run' : 'check'}</>
+              : 'enter a positive dollar amount'}
+          </p>
+        </div>
       </div>
       {kind === 'task' ? (
-        <label className={`${label} mt-4`}>
-          how it knows it&apos;s done
+        <div className="mt-4">
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-done">how it knows it&apos;s done</label>
+            <InfoDot label="done">
+              An objectively checkable finish line — &ldquo;the brief is in my inbox&rdquo;,
+              &ldquo;the spreadsheet has a row per company&rdquo;. The worker uses it to decide when
+              to stop and report, instead of running forever or quitting early.
+            </InfoDot>
+          </div>
           <input
+            id="lab-q-done"
             value={done}
             onChange={(e) => setDone(e.target.value)}
             placeholder="the brief is in my inbox"
-            className={`${field} mt-1.5`}
-            style={fieldStyle}
+            className={`${FIELD_CLS} mt-1.5`}
             data-testid="q-done"
           />
-        </label>
+        </div>
       ) : null}
       <div className="mt-5 flex flex-wrap items-center gap-4">
         <button
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={busy || goal.length === 0}
-          className="bg-[#e6ebf4] px-5 py-2.5 text-[13px] font-semibold text-[#0b0e14] hover:opacity-90 disabled:opacity-30"
+          className="bg-ink px-5 py-2.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-30"
           data-testid="interview-submit"
         >
-          {busy ? 'Growing the harness…' : 'Hire this worker'}
+          {busy ? 'Building your worker…' : 'Hire this worker'}
         </button>
-        <span className="font-mono text-[12px] text-[#5c6678]">
+        <span className="font-mono text-[12px] text-faint">
           born fully supervised · hard budget · you approve every external action until it earns otherwise
         </span>
       </div>
-      {result?.kind === 'draft' ? (
-        <div className="mt-4 border px-4 py-3 text-[13px] text-[#c9d2e0]" style={{ borderColor: '#2a3346' }} data-testid="gen-draft">
-          <span className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[#8b96a8]">one more question</span>
-          <ul className="mt-1 list-disc pl-5">{(result.gaps ?? []).map((g, i) => <li key={i}>{g.question ?? g.code}</li>)}</ul>
+
+      {/* One more question — ANSWERABLE: the candidates are the answer. */}
+      {clusterGap ? (
+        <div className="mt-4 border border-accent/40 bg-white px-4 py-3.5" data-testid="gen-draft">
+          <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-accent">one more question</span>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-ink">
+            I couldn&rsquo;t confidently tell what kind of work this is. Pick the closest — your
+            answer decides which measured evidence the worker&rsquo;s brain is chosen from:
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {(clusterGap.candidates ?? []).map((c) => (
+              <button
+                key={c}
+                onClick={() => void submit(c)}
+                disabled={busy}
+                className="border border-[#c4bfb2] bg-[#fbfaf7] px-3.5 py-2 font-mono text-[13px] text-ink hover:border-accent hover:text-accent disabled:opacity-40"
+                data-testid={`cluster-answer-${c}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
+
+      {/* Missing live evidence — an honest stop, not a question. */}
+      {evidenceGaps.length > 0 ? (
+        <div className="mt-4 border border-[#c4bfb2] bg-white px-4 py-3.5" data-testid="gen-draft">
+          <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-warn">an honest stop</span>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
+            A worker is only ever born on live, measured evidence — and Potion doesn&rsquo;t have it
+            for this kind of work yet, so it refuses to build on guesses. This changes as the
+            research engine measures more kinds of work.
+          </p>
+          <ul className="mt-2 list-disc pl-5 font-mono text-[12.5px] text-faint">
+            {evidenceGaps.map((g, i) => <li key={i}>{g.question ?? g.code}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
       {result?.kind === 'refused' ? (
-        <div className="mt-4 border px-4 py-3 text-[13px]" style={{ borderColor: '#5c2733', color: '#ff9daf' }} data-testid="gen-refused">
+        <div className="mt-4 border border-refuse/50 bg-white px-4 py-3 text-[13.5px] text-refuse" data-testid="gen-refused">
           <b>Refused ({result.reason}):</b> {result.detail}
         </div>
       ) : null}
-      {result?.error ? <div className="mt-4 text-[13px] text-[#ff9daf]">{result.error.message}</div> : null}
+      {result?.error ? <div className="mt-4 text-[13.5px] text-refuse">{result.error.message}</div> : null}
     </div>
   );
 }
@@ -443,20 +646,82 @@ const TIER_LABEL: Record<ConnectorDto['tier'], string> = {
   'fixture-recorded': 'fixture-recorded',
   'live-proven': 'LIVE-PROVEN',
 };
-const TIER_BG: Record<ConnectorDto['tier'], string> = {
-  'fixture-authored': '#e5e7eb',
-  'fixture-recorded': '#dbeafe',
-  'live-proven': '#dcfce7',
+
+const STATUS_LABEL: Record<ConnectorDto['status'], string> = {
+  'not-connected': 'not connected',
+  connected: 'connected',
+  expired: 'expired',
+  revoked: 'revoked',
+};
+const STATUS_CLS: Record<ConnectorDto['status'], string> = {
+  'not-connected': 'border-[#c4bfb2] text-soft',
+  connected: 'border-kept text-kept',
+  expired: 'border-warn text-warn',
+  revoked: 'border-refuse text-refuse',
 };
 
-const STATUS_BG: Record<ConnectorDto['status'], string> = {
-  'not-connected': '#fee2e2',
-  connected: '#dcfce7',
-  expired: '#fef3c7',
-  revoked: '#e5e7eb',
-};
+function ConnectorRow({
+  c, declared, busy, onConnect, onRevoke,
+}: {
+  c: ConnectorDto;
+  declared: boolean;
+  busy: boolean;
+  onConnect: (id: string) => void;
+  onRevoke: (id: string) => void;
+}) {
+  const chip = 'border px-1.5 py-px font-mono text-[11px] uppercase tracking-[0.08em]';
+  return (
+    <li
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-dashed border-[#d9d5cb] py-2.5 last:border-0"
+      data-testid={`connector-${c.connectorId}`}
+      data-status={c.status}
+    >
+      <span className="text-[14px] font-medium text-ink">{c.displayName}</span>
+      {/* Step 10 grant badge — the filament state */}
+      <span className={`${chip} ${STATUS_CLS[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+      {/* Step 11 proof tier — a DIFFERENT claim, never conflated */}
+      <span className={`${chip} border-[#c4bfb2] text-faint`} data-testid={`tier-${c.connectorId}`}>
+        {TIER_LABEL[c.tier]}
+        {c.fixtureAgeDays === null ? '' : ` · ${c.fixtureAgeDays}d old`}
+      </span>
+      <span className="font-mono text-[12px] text-faint">
+        {c.toolCount.read} read / {c.toolCount.act} act
+        {c.defaultScopes.length === 0 ? ' · zero-scope default' : ` · default ${c.defaultScopes.length} scope(s)`}
+      </span>
+      {c.status === 'connected' ? (
+        <button
+          onClick={() => onRevoke(c.connectorId)}
+          disabled={busy}
+          className="border border-[#c4bfb2] px-2.5 py-1 text-[12px] text-soft hover:border-refuse hover:text-refuse disabled:opacity-40"
+        >
+          Revoke
+        </button>
+      ) : c.connectStatus === 'ready' ? (
+        <button
+          onClick={() => onConnect(c.connectorId)}
+          disabled={busy || !c.configured}
+          title={c.configured ? '' : 'set the connector client id/secret env vars'}
+          className="bg-ink px-3 py-1 text-[12px] font-medium text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+        >
+          {c.status === 'not-connected' ? 'Connect' : 'Reconnect'}
+        </button>
+      ) : (
+        // Honest, not broken: a package we cannot reach live says why —
+        // in words a person can act on, prominent when the worker needs it.
+        <span
+          className={`text-[12.5px] leading-snug ${declared ? 'basis-full text-warn' : 'text-faint'}`}
+          title={c.connectNote ?? ''}
+          data-testid={`unconnectable-${c.connectorId}`}
+        >
+          built &amp; tested against recordings — a live connection isn&rsquo;t available yet.
+          {declared ? ' Until it is, trials run brain-only: the worker reasons and drafts, but touches nothing real.' : ''}
+        </span>
+      )}
+    </li>
+  );
+}
 
-export function ConnectorPanel() {
+export function ConnectorPanel({ declared = [] }: { declared?: string[] }) {
   const [connectors, setConnectors] = useState<ConnectorDto[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -490,7 +755,7 @@ export function ConnectorPanel() {
 
   const revoke = useCallback(
     async (id: string) => {
-      if (!window.confirm(`Revoke the ${id} grant? The filament shows the cut immediately.`)) return;
+      if (!window.confirm(`Revoke the ${id} grant? The worker loses this access immediately.`)) return;
       setBusy(true);
       try {
         await fetch(`/api/lab/connectors/${id}/revoke`, { method: 'POST' });
@@ -503,52 +768,45 @@ export function ConnectorPanel() {
   );
 
   if (connectors === null) return null;
+  const declaredSet = new Set(declared);
+  const declaredRows = connectors.filter((c) => declaredSet.has(c.connectorId));
+  const missingDeclared = declared.filter((id) => !connectors.some((c) => c.connectorId === id));
+  const catalogRows = connectors.filter((c) => !declaredSet.has(c.connectorId));
+
   return (
-    <div style={box} data-testid="connector-panel">
-      <strong>Superpower connections</strong>
-      {note ? <div style={{ color: '#b91c1c', fontSize: 12 }}>{note}</div> : null}
-      <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-        {connectors.map((c) => (
-          <li key={c.connectorId} data-testid={`connector-${c.connectorId}`} data-status={c.status}>
-            {c.displayName}
-            {/* Step 10 grant badge — the filament state */}
-            <span style={{ ...badge, background: STATUS_BG[c.status] }}>{c.status}</span>
-            {/* Step 11 proof tier — a DIFFERENT claim, never conflated */}
-            <span style={{ ...badge, background: TIER_BG[c.tier] }} data-testid={`tier-${c.connectorId}`}>
-              {TIER_LABEL[c.tier]}
-              {c.fixtureAgeDays === null ? '' : ` · ${c.fixtureAgeDays}d old`}
-            </span>
-            <span style={{ fontSize: 11, color: '#6b7688', marginLeft: 6 }}>
-              {c.toolCount.read} read / {c.toolCount.act} act
-              {c.defaultScopes.length === 0 ? ' · zero-scope default' : ` · default ${c.defaultScopes.length} scope(s)`}
-              {' · ~'}{c.contextTokens} ctx tokens
-            </span>
-            {c.status === 'connected' ? (
-              <button onClick={() => void revoke(c.connectorId)} disabled={busy} style={{ marginLeft: 8 }}>
-                Revoke
-              </button>
-            ) : c.connectStatus === 'ready' ? (
-              <button
-                onClick={() => void connect(c.connectorId)}
-                disabled={busy || !c.configured}
-                title={c.configured ? '' : 'set the connector client id/secret env vars'}
-                style={{ marginLeft: 8 }}
-              >
-                {c.status === 'not-connected' ? 'Connect' : 'Reconnect'}
-              </button>
-            ) : (
-              // Honest, not broken: a package we cannot reach live says why.
-              <span
-                style={{ fontSize: 11, color: '#92400e', marginLeft: 8 }}
-                title={c.connectNote ?? ''}
-                data-testid={`unconnectable-${c.connectorId}`}
-              >
-                packaged &amp; fixture-proven · not connectable ({c.connectStatus})
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
+    <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4" data-testid="connector-panel">
+      {note ? <div className="mb-2 text-[12.5px] text-refuse">{note}</div> : null}
+      {declared.length > 0 ? (
+        <>
+          <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-soft">this worker declared</div>
+          <ul className="mt-1">
+            {declaredRows.map((c) => (
+              <ConnectorRow key={c.connectorId} c={c} declared busy={busy} onConnect={(id) => void connect(id)} onRevoke={(id) => void revoke(id)} />
+            ))}
+            {missingDeclared.map((id) => (
+              <li key={id} className="border-b border-dashed border-[#d9d5cb] py-2.5 last:border-0" data-testid={`connector-${id}`} data-status="uncataloged">
+                <span className="text-[14px] font-medium text-ink">{id}</span>
+                <p className="mt-0.5 text-[12.5px] leading-snug text-warn">
+                  not in the connector catalog yet — the worker plans around it, and every {id} action
+                  stays simulated or held for your approval.
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {catalogRows.length > 0 ? (
+        <details className={declared.length > 0 ? 'mt-3' : ''}>
+          <summary className="cursor-pointer font-mono text-[12px] uppercase tracking-[0.13em] text-faint hover:text-accent">
+            full connector catalog · {catalogRows.length}
+          </summary>
+          <ul className="mt-1">
+            {catalogRows.map((c) => (
+              <ConnectorRow key={c.connectorId} c={c} declared={false} busy={busy} onConnect={(id) => void connect(id)} onRevoke={(id) => void revoke(id)} />
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

@@ -165,4 +165,20 @@ describe('tool posture — not-connected in all three places', () => {
     expect(rep.suggestedUpgrade.reason).toBe('not-connected-superpowers');
     expect(rep.suggestedUpgrade.text).toContain('calendar');
   }, 120_000);
+
+  it('clusterChoice is schema-known and enum-bound (the answerable draft loop)', async () => {
+    // A junk value must fail the ENUM, not pass the strict schema silently
+    // or 400 as an unknown key — this pins the field into the contract.
+    const bad = await post('/api/lab/harnesses', {
+      answers: {
+        goal: 'Summarize my meeting notes',
+        kind: 'standing',
+        accounts: [],
+        worthUsd: 1,
+        clusterChoice: 'not-a-cluster',
+      },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.body).toContain('clusterChoice');
+  });
 });

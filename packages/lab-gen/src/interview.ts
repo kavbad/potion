@@ -22,6 +22,13 @@ export interface InterviewAnswers {
   worthUsd: number;
   /** Q5 (optional): "Anything it must never do?" — verbatim rules. */
   constraints?: string[];
+  /**
+   * The operator's answer to a cluster-uncertain draft: when the lexical
+   * signal and the model hint could not agree, the generator ASKED — this
+   * field is the answer coming back. Authoritative when present (the whole
+   * point of asking), enum-bound at the API edge.
+   */
+  clusterChoice?: TaxonomyCluster;
 }
 
 /** The ten taxonomy clusters — the extraction hint enum and the

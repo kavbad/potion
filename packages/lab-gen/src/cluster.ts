@@ -23,8 +23,10 @@ const DESCRIPTORS: Record<TaxonomyCluster, string[]> = {
 export interface ClusterAssignment {
   outcome: 'assigned';
   clusterId: TaxonomyCluster;
-  /** Why the assignment holds — rides the choice's provenance. */
-  basis: 'lexical+hint';
+  /** Why the assignment holds — rides the choice's provenance.
+   * 'operator-answer': the generator asked (cluster-uncertain draft) and
+   * the operator answered — the answer is authoritative. */
+  basis: 'lexical+hint' | 'operator-answer';
   lexicalScore: number;
 }
 

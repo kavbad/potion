@@ -22,14 +22,15 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
     fetchOrRecover<MeResponse>('/auth/me'),
   ]);
   return (
-    <main style={{ padding: 16 }}>
-      <p>
-        <Link href="/lab">← Lab</Link>{' '}
-        <span style={{ color: '#6b7688', fontSize: 12 }}>
-          run <code>{id}</code> of {harness.name}
-        </span>
-      </p>
-      <LabFormView harness={harness} memory={memory} runId={id} initialRun={run} role={me.role} surface="run" />
+    <main className="mx-auto max-w-5xl">
+      <nav className="mb-3 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
+        <Link href="/lab" className="text-soft hover:text-accent">Potion Lab</Link>
+        {' · '}<Link href={`/lab/harness/${run.harnessHash}`} className="text-soft hover:text-accent">{harness.name}</Link>
+        {' · '}run <code className="normal-case">{id.slice(0, 12)}…</code>
+      </nav>
+      <div className="overflow-hidden rounded-lg border border-[#d9d5cb] shadow-paper">
+        <LabFormView harness={harness} memory={memory} runId={id} initialRun={run} role={me.role} surface="run" />
+      </div>
     </main>
   );
 }

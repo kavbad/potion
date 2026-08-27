@@ -68,6 +68,7 @@ import { loadCurrentFrontier } from '@potion/pareto';
 import {
   fuelFromWorth,
   generateSpec,
+  TAXONOMY_CLUSTERS,
   type ChoicesSidecar,
   type InterviewAnswers,
   type TaxonomyCluster,
@@ -167,6 +168,8 @@ const ANSWERS_SCHEMA = z
     accounts: z.array(z.string().min(1).max(200)).max(20),
     worthUsd: z.number(),
     constraints: z.array(z.string().min(1).max(500)).max(20).optional(),
+    /** Answer to a cluster-uncertain draft — enum-bound, authoritative. */
+    clusterChoice: z.enum(TAXONOMY_CLUSTERS).optional(),
   })
   .strict();
 
@@ -311,6 +314,7 @@ export function registerLabRoutes(
       worthUsd: a.worthUsd,
       ...(a.doneDefinition !== undefined ? { doneDefinition: a.doneDefinition } : {}),
       ...(a.constraints !== undefined ? { constraints: a.constraints } : {}),
+      ...(a.clusterChoice !== undefined ? { clusterChoice: a.clusterChoice } : {}),
     };
     const result = await withEphemeralKey(org.orgId, async (rawKey) => {
       const client = new ServingClient({ baseUrl: 'http://lab.injected', apiKey: rawKey, fetchFn: injectFetch });

@@ -213,4 +213,33 @@ describe('generateSpec — refusals and drafts', () => {
       expect(r.gaps[0]!.question.length).toBeGreaterThan(0);
     }
   });
+
+  it('clusterChoice: the operator answer resolves the same interview to complete, on the chosen cluster', async () => {
+    // Same disagreeing extraction as above — without the answer it drafts;
+    // with it, the answer is authoritative and generation completes.
+    const disagreeing = JSON.stringify({
+      ...JSON.parse(EXTRACTION_JSON),
+      clusterHint: 'code-gen',
+    });
+    const { client } = scripted([disagreeing]);
+    const r = await generateSpec(
+      { ...ANSWERS, goal: 'handle the thing for the stuff', clusterChoice: 'summarization' },
+      { client, loadFrontier },
+    );
+    expect(r.kind).toBe('complete');
+    if (r.kind === 'complete') {
+      expect(r.sidecar.choices[0]!.basis.clusterId).toBe('summarization');
+    }
+  });
+
+  it('clusterChoice never bypasses the refusal gates that run first', async () => {
+    const { client, calls } = scripted([]);
+    const r = await generateSpec(
+      { ...ANSWERS, worthUsd: 0, clusterChoice: 'summarization' },
+      { client, loadFrontier },
+    );
+    expect(r.kind).toBe('refused');
+    if (r.kind === 'refused') expect(r.reason).toBe('invalid-worth');
+    expect(calls()).toBe(0);
+  });
 });

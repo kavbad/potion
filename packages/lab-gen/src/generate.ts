@@ -102,7 +102,13 @@ export async function generateSpec(answers: InterviewAnswers, deps: GenerateDeps
   }
   const extraction = extracted.extraction;
 
-  const assignment = assignCluster(answers.goal, extraction.clusterHint);
+  // An explicit operator answer to the cluster question is authoritative —
+  // asking and then second-guessing the answer would make the draft loop
+  // unclosable. All refusal gates above still ran first.
+  const assignment =
+    answers.clusterChoice !== undefined
+      ? ({ outcome: 'assigned', clusterId: answers.clusterChoice, basis: 'operator-answer', lexicalScore: 0 } as const)
+      : assignCluster(answers.goal, extraction.clusterHint);
   if (assignment.outcome === 'uncertain') {
     return {
       kind: 'draft',
