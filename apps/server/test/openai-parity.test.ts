@@ -142,7 +142,10 @@ describe('GET /v1/models', () => {
     expect(body.object).toBe('list');
     const created = Math.floor(Date.parse(app.potion.prices.updatedAt) / 1000);
     const ids = body.data.map((m: { id: string }) => m.id);
-    expect(ids).toEqual(['potion-auto', ...app.potion.prices.entries.map((e) => e.alias)]);
+    // R1: the org's NAMED router leads — an alias of potion-auto with the
+    // org's slug on it — then potion-auto, then the catalogue.
+    expect(ids[0]).toMatch(/^potion\//);
+    expect(ids.slice(1)).toEqual(['potion-auto', ...app.potion.prices.entries.map((e) => e.alias)]);
     for (const m of body.data) {
       // S5 added a namespaced `potion` block (role, measured) — see
       // models-catalog.test.ts for what it asserts and why. The OpenAI-shaped
@@ -152,10 +155,10 @@ describe('GET /v1/models', () => {
       expect(m.object).toBe('model');
       expect(m.created).toBe(created);
     }
-    expect(body.data[0]).toMatchObject({ id: 'potion-auto', object: 'model', created, owned_by: 'potion' });
+    expect(body.data[1]).toMatchObject({ id: 'potion-auto', object: 'model', created, owned_by: 'potion' });
     // owned_by = the price entry's provider
     const byId = new Map(app.potion.prices.entries.map((e) => [e.alias, e.provider]));
-    for (const m of body.data.slice(1)) {
+    for (const m of body.data.slice(2)) {
       expect(m.owned_by).toBe(byId.get(m.id));
     }
   });

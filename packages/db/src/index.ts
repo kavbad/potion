@@ -51,4 +51,5 @@ export * from './test-fixtures/orgs.js';
 export * from './test-fixtures/reproducible.js';
 export * from './repos/invites.js';
 export * from './repos/lab-action-grants.js';
+export * from './repos/router-versions.js';
 export * from './repos/lab-runtime-sessions.js';

@@ -12,10 +12,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   sha256,
+  canonicalJson,
+  strategyHash,
   PolicySchema,
   fastestQualityQualifyingPoint,
   selectPoint,
   type Policy,
+  type StrategyConfig,
 } from '@potion/core';
 import {
   DEFAULT_ORG_ID,
@@ -32,6 +35,9 @@ import {
   type OrgContext,
   type PotionDb,
   insertCustodyAudit,
+  getOrgById,
+  appendRouterVersion,
+  listRouterVersions,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -40,7 +46,11 @@ import {
   roleAtLeast, authenticate, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { publicBaseUrl } from '../public-url.js';
-import { highestQualityPoint } from './chat.js';
+import { highestQualityPoint, guardFrontierProvenance, resolveOperatingPoint } from './chat.js';
+import { fallbackStrategyFor } from '../context.js';
+import { policyForCluster } from '../routing/floors.js';
+import { routerModelName } from '../routing/router-slug.js';
+import { describePolicy } from './connection.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 
 // ---------- POST /api/workloads ----------
@@ -575,5 +585,168 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
         );
     }
     return reply.send({ policy, ...buildEndpointSnippets(baseUrlOf(req), policy) });
+  });
+
+  // ======================= R1 — THE ROUTER (2026-08-27) ==================
+  //
+  // GET /api/router — the org's router, MINTED as a versioned artifact.
+  // "Your inference is unique. Your router should be too."
+  //
+  // The document is assembled by the SAME functions the serve path runs —
+  // loadCurrentFrontier (org-preferred) → guardFrontierProvenance →
+  // bindServingLatency → resolveOperatingPoint under policyForCluster — so
+  // the artifact a customer reads is the router their requests actually get.
+  // A cheaper approximation here would be a document that can lie.
+  //
+  // Versions are lazily minted: the router's identity hash covers the
+  // DECISION inputs (policy config + per-cluster frontier id/version +
+  // chosen strategy + fallback posture) and excludes volatile display
+  // fields (bound latency numbers), so a version means "the routing
+  // changed", never "a latency sample wiggled". When the hash differs from
+  // the latest stored version, the next number is appended with a
+  // plain-language change list computed against the previous document.
+  app.get('/api/router', async (req, reply) => {
+    const orgId = req.potionOrg!.orgId;
+    const orgRow = await getOrgById(db, orgId);
+    const name = routerModelName(orgRow?.name ?? 'org');
+
+    // The org's bound policy — connection.ts's exact resolution.
+    let policy: Policy | null = null;
+    const policies = await listPolicies(db, orgId);
+    const firstPolicy = policies[0];
+    if (firstPolicy) {
+      const parsed = PolicySchema.safeParse(firstPolicy.config);
+      if (parsed.success) policy = parsed.data;
+    }
+
+    interface Assignment {
+      clusterId: string;
+      frontierId: string;
+      frontierVersion: number;
+      provenance: 'live' | 'mock' | 'blocked';
+      strategyHash: string;
+      strategy: { type: string; label: string };
+      quality: number | null;
+      costPer1K: number | null;
+      latencyP95: number | null;
+      evidenceN: number | null;
+      alternatives: number;
+      fallback: string | null;
+    }
+    const assignments: Assignment[] = [];
+    if (policy !== null) {
+      const clusterIds: string[] = [];
+      const seen = new Set<string>();
+      for (const c of loadTaxonomy().clusters) {
+        if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
+      }
+      for (const c of await listClusters(db, { orgId })) {
+        if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
+      }
+      for (const cid of clusterIds.sort()) {
+        const loaded = await loadCurrentFrontier(db, cid, orgId);
+        if (!loaded || loaded.points.length === 0) continue;
+        const guarded = guardFrontierProvenance(loaded, ctx.providerMode, (m) => app.log.warn(m));
+        const clusterPolicy = policyForCluster(policy, cid);
+        const bound = await bindServingLatency(ctx, clusterPolicy, guarded.frontier, orgId, cid, (m) => app.log.warn(m));
+        const op = resolveOperatingPoint(clusterPolicy, bound.frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+        if (op.config === null) continue;
+        const hash = strategyHash(op.config as StrategyConfig);
+        const served = (bound.frontier?.points ?? guarded.frontier?.points ?? []).find((p) => p.strategyHash === hash) ?? null;
+        const cfg = op.config as StrategyConfig & { model?: string };
+        assignments.push({
+          clusterId: cid,
+          frontierId: loaded.id,
+          frontierVersion: loaded.version,
+          provenance: guarded.provenance,
+          strategyHash: hash,
+          strategy: { type: cfg.type, label: cfg.type === 'single' && cfg.model !== undefined ? cfg.model : cfg.type },
+          quality: served?.quality ?? null,
+          costPer1K: served?.costPer1K ?? null,
+          latencyP95: served?.latencyP95 ?? null,
+          evidenceN: served?.evidence?.n ?? null,
+          alternatives: loaded.points.length,
+          fallback: op.fallbackReason ?? null,
+        });
+      }
+    }
+
+    // Identity hash — decision inputs only; display numbers excluded.
+    const routerHash = sha256(
+      canonicalJson({
+        name,
+        policy: policy ?? null,
+        assignments: assignments.map((a) => ({
+          clusterId: a.clusterId,
+          frontierId: a.frontierId,
+          frontierVersion: a.frontierVersion,
+          strategyHash: a.strategyHash,
+          fallback: a.fallback,
+        })),
+      }),
+    );
+
+    // Plain-language changes vs the latest minted version, then lazy-mint.
+    const history = await listRouterVersions(db, orgId, 12);
+    const latest = history[0] ?? null;
+    let changes: string[] = [];
+    if (latest === null) {
+      changes = ['first compilation'];
+    } else if (latest.routerHash !== routerHash) {
+      const prev = latest.document as { policy?: { description?: string } | null; assignments?: Assignment[] };
+      const prevAssignments = prev.assignments ?? [];
+      const prevBy = new Map(prevAssignments.map((a) => [a.clusterId, a]));
+      const nowBy = new Map(assignments.map((a) => [a.clusterId, a]));
+      const prevDesc = prev.policy?.description ?? null;
+      const nowDesc = policy ? describePolicy(policy) : null;
+      if (prevDesc !== nowDesc) changes.push(`your rule changed: ${prevDesc ?? 'none'} → ${nowDesc ?? 'none'}`);
+      for (const a of assignments) {
+        const p = prevBy.get(a.clusterId);
+        if (!p) { changes.push(`${a.clusterId}: newly routed → ${a.strategy.label}`); continue; }
+        if (p.strategyHash !== a.strategyHash) {
+          const money = (v: number | null) => (v === null ? '—' : `$${v.toFixed(4)}`);
+          changes.push(
+            `${a.clusterId}: ${p.strategy.label} → ${a.strategy.label}` +
+            ` (quality ${p.quality?.toFixed(3) ?? '—'} → ${a.quality?.toFixed(3) ?? '—'},` +
+            ` ${money(p.costPer1K)} → ${money(a.costPer1K)} per 1K requests)`,
+          );
+        } else if (p.frontierVersion !== a.frontierVersion) {
+          changes.push(`${a.clusterId}: re-measured (frontier v${p.frontierVersion} → v${a.frontierVersion}), assignment held`);
+        }
+      }
+      for (const p of prevAssignments) {
+        if (!nowBy.has(p.clusterId)) changes.push(`${p.clusterId}: no longer routed`);
+      }
+      if (changes.length === 0) changes = ['routing inputs changed'];
+    }
+
+    const document = {
+      name,
+      policy: policy ? { config: policy, description: describePolicy(policy) } : null,
+      assignments,
+      pricesVersion: ctx.prices.version,
+      changes,
+    };
+    const minted = await appendRouterVersion(db, { orgId, routerHash, document });
+
+    return reply.send({
+      name,
+      version: minted.version,
+      routerHash: minted.routerHash.slice(0, 12),
+      mintedAt: minted.createdAt,
+      document: minted.routerHash === routerHash ? document : (minted.document as typeof document),
+      history: (minted.routerHash === routerHash && latest?.routerHash !== routerHash
+        ? [{ version: minted.version, createdAt: minted.createdAt, changes }, ...history.map((h: { version: number; createdAt: Date; document: unknown }) => ({
+            version: h.version,
+            createdAt: h.createdAt,
+            changes: ((h.document as { changes?: string[] }).changes ?? []),
+          }))]
+        : history.map((h: { version: number; createdAt: Date; document: unknown }) => ({
+            version: h.version,
+            createdAt: h.createdAt,
+            changes: ((h.document as { changes?: string[] }).changes ?? []),
+          }))
+      ).slice(0, 12),
+    });
   });
 }

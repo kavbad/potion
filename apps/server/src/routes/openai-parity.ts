@@ -30,11 +30,13 @@ import {
   loadModelRegistry,
   resolvePolicyRef,
   type NewRequestLog,
+  getOrgById,
 } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import { execute, type ExecContext } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError, type AuthResult } from '../auth.js';
 import { assignmentCacheKey, fallbackStrategyFor, type PotionContext } from '../context.js';
+import { routerModelName } from '../routing/router-slug.js';
 import { enforceBudgetHardStop } from './budgets.js';
 import { guardFrontierProvenance, resolveOperatingPoint, traceHeaderValue } from './chat.js';
 import {
@@ -106,9 +108,24 @@ function registerModelsRoute(app: FastifyInstance, ctx: PotionContext): void {
     // exists to remove. Falls back to the boot table if the read fails.
     const catalogue = await liveCatalogue(ctx);
     const routable = new Set(await routableAliases(ctx));
+    // R1: the org's NAMED router — same router, your name on it.
+    const orgRow = await getOrgById(ctx.db.db, auth.org.orgId);
+    const routerId = routerModelName(orgRow?.name ?? 'org');
     return {
       object: 'list',
       data: [
+        {
+          id: routerId,
+          object: 'model',
+          created,
+          owned_by: 'potion',
+          potion: {
+            role: 'router',
+            note:
+              `Your router — an exact alias of potion-auto, compiled from your policy and ` +
+              `the measured frontiers. Inspect it in the dashboard under Router.`,
+          },
+        },
         {
           id: 'potion-auto',
           object: 'model',

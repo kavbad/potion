@@ -1734,6 +1734,27 @@ export const labActionGrants = pgTable(
 );
 export type LabActionGrantRow = typeof labActionGrants.$inferSelect;
 
+/** R1 (Router direction, 2026-08-27): the org's compiled router, minted as
+ * versioned artifacts. `document` is the full assembled router (policy +
+ * assignments + provenance); `routerHash` is its stable content hash (the
+ * volatile display fields — bound latency — are excluded from hashing).
+ * Append-only; lazily minted on read when the hash moves. */
+export const routerVersions = pgTable(
+  'router_versions',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    routerHash: text('router_hash').notNull(),
+    document: jsonb('document').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('router_versions_identity_idx').on(t.orgId, t.version)],
+);
+export type RouterVersionRow = typeof routerVersions.$inferSelect;
+
 export type LabHarnessRow = typeof labHarnesses.$inferSelect;
 
 /** Lab Step 10: superpower grants (0038) — the first REVERSIBLE secret

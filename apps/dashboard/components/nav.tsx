@@ -25,6 +25,7 @@ import { usePathname } from 'next/navigation';
  */
 const PRIMARY = [
   { href: '/', label: 'Today', hint: 'What routed, what it cost, what it saved' },
+  { href: '/router', label: 'Router', hint: 'The router Potion compiled for you — assignments, evidence, versions' },
   { href: '/receipts', label: 'Receipts', hint: 'Every token, accounted for' },
   { href: '/frontiers', label: 'Evidence', hint: 'The measurements behind your routing' },
   { href: '/usage', label: 'Savings', hint: 'What you kept, verified per receipt' },

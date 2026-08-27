@@ -69,7 +69,9 @@ describe('the list says what each id actually IS', () => {
   });
 
   it('marks every catalogue entry as catalogue, NOT as something to select', async () => {
-    const rest = (await models()).filter((m) => m.id !== 'potion-auto');
+    // R1: both router ids (potion-auto and the org's potion/<slug>) are
+    // role 'router'; everything else stays catalogue.
+    const rest = (await models()).filter((m) => m.id !== 'potion-auto' && !m.id.startsWith('potion/'));
     expect(rest.length).toBeGreaterThan(0);
     expect(rest.every((m) => m.potion?.role === 'catalog')).toBe(true);
   });
@@ -78,7 +80,7 @@ describe('the list says what each id actually IS', () => {
     // The baseline measured a handful of models across ten clusters; the
     // price table carries more than that. If every entry came back measured,
     // the flag would be decoration.
-    const rest = (await models()).filter((m) => m.id !== 'potion-auto');
+    const rest = (await models()).filter((m) => m.id !== 'potion-auto' && !m.id.startsWith('potion/'));
     const measured = rest.filter((m) => m.potion?.measured === true);
     expect(measured.length).toBeGreaterThan(0);
     expect(measured.length).toBeLessThan(rest.length);
