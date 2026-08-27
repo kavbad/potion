@@ -19,7 +19,9 @@ export default function ControlsPage() {
       <p className="mb-8 mt-2 text-sm leading-relaxed text-soft">
         The policy decides what your key optimizes for, the quality floor decides how good every
         answer must be, and the spending cap decides how much a month may cost. Everything else
-        follows from these three.
+        follows from these three — <span className="text-ink">changing them recompiles{' '}
+        <a href="/router" className="text-accent underline">your router</a></span>: a new version is
+        minted, with what changed written on it.
       </p>
       <SettingsTabs />
       <PolicyPicker mode="settings" />

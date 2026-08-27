@@ -25,13 +25,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { Policy } from '@potion/core';
 import { PolicySchema } from '@potion/core';
-import { listApiKeys, listPolicies, listRequestLogs } from '@potion/db';
+import { getOrgById, listApiKeys, listPolicies, listRequestLogs } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import type { PotionContext } from '../context.js';
 import { publicBaseUrl } from '../public-url.js';
 import { guardFrontierProvenance, parseTraceHeader, traceWasRouted } from './chat.js';
 import { compileAndMintRouter, routerVersionForRequest } from '../routing/compile-router.js';
+import { routerModelName } from '../routing/router-slug.js';
 import { buildEndpointSnippets } from './dashboard.js';
 
 /**
@@ -126,6 +127,7 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
     // The org's bound policy. listPolicies is creation-ordered; the first is
     // what a self-serve signup bound, and it is what /api/endpoint-snippet
     // falls back to, so both surfaces name the same policy.
+    const connOrg = await getOrgById(db, orgId);
     const policies = await listPolicies(db, orgId);
     const firstPolicy = policies[0];
     let policy: Policy | null = null;
@@ -179,7 +181,8 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
             description: describePolicy(policy),
           }
         : null,
-      snippets: policy ? buildEndpointSnippets(baseUrl, policy) : null,
+      router: { name: routerModelName(connOrg?.name ?? 'org') },
+      snippets: policy ? buildEndpointSnippets(baseUrl, policy, routerModelName(connOrg?.name ?? 'org')) : null,
       servingKeys,
       serving: {
         providerMode: ctx.providerMode,

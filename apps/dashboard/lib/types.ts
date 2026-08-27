@@ -528,6 +528,8 @@ export interface ClusterReadinessDto {
 export interface ConnectionResponse {
   baseUrl: string;
   endpoint: string;
+  /** Coherence pass: the org's named router — the model id to hand out. */
+  router?: { name: string };
   /** false = derived from the request, only trustworthy without a proxy. */
   baseUrlConfigured: boolean;
   policy: { id: string; name: string; config: Policy; description: string } | null;

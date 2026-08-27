@@ -46,6 +46,7 @@ export function FirstRunGate() {
   // beat 2
   const [rawKey, setRawKey] = useState<string | null>(null);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const [router, setRouter] = useState<{ name: string; version: number } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   // beats 3–4
   const [prompt, setPrompt] = useState('');
@@ -93,17 +94,27 @@ export function FirstRunGate() {
       | null;
     if (conn?.baseUrl) setBaseUrl(conn.baseUrl);
     const hasLive = (conn?.servingKeys ?? []).some((k) => !k.revokedAt);
-    if (hasLive) return; // a key already exists; show the URL, mint nothing
-    const res = await fetch('/api/api-keys', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'first key' }),
-    }).catch(() => null);
-    if (res?.ok) {
-      const body = (await res.json()) as { apiKey?: string };
-      if (body.apiKey) setRawKey(body.apiKey);
+    if (!hasLive) {
+      const res = await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'first key' }),
+      }).catch(() => null);
+      if (res?.ok) {
+        const body = (await res.json()) as { apiKey?: string };
+        if (body.apiKey) setRawKey(body.apiKey);
+      }
+      // Mint failure is not a wall: the flow continues; keys live in Settings.
     }
-    // Mint failure is not a wall: the flow continues; keys live in Settings.
+    // The payoff: reading /api/router right here IS the moment the org's
+    // router v1 gets compiled and minted — the artifact exists because this
+    // flow just gave it a quality bar. Absent a policy it stays quiet.
+    const r = await fetch('/api/router', { cache: 'no-store' }).then((x) => (x.ok ? x.json() : null)).catch(() => null) as
+      | { name?: string; version?: number; document?: { policy?: unknown } }
+      | null;
+    if (r?.name !== undefined && r.version !== undefined && r.document?.policy) {
+      setRouter({ name: r.name, version: r.version });
+    }
   }
 
   async function sendFirst(text: string) {
@@ -210,15 +221,30 @@ export function FirstRunGate() {
 
         {beat === 'key' && (
           <>
-            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">Step 2 of 4 · your key</div>
+            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
+              Step 2 of 4 · {router ? 'your router, compiled' : 'your key'}
+            </div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-              Point your client here. Keep everything else.
+              {router ? 'Your router is compiled. Point your client at it.' : 'Point your client here. Keep everything else.'}
             </h1>
             <p className="mt-2 text-[14px] leading-relaxed text-soft">
               Potion speaks the OpenAI protocol — requests, streaming, and tool calls unchanged.
               {rawKey ? ' Your key is shown once; Potion keeps only a hash.' : ''}
             </p>
             <div className="mt-6 space-y-3">
+              {router && (
+                <div className="flex items-center justify-between gap-3 border border-accent/50 bg-[#fbfaf7] px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-accent">
+                      your router · v{router.version} · compiled just now from your bar
+                    </div>
+                    <div className="truncate font-mono text-[13px] text-ink">model: &apos;{router.name}&apos;</div>
+                  </div>
+                  <button type="button" onClick={() => void copy(router.name, 'router')} className="shrink-0 border border-ink px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-ink hover:text-[#f4f2ec]">
+                    {copied === 'router' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              )}
               {rawKey && (
                 <div className="flex items-center justify-between gap-3 border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3">
                   <div className="min-w-0">

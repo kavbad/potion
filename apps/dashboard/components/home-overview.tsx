@@ -87,6 +87,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
         {/* the S1 contract in one quiet line each: where traffic points, and under what rule */}
         <p className="mt-4 font-mono text-[12px] leading-relaxed text-faint">
           Base URL <span className="text-ink">{conn.baseUrl}/v1</span>
+          {conn.router && <> · your router: <Link href="/router" className="text-accent underline">{conn.router.name}</Link></>}
           {' · '}{conn.servingKeys.filter((k) => !k.revokedAt).length} active key{conn.servingKeys.filter((k) => !k.revokedAt).length === 1 ? '' : 's'} (<Link href="/settings/keys" className="text-accent underline">manage</Link>)
           {conn.policy && <> · your rule: <span className="text-ink">{conn.policy.description}</span> (<Link href="/settings/controls" className="text-accent underline">change</Link>)</>}
         </p>
@@ -139,7 +140,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
             calls all stay as they are. Or hand the instructions to your coding agent.
           </p>
           <div className="mt-4 space-y-4">
-            <AgentInstructions baseUrl={conn.baseUrl} />
+            <AgentInstructions baseUrl={conn.baseUrl} routerModel={conn.router?.name} />
             <CopyBlock label="Base URL" text={`${conn.baseUrl}/v1`} />
             {conn.snippets && <CopyBlock label="Node.js (openai SDK)" text={conn.snippets.openaiNode} />}
             {conn.policy && (

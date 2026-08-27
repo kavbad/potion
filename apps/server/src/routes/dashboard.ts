@@ -33,6 +33,7 @@ import {
   type OrgContext,
   type PotionDb,
   insertCustodyAudit,
+  getOrgById,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -43,6 +44,7 @@ import type { PotionContext } from '../context.js';
 import { publicBaseUrl } from '../public-url.js';
 import { highestQualityPoint } from './chat.js';
 import { compileAndMintRouter } from '../routing/compile-router.js';
+import { routerModelName } from '../routing/router-slug.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 
 // ---------- POST /api/workloads ----------
@@ -118,7 +120,7 @@ export function parsePolicyQuery(raw: string | undefined): Policy | null {
   return parsed.success ? parsed.data : null;
 }
 
-export function buildEndpointSnippets(baseUrl: string, policy: Policy): {
+export function buildEndpointSnippets(baseUrl: string, policy: Policy, routerModel = 'potion-auto'): {
   url: string;
   curl: string;
   openaiNode: string;
@@ -127,7 +129,7 @@ export function buildEndpointSnippets(baseUrl: string, policy: Policy): {
   // The platform routes by PROMPT (cluster) + server-side policy, so the
   // client sends any model label; 'potion-auto' is the documented convention.
   const payload = JSON.stringify({
-    model: 'potion-auto',
+    model: routerModel,
     messages: [{ role: 'user', content: 'Write a python function that reverses a string' }],
   });
   const curl =
@@ -147,7 +149,7 @@ export function buildEndpointSnippets(baseUrl: string, policy: Policy): {
     `  apiKey: process.env.POTION_API_KEY, // your pk_... key\n` +
     `});\n\n` +
     `const res = await client.chat.completions.create({\n` +
-    `  model: 'potion-auto', // any label; Potion routes by prompt + policy\n` +
+    `  model: '${routerModel}', // your router, by name ('potion-auto' is the plain alias)\n` +
     `  messages: [{ role: 'user', content: 'Write a python function that reverses a string' }],\n` +
     `});\n` +
     `console.log(res.choices[0].message.content);`;
@@ -576,7 +578,8 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
           ),
         );
     }
-    return reply.send({ policy, ...buildEndpointSnippets(baseUrlOf(req), policy) });
+    const snippetOrg = await getOrgById(db, req.potionOrg!.orgId);
+    return reply.send({ policy, ...buildEndpointSnippets(baseUrlOf(req), policy, routerModelName(snippetOrg?.name ?? 'org')) });
   });
 
   // ======================= R1/R2 — THE ROUTER ===========================

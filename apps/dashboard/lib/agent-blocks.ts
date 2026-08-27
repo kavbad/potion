@@ -39,14 +39,14 @@ const VERIFY = `## Verify
 - Never alter the OpenAI request or response shapes, or the headers Potion returns. Streaming and tool calls work unchanged.
 - Never rely on the model field to choose a model: it is a label. The rule on the key decides; \`x-potion-model\` shows what answered.`;
 
-export function block(s: Situation, baseUrl: string): string {
+export function block(s: Situation, baseUrl: string, routerModel = 'potion-auto'): string {
   const head = `# Route this app's AI requests through Potion
 
 You are integrating Potion, a measured model router with an OpenAI-compatible API.
 Base URL: ${baseUrl}/v1
 Key: read \`POTION_API_KEY\` from the environment. Do not ask for it, do not echo it; if it is unset at runtime, fail with a clear message BEFORE constructing a client. This matters: the OpenAI SDKs silently fall back to \`OPENAI_API_KEY\` and \`OPENAI_BASE_URL\` when given undefined, so an app migrating off OpenAI with those still set would quietly keep sending traffic to OpenAI while believing it is on Potion. Always pass both \`apiKey\` and \`baseURL\` explicitly.
 Retries: the SDK's default retries (on 408/409/429/5xx and connection errors) are safe to keep — those responses are refused before any model runs, so nothing is billed twice. A 200 is billed once.
-Model: \`potion-auto\`. Routing is decided by the rule bound to the key, never by this field; the field is echoed back and recorded with the request as a label, so an existing per-tier label (e.g. \`fast\`, \`best\`) may be passed through unchanged as a free tag. The receipt (below) shows what answered.
+Model: \`${routerModel}\`${routerModel === 'potion-auto' ? " (or the org's NAMED router id \`potion/<org-slug>\` — shown on the dashboard's Router page; both route identically)" : " — this org's NAMED router (\`potion-auto\` is the plain alias; both route identically)"}. Routing is decided by the rule bound to the key, never by this field; the field is echoed back and recorded with the request as a label, so an existing per-tier label (e.g. \`fast\`, \`best\`) may be passed through unchanged as a free tag. The receipt (below) shows what answered.
 Base URL: your Potion origin plus \`/v1\` — put it in \`POTION_BASE_URL\` (default \`${baseUrl}/v1\`) so it can be changed without a code edit (inside a private network the origin differs).
 ${RECEIPT}
 `;
@@ -56,7 +56,7 @@ ${RECEIPT}
 ## Steps
 1. Find every place an OpenAI client is constructed (\`new OpenAI(...)\` in JS/TS, \`OpenAI(...)\` in Python, or equivalent), and every raw \`fetch\`/HTTP call to an OpenAI-shaped endpoint. There may be more than one. Leave Potion's own internal provider abstractions alone if you happen to be inside Potion's repo.
 2. Set the base URL to \`${baseUrl}/v1\` and the API key to \`process.env.POTION_API_KEY\` / \`os.environ["POTION_API_KEY"]\`. Keep every other option. Do this in the package that makes the calls (in a monorepo, not the root).
-3. Set \`model\` to \`"potion-auto"\` on chat-completions calls. Leave messages, temperature, streaming, tools, tool_choice, max_tokens untouched.
+3. Set \`model\` to \`"${routerModel}"\` on chat-completions calls. Leave messages, temperature, streaming, tools, tool_choice, max_tokens untouched.
 3b. To read the receipt: JS/TS \`const { data, response } = await client.chat.completions.create({...}).withResponse(); response.headers.get('x-frontier-trace')\` (openai >= 5). Python \`raw = client.chat.completions.with_raw_response.create(...); raw.headers['x-frontier-trace']; raw.parse()\` (openai >= 1.0).
 4. If the code branches on the provider model name in responses (e.g. parsing \`response.model\`), make it tolerant: Potion returns the label you sent.
 5. Run the existing test suite. Preserve behaviour: if you moved from raw HTTP to the SDK, note that the SDK throws on non-2xx instead of returning a failed response and only JSON-decodes JSON content types — keep the app's observable behaviour the same.
@@ -66,7 +66,7 @@ ${VERIFY}`;
       return `${head}
 ## Steps
 1. Find the gateway's base URL and key in config/env (e.g. \`OPENROUTER_API_KEY\`, \`*_BASE_URL\`). Replace the base URL with \`${baseUrl}/v1\` and the key with \`POTION_API_KEY\`. Do not delete the old values; comment them so the human can roll back.
-2. Replace every hard-coded provider model id (e.g. \`openai/gpt-4.1\`, \`anthropic/claude-...\`) with \`potion-auto\`. If the app lets users pick a model or tier: keep the control and pass its value through as the model label (it is recorded as a tag, not used for routing), and leave a one-line note for the human that routing now follows the key's rule; a per-request \`x-potion-policy\` header is the supported way to vary behaviour per tier.
+2. Replace every hard-coded provider model id (e.g. \`openai/gpt-4.1\`, \`anthropic/claude-...\`) with \`${routerModel}\`. If the app lets users pick a model or tier: keep the control and pass its value through as the model label (it is recorded as a tag, not used for routing), and leave a one-line note for the human that routing now follows the key's rule; a per-request \`x-potion-policy\` header is the supported way to vary behaviour per tier.
 3. Comment out gateway-specific headers (referer/title/ranking headers) like the other old values; Potion ignores them.
 4. Keep streaming and tool-call code exactly as it is.
 5. Read the receipt with \`.withResponse()\` (JS) / \`with_raw_response\` (Python), as above.
@@ -81,9 +81,9 @@ ${VERIFY}`;
 import OpenAI from 'openai';
 export const ai = new OpenAI({ baseURL: '${baseUrl}/v1', apiKey: process.env.POTION_API_KEY });
 \`\`\`
-3. Call it with \`model: 'potion-auto'\`:
+3. Call it with \`model: '${routerModel}'\`:
 \`\`\`ts
-const res = await ai.chat.completions.create({ model: 'potion-auto', messages: [{ role: 'user', content: '...' }] });
+const res = await ai.chat.completions.create({ model: '${routerModel}', messages: [{ role: 'user', content: '...' }] });
 \`\`\`
 4. Streaming and tools work as in the OpenAI SDK docs; nothing Potion-specific is needed.
 5. Read the receipt with \`.withResponse()\`: \`const { data, response } = await ai.chat.completions.create({...}).withResponse(); response.headers.get('x-frontier-trace')\`.
@@ -99,9 +99,9 @@ import os
 from openai import OpenAI
 ai = OpenAI(base_url="${baseUrl}/v1", api_key=os.environ["POTION_API_KEY"])
 \`\`\`
-3. Call it with \`model="potion-auto"\`:
+3. Call it with \`model="${routerModel}"\`:
 \`\`\`python
-res = ai.chat.completions.create(model="potion-auto", messages=[{"role": "user", "content": "..."}])
+res = ai.chat.completions.create(model="${routerModel}", messages=[{"role": "user", "content": "..."}])
 \`\`\`
 4. Streaming (\`stream=True\`) and tools work as in the OpenAI SDK docs.
 5. Read the receipt with the raw response: \`raw = ai.chat.completions.with_raw_response.create(...)\`, then \`raw.headers["x-frontier-trace"]\` and \`raw.parse()\` for the completion.
@@ -110,9 +110,9 @@ ${VERIFY}`;
     case 'ai-sdk':
       return `${head}
 ## Steps
-- **Vercel AI SDK** (\`ai\` v5+ with \`@ai-sdk/openai\` v2+/v4): \`const potion = createOpenAI({ baseURL: '${baseUrl}/v1', apiKey: process.env.POTION_API_KEY, headers: { 'x-potion-cluster': '<kind of work>' } })\` and use \`potion.chat('potion-auto')\` — NOT \`potion('potion-auto')\`, which builds a Responses-API model and posts to \`/responses\`, which Potion does not serve. (\`@ai-sdk/openai-compatible\` also works.) Keep \`streamText\`/\`generateText\` calls as they are. To read the receipt without consuming the stream, pass a \`fetch\` wrapper to \`createOpenAI\` that records \`response.headers.get('x-frontier-trace')\` and \`x-potion-model\`.
-- **LangChain**: construct \`ChatOpenAI\` with \`base_url="${baseUrl}/v1"\` (Python) / \`configuration: { baseURL }\` (JS), \`api_key\` from \`POTION_API_KEY\`, and \`model="potion-auto"\`. Tool binding works unchanged.
-- Replace every hard-coded provider model id in chains/agents with \`potion-auto\`.
+- **Vercel AI SDK** (\`ai\` v5+ with \`@ai-sdk/openai\` v2+/v4): \`const potion = createOpenAI({ baseURL: '${baseUrl}/v1', apiKey: process.env.POTION_API_KEY, headers: { 'x-potion-cluster': '<kind of work>' } })\` and use \`potion.chat('${routerModel}')\` — NOT \`potion('${routerModel}')\`, which builds a Responses-API model and posts to \`/responses\`, which Potion does not serve. (\`@ai-sdk/openai-compatible\` also works.) Keep \`streamText\`/\`generateText\` calls as they are. To read the receipt without consuming the stream, pass a \`fetch\` wrapper to \`createOpenAI\` that records \`response.headers.get('x-frontier-trace')\` and \`x-potion-model\`.
+- **LangChain**: construct \`ChatOpenAI\` with \`base_url="${baseUrl}/v1"\` (Python) / \`configuration: { baseURL }\` (JS), \`api_key\` from \`POTION_API_KEY\`, and \`model="${routerModel}"\`. Tool binding works unchanged.
+- Replace every hard-coded provider model id in chains/agents with \`${routerModel}\`.
 
 ${VERIFY}`;
     case 'http':
@@ -120,7 +120,7 @@ ${VERIFY}`;
       return `${head}
 ## Steps
 1. POST \`${baseUrl}/v1/chat/completions\` with headers \`Authorization: Bearer $POTION_API_KEY\` and \`Content-Type: application/json\`.
-2. Body is the OpenAI chat-completions shape: \`{"model":"potion-auto","messages":[{"role":"user","content":"..."}]}\`; add \`"stream": true\` for server-sent events.
+2. Body is the OpenAI chat-completions shape: \`{"model":"${routerModel}","messages":[{"role":"user","content":"..."}]}\`; add \`"stream": true\` for server-sent events.
 3. Parse the response exactly as an OpenAI response. Use a 90-second timeout for chat and read \`usage\` for token counts; \`max_tokens\` is honored.
 4. Responses also carry \`x-ratelimit-remaining-requests\` (a per-second bucket of 10) — retry on 429 with a short backoff.
 

@@ -32,7 +32,7 @@ export function EvidenceBand() {
       <div className="bg-[#1c1a17] px-6 py-20 text-[#efece4] sm:px-12 lg:py-28">
         <div className="lg:ml-auto lg:max-w-md">
           <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-[#a8a29e]">
-            <span className="text-[#efece4]">02</span> · Measured, not claimed
+            <span className="text-[#efece4]">03</span> · Measured, not claimed
           </div>
           <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
             The same work.

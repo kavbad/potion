@@ -214,7 +214,18 @@ export default async function DocsPage() {
 
       <Section id="model" title="The model field means what it says">
         <p className="text-sm leading-relaxed text-soft">
-          Three cases, no surprises. <code className="font-mono text-xs">potion-auto</code>{' '}
+          <span className="font-medium text-ink">Your router has a name</span>:{' '}
+          <code className="font-mono text-xs">potion/&lt;your-org&gt;</code> — shown on your{' '}
+          <a href="/router" className="text-accent underline">Router page</a> and first in{' '}
+          <code className="font-mono text-xs">GET /v1/models</code>. It is the model id to put in
+          your code: Potion compiles that router from your workload, quality bar, and the measured
+          frontiers, versions it as the evidence moves, and your receipts name the version each
+          request rode. <code className="font-mono text-xs">potion-auto</code> is the plain alias —
+          the two route identically.
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          Three cases, no surprises. <code className="font-mono text-xs">potion/&lt;your-org&gt;</code>{' '}
+          (or <code className="font-mono text-xs">potion-auto</code>){' '}
           <span className="font-medium text-ink">routes</span>: Potion classifies the request and
           serves the measured pick under your policy. A{' '}
           <span className="font-medium text-ink">known model name pins</span>: exactly that model

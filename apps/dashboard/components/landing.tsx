@@ -255,6 +255,68 @@ export function Landing() {
         </Reveal>
       </LabSection>
 
+      {/* ---------------- 02 · the artifact (R2 coherence pass) ----------------
+          The hero promises "your router"; this is the first place the page
+          SHOWS one. The specimen is schematic — real workload names, masked
+          strategies (the evidence-band convention), illustrative numbers —
+          and the caption says so; real ones are compiled per org at /router.
+          The asymmetry is stated here because it IS the product boundary:
+          you never hand-assign; you change what you want and Potion
+          recompiles. */}
+      <LabSection n="02" label="What you get">
+        <div className="grid items-start gap-12 lg:grid-cols-2">
+          <div>
+            <h2 className="text-[1.7rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
+              A router with your name on it.
+            </h2>
+            <p className="mt-4 text-[15px] leading-relaxed text-soft">
+              Potion compiles your router from three things: your traffic&rsquo;s actual kinds of
+              work, your quality bar, and the measured frontiers. It ships as a model id —{' '}
+              <code className="font-mono text-[13px] text-ink">potion/your-org</code> — and as a
+              document you can read: every kind of work, what it routes to, the measured quality
+              and price behind the choice.
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed text-soft">
+              It is versioned. When a new model ships or a measurement moves, Potion recompiles,
+              mints the next version, and writes what changed on it — and every receipt names the
+              version that served it. Roll it back, audit it, set boundaries on it.
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed text-soft">
+              <span className="font-medium text-ink">You never hand-assign a model.</span> You
+              change what you want — the floor, the ceiling, a ban — and Potion recompiles. The
+              intelligence stays on our side of the API.
+            </p>
+          </div>
+          <figure className="border border-[#d9d5cb] bg-[#fbfaf7]">
+            <div className="flex items-baseline justify-between border-b border-[#d9d5cb] px-5 py-3">
+              <span className="font-mono text-[13px] text-ink">potion/your-org</span>
+              <span className="font-mono text-[12px] uppercase tracking-[0.1em] text-accent">v4</span>
+            </div>
+            <div className="px-5 py-4">
+              <table className="w-full text-left font-mono text-[12px]">
+                <thead className="text-[11px] uppercase tracking-[0.1em] text-faint">
+                  <tr><th className="pb-2 font-normal">kind of work</th><th className="pb-2 font-normal">routes to</th><th className="pb-2 text-right font-normal">quality</th><th className="pb-2 text-right font-normal">$/1K</th></tr>
+                </thead>
+                <tbody className="text-soft">
+                  <tr className="border-t border-dashed border-[#d9d5cb]"><td className="py-1.5">extraction</td><td>████████·small</td><td className="text-right tabular-nums">0.977</td><td className="text-right tabular-nums">$0.05</td></tr>
+                  <tr className="border-t border-dashed border-[#d9d5cb]"><td className="py-1.5">code-gen</td><td>████████·mid</td><td className="text-right tabular-nums">0.917</td><td className="text-right tabular-nums">$0.55</td></tr>
+                  <tr className="border-t border-dashed border-[#d9d5cb]"><td className="py-1.5">summarization</td><td>████████·small</td><td className="text-right tabular-nums">0.850</td><td className="text-right tabular-nums">$0.01</td></tr>
+                  <tr className="border-t border-dashed border-[#d9d5cb]"><td className="py-1.5">rag-answer</td><td>████████·mid</td><td className="text-right tabular-nums">0.941</td><td className="text-right tabular-nums">$0.12</td></tr>
+                </tbody>
+              </table>
+              <p className="mt-3 border-t border-[#d9d5cb] pt-3 font-mono text-[12px] leading-relaxed text-soft">
+                v3 → v4 · a new model cleared the bar on extraction —{' '}
+                <span className="text-kept">estimated at your mix: saves another 11%</span>
+              </p>
+            </div>
+            <figcaption className="border-t border-[#d9d5cb] px-5 py-2.5 font-mono text-[11.5px] leading-relaxed text-faint">
+              the artifact, schematically — strategies masked, numbers illustrative. Real ones are
+              compiled per organization, from live measurements, on your Router page.
+            </figcaption>
+          </figure>
+        </div>
+      </LabSection>
+
       {/* ---------------- the evidence band (exa lesson: one dark, named-bars section) ---------------- */}
       <EvidenceBand />
 
@@ -276,7 +338,7 @@ export function Landing() {
           one. The closing line is the only place the page looks past what is
           already measured, which is why it is phrased as an admission (almost
           none of it has been measured) rather than a promise. */}
-      <LabSection n="03" label="The research engine">
+      <LabSection n="04" label="The research engine">
         <div className="grid items-start gap-12 lg:grid-cols-2">
           <Reveal>
             <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
@@ -313,7 +375,7 @@ export function Landing() {
       </LabSection>
 
       {/* ---------------- proof: the map ---------------- */}
-      <LabSection n="04" label="How you know we are not making this up">
+      <LabSection n="05" label="How you know we are not making this up">
         <div>
           <Reveal>
             <h2 className="mt-4 max-w-2xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
@@ -336,7 +398,7 @@ export function Landing() {
       {/* ---------------- business model ---------------- */}
       {/* exa's enterprise-security composition: a full-bleed dark band, the
           headline top-left, and the concrete promises as outlined tiles. */}
-      <LabSection n="05" label="The engineering" dark>
+      <LabSection n="06" label="The engineering" dark>
         <div>
           <Reveal>
             <h2 className="mt-4 max-w-2xl text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
