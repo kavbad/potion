@@ -361,14 +361,24 @@ export function registerLabRoutes(
   app.get('/api/lab/harnesses', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     const rows = await listLabHarnesses(db, org.orgId);
-    return reply.send({
-      harnesses: rows.map((r) => ({
+    // L-G3+ (design brief): the roster's trust-at-a-glance line — grant
+    // state counts per harness, straight from the trust record.
+    const harnesses = [];
+    for (const r of rows) {
+      const grants = await listActionGrants(db, org.orgId, r.harnessHash);
+      harnesses.push({
         harnessHash: r.harnessHash,
         name: r.name,
         clusterId: r.clusterId,
         createdAt: r.createdAt,
-      })),
-    });
+        trust: {
+          autonomous: grants.filter((g) => g.state === 'autonomous').length,
+          supervised: grants.filter((g) => g.state === 'supervised').length,
+          blocked: grants.filter((g) => g.state === 'blocked').length,
+        },
+      });
+    }
+    return reply.send({ harnesses });
   });
 
   // ---- GET /api/lab/harnesses/:hash (viewer) — spec + sidecar + dial ----

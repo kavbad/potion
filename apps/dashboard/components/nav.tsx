@@ -29,6 +29,7 @@ const PRIMARY = [
   { href: '/frontiers', label: 'Evidence', hint: 'The measurements behind your routing' },
   { href: '/usage', label: 'Savings', hint: 'What you kept, verified per receipt' },
   { href: '/try', label: 'Try', hint: 'Send anything; watch the receipt happen' },
+  { href: '/lab', label: 'Lab', hint: 'Where a company employs agents — supervised, then earned autonomy' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, team, audit' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
 ];

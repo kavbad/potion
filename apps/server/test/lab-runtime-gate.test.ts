@@ -99,7 +99,7 @@ describe('the runtime gate', () => {
     await post('/v1/lab/runtime/outcome', { runId, toolName: 'crm:lookup', argsHash: 'h-3', ok: true, fromAudit: true });
     const after = await listLabStepsForHarness(db(), ORG_A, HASH);
     expect(after.length).toBe(before + 1);
-    expect((after[after.length - 1]!.payload as StepPayload).toolOutput).toBe('executed');
+    expect((after[after.length - 1]!.payload as StepPayload).toolOutput).toBe('executed (audit sample)');
   });
 
   it('cross-org run ids 404 uniformly; a foreign harness cannot even register', async () => {

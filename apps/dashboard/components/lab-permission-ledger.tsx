@@ -60,6 +60,7 @@ export function LabPermissionLedger({
   const [proposals, setProposals] = useState<Proposal[]>(initialProposals ?? []);
   const [tightened, setTightened] = useState<Array<{ actionClass: string; why: string }>>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [justGranted, setJustGranted] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/lab/harnesses/${harnessHash}/grants`, { cache: 'no-store' }).catch(() => null);
@@ -88,6 +89,7 @@ export function LabPermissionLedger({
     setBusy(null);
     if (res?.ok) {
       setProposals((cur) => cur.filter((x) => x.grantId !== p.grantId));
+      setJustGranted(p.grantId);
       await load();
     }
   }
@@ -154,7 +156,7 @@ export function LabPermissionLedger({
             </p>
           ) : (
             g.rows.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-dashed border-[#d9d5cb] py-2">
+              <div key={r.id} className={`flex flex-wrap items-baseline justify-between gap-x-4 border-b border-dashed border-[#d9d5cb] py-2${justGranted === r.id ? ' lab-graduate' : ''}`}>
                 <span className="font-mono text-[12.5px] text-ink">{r.actionClass}</span>
                 <span className="flex flex-wrap items-baseline gap-x-3">
                   <span className={`border px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.08em] ${r.riskTier === 'never-graduates' ? 'border-refuse text-refuse' : 'border-line text-faint'}`}>

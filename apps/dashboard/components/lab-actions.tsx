@@ -75,57 +75,101 @@ export function InterviewForm() {
     }
   }, [goal, kind, done, accounts, worth, router]);
 
+  // The bench styling (LAB-DESIGN.md): the hire moment is ONE question —
+  // "describe the job" — with the refinements quiet beneath it. Same logic,
+  // same testids; only the clothes changed.
+  const field =
+    'w-full border bg-[#0b0e14] px-3 py-2 font-mono text-[13px] text-[#e6ebf4] placeholder:text-[#5c6678] focus:outline-none';
+  const fieldStyle = { borderColor: '#2a3346' } as const;
+  const label = 'block font-mono text-[10px] uppercase tracking-[0.16em] text-[#5c6678]';
   return (
-    <div style={box} data-testid="interview-form">
-      <h3>Build a harness</h3>
-      <p>
-        <label>
-          1. What should it do?{' '}
-          <input value={goal} onChange={(e) => setGoal(e.target.value)} size={60} data-testid="q-goal" />
-        </label>
-      </p>
-      <p>
-        <label>
-          2. One-off task or standing mission?{' '}
-          <select value={kind} onChange={(e) => setKind(e.target.value as 'task' | 'standing')} data-testid="q-kind">
-            <option value="task">task</option>
-            <option value="standing">standing</option>
+    <div className="mt-4" data-testid="interview-form">
+      <label className={label}>
+        the job, in your words
+        <textarea
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          rows={2}
+          placeholder="Watch our portfolio companies, research meaningful updates, draft me a daily brief…"
+          className={`${field} mt-1.5 resize-none text-[15px]`}
+          style={fieldStyle}
+          data-testid="q-goal"
+        />
+      </label>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <label className={label}>
+          one-off or standing
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as 'task' | 'standing')}
+            className={`${field} mt-1.5`}
+            style={fieldStyle}
+            data-testid="q-kind"
+          >
+            <option value="task">one-off task</option>
+            <option value="standing">standing mission</option>
           </select>
-        </label>{' '}
-        {kind === 'task' ? (
-          <label>
-            How will it know it&apos;s done?{' '}
-            <input value={done} onChange={(e) => setDone(e.target.value)} size={40} data-testid="q-done" />
-          </label>
-        ) : null}
-      </p>
-      <p>
-        <label>
-          3. Which accounts/services does it touch? (comma-separated, may be empty){' '}
-          <input value={accounts} onChange={(e) => setAccounts(e.target.value)} size={40} data-testid="q-accounts" />
         </label>
-      </p>
-      <p>
-        <label>
-          4. What is one {kind === 'task' ? 'run' : 'check'} worth to you, in dollars?{' '}
-          <input value={worth} onChange={(e) => setWorth(e.target.value)} size={8} data-testid="q-worth" />
+        <label className={label}>
+          accounts it touches
+          <input
+            value={accounts}
+            onChange={(e) => setAccounts(e.target.value)}
+            placeholder="github, slack — or none"
+            className={`${field} mt-1.5`}
+            style={fieldStyle}
+            data-testid="q-accounts"
+          />
         </label>
-      </p>
-      <button onClick={submit} disabled={busy || goal.length === 0} data-testid="interview-submit">
-        {busy ? 'Generating…' : 'Generate my harness'}
-      </button>
+        <label className={label}>
+          one {kind === 'task' ? 'run' : 'check'} is worth ($)
+          <input
+            value={worth}
+            onChange={(e) => setWorth(e.target.value)}
+            className={`${field} mt-1.5`}
+            style={fieldStyle}
+            data-testid="q-worth"
+          />
+        </label>
+      </div>
+      {kind === 'task' ? (
+        <label className={`${label} mt-4`}>
+          how it knows it&apos;s done
+          <input
+            value={done}
+            onChange={(e) => setDone(e.target.value)}
+            placeholder="the brief is in my inbox"
+            className={`${field} mt-1.5`}
+            style={fieldStyle}
+            data-testid="q-done"
+          />
+        </label>
+      ) : null}
+      <div className="mt-5 flex flex-wrap items-center gap-4">
+        <button
+          onClick={submit}
+          disabled={busy || goal.length === 0}
+          className="bg-[#e6ebf4] px-5 py-2.5 text-[13px] font-semibold text-[#0b0e14] hover:opacity-90 disabled:opacity-30"
+          data-testid="interview-submit"
+        >
+          {busy ? 'Growing the harness…' : 'Hire this worker'}
+        </button>
+        <span className="font-mono text-[10.5px] text-[#5c6678]">
+          born fully supervised · hard budget · you approve every external action until it earns otherwise
+        </span>
+      </div>
       {result?.kind === 'draft' ? (
-        <div style={{ marginTop: 8 }} data-testid="gen-draft">
-          <b>One more question:</b>
-          <ul>{(result.gaps ?? []).map((g, i) => <li key={i}>{g.question ?? g.code}</li>)}</ul>
+        <div className="mt-4 border px-4 py-3 text-[13px] text-[#c9d2e0]" style={{ borderColor: '#2a3346' }} data-testid="gen-draft">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8b96a8]">one more question</span>
+          <ul className="mt-1 list-disc pl-5">{(result.gaps ?? []).map((g, i) => <li key={i}>{g.question ?? g.code}</li>)}</ul>
         </div>
       ) : null}
       {result?.kind === 'refused' ? (
-        <div style={{ marginTop: 8 }} data-testid="gen-refused">
+        <div className="mt-4 border px-4 py-3 text-[13px]" style={{ borderColor: '#5c2733', color: '#ff9daf' }} data-testid="gen-refused">
           <b>Refused ({result.reason}):</b> {result.detail}
         </div>
       ) : null}
-      {result?.error ? <div style={{ marginTop: 8 }}>{result.error.message}</div> : null}
+      {result?.error ? <div className="mt-4 text-[13px] text-[#ff9daf]">{result.error.message}</div> : null}
     </div>
   );
 }

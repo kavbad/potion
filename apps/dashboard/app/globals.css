@@ -177,3 +177,14 @@
 @media (prefers-reduced-motion: reduce) {
   .receipt-printing { animation: none; }
 }
+
+/* LAB-DESIGN.md — the ONE theater moment: a grant crossing to "can act
+   alone" pulses once in earned green. Nothing else animates for ceremony. */
+@keyframes lab-graduate {
+  0% { box-shadow: 0 0 0 0 rgba(87, 217, 163, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(87, 217, 163, 0); }
+}
+.lab-graduate { animation: lab-graduate 900ms ease-out 1; }
+@media (prefers-reduced-motion: reduce) {
+  .lab-graduate { animation: none; }
+}

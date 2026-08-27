@@ -196,7 +196,9 @@ export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionCo
       payload: buildStepPayload({
         kind: 'tool',
         toolName: body.data.toolName,
-        toolOutput: body.data.ok ? 'executed' : 'failed',
+        // fromAudit rides the output marker so the sampled-review stream
+        // stays labeled when the audit surface reads these steps back.
+        toolOutput: `${body.data.ok ? 'executed' : 'failed'}${body.data.fromAudit ? ' (audit sample)' : ''}`,
         clockMs: Date.now(),
         rngSample: Math.random(),
       }),
