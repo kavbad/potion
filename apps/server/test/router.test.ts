@@ -136,6 +136,50 @@ describe('GET /api/router — the minted artifact', () => {
   });
 });
 
+describe('O1 — "what are you building?" → interpreted mix + instant reveal', () => {
+  it('interprets a description, persists it, and the router document carries it as a new version', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/onboarding/interpret',
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: { description: 'summarize research papers into a weekly digest for analysts' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as {
+      summary: string;
+      mix: Array<{ clusterId: string; share: number }>;
+      source: string;
+      router: { name: string; version: number; provisional: boolean };
+      expected: { savingsPct: number } | null;
+    };
+    expect(body.summary.length).toBeGreaterThan(0);
+    expect(body.mix.length).toBeGreaterThanOrEqual(1);
+    const total = body.mix.reduce((a, m) => a + m.share, 0);
+    expect(Math.abs(total - 1)).toBeLessThan(1e-6);
+    expect(['model', 'fallback']).toContain(body.source);
+    expect(body.router.name).toBe('potion/acme-co');
+    expect(body.router.provisional).toBe(true);
+    // The interpretation is part of the router's identity: a new version
+    // minted, with the "built for" line on it.
+    const r = await getRouter();
+    const rb = r.json() as RouterBody & { document: { interpreted?: { summary: string } } };
+    expect(rb.version).toBeGreaterThanOrEqual(3);
+    expect(rb.document.interpreted?.summary).toBe(body.summary);
+    expect(rb.document.changes.some((c) => c.includes('built for'))).toBe(true);
+  });
+
+  it('key-shaped content in the description refuses before any model call', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/onboarding/interpret',
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: { description: `our app uses sk-${'a'.repeat(44)} to call the api` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('secret');
+  });
+});
+
 describe('potion/<slug> — the router as a serving alias', () => {
   const chat = (model: string) =>
     app.inject({
@@ -171,10 +215,10 @@ describe('potion/<slug> — the router as a serving alias', () => {
       requests: Array<{ status: string | null; routerVersion: number | null }>;
     };
     expect(body.router.name).toBe('potion/acme-co');
-    expect(body.router.version).toBe(2);
+    expect(body.router.version).toBe(3);
     const served = body.requests.find((r) => r.status === 'ok');
     expect(served).toBeDefined();
-    expect(served!.routerVersion).toBe(2);
+    expect(served!.routerVersion).toBe(3);
   });
 
   it('/v1/models lists the named router first, as a router', async () => {

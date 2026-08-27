@@ -131,7 +131,7 @@ export function Landing() {
               href="/login"
               className="bg-ink px-6 py-3 text-sm font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
             >
-              Get an API key
+              Build your router
             </Link>
           </div>
 

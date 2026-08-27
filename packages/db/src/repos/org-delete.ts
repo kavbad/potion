@@ -51,6 +51,7 @@ import {
   labHarnessMemory,
   labActionGrants,
   routerVersions,
+  routerInterpretations,
   labRuns,
   labRunSteps,
   requestLogs,
@@ -264,6 +265,7 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   // L-G1: the trust record is org-scoped evidence provenance — cascades.
   await count('lab_action_grants', db.delete(labActionGrants).where(eq(labActionGrants.orgId, orgId)).returning({ x: labActionGrants.id }));
   await count('router_versions', db.delete(routerVersions).where(eq(routerVersions.orgId, orgId)).returning({ x: routerVersions.id }));
+  await count('router_interpretations', db.delete(routerInterpretations).where(eq(routerInterpretations.orgId, orgId)).returning({ x: routerInterpretations.orgId }));
   await count('lab_harness_memory', db.delete(labHarnessMemory).where(eq(labHarnessMemory.orgId, orgId)).returning({ x: labHarnessMemory.key }));
   // Lab Step 7 (0036): felt-sample cache — org-scoped like all lab data.
   await count('lab_felt_samples', db.delete(labFeltSamples).where(eq(labFeltSamples.orgId, orgId)).returning({ x: labFeltSamples.probeHash }));

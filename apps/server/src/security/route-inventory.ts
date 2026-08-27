@@ -131,6 +131,8 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   // R1: the org's compiled router — org-implicit read (lazy version mint is
   // idempotent bookkeeping, not caller-intent mutation).
   { method: 'GET', path: '/api/router', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },
+  // O1: description → interpreted mix + instant reveal; writes the org's own interpretation row only.
+  { method: 'POST', path: '/api/onboarding/interpret', surface: 'api', mutating: true, guard: 'member', probeBody: { description: 'an app that summarizes documents' }, tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/routing-activity', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   // S2 — "what are you building?". POST but READ-ONLY: it classifies text and
   // reads the caller's org-preferred frontier, creating nothing. Guard is

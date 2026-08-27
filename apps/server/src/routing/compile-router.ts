@@ -27,6 +27,7 @@ import {
 import {
   appendRouterVersion,
   getOrgById,
+  getRouterInterpretation,
   listClusters,
   listPolicies,
   listRequestLogs,
@@ -63,6 +64,11 @@ export interface RouterDocument {
   assignments: RouterAssignment[];
   pricesVersion: string;
   changes: string[];
+  /** O1: what the org said it is building, interpreted into a mix. */
+  interpreted?: { summary: string; mix: Array<{ clusterId: string; share: number }> };
+  /** O1: mix-weighted projections FROM PLATFORM EVIDENCE — labeled expected,
+   * corrected by real traffic; baseline = best scorer per kind of work. */
+  expected?: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
 }
 
 export interface CompiledRouter {
@@ -91,48 +97,15 @@ export async function compileAndMintRouter(
     if (parsed.success) policy = parsed.data;
   }
 
-  const assignments: RouterAssignment[] = [];
-  if (policy !== null) {
-    const clusterIds: string[] = [];
-    const seen = new Set<string>();
-    for (const c of loadTaxonomy().clusters) {
-      if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
-    }
-    for (const c of await listClusters(db, { orgId })) {
-      if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
-    }
-    for (const cid of clusterIds.sort()) {
-      const loaded = await loadCurrentFrontier(db, cid, orgId);
-      if (!loaded || loaded.points.length === 0) continue;
-      const guarded = guardFrontierProvenance(loaded, ctx.providerMode, warn);
-      const clusterPolicy = policyForCluster(policy, cid);
-      const bound = await bindServingLatency(ctx, clusterPolicy, guarded.frontier, orgId, cid, warn);
-      const op = resolveOperatingPoint(clusterPolicy, bound.frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
-      if (op.config === null) continue;
-      const hash = strategyHash(op.config as StrategyConfig);
-      const served = (bound.frontier?.points ?? guarded.frontier?.points ?? []).find((p) => p.strategyHash === hash) ?? null;
-      const cfg = op.config as StrategyConfig & { model?: string };
-      assignments.push({
-        clusterId: cid,
-        frontierId: loaded.id,
-        frontierVersion: loaded.version,
-        provenance: guarded.provenance,
-        strategyHash: hash,
-        strategy: { type: cfg.type, label: cfg.type === 'single' && cfg.model !== undefined ? cfg.model : cfg.type },
-        quality: served?.quality ?? null,
-        costPer1K: served?.costPer1K ?? null,
-        latencyP95: served?.latencyP95 ?? null,
-        evidenceN: served?.evidence?.n ?? null,
-        alternatives: loaded.points.length,
-        fallback: op.fallbackReason ?? null,
-      });
-    }
-  }
+  const assignments: RouterAssignment[] =
+    policy === null ? [] : await assignmentsUnderPolicy(ctx, db, orgId, policy, warn);
+  const interpretation = await getRouterInterpretation(db, orgId);
 
   const routerHash = sha256(
     canonicalJson({
       name,
       policy: policy ?? null,
+      interpreted: interpretation === null ? null : { summary: interpretation.summary, mix: interpretation.mix },
       assignments: assignments.map((a) => ({
         clusterId: a.clusterId,
         frontierId: a.frontierId,
@@ -148,6 +121,10 @@ export async function compileAndMintRouter(
   let changes: string[] = [];
   if (latest === null) {
     changes = ['first compilation'];
+  } else if (latest.routerHash === routerHash) {
+    // Unchanged router: the CURRENT version's stored change list is the
+    // truth — recomputing against itself would erase "what changed".
+    changes = (latest.document as { changes?: string[] }).changes ?? [];
   } else if (latest.routerHash !== routerHash) {
     const prev = latest.document as { policy?: { description?: string } | null; assignments?: RouterAssignment[] };
     const prevAssignments = prev.assignments ?? [];
@@ -156,6 +133,10 @@ export async function compileAndMintRouter(
     const prevDesc = prev.policy?.description ?? null;
     const nowDesc = policy ? describePolicy(policy) : null;
     if (prevDesc !== nowDesc) changes.push(`your rule changed: ${prevDesc ?? 'none'} → ${nowDesc ?? 'none'}`);
+    const prevSummary = (latest.document as { interpreted?: { summary?: string } }).interpreted?.summary ?? null;
+    if (interpretation !== null && interpretation.summary !== prevSummary) {
+      changes.push(`built for: ${interpretation.summary}`);
+    }
     // Per-request cost deltas for the R2 mix-weighted estimate below.
     const deltas: Array<{ clusterId: string; perRequestUsd: number }> = [];
     for (const a of assignments) {
@@ -215,6 +196,12 @@ export async function compileAndMintRouter(
     assignments,
     pricesVersion: ctx.prices.version,
     changes,
+    ...(interpretation === null
+      ? {}
+      : {
+          interpreted: { summary: interpretation.summary, mix: interpretation.mix },
+          expected: await expectedForMix(db, orgId, assignments, interpretation.mix),
+        }),
   };
   const minted = await appendRouterVersion(db, { orgId, routerHash, document });
   const mintedNew = minted.routerHash === routerHash && latest?.routerHash !== routerHash;
@@ -237,6 +224,88 @@ export async function compileAndMintRouter(
     mintedAt: minted.createdAt,
     document: minted.routerHash === routerHash ? document : (minted.document as RouterDocument),
     history: fullHistory.slice(0, 12),
+  };
+}
+
+
+/** The per-cluster assignment loop, shared by the compiler and the O1
+ * onboarding reveal — the SERVE PATH'S own functions, one implementation. */
+export async function assignmentsUnderPolicy(
+  ctx: PotionContext,
+  db: PotionDb,
+  orgId: string,
+  policy: Policy,
+  warn: (msg: string) => void,
+): Promise<RouterAssignment[]> {
+  const assignments: RouterAssignment[] = [];
+  const clusterIds: string[] = [];
+  const seen = new Set<string>();
+  for (const c of loadTaxonomy().clusters) {
+    if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
+  }
+  for (const c of await listClusters(db, { orgId })) {
+    if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
+  }
+  for (const cid of clusterIds.sort()) {
+    const loaded = await loadCurrentFrontier(db, cid, orgId);
+    if (!loaded || loaded.points.length === 0) continue;
+    const guarded = guardFrontierProvenance(loaded, ctx.providerMode, warn);
+    const clusterPolicy = policyForCluster(policy, cid);
+    const bound = await bindServingLatency(ctx, clusterPolicy, guarded.frontier, orgId, cid, warn);
+    const op = resolveOperatingPoint(clusterPolicy, bound.frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+    if (op.config === null) continue;
+    const hash = strategyHash(op.config as StrategyConfig);
+    const served = (bound.frontier?.points ?? guarded.frontier?.points ?? []).find((p) => p.strategyHash === hash) ?? null;
+    const cfg = op.config as StrategyConfig & { model?: string };
+    assignments.push({
+      clusterId: cid,
+      frontierId: loaded.id,
+      frontierVersion: loaded.version,
+      provenance: guarded.provenance,
+      strategyHash: hash,
+      strategy: { type: cfg.type, label: cfg.type === 'single' && cfg.model !== undefined ? cfg.model : cfg.type },
+      quality: served?.quality ?? null,
+      costPer1K: served?.costPer1K ?? null,
+      latencyP95: served?.latencyP95 ?? null,
+      evidenceN: served?.evidence?.n ?? null,
+      alternatives: loaded.points.length,
+      fallback: op.fallbackReason ?? null,
+    });
+  }
+  return assignments;
+}
+
+/** O1: mix-weighted projections. Baseline = the BEST SCORER per kind of
+ * work (the house comparison: "always the top-quality point") — an honest
+ * premium counterfactual, never a strawman. Returns null when the mix has
+ * no priced coverage. */
+export async function expectedForMix(
+  db: PotionDb,
+  orgId: string,
+  assignments: RouterAssignment[],
+  mix: Array<{ clusterId: string; share: number }>,
+): Promise<{ quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null> {
+  let q = 0, cost = 0, base = 0, covered = 0;
+  for (const m of mix) {
+    const a = assignments.find((x) => x.clusterId === m.clusterId);
+    if (!a || a.quality === null || a.costPer1K === null) continue;
+    const loaded = await loadCurrentFrontier(db, m.clusterId, orgId);
+    const best = loaded?.points.reduce<{ q: number; c: number } | null>(
+      (acc, p) => (acc === null || p.quality > acc.q ? { q: p.quality, c: p.costPer1K } : acc),
+      null,
+    ) ?? null;
+    if (best === null) continue;
+    covered += m.share;
+    q += m.share * a.quality;
+    cost += m.share * a.costPer1K;
+    base += m.share * best.c;
+  }
+  if (covered <= 0 || base <= 0) return null;
+  return {
+    quality: q / covered,
+    costPer1K: cost / covered,
+    baselineCostPer1K: base / covered,
+    savingsPct: Math.max(0, 1 - cost / base),
   };
 }
 

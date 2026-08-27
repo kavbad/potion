@@ -29,16 +29,26 @@ const CHOICES: Array<{ key: string; label: string; sub: string; models: string[]
   { key: 'scratch', label: 'Building from scratch', sub: 'No AI in production yet', models: [], other: 'building from scratch' },
 ];
 
+interface InterpretResponse {
+  summary: string;
+  mix: Array<{ clusterId: string; share: number }>;
+  router: { name: string; version: number; provisional: boolean };
+  assignments: Array<{ clusterId: string; share: number; label: string; quality: number | null; costPer1K: number | null }>;
+  expected: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
+}
+
 const SAMPLE = 'Is this review positive, negative, or neutral? "Crashed twice, support never replied."';
 
 export const FIRST_RECEIPT_KEY = 'potion:first-receipt';
 
-type Beat = 'checking' | 'question' | 'key' | 'try' | 'printed' | 'done';
+type Beat = 'checking' | 'question' | 'reveal' | 'key' | 'try' | 'printed' | 'done';
 
 export function FirstRunGate() {
   const pathname = usePathname();
   const [beat, setBeat] = useState<Beat>('checking');
   const [choice, setChoice] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
+  const [interp, setInterp] = useState<InterpretResponse | null>(null);
   const [consent, setConsent] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,12 +87,30 @@ export function FirstRunGate() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ models: picked.models, other: picked.other, samplingConsent: consent }),
     }).catch(() => null);
-    setBusy(false);
     if (!res?.ok) {
+      setBusy(false);
       setError('Could not save — try again.');
       return;
     }
-    if (!isAdmin) return setBeat('done'); // members cannot mint; the org's admin already did
+    if (!isAdmin) { setBusy(false); return setBeat('done'); } // members cannot mint; the org's admin already did
+    // O1: the description → interpreted mix → the instant reveal. Failure is
+    // never a wall — the flow continues to the key beat without the reveal.
+    if (description.trim().length >= 3) {
+      const ir = await fetch('/api/onboarding/interpret', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ description: description.trim() }),
+      }).catch(() => null);
+      setBusy(false);
+      if (ir?.ok) {
+        setInterp((await ir.json()) as InterpretResponse);
+        setBeat('reveal');
+        void prepareKey(); // key + base URL are ready when they arrive there
+        return;
+      }
+    } else {
+      setBusy(false);
+    }
     setBeat('key');
     void prepareKey();
   }
@@ -168,15 +196,27 @@ export function FirstRunGate() {
           <>
             <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">One question, then you&rsquo;re in</div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-              What do you use for AI today?
+              What are you building?
             </h1>
             <p className="mt-2 text-[14px] leading-relaxed text-soft">
-              Potion routes each request to the cheapest model measured at your quality bar. If you use
-              AI today, we measure against it — <span className="text-ink">never below what you get now</span>.
-              Starting fresh? We set a strong default bar and measure your work as it grows. Change this
-              anytime in Settings.
+              One sentence is enough — describe the product, or paste a typical prompt. Potion works
+              out what kinds of work it needs and builds your router around them. You never choose
+              models, thresholds, or fallbacks.
             </p>
-            <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="An AI support agent for our e-commerce platform… / Extract financials from PDFs… / Code review tool…"
+              className="mt-4 w-full resize-none border border-[#d9d5cb] bg-white px-4 py-3 text-[15px] text-ink placeholder:text-faint focus:border-ink focus:outline-none"
+              data-testid="onboarding-description"
+            />
+            <p className="mt-5 text-[13px] leading-relaxed text-soft">
+              <span className="font-medium text-ink">Already running on something?</span> Name it and
+              your savings are verified against it — <span className="text-ink">never below what you
+              get now</span>. Building fresh? Pick the last option.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {CHOICES.map((c) => (
                 <button
                   key={c.key}
@@ -215,6 +255,55 @@ export function FirstRunGate() {
                 {busy ? 'Saving…' : 'Continue'}
               </button>
               {choice === null && <span className="text-[12px] text-faint">Pick one — &ldquo;not sure&rdquo; is a fine answer.</span>}
+              {choice !== null && description.trim().length < 3 && (
+                <span className="text-[12px] text-faint">Describing what you&rsquo;re building gets you a router preview on the next screen.</span>
+              )}
+            </div>
+          </>
+        )}
+
+        {beat === 'reveal' && interp && (
+          <>
+            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">We understood the workload</div>
+            <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
+              Your router is ready.
+            </h1>
+            <p className="mt-2 text-[14px] leading-relaxed text-soft">{interp.summary}</p>
+
+            <div className="mt-5 border border-accent/50 bg-[#fbfaf7]" data-testid="onboarding-reveal">
+              <div className="flex items-baseline justify-between border-b border-[#d9d5cb] px-5 py-3">
+                <span className="font-mono text-[13px] text-ink">{interp.router.name}</span>
+                <span className="font-mono text-[12px] uppercase tracking-[0.1em] text-accent">v{interp.router.version} · provisional</span>
+              </div>
+              <div className="px-5 py-4">
+                {interp.assignments.map((a) => (
+                  <div key={a.clusterId} className="flex items-baseline justify-between gap-3 border-b border-dashed border-[#d9d5cb] py-1.5 font-mono text-[12.5px] last:border-0">
+                    <span className="text-soft">{Math.round(a.share * 100)}% · {a.clusterId}</span>
+                    <span className="text-ink">→ {a.label}{a.quality !== null ? ` · q ${a.quality.toFixed(2)}` : ''}</span>
+                  </div>
+                ))}
+                {interp.expected && (
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
+                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%</span></span>
+                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
+                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best-scorer baseline</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
+                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected savings</span><span className="font-semibold text-kept">{Math.round(interp.expected.savingsPct * 100)}%</span></span>
+                  </div>
+                )}
+              </div>
+              <p className="border-t border-[#d9d5cb] px-5 py-2.5 font-mono text-[11.5px] leading-relaxed text-faint">
+                expected at your described mix, from Potion&rsquo;s live platform measurements — your
+                real traffic corrects this over the first week or two
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center gap-4">
+              <button type="button" onClick={() => setBeat('key')} className="bg-ink px-5 py-2.5 text-[13px] font-medium text-[#f4f2ec] hover:opacity-90" data-testid="use-this-router">
+                Use this router →
+              </button>
+              <button type="button" onClick={() => setBeat('question')} className="text-[12px] text-faint underline hover:text-soft">
+                that&rsquo;s not what I&rsquo;m building — re-describe
+              </button>
             </div>
           </>
         )}

@@ -35,6 +35,8 @@ interface RouterResponse {
     policy: { description: string } | null;
     assignments: Assignment[];
     changes: string[];
+    interpreted?: { summary: string; mix: Array<{ clusterId: string; share: number }> };
+    expected?: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
   };
   history: Array<{ version: number; createdAt: string; changes: string[] }>;
 }
@@ -69,7 +71,7 @@ export default async function RouterPage() {
           <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h1 className="font-mono text-[2rem] font-semibold tracking-[-0.02em] text-ink">{data.name}</h1>
             <span className="border border-accent px-2 py-0.5 font-mono text-[12px] uppercase tracking-[0.08em] text-accent">
-              v{data.version}
+              v{data.version}{hasTraffic ? '' : ' · provisional'}
             </span>
             <span className="font-mono text-[12px] text-faint">
               {data.routerHash} · minted {new Date(data.mintedAt).toLocaleDateString()}
@@ -79,6 +81,26 @@ export default async function RouterPage() {
             Your inference is unique. Your router should be too. Potion builds around your actual
             workload, quality bar, and economics — and recompiles it every time the evidence moves.
           </p>
+          {data.document.interpreted && (
+            <p className="mt-2 font-mono text-[12.5px] text-faint">
+              built for: <span className="text-soft">{data.document.interpreted.summary}</span>
+              {' · '}mix: {data.document.interpreted.mix.map((m) => `${Math.round(m.share * 100)}% ${m.clusterId}`).join(' · ')}
+            </p>
+          )}
+          {data.document.expected && (
+            <section className={`mt-6 ${CARD} px-6 py-4`}>
+              <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-faint">expected at your described mix</div>
+              <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 font-mono text-[13px] sm:grid-cols-4">
+                <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">quality</span><span className="text-ink">{(data.document.expected.quality * 100).toFixed(1)}%</span></span>
+                <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">cost</span><span className="text-ink">${data.document.expected.costPer1K.toFixed(2)}/1K req</span></span>
+                <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best-scorer baseline</span><span className="text-ink">${data.document.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
+                <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected savings</span><span className="font-semibold text-kept">{Math.round(data.document.expected.savingsPct * 100)}%</span></span>
+              </div>
+              <p className="mt-2 font-mono text-[11.5px] text-faint">
+                projections from platform measurements at the mix you described — real traffic corrects this
+              </p>
+            </section>
+          )}
 
           {/* ---- the rule it compiles under ---- */}
           <section className={`mt-8 ${CARD} px-6 py-4`}>

@@ -1755,6 +1755,23 @@ export const routerVersions = pgTable(
 );
 export type RouterVersionRow = typeof routerVersions.$inferSelect;
 
+/** O1 (Onboarding, 2026-08-27): the org's product description interpreted
+ * into a workload mix — "we think you're building X". One row per org;
+ * `source` records whether a model extraction or the deterministic
+ * fallback (single-cluster assigner) produced the mix. */
+export const routerInterpretations = pgTable('router_interpretations', {
+  orgId: text('org_id')
+    .primaryKey()
+    .references(() => orgs.id, { onDelete: 'cascade' }),
+  description: text('description').notNull(),
+  summary: text('summary').notNull(),
+  mix: jsonb('mix').$type<Array<{ clusterId: string; share: number }>>().notNull(),
+  source: text('source').notNull().default('model'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type RouterInterpretationRow = typeof routerInterpretations.$inferSelect;
+
 export type LabHarnessRow = typeof labHarnesses.$inferSelect;
 
 /** Lab Step 10: superpower grants (0038) — the first REVERSIBLE secret

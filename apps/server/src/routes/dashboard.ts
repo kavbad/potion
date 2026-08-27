@@ -34,6 +34,8 @@ import {
   type PotionDb,
   insertCustodyAudit,
   getOrgById,
+  revokeApiKey,
+  upsertRouterInterpretation,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -43,7 +45,8 @@ import {
 import type { PotionContext } from '../context.js';
 import { publicBaseUrl } from '../public-url.js';
 import { highestQualityPoint } from './chat.js';
-import { compileAndMintRouter } from '../routing/compile-router.js';
+import { assignmentsUnderPolicy, compileAndMintRouter, expectedForMix } from '../routing/compile-router.js';
+import { scanRawValue } from '@potion/lab-spec';
 import { routerModelName } from '../routing/router-slug.js';
 import { bindServingLatency, policyHasLatencyDimension } from '../latency-policy.js';
 
@@ -597,6 +600,135 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
       mintedAt: compiled.mintedAt,
       document: compiled.document,
       history: compiled.history.map((h) => ({ version: h.version, createdAt: h.createdAt, changes: h.changes })),
+    });
+  });
+
+  // ================= O1 — "WHAT ARE YOU BUILDING?" ========================
+  //
+  // POST /api/onboarding/interpret — one sentence in, an interpreted
+  // workload mix + the instant reveal out. The doctrine: ZERO routing
+  // decisions before Potion has shown you evidence worth reacting to —
+  // Potion proposes, the user reacts. The reveal is computed ENTIRELY from
+  // existing platform evidence (the serve path's own assignment functions);
+  // the ONE model call is the interpretation itself, served through the
+  // full serving path on a 15-minute ephemeral key, with a deterministic
+  // fallback (the platform's own cluster assigner) when the extraction
+  // does not parse — a signup never dead-ends on a model's bad day.
+  app.post('/api/onboarding/interpret', async (req, reply) => {
+    const orgId = req.potionOrg!.orgId;
+    const body = z.object({ description: z.string().min(3).max(2000) }).safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(openAiError('description (3–2000 chars) is required', 'invalid_request_error'));
+    }
+    const description = body.data.description;
+    // Custody at the edge (the lab-gen rule): key-shaped content refuses
+    // BEFORE any model call — secrets never reach serving or a row.
+    if (scanRawValue({ description }).some((i) => i.code === 'secret-material')) {
+      return reply.code(400).send(
+        openAiError('the description contains key-shaped content — remove secrets and retry', 'invalid_request_error', 'secret_material'),
+      );
+    }
+
+    const taxonomyIds = loadTaxonomy().clusters.map((c) => c.id);
+    interface Mix { clusterId: string; share: number }
+    let summary: string | null = null;
+    let mix: Mix[] | null = null;
+    let source: 'model' | 'fallback' = 'model';
+
+    // ---- the one model call, through the real serving path ----
+    const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
+    const rawKey = `pk_onb_${suffix}${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const keyId = `key-onb-${suffix}`;
+    const polId = `pol-onb-${orgId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}`;
+    try {
+      if ((await getPolicyById(db, orgId, polId)) === null) {
+        await insertPolicy(db, { id: polId, orgId, name: 'onboarding-io', config: { type: 'min_cost', qualityFloor: 0 } });
+      }
+      await insertApiKey(db, {
+        id: keyId, keyHash: sha256(rawKey), name: `onb-${suffix}`, orgId, policyId: polId,
+        rateRps: 10, dailyCap: 50,
+        // Hard expiry: an orphaned onboarding key self-destructs.
+        expiresAt: new Date(Date.now() + 15 * 60_000),
+      });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { authorization: `Bearer ${rawKey}`, 'content-type': 'application/json' },
+        payload: {
+          model: 'potion-auto',
+          messages: [{
+            role: 'user',
+            content:
+              'You convert a product description into STRICT JSON. Reply with JSON only, no prose, no fences.\n' +
+              'Schema: {"summary": string (one plain sentence: "we think you\'re building …", <=140 chars), ' +
+              '"mix": [{"clusterId": one of ' + JSON.stringify(taxonomyIds) + ', "share": number 0..1}] (1-5 entries, shares sum to 1, largest first)}\n' +
+              'Product description:\n' + description,
+          }],
+        },
+      });
+      if (res.statusCode === 200) {
+        const text = (res.json() as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content ?? '';
+        try {
+          const stripped = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+          const parsed = JSON.parse(stripped) as { summary?: unknown; mix?: unknown };
+          const rawMix = Array.isArray(parsed.mix) ? (parsed.mix as Array<{ clusterId?: unknown; share?: unknown }>) : [];
+          const filtered = rawMix
+            .filter((m): m is { clusterId: string; share: number } =>
+              typeof m.clusterId === 'string' && taxonomyIds.includes(m.clusterId) &&
+              typeof m.share === 'number' && Number.isFinite(m.share) && m.share > 0)
+            .slice(0, 5);
+          const total = filtered.reduce((a, m) => a + m.share, 0);
+          if (typeof parsed.summary === 'string' && parsed.summary.length > 0 && filtered.length > 0 && total > 0) {
+            summary = parsed.summary.slice(0, 200);
+            mix = filtered.map((m) => ({ clusterId: m.clusterId, share: m.share / total })).sort((a, b) => b.share - a.share);
+          }
+        } catch { /* falls through to the deterministic path */ }
+      }
+    } finally {
+      await revokeApiKey(db, orgId, keyId, new Date()).catch(() => {});
+    }
+
+    // ---- deterministic fallback: the platform's own assigner ----
+    if (summary === null || mix === null) {
+      source = 'fallback';
+      const [assigned] = await ctx.assigner.assignBatch([description]);
+      const cid = assigned?.clusterId && taxonomyIds.includes(assigned.clusterId) ? assigned.clusterId : 'rag-answer';
+      const cluster = loadTaxonomy().clusters.find((c) => c.id === cid);
+      summary = `a product whose work looks like ${cluster?.name ?? cid}`;
+      mix = [{ clusterId: cid, share: 1 }];
+    }
+
+    await upsertRouterInterpretation(db, { orgId, description, summary, mix, source });
+
+    // ---- the reveal: entirely from existing evidence, zero extra spend ----
+    let policy: Policy | null = null;
+    const bound = (await listPolicies(db, orgId))[0];
+    if (bound) {
+      const parsed = PolicySchema.safeParse(bound.config);
+      if (parsed.success) policy = parsed.data;
+    }
+    const revealPolicy = policy ?? POLICY_DEFAULTS.max_quality;
+    const assignments = await assignmentsUnderPolicy(ctx, db, orgId, revealPolicy, (m) => app.log.warn(m));
+    const expected = await expectedForMix(db, orgId, assignments, mix);
+    // The interpretation changed the document — mint the version now so the
+    // reveal and the Router page agree from the first second.
+    const compiled = await compileAndMintRouter(ctx, db, orgId, (m) => app.log.warn(m));
+
+    return reply.send({
+      summary,
+      mix,
+      source,
+      router: { name: compiled.name, version: compiled.version, provisional: true },
+      assignments: mix
+        .map((m) => {
+          const a = assignments.find((x) => x.clusterId === m.clusterId);
+          return a === undefined ? null : {
+            clusterId: m.clusterId, share: m.share,
+            label: a.strategy.label, quality: a.quality, costPer1K: a.costPer1K, provenance: a.provenance,
+          };
+        })
+        .filter((x) => x !== null),
+      expected,
     });
   });
 }
