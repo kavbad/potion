@@ -56,7 +56,7 @@ clears your bar.*
 - **Frontier Notes**: publish weekly, autonomously, under the fail-closed
   redaction gate. The operator's formal yes/no on autonomy is still pending;
   current default is publish.
-- **Potion Lab**: UNPAUSED (2026-08-26, operator order; external review integrated). Direction v2: graduated autonomy purchased with evidence — risk-aware graduation (4 tiers incl. never-graduates), no scalar trust score (permission ledger), tighten-automatic/loosen-by-proposal, sampled audit never graduates away, OpenClaw as first external runtime target. L-G1 (evaluator) + L-G2 (evidence extraction) + L-G3 (permission ledger: 3 org-guarded routes + the can-act-alone/asks-first/blocked UI, no scalar trust score, view = evaluation moment) SHIPPED; next L-G4 OpenClaw adapter.
+- **Potion Lab**: UNPAUSED (2026-08-26, operator order; external review integrated). Direction v2: graduated autonomy purchased with evidence — risk-aware graduation (4 tiers incl. never-graduates), no scalar trust score (permission ledger), tighten-automatic/loosen-by-proposal, sampled audit never graduates away, OpenClaw as first external runtime target. THE FULL SPINE SHIPPED (L-G1 evaluator · L-G2 evidence · L-G3 permission ledger · L-G4 OpenClaw adapter): external runtimes govern through 4 bearer-key /v1 gate routes (external sessions are lab_runs — one machinery); @potion/lab-openclaw plugin maps before_tool_call→pore (never offers allow-always; unreachable → fail closed to supervision). Next: first live OpenClaw instance under the gate (operator sitting or partner), sampled-audit review UX, spec-slot risk tiers.
 
 ## Current blockers (all operator-side)
 

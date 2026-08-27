@@ -110,6 +110,14 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
     method: 'POST', path: '/v1/policies', surface: 'v1', mutating: true, guard: 'serve',
     notes: "G2.3 DELIBERATE: rebinds the CALLING key's OWN policy only — self-scoped onboarding mutation, stays serve-reachable", tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "rebinds the CALLING key’s own policy (G2.3 deliberate)" } },
   { method: 'POST', path: '/v1/traces', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "stamps spans with the CALLING key’s org" } },
+  // L-G4: the runtime gate — the pore over HTTP for external runtimes
+  // (OpenClaw first). Bearer-key surface; org from the calling key; run ids
+  // are body-carried and org-guarded in the handler (lab-runtime-gate tests
+  // pin the cross-org 404).
+  { method: 'POST', path: '/v1/lab/runtime/sessions', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "registers a session in the CALLING key’s org; foreign harness hashes 404 (lab-runtime-gate.test.ts)" } },
+  { method: 'POST', path: '/v1/lab/runtime/pore', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "runId is body-carried and org-guarded (getExternalSession); cross-org 404 pinned in lab-runtime-gate.test.ts" } },
+  { method: 'POST', path: '/v1/lab/runtime/pore/resolve', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "as /v1/lab/runtime/pore" } },
+  { method: 'POST', path: '/v1/lab/runtime/outcome', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "as /v1/lab/runtime/pore" } },
 
   // ---- /api reads (viewer+) ----
   { method: 'GET', path: '/api/frontiers', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },

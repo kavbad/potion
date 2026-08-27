@@ -48,6 +48,25 @@ export const NON_SERVING_V1_ROUTES: ReadonlyArray<{ path: string; why: string }>
     path: '/v1/traces',
     why: 'trace ingestion — writes customer spans, prices them at ingest, spends nothing',
   },
+  // L-G4: the runtime gate — governance calls from external runtimes.
+  // They read the trust record and write run/step rows; no strategy is
+  // resolved and no provider is called. Spend never happens here.
+  {
+    path: '/v1/lab/runtime/sessions',
+    why: 'runtime-gate session registration — writes a lab_run row, spends nothing',
+  },
+  {
+    path: '/v1/lab/runtime/pore',
+    why: 'runtime-gate decision — reads the trust record, may write a check-in step; no provider call',
+  },
+  {
+    path: '/v1/lab/runtime/pore/resolve',
+    why: 'runtime-gate resolution — writes the answer step (graduation evidence); no provider call',
+  },
+  {
+    path: '/v1/lab/runtime/outcome',
+    why: 'runtime-gate outcome report — writes a tool step; no provider call',
+  },
 ];
 
 /**
