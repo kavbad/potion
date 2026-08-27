@@ -157,6 +157,26 @@ describe('potion/<slug> — the router as a serving alias', () => {
     expect(res.body).toContain('potion/acme-co');
   });
 
+  it('R2: receipts attribute each request to the version whose assignment it rode', async () => {
+    // The alias chat above rode frontier v2 (mock-mid) — the row must name
+    // router v2, by content match, and the ledger header names the router.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/routing-activity?limit=20',
+      headers: { cookie: COOKIE },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as {
+      router: { name: string; version: number };
+      requests: Array<{ status: string | null; routerVersion: number | null }>;
+    };
+    expect(body.router.name).toBe('potion/acme-co');
+    expect(body.router.version).toBe(2);
+    const served = body.requests.find((r) => r.status === 'ok');
+    expect(served).toBeDefined();
+    expect(served!.routerVersion).toBe(2);
+  });
+
   it('/v1/models lists the named router first, as a router', async () => {
     const res = await app.inject({
       method: 'GET',

@@ -32,9 +32,9 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL((process.env.POTION_APP_URL ?? 'https://withpotion.com').replace(/\/$/, '')),
-  title: 'Potion — the right model for every request',
+  title: 'Potion — your router, built from evidence',
   description:
-    'Potion reads each prompt, works out what kind of work it is, and serves it from the strategy measured best for that work under a policy you set. OpenAI-compatible.',
+    'Your inference is unique. Your router should be too. Potion compiles a router from your actual workload, quality bar, and economics — measured, receipted, versioned. OpenAI-compatible.',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

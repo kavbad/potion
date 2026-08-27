@@ -563,10 +563,15 @@ export interface RoutingActivityRow {
   provenance: 'live' | 'mock' | 'blocked' | null;
   /** Requires BOTH a real frontier and a policy-selected point. Unknown ⇒ false. */
   routed: boolean;
+  /** R2: the router version whose recorded assignment this request rode;
+   * null = no routing decision, or routing never minted as a version. */
+  routerVersion: number | null;
 }
 
 export interface RoutingActivityResponse {
   requests: RoutingActivityRow[];
+  /** R2: the org's current compiled router. */
+  router?: { name: string; version: number };
   summary: {
     returned: number;
     withRoutingDecision: number;

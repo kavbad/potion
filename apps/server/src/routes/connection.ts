@@ -31,6 +31,7 @@ import { loadCurrentFrontier } from '@potion/pareto';
 import type { PotionContext } from '../context.js';
 import { publicBaseUrl } from '../public-url.js';
 import { guardFrontierProvenance, parseTraceHeader, traceWasRouted } from './chat.js';
+import { compileAndMintRouter, routerVersionForRequest } from '../routing/compile-router.js';
 import { buildEndpointSnippets } from './dashboard.js';
 
 /**
@@ -206,6 +207,11 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
       : 50;
 
     const rows = await listRequestLogs(db, orgId, limit);
+    // R2: compile-and-mint FIRST, so a frontier bump that moved routing this
+    // morning is minted as the next version before any receipt names one —
+    // then attribute each request to the version whose recorded assignment
+    // it actually rode (content match, never timestamp guesswork).
+    const compiled = await compileAndMintRouter(ctx, db, orgId, (m) => app.log.warn(m));
     const requests = rows.map((r) => {
       const t = parseTraceHeader(r.trace);
       const usage = r.usage as { costUsd?: number; totalTokens?: number } | null;
@@ -225,6 +231,13 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
         provenance: t.provenance,
         /** The whole claim, in one field — see traceWasRouted. */
         routed: traceWasRouted(t),
+        /** R2: the router version this request's routing is recorded in;
+         * null = never minted (or no routing decision). */
+        routerVersion: routerVersionForRequest(compiled.history, {
+          clusterId: t.clusterId,
+          strategy8: t.strategyHash8,
+          frontierVersion: t.frontierVersion,
+        }),
       };
     });
 
@@ -243,6 +256,7 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
 
     return reply.send({
       requests,
+      router: { name: compiled.name, version: compiled.version },
       summary: {
         returned: requests.length,
         withRoutingDecision: decided.length,

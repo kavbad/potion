@@ -57,6 +57,7 @@ export function TodayPulse() {
   const [log, setLog] = useState<ChangelogEntry[] | null>(null);
   const [learning, setLearning] = useState<LearningState | null>(null);
   const [budget, setBudget] = useState<BudgetState | null>(null);
+  const [router, setRouter] = useState<{ name: string; version: number; mintedAt: string; document: { changes: string[] } } | null>(null);
 
   useEffect(() => {
     const j = (u: string) => fetch(u, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -65,6 +66,7 @@ export function TodayPulse() {
     void j('/api/frontier-changelog').then((b) => b && setLog(((b as { entries?: ChangelogEntry[] }).entries ?? [])));
     void j('/api/learning').then((b) => b && setLearning(b as LearningState));
     void j('/api/budgets').then((b) => b && setBudget(b as BudgetState));
+    void j('/api/router').then((b) => b && setRouter(b as { name: string; version: number; mintedAt: string; document: { changes: string[] } }));
     const t = setInterval(loadFast, POLL_MS);
     const onFocus = () => loadFast();
     window.addEventListener('focus', onFocus);
@@ -98,6 +100,13 @@ export function TodayPulse() {
   }
 
   // ---- the narrated feed: frontier movements + the learning week ----
+  // R2: the router's own movement leads the feed while it is fresh — the
+  // change lines come from the minted version, verbatim.
+  const routerFresh =
+    router !== null && router.version > 1 &&
+    Date.now() - new Date(router.mintedAt).getTime() < 14 * 86_400_000
+      ? router
+      : null;
   const moves = (log ?? []).slice(0, 3);
   const sampling = learning
     ? Object.entries(learning.samples).filter(([, n]) => n > 0).sort(([, a], [, b]) => b - a).slice(0, 2)
@@ -121,12 +130,23 @@ export function TodayPulse() {
         )}
       </p>
 
-      {(moves.length > 0 || sampling.length > 0) && (
+      {(routerFresh !== null || moves.length > 0 || sampling.length > 0) && (
         <div className="mt-7">
           <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
             <span>Lately, narrated</span>
             <span>every line links to its evidence</span>
           </div>
+          {routerFresh !== null && (
+            <div className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
+              <span className="font-mono text-[12px] text-faint">{new Date(routerFresh.mintedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+              <span>
+                <span className="font-medium text-ink">Your router moved to v{routerFresh.version}</span>
+                {' — '}{routerFresh.document.changes.slice(0, 2).join(' · ')}
+                {routerFresh.document.changes.length > 2 ? ` · +${routerFresh.document.changes.length - 2} more` : ''}
+              </span>
+              <Link href="/router" className="font-mono text-[12px] text-accent">v{routerFresh.version} →</Link>
+            </div>
+          )}
           {moves.map((m) => (
             <div key={`${m.clusterId}-${m.toVersion}`} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
               <span className="font-mono text-[12px] text-faint">{new Date(m.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>

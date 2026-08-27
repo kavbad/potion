@@ -100,10 +100,13 @@ export function Landing() {
           <div className="font-mono text-xs uppercase tracking-[0.14em] text-faint">
             Measured model routing
           </div>
+          {/* R2 repositioning (operator-endorsed line, 2026-08-27): the
+              router is the product. The bill promise is not removed — it
+              moved one breath down and stays verbatim in the bullets. */}
           <h1 className="mt-8 text-[3.2rem] font-medium leading-[1.02] tracking-[-0.035em] text-ink sm:text-[4.25rem] lg:text-[5.25rem]">
-            Cut your AI bill{' '}
+            Your inference is unique.{' '}
             <span className="relative inline-block">
-              in half.
+              Your router should be&nbsp;too.
               {/* the graduation mark, at headline scale: beneath the words,
                   never through them (a strike reads as negation) */}
               <span aria-hidden className="absolute bottom-[-0.06em] left-[-0.02em] right-[0.06em] flex items-end">
@@ -113,7 +116,8 @@ export function Landing() {
             </span>
           </h1>
           <p className="mt-6 text-[1.45rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.75rem]">
-            The right model(s) for every request.
+            Potion builds around your actual workload, quality bar, and economics — and cuts your
+            AI bill in half.
           </p>
 
           <div className="mt-8">

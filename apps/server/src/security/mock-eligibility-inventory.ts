@@ -185,6 +185,19 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
     notes: 'M1a: a live server never serves a mock-provenance frontier; the request takes the (now live) fallback.',
   },
   {
+    file: 'apps/server/src/routing/compile-router.ts',
+    symbol: 'compileAndMintRouter (guardFrontierProvenance + resolveOperatingPoint)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/router.test.ts',
+    notes:
+      'R1/R2, READ-ONLY: the router artifact is assembled by the SAME guard + operating-point resolution the ' +
+      'serve path runs (guardFrontierProvenance discards mock-provenance frontiers under live providers; ' +
+      'resolveOperatingPoint takes the same fallbackStrategyFor). Nothing is served from here — the document ' +
+      'records what serving WOULD do, and any non-live provenance is carried on the assignment and rendered as ' +
+      'a visible badge, never laundered.',
+  },
+  {
     file: 'apps/server/src/routes/connection.ts',
     symbol: 'clusterReadiness (guardFrontierProvenance) + providersForOrg',
     kind: 'alias-guard',
