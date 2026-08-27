@@ -141,27 +141,27 @@ export default async function FrontiersPage({
         </div>
 
         {/* S3: the evidence rail — the facts a skeptic asks for, in one row */}
-        <div className="mb-6 grid grid-cols-2 gap-px border border-[#d9d5cb] bg-[#d9d5cb] font-mono text-[11px] sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-px border border-[#d9d5cb] bg-[#d9d5cb] font-mono text-[12px] sm:grid-cols-4">
           <div className="bg-[#fbfaf7] px-3.5 py-2.5">
-            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">your bar</div>
+            <div className="text-[11px] uppercase tracking-[0.1em] text-faint">your bar</div>
             <div className="mt-1 text-ink">{floorNow !== null ? `never below ${floorNow.toFixed(2)}` : 'set a policy'}</div>
           </div>
           <div className="bg-[#fbfaf7] px-3.5 py-2.5">
-            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">pin</div>
+            <div className="text-[11px] uppercase tracking-[0.1em] text-faint">pin</div>
             <div className="mt-1 text-ink">
               {pin?.pinned ? `frozen at v${pin.pinned.version}${pin.holdingBack ? ' · holding back a move' : ''}` : 'following newest'}{' '}
               <a href="/settings/frontier" className="text-accent underline">change</a>
             </div>
           </div>
           <div className="bg-[#fbfaf7] px-3.5 py-2.5">
-            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">movements</div>
+            <div className="text-[11px] uppercase tracking-[0.1em] text-faint">movements</div>
             <div className="mt-1 text-ink">
               {movements === 0 ? 'none recorded' : `${movements} logged`}{' '}
               <a href="/settings/frontier" className="text-accent underline">log</a>
             </div>
           </div>
           <div className="bg-[#fbfaf7] px-3.5 py-2.5">
-            <div className="text-[9.5px] uppercase tracking-[0.1em] text-faint">certification</div>
+            <div className="text-[11px] uppercase tracking-[0.1em] text-faint">certification</div>
             <div className="mt-1 text-ink">
               {cert ? (
                 <span className={cert.status === 'certified' ? 'text-kept' : 'text-refuse'}>{cert.status}</span>
@@ -227,7 +227,7 @@ function LatencyNote({ op }: { op: OperatingPointDto }) {
       {ev?.provisional ? (
         <>
           {' '}
-          <span className="inline-block rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-warn">
+          <span className="inline-block rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[11.5px] font-semibold tracking-wide text-warn">
             PROVISIONAL
           </span>{' '}
           <span className="text-xs">
@@ -304,7 +304,7 @@ function PointRow({ point }: { point: FrontierPointDto }) {
           {point.quality.toFixed(2)} · ${point.costPer1K.toFixed(3)}/1K
         </span>
         <span
-          className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${cls}`}
+          className={`inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-semibold tracking-wide ${cls}`}
         >
           {label}
         </span>

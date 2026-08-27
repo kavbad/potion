@@ -74,7 +74,7 @@ export function DocsAsk() {
 
   return (
     <div className="border border-[#d9d5cb] bg-[#fbfaf7]">
-      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         ask the docs · answered from this page only · served through potion
       </div>
       <form
@@ -95,7 +95,7 @@ export function DocsAsk() {
         <button
           type="submit"
           disabled={busy || question.trim().length === 0}
-          className="shrink-0 bg-ink px-3 py-1 font-mono text-[11px] text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+          className="shrink-0 bg-ink px-3 py-1 font-mono text-[12px] text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
         >
           {busy ? 'asking' : 'ask'}
         </button>
@@ -123,11 +123,11 @@ export function DocsAsk() {
           ) : answer ? (
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{answer}</p>
           ) : (
-            <p className="font-mono text-[11px] text-faint">waiting for the first token</p>
+            <p className="font-mono text-[12px] text-faint">waiting for the first token</p>
           )}
         </div>
       )}
-      <p className="px-4 py-2 font-mono text-[10px] text-faint">
+      <p className="px-4 py-2 font-mono text-[11.5px] text-faint">
         {receipt ? describeReceipt(receipt) : 'the receipt — x-frontier-trace, forwarded as x-potion-receipt — appears here'}
       </p>
     </div>

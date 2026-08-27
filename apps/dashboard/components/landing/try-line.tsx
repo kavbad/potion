@@ -38,7 +38,7 @@ export function TryLine({ embedded = false }: { embedded?: boolean }) {
   const body = (
     <div className={embedded ? 'w-full max-w-3xl' : 'mx-auto max-w-3xl'}>
         {!embedded && (
-          <div className="text-center font-mono text-xs uppercase tracking-[0.18em] text-faint">
+          <div className="text-center font-mono text-xs uppercase tracking-[0.14em] text-faint">
             See a route happen
           </div>
         )}
@@ -91,7 +91,7 @@ export function TryLine({ embedded = false }: { embedded?: boolean }) {
                   <span className="text-accent">−{saved}% vs the premium option</span>
                 ) : null}
               </p>
-              <p className="mt-2 font-mono text-[11px] text-faint">
+              <p className="mt-2 font-mono text-[12px] text-faint">
                 a real decision from the measured frontier — not a simulation
               </p>
             </div>

@@ -43,7 +43,7 @@ export default function TeamPage() {
   const open = invites.filter((i) => i.status === 'open');
   return (
     <div className="max-w-3xl">
-      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Settings · Team</div>
+      <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Settings · Team</div>
       <h1 className="mt-2 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Who can sign in</h1>
       <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-soft">
         Members sign in by magic link with their email. An invite authorizes an address; signing in with it accepts the invite.
@@ -52,12 +52,12 @@ export default function TeamPage() {
       <div className="mt-8"><SettingsTabs /></div>
 
       <div className="mt-8 border border-[#d9d5cb] bg-[#fbfaf7]">
-        <div className="border-b border-[#d9d5cb] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Members</div>
+        <div className="border-b border-[#d9d5cb] px-5 py-3 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Members</div>
         <ul className="divide-y divide-[#d9d5cb]">
           {members.map((m) => (
             <li key={m.email} className="flex items-baseline justify-between px-5 py-3 text-[13px]">
               <span className="text-ink">{m.email}</span>
-              <span className="font-mono text-[11px] text-faint">{m.role} · since {m.since.slice(0, 10)}</span>
+              <span className="font-mono text-[12px] text-faint">{m.role} · since {m.since.slice(0, 10)}</span>
             </li>
           ))}
           {members.length === 0 && <li className="px-5 py-3 text-[13px] text-faint">Loading…</li>}
@@ -67,12 +67,12 @@ export default function TeamPage() {
       {admin && (
         <>
           <form onSubmit={invite} className="mt-6 flex flex-wrap items-end gap-3 border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
-            <label className="flex flex-col gap-1 text-[11px] font-mono uppercase tracking-[0.14em] text-faint">
+            <label className="flex flex-col gap-1 text-[12px] font-mono uppercase tracking-[0.14em] text-faint">
               Email
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="teammate@yourco.com"
                 className="w-64 border border-[#d9d5cb] bg-white px-3 py-2 font-sans text-[13px] normal-case tracking-normal text-ink outline-none focus:border-accent" />
             </label>
-            <label className="flex flex-col gap-1 text-[11px] font-mono uppercase tracking-[0.14em] text-faint">
+            <label className="flex flex-col gap-1 text-[12px] font-mono uppercase tracking-[0.14em] text-faint">
               Role
               <select value={role} onChange={(e) => setRole(e.target.value)} className="border border-[#d9d5cb] bg-white px-3 py-2 font-sans text-[13px] normal-case tracking-normal text-ink outline-none">
                 <option value="member">member</option>
@@ -89,11 +89,11 @@ export default function TeamPage() {
 
           {open.length > 0 && (
             <div className="mt-6 border border-[#d9d5cb] bg-[#fbfaf7]">
-              <div className="border-b border-[#d9d5cb] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Open invites</div>
+              <div className="border-b border-[#d9d5cb] px-5 py-3 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Open invites</div>
               <ul className="divide-y divide-[#d9d5cb]">
                 {open.map((i) => (
                   <li key={i.id} className="flex items-baseline justify-between px-5 py-3 text-[13px]">
-                    <span className="text-ink">{i.email} <span className="font-mono text-[11px] text-faint">as {i.role}</span></span>
+                    <span className="text-ink">{i.email} <span className="font-mono text-[12px] text-faint">as {i.role}</span></span>
                     <button type="button" onClick={() => void revoke(i.id)} disabled={busy} className="border border-[#d9d5cb] px-3 py-1 text-[12px] text-ink hover:opacity-80 disabled:opacity-40">
                       Revoke
                     </button>

@@ -92,7 +92,7 @@ export function BudgetCard() {
         <h2 className="text-lg font-medium text-ink">Budget autopilot</h2>
         <span className="flex items-center gap-3 text-xs text-faint">
           {data.budget?.hardStop ? (
-            <span className="rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-warn">
+            <span className="rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[11.5px] font-semibold tracking-wide text-warn">
               HARD STOP
             </span>
           ) : null}
@@ -139,7 +139,7 @@ export function BudgetCard() {
               style={{ left: `${warnPctOfCap}%` }}
             />
           </div>
-          <div className="mt-2 flex justify-between text-[11px] text-faint">
+          <div className="mt-2 flex justify-between text-[12px] text-faint">
             <span>warn at {formatUsd(data.warnAtUsd ?? 0)}</span>
             <span>cap {formatUsd(capUsd!)}</span>
           </div>

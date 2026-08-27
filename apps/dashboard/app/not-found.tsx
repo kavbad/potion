@@ -7,7 +7,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#f4f2ec] px-6">
       <Mark className="h-8 w-8 text-accent" />
-      <div className="mt-6 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">404</div>
+      <div className="mt-6 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">404</div>
       <h1 className="mt-2 text-center text-[1.6rem] font-medium tracking-[-0.02em] text-ink">This page doesn&rsquo;t exist</h1>
       <p className="mt-3 max-w-sm text-center text-[13.5px] leading-relaxed text-soft">
         The link may be old, or the address mistyped. Nothing was lost.

@@ -30,7 +30,7 @@ export default async function LabPage() {
   }
   return (
     <LabStage>
-      <div className="font-mono text-[10.5px] uppercase tracking-[0.2em]" style={{ color: BENCH.faint }}>
+      <div className="font-mono text-[12px] uppercase tracking-[0.14em]" style={{ color: BENCH.faint }}>
         Potion Lab · where a company employs agents
       </div>
       <h1 className="mt-3 text-[2.2rem] font-semibold leading-[1.05] tracking-[-0.025em]" style={{ color: '#eef2f8' }}>
@@ -77,7 +77,7 @@ export default async function LabPage() {
                     <span className="block truncate text-[15px] font-medium" style={{ color: '#eef2f8' }}>
                       {h.name}
                     </span>
-                    <span className="mt-0.5 block font-mono text-[10.5px]" style={{ color: BENCH.faint }}>
+                    <span className="mt-0.5 block font-mono text-[12px]" style={{ color: BENCH.faint }}>
                       {h.clusterId} · born {new Date(h.createdAt).toLocaleDateString()} ·{' '}
                       <code>{h.harnessHash.slice(0, 8)}</code>
                     </span>
@@ -92,7 +92,7 @@ export default async function LabPage() {
         )}
       </section>
 
-      <p className="mt-14 font-mono text-[10.5px] leading-relaxed" style={{ color: BENCH.faint }}>
+      <p className="mt-14 font-mono text-[12px] leading-relaxed" style={{ color: BENCH.faint }}>
         permission is the output of evidence — there is no trust score · paperwork stays paper:
         ledgers and receipts render light, organisms render live
       </p>

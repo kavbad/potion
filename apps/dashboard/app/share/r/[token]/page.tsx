@@ -121,7 +121,7 @@ export default async function SharedReportPage({
                   <td className="py-2 text-right">
                     <span
                       title={confidenceHint(a.confidence)}
-                      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      className={`inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide ${
                         a.confidence === 'high'
                           ? 'border-accent bg-accent-soft text-accent'
                           : a.confidence === 'medium'

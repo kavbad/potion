@@ -34,9 +34,9 @@ const TIER_LABEL: Record<GrantRow['riskTier'], string> = {
 };
 
 function EvidenceLine({ e }: { e: GrantEvidence }) {
-  if (e.n === 0) return <span className="font-mono text-[10.5px] text-faint">no supervised observations yet</span>;
+  if (e.n === 0) return <span className="font-mono text-[12px] text-faint">no supervised observations yet</span>;
   return (
-    <span className="font-mono text-[10.5px] text-faint">
+    <span className="font-mono text-[12px] text-faint">
       {e.n} observed · {e.approved} approved{e.edited > 0 ? ` · ${e.edited} edited` : ''}
       {e.rejected > 0 ? ` · ${e.rejected} rejected` : ''}
       {e.lastAt ? ` · last ${new Date(e.lastAt).toLocaleDateString()}` : ''}
@@ -103,14 +103,14 @@ export function LabPermissionLedger({
 
   return (
     <section className="mt-8 border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-5">
-      <div className="flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex items-baseline justify-between font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span>Permission ledger</span>
         <span>permission is the output of evidence — there is no trust score</span>
       </div>
 
       {tightened.length > 0 && (
         <div className="mt-3 border border-refuse/40 bg-white px-4 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-refuse">re-supervised just now</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-refuse">re-supervised just now</div>
           {tightened.map((t) => (
             <p key={t.actionClass} className="mt-1 text-[13px] text-soft">
               <span className="font-mono text-ink">{t.actionClass}</span> — {t.why}
@@ -121,7 +121,7 @@ export function LabPermissionLedger({
 
       {proposals.length > 0 && (
         <div className="mt-3 border border-[#c4bfb2] border-t-4 border-t-warn bg-white px-4 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-warn">graduation proposals · evidence cleared the bar</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-warn">graduation proposals · evidence cleared the bar</div>
           {proposals.map((p) => (
             <div key={p.grantId} className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-[13px] text-soft">
@@ -137,7 +137,7 @@ export function LabPermissionLedger({
                   {busy === p.grantId ? 'Granting…' : 'Grant autonomy'}
                 </button>
               ) : (
-                <span className="text-[11px] text-faint">an admin can grant this</span>
+                <span className="text-[12px] text-faint">an admin can grant this</span>
               )}
             </div>
           ))}
@@ -148,10 +148,10 @@ export function LabPermissionLedger({
         <div key={g.title} className="mt-4">
           <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-1.5">
             <span className={`text-[13px] font-semibold ${g.title === 'Can act alone' ? 'text-kept' : g.title === 'Blocked' ? 'text-refuse' : 'text-ink'}`}>{g.title}</span>
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-faint">{g.note}</span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-faint">{g.note}</span>
           </div>
           {g.rows.length === 0 ? (
-            <p className="py-2 font-mono text-[11px] text-faint">
+            <p className="py-2 font-mono text-[12px] text-faint">
               {g.title === 'Can act alone' ? 'nothing yet — autonomy is earned per action class, under supervision' : 'none'}
             </p>
           ) : (
@@ -159,14 +159,14 @@ export function LabPermissionLedger({
               <div key={r.id} className={`flex flex-wrap items-baseline justify-between gap-x-4 border-b border-dashed border-[#d9d5cb] py-2${justGranted === r.id ? ' lab-graduate' : ''}`}>
                 <span className="font-mono text-[12.5px] text-ink">{r.actionClass}</span>
                 <span className="flex flex-wrap items-baseline gap-x-3">
-                  <span className={`border px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.08em] ${r.riskTier === 'never-graduates' ? 'border-refuse text-refuse' : 'border-line text-faint'}`}>
+                  <span className={`border px-1.5 py-px font-mono text-[11px] uppercase tracking-[0.08em] ${r.riskTier === 'never-graduates' ? 'border-refuse text-refuse' : 'border-line text-faint'}`}>
                     {TIER_LABEL[r.riskTier]}
                   </span>
                   <EvidenceLine e={r.evidence} />
                   {r.state === 'autonomous' && (
-                    <span className="font-mono text-[10.5px] text-kept">audit {(r.auditRate * 100).toFixed(0)}%</span>
+                    <span className="font-mono text-[12px] text-kept">audit {(r.auditRate * 100).toFixed(0)}%</span>
                   )}
-                  {r.stateReason && <span className="font-mono text-[10.5px] text-refuse">{r.stateReason}</span>}
+                  {r.stateReason && <span className="font-mono text-[12px] text-refuse">{r.stateReason}</span>}
                 </span>
               </div>
             ))
@@ -175,7 +175,7 @@ export function LabPermissionLedger({
       ))}
 
       {ledger.observedUngranted.length > 0 && (
-        <p className="mt-3 font-mono text-[10.5px] text-faint">
+        <p className="mt-3 font-mono text-[12px] text-faint">
           also observed: {ledger.observedUngranted.map((o) => o.actionClass).join(' · ')} — rows appear after the next evaluation
         </p>
       )}

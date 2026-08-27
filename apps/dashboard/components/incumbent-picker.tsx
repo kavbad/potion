@@ -67,7 +67,7 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
     <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
       {Object.entries(byVendor).map(([vendor, entries]) => (
         <div key={vendor}>
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{vendor}</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">{vendor}</div>
           <div className="mt-1.5 space-y-1">
             {entries.map((e) => {
               const on = chosen.includes(e.alias);
@@ -96,7 +96,7 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
           roster waits behind one disclosure. */}
       {saved !== null && chosen.length === 0 ? (
         <details>
-          <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.14em] text-faint hover:text-ink">
+          <summary className="cursor-pointer font-mono text-[12px] uppercase tracking-[0.14em] text-faint hover:text-ink">
             Pick specific models (optional)
           </summary>
           <div className="mt-3">{rosterGrid}</div>
@@ -132,7 +132,7 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
       </div>
       {error && <p className="mt-2 text-[12px] text-warn">{error}</p>}
       {saved && (
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
           {saved.models.length === 0 && saved.other ? (
             SENTINELS[saved.other] ? (
               <>

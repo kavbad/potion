@@ -22,7 +22,7 @@ export function ResearchLoop() {
   );
   return (
     <div className="bg-[#fbfaf7]">
-      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         the research loop · runs weekly · no one in it
       </div>
       <div className="px-5 py-6 sm:px-7">

@@ -15,7 +15,7 @@ export function PriceSpread() {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-paper">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-accent/70" />
         one task · pulling data out of documents
         <span className="ml-auto normal-case tracking-normal">every bar does the job</span>
@@ -37,7 +37,7 @@ export function PriceSpread() {
                 {/* quality, printed at the bar's end — the point is that the
                     numbers barely differ while the bars wildly do */}
                 <span
-                  className={`absolute top-1/2 -translate-y-1/2 font-mono text-[10px] ${
+                  className={`absolute top-1/2 -translate-y-1/2 font-mono text-[11.5px] ${
                     cheapestRow ? 'text-white' : 'text-faint'
                   }`}
                   style={
@@ -56,7 +56,7 @@ export function PriceSpread() {
       <div className="mt-4 flex items-end gap-2" aria-hidden>
         <span className="h-px w-14 bg-accent/60" />
         <span className="-ml-px h-[6px] w-px bg-accent/60" />
-        <span className="font-mono text-[11px] leading-none text-accent">
+        <span className="font-mono text-[12px] leading-none text-accent">
           the routed pick — highest bar-for-bar value on the frontier
         </span>
       </div>

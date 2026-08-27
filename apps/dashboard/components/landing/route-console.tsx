@@ -87,21 +87,21 @@ export function RouteConsole() {
       <div className="grid lg:grid-cols-[15rem_1fr]">
         {/* ---- the receipt rail (exa's controls column, honest version) ---- */}
         <div className="flex min-w-0 flex-col border-b border-line px-5 py-5 text-left lg:border-b-0 lg:border-r">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">receipt</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">receipt</div>
           {d ? (
             <dl className="mt-4 space-y-3.5 font-mono text-xs">
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">kind of work</dt>
+                <dt className="text-[11.5px] uppercase tracking-wide text-faint">kind of work</dt>
                 <dd className="mt-1 inline-block rounded bg-accent-soft px-1.5 py-0.5 font-medium text-accent">
                   {d.cluster}
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">routed to</dt>
+                <dt className="text-[11.5px] uppercase tracking-wide text-faint">routed to</dt>
                 <dd className="mt-1 font-medium text-ink">{d.label}</dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">price · quality</dt>
+                <dt className="text-[11.5px] uppercase tracking-wide text-faint">price · quality</dt>
                 <dd className="mt-1 text-soft">
                   {usd(d.costPer1K)}/1k · q {d.quality.toFixed(2)}{' '}
                   {savedPct !== null ? (
@@ -112,7 +112,7 @@ export function RouteConsole() {
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-faint">why</dt>
+                <dt className="text-[11.5px] uppercase tracking-wide text-faint">why</dt>
                 <dd className="mt-1 break-words leading-relaxed text-soft">{d.note}</dd>
               </div>
             </dl>
@@ -124,13 +124,13 @@ export function RouteConsole() {
           <div className="mt-auto flex items-center gap-2 pt-6">
             <Link
               href="/docs"
-              className="rounded-md bg-paper px-3 py-1.5 font-mono text-[11px] text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink"
+              className="rounded-md bg-paper px-3 py-1.5 font-mono text-[12px] text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink"
             >
               Docs ↗
             </Link>
             <Link
               href="/docs"
-              className="rounded-md bg-paper px-3 py-1.5 font-mono text-[11px] text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink"
+              className="rounded-md bg-paper px-3 py-1.5 font-mono text-[12px] text-soft ring-1 ring-line transition-colors hover:bg-line/40 hover:text-ink"
             >
               {'</>'}
             </Link>
@@ -152,7 +152,7 @@ export function RouteConsole() {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 font-mono text-[11px] text-faint">
+              <div className="flex items-center gap-2 font-mono text-[12px] text-faint">
                 <span
                   aria-hidden
                   className="inline-block h-3 w-3 animate-spin rounded-full border border-faint border-t-accent"
@@ -161,7 +161,7 @@ export function RouteConsole() {
               </div>
               <div className="mt-3 overflow-x-auto">
                 <div className="min-w-[34rem]">
-                  <div className="grid grid-cols-[minmax(0,1fr)_7.5rem_6.5rem_4.5rem] gap-x-4 border-b border-line pb-2 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+                  <div className="grid grid-cols-[minmax(0,1fr)_7.5rem_6.5rem_4.5rem] gap-x-4 border-b border-line pb-2 text-left font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
                     <span>request</span>
                     <span>routed to</span>
                     <span>price/1k</span>
@@ -199,7 +199,7 @@ export function RouteConsole() {
                   })}
                 </div>
               </div>
-              <p className="mt-3 text-left font-mono text-[11px] text-faint">
+              <p className="mt-3 text-left font-mono text-[12px] text-faint">
                 six real decisions from the measured frontier — not a simulation · click a row for
                 its receipt
               </p>

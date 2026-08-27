@@ -166,12 +166,12 @@ function SessionRow({ session }: { session: TraceSession }) {
             {session.totalCostUsd.toFixed(4)}
           </span>
           {session.looping ? (
-            <span className="inline-block rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-warn">
+            <span className="inline-block rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[11.5px] font-semibold tracking-wide text-warn">
               LOOP
             </span>
           ) : null}
           {session.metadataOnly ? (
-            <span className="inline-block rounded-full border border-line bg-paper px-2 py-0.5 text-[10px] font-semibold tracking-wide text-faint">
+            <span className="inline-block rounded-full border border-line bg-paper px-2 py-0.5 text-[11.5px] font-semibold tracking-wide text-faint">
               METADATA ONLY
             </span>
           ) : null}

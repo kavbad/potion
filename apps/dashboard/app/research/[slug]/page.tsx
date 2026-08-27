@@ -54,13 +54,13 @@ export default async function IssuePage({ params }: Params) {
           <header>
             <div className="border-t-2 border-ink" />
             <div className="mt-[3px] border-t border-ink" />
-            <nav className="mt-4 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint">
+            <nav className="mt-4 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
               <Link href="/research" className="text-ink hover:text-accent">{RESEARCH_TITLE}</Link>
               <span>daily note · {i.publishedAt.slice(0, 10)}</span>
             </nav>
           </header>
           <h1 className="mt-6 text-[1.9rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-[2.4rem]">{i.title}</h1>
-          <div className="mt-3 font-mono text-[11px] text-faint">{i.byline}</div>
+          <div className="mt-3 font-mono text-[12px] text-faint">{i.byline}</div>
           {(i.body ?? i.summary).split('\n\n').map((para) => (
             <p key={para.slice(0, 40)} className="mt-6 text-[16px] leading-relaxed text-ink">{para}</p>
           ))}
@@ -126,13 +126,13 @@ export default async function IssuePage({ params }: Params) {
         <header>
           <div className="border-t-2 border-ink" />
           <div className="mt-[3px] border-t border-ink" />
-          <nav className="mt-4 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint">
+          <nav className="mt-4 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
             <Link href="/research" className="text-ink hover:text-accent">{RESEARCH_TITLE}</Link>
             <span>{i.week} · {i.publishedAt.slice(0, 10)}</span>
           </nav>
         </header>
         <h1 className="mt-6 text-[2.1rem] font-semibold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[2.9rem]">{i.title}</h1>
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-faint">
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12px] text-faint">
           <span>{i.byline}</span>
           <span>·</span>
           <Link href="/research/methodology" className="text-accent underline underline-offset-2">method</Link>
@@ -141,7 +141,7 @@ export default async function IssuePage({ params }: Params) {
         </div>
 
         <section className="mt-8 rounded-2xl border border-accent/30 bg-accent-soft/40 px-6 py-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">In plain words</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-accent">In plain words</div>
           <p className="mt-2 text-[17px] leading-relaxed text-ink">{i.plain}</p>
         </section>
 
@@ -156,7 +156,7 @@ export default async function IssuePage({ params }: Params) {
         </p>
         <div className="mt-4 overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7]">
           <table className="w-full text-left font-mono text-[12px]">
-            <thead className="text-[10px] uppercase tracking-[0.14em] text-faint">
+            <thead className="text-[11.5px] uppercase tracking-[0.14em] text-faint">
               <tr className="border-b border-line">
                 <th className="px-4 py-2.5 font-normal">kind of work</th>
                 <th className="px-4 py-2.5 font-normal">verdict</th>
@@ -170,7 +170,7 @@ export default async function IssuePage({ params }: Params) {
                 <tr key={c.clusterId} className="border-b border-line/60 last:border-0">
                   <td className="px-4 py-2 text-ink">{c.clusterId}</td>
                   <td className="px-4 py-2">
-                    <span className={`inline-block border px-1.5 py-px text-[10px] uppercase tracking-[0.1em] ${c.verdict === 'drift' ? 'border-refuse text-refuse' : c.verdict === 'ok' ? 'border-kept text-kept' : 'border-line text-faint'}`}>
+                    <span className={`inline-block border px-1.5 py-px text-[11.5px] uppercase tracking-[0.1em] ${c.verdict === 'drift' ? 'border-refuse text-refuse' : c.verdict === 'ok' ? 'border-kept text-kept' : 'border-line text-faint'}`}>
                       {verdictWord(c.verdict)}
                     </span>
                   </td>
@@ -231,7 +231,7 @@ export default async function IssuePage({ params }: Params) {
           ].map(([n, l]) => (
             <div key={l} className="bg-[#fbfaf7] px-4 py-3">
               <div className="font-mono text-[1.15rem] font-semibold tabular-nums text-ink">{n}</div>
-              <div className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-faint">{l}</div>
+              <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-faint">{l}</div>
             </div>
           ))}
         </div>
@@ -252,7 +252,7 @@ export default async function IssuePage({ params }: Params) {
 
         {i.writer?.receipt && (
           <div className="mt-10 border border-dashed border-[#b8b3a6] bg-[#fbfaf7] px-5 py-4">
-            <div className="flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+            <div className="flex items-baseline justify-between font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
               <span>Potion · receipt</span>
               <span className="border border-kept px-1.5 py-px text-kept">served</span>
             </div>

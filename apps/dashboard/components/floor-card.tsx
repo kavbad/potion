@@ -110,7 +110,7 @@ export function FloorCard() {
 
       {kinds.length > 0 && (
         <div className="mt-6">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+          <div className="mb-2 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
             Measured bars per kind of work
           </div>
           <div className="flex flex-wrap gap-2">

@@ -105,7 +105,7 @@ export function TodayPulse() {
 
   return (
     <div>
-      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
+      <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
         {new Date().toLocaleDateString(undefined, { month: 'long' })} · live
       </div>
       <div className="mt-2 font-sans text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-kept tabular-nums sm:text-[3.4rem]">
@@ -123,33 +123,33 @@ export function TodayPulse() {
 
       {(moves.length > 0 || sampling.length > 0) && (
         <div className="mt-7">
-          <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
             <span>Lately, narrated</span>
             <span>every line links to its evidence</span>
           </div>
           {moves.map((m) => (
             <div key={`${m.clusterId}-${m.toVersion}`} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
-              <span className="font-mono text-[10.5px] text-faint">{new Date(m.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+              <span className="font-mono text-[12px] text-faint">{new Date(m.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
               <span>
                 <span className="font-medium text-ink">{m.name}</span>{' '}
                 {m.kind === 'held-back' ? <>— a newer frontier exists; your pin is holding v{m.fromVersion}. </> : null}
                 {m.narrative}
               </span>
-              <Link href="/settings/frontier" className="font-mono text-[10.5px] text-accent">v{m.toVersion} →</Link>
+              <Link href="/settings/frontier" className="font-mono text-[12px] text-accent">v{m.toVersion} →</Link>
             </div>
           ))}
           {sampling.map(([cid, n]) => (
             <div key={cid} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
-              <span className="font-mono text-[10.5px] text-faint">this week</span>
+              <span className="font-mono text-[12px] text-faint">this week</span>
               <span><span className="font-medium text-ink">Measuring your {cid}</span> — {n} sample{n === 1 ? '' : 's'} so far; your personal bar proposal arrives as coverage fills.</span>
-              <Link href="/settings/controls" className="font-mono text-[10.5px] text-accent">details →</Link>
+              <Link href="/settings/controls" className="font-mono text-[12px] text-accent">details →</Link>
             </div>
           ))}
         </div>
       )}
 
       <div className="mt-7">
-        <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+        <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
           <span>Needs you</span>
           <span>{needs.length === 0 ? '' : `${needs.length} item${needs.length === 1 ? '' : 's'}`}</span>
         </div>
@@ -160,7 +160,7 @@ export function TodayPulse() {
             <div key={n.href + n.time} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
               <span><Stamp kind="attention">{n.time}</Stamp></span>
               <span>{n.text}</span>
-              <Link href={n.href} className="font-mono text-[10.5px] text-accent">fix →</Link>
+              <Link href={n.href} className="font-mono text-[12px] text-accent">fix →</Link>
             </div>
           ))
         )}

@@ -155,7 +155,7 @@ export function FirstRunGate() {
 
         {beat === 'question' && (
           <>
-            <div className="mt-8 font-mono text-[11px] uppercase tracking-[0.18em] text-faint">One question, then you&rsquo;re in</div>
+            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">One question, then you&rsquo;re in</div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
               What do you use for AI today?
             </h1>
@@ -210,7 +210,7 @@ export function FirstRunGate() {
 
         {beat === 'key' && (
           <>
-            <div className="mt-8 font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Step 2 of 4 · your key</div>
+            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">Step 2 of 4 · your key</div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
               Point your client here. Keep everything else.
             </h1>
@@ -222,7 +222,7 @@ export function FirstRunGate() {
               {rawKey && (
                 <div className="flex items-center justify-between gap-3 border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3">
                   <div className="min-w-0">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">api key · shown once</div>
+                    <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">api key · shown once</div>
                     <div className="truncate font-mono text-[13px] text-ink">{rawKey}</div>
                   </div>
                   <button type="button" onClick={() => void copy(rawKey, 'key')} className="shrink-0 border border-ink px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-ink hover:text-[#f4f2ec]">
@@ -232,7 +232,7 @@ export function FirstRunGate() {
               )}
               <div className="flex items-center justify-between gap-3 border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3">
                 <div className="min-w-0">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">base url</div>
+                  <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">base url</div>
                   <div className="truncate font-mono text-[13px] text-ink">{baseUrl ? `${baseUrl}/v1` : 'loading…'}</div>
                 </div>
                 {baseUrl && (
@@ -253,7 +253,7 @@ export function FirstRunGate() {
 
         {beat === 'try' && (
           <>
-            <div className="mt-8 font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Step 3 of 4 · one request</div>
+            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">Step 3 of 4 · one request</div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
               Send one request. Watch what happens to it.
             </h1>
@@ -295,7 +295,7 @@ export function FirstRunGate() {
 
         {beat === 'printed' && receipt && (
           <>
-            <div className="mt-8 font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Step 4 of 4 · your first receipt</div>
+            <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">Step 4 of 4 · your first receipt</div>
             <div className="mt-4">
               {/* the slot the receipt prints from — the one moment of theater */}
               <div className="h-3.5 rounded bg-ink shadow-sm" aria-hidden />

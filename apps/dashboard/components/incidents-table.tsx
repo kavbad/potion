@@ -12,7 +12,7 @@ function KindBadge({ kind }: { kind: IncidentDto['kind'] }) {
       : 'border-line bg-paper text-soft';
   return (
     <span
-      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+      className={`inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide ${cls}`}
     >
       {kind === 'rollback' ? 'rollback' : 'alert'}
     </span>
@@ -62,7 +62,7 @@ export function IncidentsTable({
               <KindBadge kind={i.kind} />
             </td>
             <td className="py-2.5 pr-4 font-mono text-xs text-ink">{i.detail.clusterId ?? '—'}</td>
-            <td className="py-2.5 pr-4 font-mono text-[11px] text-soft">
+            <td className="py-2.5 pr-4 font-mono text-[12px] text-soft">
               {i.kind === 'rollback' && typeof i.detail.toStrategy === 'string'
                 ? `${short(i.detail.fromStrategy)} → ${short(i.detail.toStrategy)}`
                 : '—'}

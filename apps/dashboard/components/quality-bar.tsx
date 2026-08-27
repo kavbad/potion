@@ -48,7 +48,7 @@ export function QualityBar({ admin }: { admin: boolean }) {
     setBusy(null);
   }
 
-  if (!state) return <p className="font-mono text-[11px] text-faint">loading</p>;
+  if (!state) return <p className="font-mono text-[12px] text-faint">loading</p>;
   const clusters = Object.entries(state.samples).sort(([a], [b]) => a.localeCompare(b));
   const total = clusters.reduce((s, [, n]) => s + n, 0);
   const open = state.proposals.filter((p) => p.status === 'proposed');
@@ -57,8 +57,8 @@ export function QualityBar({ admin }: { admin: boolean }) {
   return (
     <div className="mt-4 border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4 font-mono text-[12px]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-[0.16em] text-faint">measuring your workloads</div>
-        <div className="text-[11px] text-faint">
+        <div className="text-[11.5px] uppercase tracking-[0.13em] text-faint">measuring your workloads</div>
+        <div className="text-[12px] text-faint">
           {state.samplingConsent ? `${total} request${total === 1 ? '' : 's'} sampled so far` : 'sampling is off'}
         </div>
       </div>
@@ -114,7 +114,7 @@ export function QualityBar({ admin }: { admin: boolean }) {
         </button>
       )}
       {note && <p className="mt-3 text-[12px] text-accent">{note}</p>}
-      <p className="mt-3 text-[11px] leading-relaxed text-faint">Measured on your own requests against what you use today. Your rule changes only when you set it.</p>
+      <p className="mt-3 text-[12px] leading-relaxed text-faint">Measured on your own requests against what you use today. Your rule changes only when you set it.</p>
     </div>
   );
 }

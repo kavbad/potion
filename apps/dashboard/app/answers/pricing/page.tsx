@@ -33,7 +33,7 @@ export default async function PricingIndex() {
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <main className="mx-auto max-w-3xl px-6 py-16 sm:py-24">
-        <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
+        <div className="font-mono text-xs uppercase tracking-[0.14em] text-faint">
           <Link href="/answers" className="hover:text-accent">The Measured Answers</Link> · pricing
         </div>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight text-ink">Model pricing, measured</h1>
@@ -43,7 +43,7 @@ export default async function PricingIndex() {
         </p>
         <div className="mt-10 overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7]">
           <table className="w-full text-left font-mono text-[12.5px]">
-            <thead className="text-[10px] uppercase tracking-[0.14em] text-faint">
+            <thead className="text-[11.5px] uppercase tracking-[0.14em] text-faint">
               <tr className="border-b border-line">
                 <th className="px-4 py-2.5 font-normal">model</th>
                 <th className="px-4 py-2.5 font-normal">vendor</th>
@@ -72,7 +72,7 @@ export default async function PricingIndex() {
             </tbody>
           </table>
         </div>
-        <p className="mt-4 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-4 font-mono text-[12px] leading-relaxed text-faint">
           only models on a live measured frontier appear · measured ranges span the workloads each
           model earns · <Link href="/research/methodology" className="text-accent underline">method</Link>
         </p>

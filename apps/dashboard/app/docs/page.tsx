@@ -129,7 +129,7 @@ export default async function DocsPage() {
           receipt under it is the real x-frontier-trace — the product doing
           the thing the section below describes. */}
       <nav className="mb-10 border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-4 text-[12.5px] leading-relaxed text-soft">
-        <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">On this page</span>
+        <span className="mr-2 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">On this page</span>
         <a href="#quickstart" className="text-accent underline">Quickstart</a> · <a href="#agent" className="text-accent underline">Hand it to your agent</a> · <a href="#auth" className="text-accent underline">Authentication</a> · <a href="#model" className="text-accent underline">The model field</a> · <a href="#trace" className="text-accent underline">The decision header</a> · <a href="#receipts" className="text-accent underline">Receipts &amp; kept</a> · <a href="#policies" className="text-accent underline">Policies</a> · <a href="#controls" className="text-accent underline">Bar, floor, pins</a> · <a href="#workloads" className="text-accent underline">Workload types</a> · <a href="#compat" className="text-accent underline">Streaming</a> · <a href="#errors" className="text-accent underline">Errors</a> · <a href="#limits" className="text-accent underline">Limits</a> · <a href="#pricing" className="text-accent underline">Pricing</a> · <a href="#traces-api" className="text-accent underline">Agent journeys</a> · <a href="#api" className="text-accent underline">API reference</a> · <a href="#honest" className="text-accent underline">Things worth knowing</a>
       </nav>
 

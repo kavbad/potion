@@ -125,7 +125,7 @@ export function FrontierExplorer() {
   return (
     <div className="bg-[#fbfaf7] font-mono">
       {/* title row */}
-      <div className="flex items-center justify-between border-b border-[#d9d5cb] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex items-center justify-between border-b border-[#d9d5cb] px-4 py-2.5 text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span>{EXPLORER.cluster} · v{EXPLORER.frontierVersion} · n = {EXPLORER.items} per point</span>
         <span className="hidden sm:inline">{POLICIES.find((p) => p.kind === kind)!.blurb}</span>
       </div>
@@ -272,7 +272,7 @@ export function FrontierExplorer() {
         ) : (
           <div><span className="text-ink">Nothing measured qualifies.</span> <span className="text-soft">Potion refuses to invent a number; the request rides the default strategy and the trace says so.</span></div>
         )}
-        <div className="mt-2.5 overflow-x-auto border border-[#d9d5cb] px-3 py-1.5 text-[11px] text-soft">
+        <div className="mt-2.5 overflow-x-auto border border-[#d9d5cb] px-3 py-1.5 text-[12px] text-soft">
           <span className="text-faint">x-frontier-trace:</span> {trace}
         </div>
         <p className="mt-2.5 font-sans text-[12px] leading-relaxed text-faint">

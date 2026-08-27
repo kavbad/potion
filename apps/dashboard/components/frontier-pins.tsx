@@ -65,7 +65,7 @@ export function FrontierPins() {
       <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">Version control</h2>
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">per kind of work</span>
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">per kind of work</span>
         </div>
         <p className="mb-6 max-w-xl text-sm leading-relaxed text-soft">
           Potion re-measures continuously and moves you to better points as they are proven. Pin a
@@ -83,17 +83,17 @@ export function FrontierPins() {
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] text-ink">{r.name}</span>
                     {r.pinned && (
-                      <span className="rounded border border-line px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-soft">
+                      <span className="rounded border border-line px-1.5 py-0.5 font-mono text-[11.5px] uppercase tracking-wide text-soft">
                         pinned v{r.pinned.version}
                       </span>
                     )}
                     {r.holdingBack && (
-                      <span className="rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-warn">
+                      <span className="rounded-full border border-warn bg-amber-50 px-2 py-0.5 text-[11.5px] font-semibold tracking-wide text-warn">
                         v{r.latestVersion} available
                       </span>
                     )}
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] text-faint">
+                  <div className="mt-0.5 font-mono text-[12px] text-faint">
                     serving v{r.servedVersion ?? '—'}
                     {r.pinned ? ` · pinned by ${r.pinned.pinnedBy} on ${r.pinned.pinnedAt.slice(0, 10)}` : ' · following the newest'}
                   </div>
@@ -118,7 +118,7 @@ export function FrontierPins() {
       <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">What moved</h2>
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">frontier changelog</span>
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">frontier changelog</span>
         </div>
         {entries.length === 0 ? (
           <p className="text-sm text-soft">
@@ -131,11 +131,11 @@ export function FrontierPins() {
               <li key={`${e.clusterId}-${e.toVersion}`} className="border-l-2 border-line pl-4">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="text-[14px] text-ink">{e.name}</span>
-                  <span className="font-mono text-[11px] text-faint">
+                  <span className="font-mono text-[12px] text-faint">
                     v{e.fromVersion} → v{e.toVersion} · {String(e.at).slice(0, 10)}
                   </span>
                   {e.kind === 'held-back' && (
-                    <span className="rounded border border-line px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-soft">
+                    <span className="rounded border border-line px-1.5 py-0.5 font-mono text-[11.5px] uppercase tracking-wide text-soft">
                       held back by your pin
                     </span>
                   )}

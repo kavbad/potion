@@ -82,7 +82,7 @@ export function Nav() {
     <nav className="flex flex-col gap-1">
       <div className="mb-6 border-b border-[#d9d5cb] pb-4">
         <div className="truncate text-[13px] text-ink">{me.user?.email ?? 'api key'}</div>
-        <div className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+        <div className="mt-1 truncate font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
           {me.org.name} · {me.role}
         </div>
       </div>
@@ -110,7 +110,7 @@ export function Nav() {
         aria-expanded={openAdvanced}
       >
         <span>Advanced</span>
-        <span aria-hidden className="text-[10px]">{openAdvanced ? '▾' : '▸'}</span>
+        <span aria-hidden className="text-[11.5px]">{openAdvanced ? '▾' : '▸'}</span>
       </button>
       {openAdvanced && (
         <div className="flex flex-col gap-1">

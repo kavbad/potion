@@ -47,7 +47,7 @@ export default async function AnswersHub() {
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <main className="mx-auto max-w-3xl px-6 py-16 sm:py-24">
-        <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
+        <div className="font-mono text-xs uppercase tracking-[0.14em] text-faint">
           <Link href="/research" className="hover:text-accent">Frontier Notes</Link> · the reference section
         </div>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">The Measured Answers</h1>
@@ -57,7 +57,7 @@ export default async function AnswersHub() {
           weekly, stated with dates and intervals, from the same measurements that route
           production traffic. Names that are part of the product are withheld; their numbers are not.
         </p>
-        <p className="mt-3 font-mono text-[11.5px] text-faint">
+        <p className="mt-3 font-mono text-[12.5px] text-faint">
           method: <Link href="/research/methodology" className="text-accent underline">how these numbers are made</Link>
           {' · '}every page updates when its measurement does
         </p>
@@ -80,7 +80,7 @@ export default async function AnswersHub() {
                   <h2 className="text-lg font-semibold leading-snug tracking-tight text-ink">
                     <Link href={`/answers/${page.slug}`} className="hover:text-accent">{page.question}</Link>
                   </h2>
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                  <span className="shrink-0 font-mono text-[11.5px] uppercase tracking-[0.12em] text-faint">
                     v{c.version} · {c.measuredAt.slice(0, 10)}
                   </span>
                 </div>

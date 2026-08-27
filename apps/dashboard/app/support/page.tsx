@@ -56,7 +56,7 @@ export default function SupportPage() {
             className="w-full resize-y border border-[#d9d5cb] bg-white px-3 py-2 text-[13.5px] leading-relaxed text-ink outline-none focus:border-accent"
           />
           <div className="mt-3 flex items-center justify-between">
-            <span className="font-mono text-[11px] text-faint">{message.length}/4000</span>
+            <span className="font-mono text-[12px] text-faint">{message.length}/4000</span>
             <button
               type="submit"
               disabled={busy || message.trim().length === 0}

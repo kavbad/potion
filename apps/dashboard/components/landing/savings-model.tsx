@@ -37,7 +37,7 @@ export function SavingsModel() {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-paper">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-accent/70" />
         savings model · runs the real selection rule, live
       </div>

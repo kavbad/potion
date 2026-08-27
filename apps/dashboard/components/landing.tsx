@@ -63,7 +63,7 @@ function LabSection({ n, label, id, children, dark = false }: { n: string; label
   return (
     <section id={id} className={`${dark ? INK_BAND : PAPER} ${dark ? '' : 'border-t border-[#d9d5cb]'}`}>
       <div className="mx-auto grid max-w-6xl gap-8 px-6 py-20 sm:py-28 lg:grid-cols-[10rem_1fr] lg:gap-12">
-        <div className={`font-mono text-[11px] uppercase tracking-[0.18em] ${dark ? 'text-[#a8a29e]' : 'text-faint'}`}>
+        <div className={`font-mono text-[12px] uppercase tracking-[0.14em] ${dark ? 'text-[#a8a29e]' : 'text-faint'}`}>
           <div className={dark ? 'text-[#efece4]' : 'text-ink'}>{n}</div>
           <div className="mt-1.5 leading-relaxed">{label}</div>
         </div>
@@ -77,7 +77,7 @@ function Figure({ n, caption, children, dark = false }: { n: string; caption: st
   return (
     <figure>
       <div className={`overflow-hidden border ${dark ? 'border-[#3f3b35]' : 'border-[#d9d5cb]'}`}>{children}</div>
-      <figcaption className={`mt-3 font-mono text-[11px] leading-relaxed ${dark ? 'text-[#a8a29e]' : 'text-faint'}`}>
+      <figcaption className={`mt-3 font-mono text-[12px] leading-relaxed ${dark ? 'text-[#a8a29e]' : 'text-faint'}`}>
         <span className={dark ? 'text-[#efece4]' : 'text-ink'}>Figure {n}.</span> {caption}
       </figcaption>
     </figure>
@@ -97,7 +97,7 @@ export function Landing() {
           box. Scale carries the confidence; the tape carries the proof. */}
       <section className="relative flex min-h-[calc(100vh-73px)] flex-col bg-[#f4f2ec]">
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
-          <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
+          <div className="font-mono text-xs uppercase tracking-[0.14em] text-faint">
             Measured model routing
           </div>
           <h1 className="mt-8 text-[3.2rem] font-medium leading-[1.02] tracking-[-0.035em] text-ink sm:text-[4.25rem] lg:text-[5.25rem]">
@@ -199,7 +199,7 @@ export function Landing() {
                 ['A new model ships', 'You re-evaluate by hand', 'Measured first, adopted only if it earns it'],
               ].map(([k, a, b]) => (
                 <React.Fragment key={k}>
-                  <div className="flex items-center bg-panel px-5 py-4 font-mono text-[11px] uppercase tracking-wide text-faint">
+                  <div className="flex items-center bg-panel px-5 py-4 font-mono text-[12px] uppercase tracking-wide text-faint">
                     {k}
                   </div>
                   <div className="bg-panel px-5 py-4 text-sm leading-relaxed text-soft">{a}</div>
@@ -224,7 +224,7 @@ export function Landing() {
                 ['A new model ships', 'You re-evaluate by hand', 'Measured first, adopted only if it earns it'],
               ].map(([k, a, b]) => (
                 <div key={k} className="bg-panel px-4 py-4">
-                  <div className="font-mono text-[11px] uppercase tracking-wide text-faint">{k}</div>
+                  <div className="font-mono text-[12px] uppercase tracking-wide text-faint">{k}</div>
                   <div className="mt-2 text-sm leading-snug text-soft">
                     <span className="text-faint">gateway · </span>
                     {a}
@@ -348,7 +348,7 @@ export function Landing() {
             </p>
           </Reveal>
           <Reveal delayMs={120} className="mt-14">
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#a8a29e]">
+            <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-[#a8a29e]">
               what is true of every request, today
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

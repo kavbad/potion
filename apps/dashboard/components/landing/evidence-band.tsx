@@ -31,7 +31,7 @@ export function EvidenceBand() {
     <section id="evidence" className="grid lg:grid-cols-[2fr_3fr]">
       <div className="bg-[#1c1a17] px-6 py-20 text-[#efece4] sm:px-12 lg:py-28">
         <div className="lg:ml-auto lg:max-w-md">
-          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#a8a29e]">
+          <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-[#a8a29e]">
             <span className="text-[#efece4]">02</span> · Measured, not claimed
           </div>
           <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
@@ -48,7 +48,7 @@ export function EvidenceBand() {
             This is why routing pays: most kinds of work are served from the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
-          <p className="mt-6 font-mono text-[11px] leading-relaxed text-[#a8a29e]">
+          <p className="mt-6 font-mono text-[12px] leading-relaxed text-[#a8a29e]">
             measured 2026-08-20 · retrieval-hostile suite · scored by execution · error bars on the
             full table in the docs
           </p>
@@ -80,7 +80,7 @@ export function EvidenceBand() {
                   />
                 </div>
                 {star && (
-                  <p className="mt-1.5 font-mono text-[11px] leading-relaxed text-accent">
+                  <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-accent">
                     ↑ the routed pick — 99% of the top row&apos;s quality at 1/270th the price.
                     The name? That&apos;s the product.
                   </p>
@@ -88,7 +88,7 @@ export function EvidenceBand() {
               </div>
             );
           })}
-          <p className="pt-1 font-mono text-[11px] text-faint">
+          <p className="pt-1 font-mono text-[12px] text-faint">
             <span className="text-ink">Figure 3.</span> The code-gen-hard frontier, measured 2026-08-20, 30 items scored by execution. Bars show cost per 1,000 requests · <span className="text-accent">teal</span> = what
             a 0.95 quality floor actually buys
           </p>

@@ -50,7 +50,7 @@ export function BillingCard() {
       <section className="mb-8 rounded-xl border border-line bg-panel px-8 py-8">
         <div className="mb-1 flex items-baseline justify-between">
           <h2 className="text-lg font-medium text-ink">This month</h2>
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">{data.period}</span>
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">{data.period}</span>
         </div>
         <div className="flex items-baseline gap-4">
           <span className="text-[2.4rem] font-medium tracking-[-0.02em] text-ink">{usd(data.current.totalUsd)}</span>
@@ -111,7 +111,7 @@ export function BillingCard() {
                 <span className="text-ink">{c.period}</span>
                 <span className="flex items-baseline gap-3">
                   <span className="font-mono text-ink">{usd(c.amountUsd)}</span>
-                  <span className="font-mono text-[11px] uppercase tracking-wide text-faint">
+                  <span className="font-mono text-[12px] uppercase tracking-wide text-faint">
                     {c.status === 'recorded' ? 'recorded · not charged' : c.status}
                   </span>
                 </span>

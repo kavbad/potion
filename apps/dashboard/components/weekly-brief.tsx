@@ -56,7 +56,7 @@ export function WeeklyBrief() {
 
   return (
     <div className="mt-10 max-w-xl border border-[#c4bfb2] bg-[#fbfaf7] px-7 py-6 shadow-paper">
-      <div className="flex items-baseline justify-between border-b border-[#d9d5cb] pb-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex items-baseline justify-between border-b border-[#d9d5cb] pb-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span>The Monday Brief</span>
         <span>the last 7 days</span>
       </div>
@@ -78,7 +78,7 @@ export function WeeklyBrief() {
           One thing would help: <Link href={ask.href} className="text-accent underline">{ask.text}</Link>.
         </p>
       )}
-      <p className="mt-4 font-mono text-[10.5px] text-faint">— your measurement engine · every claim links to its receipts</p>
+      <p className="mt-4 font-mono text-[12px] text-faint">— your measurement engine · every claim links to its receipts</p>
     </div>
   );
 }

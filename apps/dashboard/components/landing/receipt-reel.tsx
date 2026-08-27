@@ -53,11 +53,11 @@ export function ReceiptReel() {
       onMouseLeave={() => setPaused(false)}
     >
       <div className="flex h-[4.25rem] items-center gap-3 border-b border-[#d9d5cb] px-5 sm:px-6">
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">request</span>
+        <span className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">request</span>
         <div key={`p${i}`} className="reel-fade min-w-0 flex-1 truncate text-[15px] text-ink">{d.prompt}</div>
       </div>
       <div className="h-[19.5rem] px-5 py-5 sm:h-[17rem] sm:px-6">
-        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">what happened</div>
+        <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">what happened</div>
         <dl key={`r${i}`} className="reel-fade mt-3 grid grid-cols-[6rem_1fr] gap-x-3 gap-y-2.5 text-[15px] leading-snug sm:grid-cols-[9rem_1fr] sm:gap-x-4">
           <dt className="text-faint">This was</dt>
           <dd className="text-ink">{WORK[d.cluster] ?? d.cluster}.</dd>
@@ -85,7 +85,7 @@ export function ReceiptReel() {
           </dd>
         </dl>
       </div>
-      <div className="flex h-10 items-center justify-between border-t border-[#d9d5cb] px-5 font-mono text-[10px] text-faint sm:px-6">
+      <div className="flex h-10 items-center justify-between border-t border-[#d9d5cb] px-5 font-mono text-[11.5px] text-faint sm:px-6">
         <span>{String(i + 1).padStart(2, '0')} / {String(ROUTE_DEMO.length).padStart(2, '0')} · real decisions, not a demo · hover to pause</span>
         <span className="hidden sm:inline">every answer carries one of these</span>
       </div>

@@ -81,7 +81,7 @@ export function InterviewForm() {
   const field =
     'w-full border bg-[#0b0e14] px-3 py-2 font-mono text-[13px] text-[#e6ebf4] placeholder:text-[#5c6678] focus:outline-none';
   const fieldStyle = { borderColor: '#2a3346' } as const;
-  const label = 'block font-mono text-[10px] uppercase tracking-[0.16em] text-[#5c6678]';
+  const label = 'block font-mono text-[11.5px] uppercase tracking-[0.13em] text-[#5c6678]';
   return (
     <div className="mt-4" data-testid="interview-form">
       <label className={label}>
@@ -154,13 +154,13 @@ export function InterviewForm() {
         >
           {busy ? 'Growing the harness…' : 'Hire this worker'}
         </button>
-        <span className="font-mono text-[10.5px] text-[#5c6678]">
+        <span className="font-mono text-[12px] text-[#5c6678]">
           born fully supervised · hard budget · you approve every external action until it earns otherwise
         </span>
       </div>
       {result?.kind === 'draft' ? (
         <div className="mt-4 border px-4 py-3 text-[13px] text-[#c9d2e0]" style={{ borderColor: '#2a3346' }} data-testid="gen-draft">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8b96a8]">one more question</span>
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[#8b96a8]">one more question</span>
           <ul className="mt-1 list-disc pl-5">{(result.gaps ?? []).map((g, i) => <li key={i}>{g.question ?? g.code}</li>)}</ul>
         </div>
       ) : null}

@@ -79,7 +79,7 @@ export function BarProposal({ initialProposals, initialAdmin }: { initialProposa
   if (applied) {
     return (
       <div className="mt-8 border border-[#c4bfb2] border-t-4 border-t-kept bg-[#fbfaf7] px-6 py-5">
-        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-kept">bar set · {applied}</div>
+        <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-kept">bar set · {applied}</div>
         <p className="mt-2 max-w-lg text-[14px] leading-relaxed text-soft">
           <span className="font-medium text-ink">Done — the bar is yours now.</span> It becomes the
           quality line on Today, the fence on your frontier, and every receipt for this kind of work
@@ -94,7 +94,7 @@ export function BarProposal({ initialProposals, initialAdmin }: { initialProposa
 
   return (
     <div className="mt-8 border border-[#c4bfb2] border-t-4 border-t-warn bg-[#fbfaf7] px-6 py-5">
-      <div className="flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-warn">
+      <div className="flex items-baseline justify-between font-mono text-[11.5px] uppercase tracking-[0.13em] text-warn">
         <span>bar proposal · {p.clusterId}</span>
         <span>from your own traffic</span>
       </div>

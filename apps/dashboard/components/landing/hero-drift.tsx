@@ -72,17 +72,17 @@ export function HeroDrift() {
       <div className="absolute inset-y-0 left-5 flex w-[9.5rem] flex-col justify-center gap-5 2xl:left-10">
         <Card title="one coding task · 5 models">
           <QualityVsPrice />
-          <p className="mt-1 text-[10px] leading-snug text-soft">Quality within two points. Price apart by 270×.</p>
+          <p className="mt-1 text-[11.5px] leading-snug text-soft">Quality within two points. Price apart by 270×.</p>
         </Card>
         <Card title="the routed pick">
           <div className="font-mono text-xl font-medium tracking-tight text-ink">$0.0231</div>
-          <p className="mt-1 text-[10px] leading-snug text-soft">per 1,000 requests, at 99% of the best scorer&apos;s quality.</p>
+          <p className="mt-1 text-[11.5px] leading-snug text-soft">per 1,000 requests, at 99% of the best scorer&apos;s quality.</p>
         </Card>
         <Card title="quality floor">
-          <div className="font-mono text-[11px] text-ink">
+          <div className="font-mono text-[12px] text-ink">
             0.979 <span className="text-faint">± 0.021</span>
           </div>
-          <p className="mt-1 text-[10px] leading-snug text-soft">
+          <p className="mt-1 text-[11.5px] leading-snug text-soft">
             Measured above the 0.95 floor, error bars included. <span className="text-accent">Holds.</span>
           </p>
         </Card>
@@ -90,10 +90,10 @@ export function HeroDrift() {
       <div className="absolute inset-y-0 right-5 flex w-[9.5rem] flex-col justify-center gap-5 2xl:right-10">
         <Card title="cost per 1,000 requests">
           <CostBars />
-          <p className="mt-1.5 text-[10px] leading-snug text-soft">Same work, top to bottom. Teal is what the floor buys.</p>
+          <p className="mt-1.5 text-[11.5px] leading-snug text-soft">Same work, top to bottom. Teal is what the floor buys.</p>
         </Card>
         <Card title="how it is scored">
-          <p className="text-[10px] leading-snug text-soft">
+          <p className="text-[11.5px] leading-snug text-soft">
             Code is run, not judged. 30 tasks the models have never seen. Every point carries an interval.
           </p>
         </Card>
@@ -105,7 +105,7 @@ export function HeroDrift() {
             <br />
             cost <span className="text-faint">$0.0231 /1k</span>
           </div>
-          <p className="mt-1 text-[10px] leading-snug text-soft">Every answer says what ran, and why.</p>
+          <p className="mt-1 text-[11.5px] leading-snug text-soft">Every answer says what ran, and why.</p>
         </Card>
       </div>
     </div>

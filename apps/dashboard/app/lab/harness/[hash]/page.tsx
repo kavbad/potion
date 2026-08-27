@@ -46,7 +46,7 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
 
   return (
     <LabStage>
-      <nav className="font-mono text-[10.5px] uppercase tracking-[0.18em]" style={{ color: BENCH.faint }}>
+      <nav className="font-mono text-[12px] uppercase tracking-[0.14em]" style={{ color: BENCH.faint }}>
         <Link href="/lab" className="hover:underline" style={{ color: BENCH.muted }}>Potion Lab</Link>
         {' · '}the specimen
       </nav>
@@ -57,7 +57,7 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
           <h1 className="text-[1.9rem] font-semibold leading-[1.05] tracking-[-0.02em]" style={{ color: '#eef2f8' }}>
             {harness.name}
           </h1>
-          <p className="mt-1.5 font-mono text-[11px]" style={{ color: BENCH.faint }}>
+          <p className="mt-1.5 font-mono text-[12px]" style={{ color: BENCH.faint }}>
             {harness.clusterId}
             {born ? ` · born ${new Date(born).toLocaleDateString()}` : ''} ·{' '}
             <code>{harness.harnessHash.slice(0, 12)}…</code>
@@ -109,7 +109,7 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
               only ever comes from the grants above.
             </p>
             <pre
-              className="mt-4 overflow-x-auto border px-4 py-3 font-mono text-[11.5px] leading-relaxed"
+              className="mt-4 overflow-x-auto border px-4 py-3 font-mono text-[12.5px] leading-relaxed"
               style={{ borderColor: '#2a3346', background: BENCH.ground, color: '#c9d2e0' }}
             >
               {openClawSnippet}

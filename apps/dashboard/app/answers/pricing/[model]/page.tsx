@@ -69,7 +69,7 @@ export default async function ModelPricingPage({ params }: Params) {
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <main className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
-        <nav className="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
+        <nav className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
           <Link href="/answers" className="hover:text-accent">The Measured Answers</Link>
           {' · '}<Link href="/answers/pricing" className="hover:text-accent">pricing</Link>
         </nav>
@@ -78,9 +78,9 @@ export default async function ModelPricingPage({ params }: Params) {
         </h1>
 
         <section className="mt-7 border border-accent/40 bg-[#fbfaf7] px-6 py-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">the measured answer</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-accent">the measured answer</div>
           <p className="mt-2 text-[17px] leading-relaxed text-ink">{verdict(entry)}</p>
-          <p className="mt-2 font-mono text-[11px] text-faint">
+          <p className="mt-2 font-mono text-[12px] text-faint">
             per-token list price + measured per-request cost from live traffic-shaped suites ·{' '}
             <Link href="/research/methodology" className="text-accent underline">method</Link>
           </p>
@@ -96,18 +96,18 @@ export default async function ModelPricingPage({ params }: Params) {
         <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden border border-[#d9d5cb] bg-[#d9d5cb]">
           <div className="bg-[#fbfaf7] px-4 py-3">
             <div className="font-mono text-[1.15rem] font-semibold tabular-nums text-ink">${entry.inputPer1M.toFixed(2)}</div>
-            <div className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-faint">per 1M input tokens</div>
+            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-faint">per 1M input tokens</div>
           </div>
           <div className="bg-[#fbfaf7] px-4 py-3">
             <div className="font-mono text-[1.15rem] font-semibold tabular-nums text-ink">${entry.outputPer1M.toFixed(2)}</div>
-            <div className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-faint">per 1M output tokens</div>
+            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-faint">per 1M output tokens</div>
           </div>
         </div>
 
         <h2 className="mt-10 text-xl font-semibold tracking-tight text-ink">Measured, per kind of work</h2>
         <div className="mt-4 overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7]">
           <table className="w-full text-left font-mono text-[12.5px]">
-            <thead className="text-[10px] uppercase tracking-[0.14em] text-faint">
+            <thead className="text-[11.5px] uppercase tracking-[0.14em] text-faint">
               <tr className="border-b border-line">
                 <th className="px-4 py-2.5 font-normal">kind of work</th>
                 <th className="px-4 py-2.5 text-right font-normal">measured quality</th>
@@ -134,13 +134,13 @@ export default async function ModelPricingPage({ params }: Params) {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
           a model appears here only for workloads where it sits on the live measured frontier —
           absence means it was measured and beaten, or not yet measured
         </p>
 
         <section className="mt-10 border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">the routed alternative</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">the routed alternative</div>
           <p className="mt-2 text-[14.5px] leading-relaxed text-soft">
             Potion routes each request to the cheapest option measured at your quality bar — this
             model where it earns the route, something cheaper where it does not.{' '}

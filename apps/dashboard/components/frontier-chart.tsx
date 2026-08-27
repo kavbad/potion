@@ -244,7 +244,7 @@ function WhyThisPoint({ op, points }: { op: OperatingPointDto; points: FrontierP
   const isCheapest = cheapest !== null && cheapest.strategyHash === op.strategyHash;
   return (
     <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-soft">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">why this point · </span>
+      <span className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">why this point · </span>
       Your rule is <span className="font-medium text-ink">{ruleInWords(op.policy)}</span>
       {op.fallback === 1 ? ' — no point qualified, so this is the fallback serve' : ''}.{' '}
       {isCheapest ? (

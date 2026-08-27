@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 function S({ k, title, children }: { k: string; title: string; children: React.ReactNode }) {
   return (
     <section className="mt-10">
-      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">{k}</div>
+      <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">{k}</div>
       <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">{title}</h2>
       <div className="mt-3 space-y-3 text-[15px] leading-relaxed text-soft">{children}</div>
     </section>
@@ -39,7 +39,7 @@ export default function MethodologyPage() {
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <main className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
-        <nav className="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
+        <nav className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
           <Link href="/research" className="hover:text-accent">Frontier Notes</Link> · methodology
         </nav>
         <h1 className="mt-4 text-3xl font-semibold leading-[1.12] tracking-tight text-ink sm:text-[2.5rem]">
@@ -120,7 +120,7 @@ export default function MethodologyPage() {
           </p>
         </S>
 
-        <p className="mt-12 font-mono text-[11.5px] text-faint">
+        <p className="mt-12 font-mono text-[12.5px] text-faint">
           the current answers: <Link href="/answers" className="text-accent underline">/answers</Link>
           {' · '}the weekly issues: <Link href="/research" className="text-accent underline">/research</Link>
           {' · '}the product: <Link href="/home" className="text-accent underline">withpotion.com</Link>

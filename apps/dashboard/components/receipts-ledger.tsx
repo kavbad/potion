@@ -77,7 +77,7 @@ export function ReceiptsLedger() {
         <button
           type="button"
           onClick={() => setLive((v) => !v)}
-          className={`border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] ${live ? 'border-accent text-accent' : 'border-[#d9d5cb] text-faint hover:text-soft'}`}
+          className={`border px-3 py-2 font-mono text-[12px] uppercase tracking-[0.12em] ${live ? 'border-accent text-accent' : 'border-[#d9d5cb] text-faint hover:text-soft'}`}
           title="Tail new requests as they land"
         >
           {live ? '● live' : '○ paused'}
@@ -108,7 +108,7 @@ export function ReceiptsLedger() {
                 onClick={() => setOpenTs(open ? null : r.ts)}
                 className="grid w-full grid-cols-[92px_1fr_auto] items-baseline gap-3 py-2.5 text-left text-[13.5px] hover:bg-[#fbfaf7] sm:gap-4"
               >
-                <span className="font-mono text-[10.5px] text-faint">{new Date(r.ts).toLocaleTimeString()}</span>
+                <span className="font-mono text-[12px] text-faint">{new Date(r.ts).toLocaleTimeString()}</span>
                 <span className="min-w-0 truncate text-soft">
                   {ok ? (
                     <>
@@ -122,7 +122,7 @@ export function ReceiptsLedger() {
                     <span className="text-warn">{r.status}</span>
                   )}
                 </span>
-                <span className="font-mono text-[11px]">
+                <span className="font-mono text-[12px]">
                   {kept !== null ? (
                     <span className="font-semibold text-kept">kept ${kept.toFixed(5)}</span>
                   ) : r.costUsd !== null ? (
@@ -136,7 +136,7 @@ export function ReceiptsLedger() {
                 <div className="pb-4 pl-[92px] sm:pl-24">
                   <ReceiptCard r={rowToReceipt(r)} subtitle={`${new Date(r.ts).toLocaleString()} · from your request log`} />
                   {kept !== null && r.baselineCostUsd !== null && (
-                    <p className="mt-2 max-w-md font-mono text-[11px] leading-relaxed text-faint">
+                    <p className="mt-2 max-w-md font-mono text-[12px] leading-relaxed text-faint">
                       counterfactual recorded at serve time: your named baseline would have cost ${r.baselineCostUsd.toFixed(5)} — kept ${kept.toFixed(5)}.
                     </p>
                   )}
@@ -148,7 +148,7 @@ export function ReceiptsLedger() {
       </div>
 
       {data && data.summary.withRoutingDecision > 0 && (
-        <p className="mt-5 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-5 font-mono text-[12px] leading-relaxed text-faint">
           {data.summary.routed} of {data.summary.withRoutingDecision} recent requests routed on a measured frontier
           {data.summary.defaulted > 0 ? ` · ${data.summary.defaulted} served the default` : ''} · rows read back from each response&rsquo;s own trace.
         </p>

@@ -85,10 +85,10 @@ export function Receipt() {
         aria-label={`A routing receipt: five real requests, premium option ${usd(premiumTotal)}, routed ${usd(routedTotal)} — ${savedPct} percent less`}
       >
         {/* masthead */}
-        <div className="text-center font-mono text-[11px] uppercase tracking-[0.22em] text-ink">
+        <div className="text-center font-mono text-[12px] uppercase tracking-[0.22em] text-ink">
           Potion
         </div>
-        <div className="mt-1 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+        <div className="mt-1 text-center font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
           routing receipt · per 1k requests
         </div>
         <div className="mt-4 border-t border-dashed border-line" />
@@ -112,14 +112,14 @@ export function Receipt() {
             return (
               <div key={idx} className={row(phase >= idx + 1)}>
                 <div className="truncate text-xs leading-snug text-soft">{d.prompt}</div>
-                <div className="mt-0.5 flex items-baseline gap-2 font-mono text-[11px]">
+                <div className="mt-0.5 flex items-baseline gap-2 font-mono text-[12px]">
                   <span className="text-faint">{d.cluster}</span>
                   <span className="text-ink">· {d.label}</span>
                   <span className="min-w-4 flex-1 border-b border-dotted border-line" />
                   <span className={up ? 'text-warn' : 'text-ink'}>{usd(d.costPer1K)}</span>
                 </div>
                 {up && (
-                  <div className={`text-right font-mono text-[10px] text-warn ${row(phase >= idx + 1)}`}>
+                  <div className={`text-right font-mono text-[11.5px] text-warn ${row(phase >= idx + 1)}`}>
                     full price — nothing cheaper measures good enough
                   </div>
                 )}
@@ -131,7 +131,7 @@ export function Receipt() {
         <div className="mt-4 border-t border-dashed border-line" />
 
         {/* totals — computed from the lines above, checkable like a real bill */}
-        <div className="mt-3 space-y-1.5 font-mono text-[11px]">
+        <div className="mt-3 space-y-1.5 font-mono text-[12px]">
           <div className={`flex items-baseline gap-2 ${row(phase >= N + 1)}`}>
             <span className="text-faint">premium model on all five</span>
             <span className="min-w-4 flex-1 border-b border-dotted border-line" />
@@ -149,7 +149,7 @@ export function Receipt() {
           </div>
         </div>
 
-        <div className={`mt-4 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-faint ${row(phase >= LAST)}`}>
+        <div className={`mt-4 text-center font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint ${row(phase >= LAST)}`}>
           every answer ships this receipt
         </div>
       </div>

@@ -49,10 +49,10 @@ export function FrontierStatus() {
   return (
     <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+        <span className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
           Your frontier, per kind of work
         </span>
-        <span className="font-mono text-[11px] text-faint">measured on your own requests</span>
+        <span className="font-mono text-[12px] text-faint">measured on your own requests</span>
       </div>
       <ul className="mt-3 space-y-2">
         {clusters.map((c) => {

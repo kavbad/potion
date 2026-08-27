@@ -81,7 +81,7 @@ export function RoutingField() {
       <div className="flex h-14 items-center gap-3 border-b border-line px-5">
         <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-accent" />
         <div key={i} className="field-fade min-w-0 flex-1 truncate text-left font-mono text-[13px] text-ink">{d.prompt}</div>
-        <div className="hidden shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] text-faint sm:block">
+        <div className="hidden shrink-0 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint sm:block">
           {String(i + 1).padStart(2, '0')} / {String(ROUTE_DEMO.length).padStart(2, '0')}
         </div>
       </div>
@@ -117,19 +117,19 @@ export function RoutingField() {
           </svg>
 
           {/* text overlays in HTML so type never stretches */}
-          <div className="pointer-events-none absolute left-3 top-2 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">quality ↑</div>
+          <div className="pointer-events-none absolute left-3 top-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">quality ↑</div>
           {ticks.map((q) => (
             <div key={q} className="pointer-events-none absolute left-3 font-mono text-[9px] text-faint" style={{ top: `calc(${(y(q) / H) * 100}% - 6px)` }}>
               {q.toFixed(2)}
             </div>
           ))}
-          <div className="pointer-events-none absolute bottom-2 right-4 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">cost per 1,000 requests → (log)</div>
-          <div className="pointer-events-none absolute right-4 font-mono text-[10px] text-accent" style={{ top: `calc(${(y(FLOOR) / H) * 100}% - 14px)` }}>
+          <div className="pointer-events-none absolute bottom-2 right-4 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">cost per 1,000 requests → (log)</div>
+          <div className="pointer-events-none absolute right-4 font-mono text-[11.5px] text-accent" style={{ top: `calc(${(y(FLOOR) / H) * 100}% - 14px)` }}>
             floor 0.95
           </div>
           <div
             key={`l${i}`}
-            className="field-fade pointer-events-none absolute max-w-[12rem] truncate rounded border border-line bg-panel/95 px-1.5 py-0.5 font-mono text-[11px] text-ink"
+            className="field-fade pointer-events-none absolute max-w-[12rem] truncate rounded border border-line bg-panel/95 px-1.5 py-0.5 font-mono text-[12px] text-ink"
             style={{ left: `calc(${(px / W) * 100}% + 9px)`, top: `calc(${(py / H) * 100}% + 6px)` }}
           >
             {pick.label} <span className="text-faint">{pick.quality.toFixed(2)}</span>
@@ -138,13 +138,13 @@ export function RoutingField() {
 
         {/* the receipt — fixed column, fixed rows */}
         <div className="grid h-[188px] grid-rows-[auto_auto_auto_1fr] gap-2.5 border-t border-line px-5 py-4 text-left sm:h-[300px] sm:border-l sm:border-t-0">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">receipt</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">receipt</div>
           <div key={`a${i}`} className="field-fade">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">kind of work</div>
+            <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">kind of work</div>
             <div className="mt-1 inline-block rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[12px] text-accent">{d.cluster}</div>
           </div>
           <div key={`b${i}`} className="field-fade">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">routed to · price · quality</div>
+            <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">routed to · price · quality</div>
             <div className="mt-1 h-5 truncate font-mono text-[12px] text-ink">{pick.label}</div>
             <div className="font-mono text-[12px] text-ink">
               {usd(pick.costPer1K)}/1k · {pick.quality.toFixed(2)}{' '}
@@ -152,13 +152,13 @@ export function RoutingField() {
             </div>
           </div>
           <div key={`c${i}`} className="field-fade min-h-0">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">why</div>
-            <p className="mt-1 line-clamp-3 font-mono text-[11px] leading-relaxed text-soft">{why}</p>
+            <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">why</div>
+            <p className="mt-1 line-clamp-3 font-mono text-[12px] leading-relaxed text-soft">{why}</p>
           </div>
         </div>
       </div>
 
-      <div className="flex h-10 items-center justify-between border-t border-line px-5 font-mono text-[10px] text-faint">
+      <div className="flex h-10 items-center justify-between border-t border-line px-5 font-mono text-[11.5px] text-faint">
         <span className="truncate">{points.length} measured points · real frontier, not a simulation · hover to pause</span>
         <Link href="/login" className="shrink-0 text-accent hover:underline">
           route your own ↗

@@ -28,8 +28,8 @@ import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 function ClustersDisclosure({ conn }: { conn: ConnectionResponse }) {
   return (
-    <details className="mt-10 border-t border-[#d9d5cb] pt-6 font-mono text-[11px] text-faint">
-      <summary className="cursor-pointer uppercase tracking-[0.16em] hover:text-ink">What Potion can route today · {conn.autoRouting.ready} of {conn.autoRouting.total} kinds of work measured</summary>
+    <details className="mt-10 border-t border-[#d9d5cb] pt-6 font-mono text-[12px] text-faint">
+      <summary className="cursor-pointer uppercase tracking-[0.13em] hover:text-ink">What Potion can route today · {conn.autoRouting.ready} of {conn.autoRouting.total} kinds of work measured</summary>
       <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
         {conn.autoRouting.clusters.map((c) => (
           <li key={c.clusterId} className="flex items-center justify-between">
@@ -85,7 +85,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
         <WeeklyBrief />
 
         {/* the S1 contract in one quiet line each: where traffic points, and under what rule */}
-        <p className="mt-4 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-4 font-mono text-[12px] leading-relaxed text-faint">
           Base URL <span className="text-ink">{conn.baseUrl}/v1</span>
           {' · '}{conn.servingKeys.filter((k) => !k.revokedAt).length} active key{conn.servingKeys.filter((k) => !k.revokedAt).length === 1 ? '' : 's'} (<Link href="/settings/keys" className="text-accent underline">manage</Link>)
           {conn.policy && <> · your rule: <span className="text-ink">{conn.policy.description}</span> (<Link href="/settings/controls" className="text-accent underline">change</Link>)</>}
@@ -110,7 +110,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
 
   return (
     <div className="max-w-4xl">
-      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
+      <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
         {hasKey ? 'One line, then a test request' : 'A key, one line, a test request'}
       </div>
       <h1 className="mt-3 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink sm:text-[2.5rem]">
@@ -143,7 +143,7 @@ export function HomeOverview({ conn: initial, initialActivity = null }: { conn: 
             <CopyBlock label="Base URL" text={`${conn.baseUrl}/v1`} />
             {conn.snippets && <CopyBlock label="Node.js (openai SDK)" text={conn.snippets.openaiNode} />}
             {conn.policy && (
-              <p className="font-mono text-[11px] leading-relaxed text-faint">
+              <p className="font-mono text-[12px] leading-relaxed text-faint">
                 your rule: <span className="text-ink">{conn.policy.description}</span> ·{' '}
                 <Link href="/settings/controls" className="text-accent underline">change it</Link>
               </p>

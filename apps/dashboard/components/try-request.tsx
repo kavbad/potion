@@ -154,11 +154,11 @@ export function TryRequest({ onReceipt }: { onReceipt?: (r: Receipt) => void } =
 
   return (
     <div className="overflow-hidden border border-[#d9d5cb] bg-[#fbfaf7]">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-accent/70" />
         try a request · routed under your policy · receipt attached
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#d9d5cb] px-5 py-2.5 font-mono text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#d9d5cb] px-5 py-2.5 font-mono text-[12px]">
         <span className="uppercase tracking-[0.14em] text-faint">optimize for</span>
         <div className="flex divide-x divide-[#d9d5cb] border border-[#d9d5cb]">
           {RULES.map((r) => (
@@ -216,7 +216,7 @@ export function TryRequest({ onReceipt }: { onReceipt?: (r: Receipt) => void } =
       </div>
       <div className="grid lg:grid-cols-[15rem_1fr]">
         <div className="border-b border-line px-5 py-5 lg:border-b-0 lg:border-r">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">receipt</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">receipt</div>
           {receipt ? (
             <div className="mt-4" key={`${receipt.strategyHash ?? ''}-${receipt.latencyMs ?? 0}`}>
               {/* one object everywhere (S1): the receipt prints here too */}
@@ -236,11 +236,11 @@ export function TryRequest({ onReceipt }: { onReceipt?: (r: Receipt) => void } =
               <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">{answer}</pre>
               {receipt && receipt.alternatives.length > 0 && (
                 <div className="mt-6 border-t border-[#d9d5cb] pt-4">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+                  <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
                     what each rule picks for {receipt.clusterId ?? 'this kind of work'} · measured, click one to re-run
                   </div>
-                  <table className="mt-2 w-full font-mono text-[11px]">
-                    <thead className="text-[10px] uppercase tracking-wide text-faint">
+                  <table className="mt-2 w-full font-mono text-[12px]">
+                    <thead className="text-[11.5px] uppercase tracking-wide text-faint">
                       <tr><th className="py-1 text-left font-normal">rule</th><th className="py-1 text-left font-normal">model</th><th className="py-1 text-right font-normal">quality</th><th className="py-1 text-right font-normal">$ / 1k</th><th className="py-1 text-right font-normal">p95</th></tr>
                     </thead>
                     <tbody>

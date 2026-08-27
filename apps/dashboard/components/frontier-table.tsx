@@ -117,7 +117,7 @@ export function FrontierTable({
                         {r.selectedBy.map((p) => (
                           <span
                             key={p}
-                            className="rounded-full border border-line bg-paper px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-soft"
+                            className="rounded-full border border-line bg-paper px-1.5 py-0.5 text-[11.5px] uppercase tracking-wide text-soft"
                           >
                             {PRIORITY_LABEL[p]}
                           </span>
@@ -133,7 +133,7 @@ export function FrontierTable({
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right text-ink">
                     ${r.costPer1K.toFixed(4)}
-                    <div className="text-[10px] text-faint">
+                    <div className="text-[11.5px] text-faint">
                       ${(r.costPer1K / 1000).toFixed(6)}/req
                     </div>
                   </td>

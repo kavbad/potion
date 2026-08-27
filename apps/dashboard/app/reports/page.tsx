@@ -212,7 +212,7 @@ function AlternativeRow({ alt }: { alt: SavingsAlternativeDto }) {
     <tr className="border-b border-line/60 last:border-0">
       <td className="py-2.5 pr-4">
         <span className="text-xs text-ink">{alt.label}</span>{' '}
-        <span className="font-mono text-[10px] text-faint">{alt.strategyHash.slice(0, 8)}</span>
+        <span className="font-mono text-[11.5px] text-faint">{alt.strategyHash.slice(0, 8)}</span>
       </td>
       <td className="py-2.5 pr-4 text-right tabular-nums text-ink">{formatUsd(alt.projectedSpendUsd)}</td>
       <td className="py-2.5 pr-4 text-right tabular-nums text-soft">{alt.projectedQuality.toFixed(2)}</td>
@@ -242,7 +242,7 @@ function ConfidenceBadge({ confidence }: { confidence: 'low' | 'medium' | 'high'
   return (
     <span
       title={confidenceHint(confidence)}
-      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+      className={`inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide ${cls}`}
     >
       {confidence}
     </span>
@@ -337,7 +337,7 @@ function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
         {entry.policyId} · <span className="font-mono">{entry.clusterId}</span>
       </div>
       {entry.verification && entry.verification.state !== 'none' && (
-        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide">
+        <div className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide">
           <span
             className={
               entry.verification.state === 'unverifiable'
@@ -361,7 +361,7 @@ function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
               {(r.mean * 100).toFixed(1)}%
             </span>
             <span
-              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+              className={`rounded-full border px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide ${
                 r.verdict === 'all-clear'
                   ? 'border-accent bg-accent-soft text-accent'
                   : 'border-warn bg-amber-50 text-warn'
@@ -370,7 +370,7 @@ function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
               {r.verdict}
             </span>
           </div>
-          <div className="mt-1 text-[11px] text-faint">
+          <div className="mt-1 text-[12px] text-faint">
             CI95 [{(r.ci95[0] * 100).toFixed(1)}%, {(r.ci95[1] * 100).toFixed(1)}%] vs floor{' '}
             {(r.floor * 100).toFixed(0)}% · {r.pairs} pairs ({r.excludedPairs} excluded) ·{' '}
             {r.confidence} · {r.providerMode}
@@ -380,7 +380,7 @@ function RetentionEntryCard({ entry }: { entry: GuaranteeReportEntryDto }) {
         <div className="text-sm text-soft">{entry.retentionUnavailableReason ?? 'retention unavailable'}</div>
       )}
       {entry.incumbent && (
-        <div className="mt-2 text-[11px] text-faint">
+        <div className="mt-2 text-[12px] text-faint">
           incumbent <span className="font-mono">{entry.incumbent.strategyHash.slice(0, 12)}</span>
           {entry.derivedFloor &&
             ` · serve floor ${entry.derivedFloor.floor.toFixed(3)} (n=${entry.derivedFloor.provenance.n})`}

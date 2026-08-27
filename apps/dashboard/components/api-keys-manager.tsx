@@ -158,12 +158,12 @@ export function ApiKeysManager({ initial }: { initial: ServingKeyDto[] }) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-ink">{k.name}</span>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${st.cls}`}
+                        className={`rounded-full border px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide ${st.cls}`}
                       >
                         {st.label}
                       </span>
                       {k.scopes === 'serve+admin' && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide text-amber-700">
                           admin
                         </span>
                       )}

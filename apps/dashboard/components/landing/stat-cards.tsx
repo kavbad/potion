@@ -55,7 +55,7 @@ export function StatCards() {
           </div>
         </div>
         <div className="flex flex-col justify-end rounded-lg border border-line bg-panel px-8 py-10">
-          <div className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
+          <div className="font-mono text-xs uppercase tracking-[0.14em] text-faint">
             same suite · scored by execution
           </div>
           <p className="mt-4 text-sm leading-relaxed text-soft">

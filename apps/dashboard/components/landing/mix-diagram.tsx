@@ -19,7 +19,7 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 export function MixDiagram() {
   return (
     <div className="bg-[#fbfaf7]">
-      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="border-b border-[#d9d5cb] px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         a cascade · one strategy · measured as a unit
       </div>
       <div className="px-5 py-6 sm:px-7">
@@ -78,7 +78,7 @@ export function MixDiagram() {
           {/* footnote rule */}
           <line x1="16" y1="226" x2="464" y2="226" stroke={RULE} strokeWidth="1" />
         </svg>
-        <div className="mt-3 grid gap-1 font-mono text-[10px] leading-relaxed text-faint sm:grid-cols-3">
+        <div className="mt-3 grid gap-1 font-mono text-[11.5px] leading-relaxed text-faint sm:grid-cols-3">
           <div><span className="text-ink">t</span> · the threshold, chosen by measurement per kind of work</div>
           <div><span className="text-ink">c</span> · the cheap model&apos;s reported confidence on this request</div>
           <div><span className="text-ink">one hash</span> · the whole cascade is measured, priced and served as a unit</div>

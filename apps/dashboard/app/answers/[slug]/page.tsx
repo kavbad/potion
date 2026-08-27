@@ -94,7 +94,7 @@ export default async function AnswerPage({ params }: Params) {
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <main className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
-        <nav className="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
+        <nav className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
           <Link href="/research" className="hover:text-accent">Frontier Notes</Link>
           {' · '}<Link href="/answers" className="hover:text-accent">The Measured Answers</Link>
         </nav>
@@ -102,9 +102,9 @@ export default async function AnswerPage({ params }: Params) {
 
         {/* The extractable verdict — dated, numeric, ≤ a breath. */}
         <section className="mt-7 border border-accent/40 bg-[#fbfaf7] px-6 py-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">the measured answer</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-accent">the measured answer</div>
           <p className="mt-2 text-[17px] leading-relaxed text-ink">{verdict}</p>
-          <p className="mt-2 font-mono text-[11px] text-faint">
+          <p className="mt-2 font-mono text-[12px] text-faint">
             re-measured weekly · <Link href="/research/methodology" className="text-accent underline">how these numbers are made</Link>
           </p>
         </section>
@@ -119,7 +119,7 @@ export default async function AnswerPage({ params }: Params) {
         </p>
         <div className="mt-4 overflow-x-auto border border-[#d9d5cb] bg-[#fbfaf7]">
           <table className="w-full text-left font-mono text-[12.5px]">
-            <thead className="text-[10px] uppercase tracking-[0.14em] text-faint">
+            <thead className="text-[11.5px] uppercase tracking-[0.14em] text-faint">
               <tr className="border-b border-line">
                 <th className="px-4 py-2.5 font-normal">option</th>
                 <th className="px-4 py-2.5 font-normal">vendor</th>
@@ -141,7 +141,7 @@ export default async function AnswerPage({ params }: Params) {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
           frontier v{cluster.version} · measured {cluster.measuredAt.slice(0, 10)} · live provider calls only —
           simulated evidence never appears on this page
         </p>
@@ -170,7 +170,7 @@ export default async function AnswerPage({ params }: Params) {
         </div>
 
         <section className="mt-12 border border-[#d9d5cb] bg-[#fbfaf7] px-6 py-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">the routed alternative</div>
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">the routed alternative</div>
           <p className="mt-2 text-[14.5px] leading-relaxed text-soft">
             Potion routes each request to the cheapest option measured at your quality bar — with a
             receipt on every answer and this page&apos;s evidence behind every pick.{' '}

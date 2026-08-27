@@ -26,7 +26,7 @@ function Chip({ tone, children }: { tone: 'good' | 'warn' | 'muted'; children: R
         ? 'border-amber-200 bg-amber-50 text-amber-700'
         : 'border-line bg-paper text-faint';
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>
+    <span className={`rounded-full border px-2 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide ${cls}`}>
       {children}
     </span>
   );

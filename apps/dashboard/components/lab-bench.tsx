@@ -28,7 +28,7 @@ export function LabStage({ children }: { children: React.ReactNode }) {
 export function BenchLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div
-      className="flex items-baseline justify-between border-b pb-2 font-mono text-[10px] uppercase tracking-[0.18em]"
+      className="flex items-baseline justify-between border-b pb-2 font-mono text-[11.5px] uppercase tracking-[0.14em]"
       style={{ borderColor: BENCH.line, color: BENCH.faint }}
     >
       <span>{children}</span>
@@ -42,13 +42,13 @@ export function TrustLine({ trust }: { trust: { autonomous: number; supervised: 
   const total = trust.autonomous + trust.supervised + trust.blocked;
   if (total === 0) {
     return (
-      <span className="font-mono text-[11px]" style={{ color: BENCH.faint }}>
+      <span className="font-mono text-[12px]" style={{ color: BENCH.faint }}>
         newborn — every action asks first
       </span>
     );
   }
   return (
-    <span className="font-mono text-[11px]" style={{ color: BENCH.muted }}>
+    <span className="font-mono text-[12px]" style={{ color: BENCH.muted }}>
       {trust.autonomous > 0 && <span style={{ color: BENCH.earned }}>{trust.autonomous} act alone</span>}
       {trust.autonomous > 0 && (trust.supervised > 0 || trust.blocked > 0) && ' · '}
       {trust.supervised > 0 && <span>{trust.supervised} ask first</span>}

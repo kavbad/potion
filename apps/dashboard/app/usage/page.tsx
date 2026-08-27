@@ -114,7 +114,7 @@ export default async function UsagePage({
         </p>
       )}
       {(current.measurementUsd ?? 0) > 0 && (
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
+        <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
           Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date, billed to this account and not counted in the cost above.
         </p>
       )}

@@ -23,7 +23,7 @@ export function Stamp({ kind, children }: { kind: 'held' | 'attention' | 'refuse
           ? 'text-accent border-accent bg-transparent'
           : 'text-warn bg-amber-50 border-warn';
   return (
-    <span className={`inline-block -rotate-1 border-[1.5px] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] ${cls}`}>
+    <span className={`inline-block -rotate-1 border-[1.5px] px-2 py-0.5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.1em] ${cls}`}>
       {children ?? kind}
     </span>
   );
@@ -33,7 +33,7 @@ export function Prov({ children, card }: { children: ReactNode; card: ReactNode 
   return (
     <span className="group relative cursor-help border-b-[1.5px] border-dotted border-accent">
       {children}
-      <span className="pointer-events-none absolute left-0 top-full z-30 mt-2 w-72 -translate-y-1 border border-[#c4bfb2] bg-[#fbfaf7] px-3.5 py-3 font-mono text-[11px] leading-relaxed text-soft opacity-0 shadow-paper-lift transition-all duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+      <span className="pointer-events-none absolute left-0 top-full z-30 mt-2 w-72 -translate-y-1 border border-[#c4bfb2] bg-[#fbfaf7] px-3.5 py-3 font-mono text-[12px] leading-relaxed text-soft opacity-0 shadow-paper-lift transition-all duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
         {card}
       </span>
     </span>
@@ -71,8 +71,8 @@ export function ReceiptCard({ r, subtitle, printing = false }: { r: Receipt; sub
       >
         <span className="absolute right-3.5 top-3"><Stamp kind="held" /></span>
         <div className="border-b border-dashed border-[#c4bfb2] pb-2.5 text-center">
-          <div className="text-[11px] font-semibold tracking-[0.18em] text-ink">POTION · RECEIPT</div>
-          <div className="mt-0.5 text-[10px] text-faint">{subtitle ?? 'routed under your rule'}</div>
+          <div className="text-[12px] font-semibold tracking-[0.14em] text-ink">POTION · RECEIPT</div>
+          <div className="mt-0.5 text-[11.5px] text-faint">{subtitle ?? 'routed under your rule'}</div>
         </div>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1">
           <dt className="text-faint">kind of work</dt>

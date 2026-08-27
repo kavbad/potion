@@ -94,7 +94,7 @@ export default async function SharedFrontierPage({
                     {p.quality.toFixed(2)} · ${p.costPer1K.toFixed(3)}/1K
                   </span>
                   <span
-                    className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${
+                    className={`inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-semibold tracking-wide ${
                       simulated
                         ? 'border-warn bg-amber-50 text-warn'
                         : 'border-accent bg-accent-soft text-accent'

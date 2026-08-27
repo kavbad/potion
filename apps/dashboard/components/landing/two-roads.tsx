@@ -101,7 +101,7 @@ export function TwoRoads() {
 
   return (
     <div className="w-full bg-[#fbfaf7]" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <div className="flex h-11 items-center justify-between border-b border-[#d9d5cb] px-4 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
+      <div className="flex h-11 items-center justify-between border-b border-[#d9d5cb] px-4 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
         <span>one request · two roads</span>
         <span className="hidden sm:inline">{String((n % ROUTE_DEMO.length) + 1).padStart(2, '0')} / 06 · real measurements · hover to pause</span>
       </div>
@@ -179,7 +179,7 @@ export function TwoRoads() {
         <text x={W - 24} y="281" textAnchor="end" fontSize="11" fill={ACCENT}>−{saved}%</text>
       </svg>
 
-      <div className="flex h-9 items-center border-t border-[#d9d5cb] px-4 font-mono text-[10px] text-faint">
+      <div className="flex h-9 items-center border-t border-[#d9d5cb] px-4 font-mono text-[11.5px] text-faint">
         <span className="truncate">tallies are means over the requests served so far · same work, same quality bar, two roads</span>
       </div>
     </div>

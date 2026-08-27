@@ -27,7 +27,7 @@ export default async function StatusPage() {
   return (
     <SiteShell>
       <main className="mx-auto max-w-2xl px-6 py-14">
-        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Live, checked on load</div>
+        <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Live, checked on load</div>
         <h1 className="mt-2 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">
           {api ? 'All systems serving' : 'The API is not responding'}
         </h1>
