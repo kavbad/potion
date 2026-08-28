@@ -269,3 +269,49 @@ The target user span (novice to power user), Stellaris-depth modular
 editing, the derived form and its pixel-to-parameter audit, the
 superpowers catalog and its injection posture (act/read classification
 drives the pore), hosted-only custody, and every standing rule.
+
+## v4 (2026-08-28): the harness doctrine (operator-adopted verbatim in spirit)
+
+The operator supplied the full definition of an AI harness — the layer that
+"determines how intelligence is assembled and applied to a task," spanning
+context, prompts, models, tools, memory, state, execution, verification,
+retries, permissions, observability, evaluation, and adaptation, "so that an
+application can specify the outcome it needs while the harness determines and
+governs the inference process most likely to produce it." Adopted. What it
+changes:
+
+**1. Identity unification.** Potion is the harness company, at two levels of
+one spine. The serving path IS a model harness already (outcome-bound
+policies, routing, fallbacks, retries, receipts, metering — reliability +
+observability + evaluation around single calls). The Lab is the agent
+harness. They share the laws (measurement, custody, receipts, replay) and the
+thesis of `docs/INFERENCE-COMPILER.md`: the frontier ranks *recipes*, not
+models; the customer declares outcomes, the harness compiles the means.
+
+**2. The differentiator, stated once.** Every framework gives you a loop and
+calls it a harness. Potion's angle is that harness DECISIONS — which model,
+which strategy shape, how much verification, when to escalate — are chosen
+FROM MEASURED EVIDENCE, per kind of work, with receipts, and re-proposed as
+the evidence moves. "A compiler or optimizer for inference" is only credible
+if the optimizer has measurements; we are the ones with the instrument.
+
+**3. The honest scorecard (2026-08-28), by the doctrine's own checklist:**
+- STRONG (and hard to fake): model management (the router), permissions &
+  governance (evidence-earned autonomy, custody, before-external-action),
+  observability (durable checkpoints, receipts, traces), reliability
+  primitives (fences, replay, fuel hard stop, stall law), prompt/spec
+  management (hash-addressed, tamper-evident, machinery-editable).
+- WEAK (the visible gaps that read as "toy"): execution shapes (one loop),
+  triggers (manual only), output contracts (prose), context management
+  (no retrieval policy), harness-level evaluation (no judge), state (flat
+  memory), tools-in (closed catalog, no BYO-MCP), delivery-out (report page).
+The W-spine + axes plan (hands, clock, mouth → judge → beat memory →
+plan/verify/escalate → feedback → fan-out; shapes × triggers × tools ×
+contracts × delivery) is exactly the WEAK column, ordered. Nothing in the
+STRONG column may be weakened to speed the WEAK column up.
+
+**4. The two-audience law restated in harness terms.** The idiot declares an
+outcome on the recipe card and gets a governed inference process they can
+read. The genius opens the machinery and finds a real runtime: laws,
+provenance, contracts, BYO tools, and every decision traceable to evidence.
+Same object, two depths — never two products.
