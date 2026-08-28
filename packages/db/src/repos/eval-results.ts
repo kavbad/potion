@@ -313,3 +313,37 @@ export async function singleModelLatencyP95(
   }
   return out;
 }
+
+/** The measured counterfactual (2026-08-28, operator: "shouldn't the
+ * comparison be what they'd actually run?"): the LIVE-evidenced mean
+ * quality and cost of ONE single-model strategy on one cluster — every
+ * result row, dominated or not (the frontier keeps only survivors; a
+ * counterfactual is usually dominated, which is the whole point).
+ * Deterministic: the hash is computed from the canonical config, never
+ * guessed from a name. Returns null when no live evidence exists — the
+ * caller says "unmeasured", never invents. */
+export async function measuredSinglePoint(
+  db: PotionDb,
+  clusterId: string,
+  strategyHashValue: string,
+): Promise<{ quality: number; costPer1K: number; n: number } | null> {
+  const rows = await db
+    .select({ quality: evalResults.quality, usage: evalResults.usage })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.clusterId, clusterId),
+        eq(evalResults.strategyHash, strategyHashValue),
+        eq(evalResults.providerMode, 'live'),
+        eq(evalResults.instrument, 'default'),
+      ),
+    );
+  if (rows.length === 0) return null;
+  let q = 0;
+  let cost = 0;
+  for (const r of rows) {
+    q += r.quality;
+    cost += (r.usage as { costUsd?: number }).costUsd ?? 0;
+  }
+  return { quality: q / rows.length, costPer1K: (cost / rows.length) * 1000, n: rows.length };
+}

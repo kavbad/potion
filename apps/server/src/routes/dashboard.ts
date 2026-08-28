@@ -37,6 +37,7 @@ import {
   revokeApiKey,
   upsertRouterInterpretation,
   getRouterInterpretation,
+  getOrgIncumbents,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -711,7 +712,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     }
     const revealPolicy = policy ?? POLICY_DEFAULTS.max_quality;
     const assignments = await assignmentsUnderPolicy(ctx, db, orgId, revealPolicy, (m) => app.log.warn(m));
-    const expected = await expectedForMix(db, orgId, assignments, mix);
+    const expected = await expectedForMix(db, orgId, assignments, mix, (await getOrgIncumbents(db, orgId))?.models[0]);
     // The interpretation changed the document — mint the version now so the
     // reveal and the Router page agree from the first second.
     const compiled = await compileAndMintRouter(ctx, db, orgId, (m) => app.log.warn(m));
@@ -752,7 +753,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     const candidate = body.data.policy;
     const assignments = await assignmentsUnderPolicy(ctx, db, orgId, candidate, (m) => app.log.warn(m));
     const interp = await getRouterInterpretation(db, orgId);
-    const expected = interp === null ? null : await expectedForMix(db, orgId, assignments, interp.mix);
+    const expected = interp === null ? null : await expectedForMix(db, orgId, assignments, interp.mix, (await getOrgIncumbents(db, orgId))?.models[0]);
     return reply.send({
       description: describePolicy(candidate),
       assignments: assignments.map((a) => ({

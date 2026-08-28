@@ -33,6 +33,8 @@ import {
   listRequestLogs,
   listRouterVersions,
   type PotionDb,
+  measuredSinglePoint,
+  getOrgIncumbents,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -58,6 +60,15 @@ export interface RouterAssignment {
   fallback: string | null;
 }
 
+export interface ExpectedProjection {
+  quality: number;
+  costPer1K: number;
+  baselineCostPer1K: number;
+  baselineQuality: number;
+  savingsPct: number;
+  incumbent: { model: string; quality: number; costPer1K: number; coverage: number } | null;
+}
+
 export interface RouterDocument {
   name: string;
   policy: { config: Policy; description: string } | null;
@@ -67,8 +78,9 @@ export interface RouterDocument {
   /** O1: what the org said it is building, interpreted into a mix. */
   interpreted?: { summary: string; mix: Array<{ clusterId: string; share: number }> };
   /** O1: mix-weighted projections FROM PLATFORM EVIDENCE — labeled expected,
-   * corrected by real traffic; baseline = best scorer per kind of work. */
-  expected?: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
+   * corrected by real traffic; baseline = best scorer per kind of work,
+   * incumbent = the org's NAMED model, measured (2026-08-28). */
+  expected?: ExpectedProjection | null;
 }
 
 export interface CompiledRouter {
@@ -200,7 +212,7 @@ export async function compileAndMintRouter(
       ? {}
       : {
           interpreted: { summary: interpretation.summary, mix: interpretation.mix },
-          expected: await expectedForMix(db, orgId, assignments, interpretation.mix),
+          expected: await expectedForMix(db, orgId, assignments, interpretation.mix, (await getOrgIncumbents(db, orgId))?.models[0]),
         }),
   };
   const minted = await appendRouterVersion(db, { orgId, routerHash, document });
@@ -284,8 +296,14 @@ export async function expectedForMix(
   orgId: string,
   assignments: RouterAssignment[],
   mix: Array<{ clusterId: string; share: number }>,
-): Promise<{ quality: number; costPer1K: number; baselineCostPer1K: number; baselineQuality: number; savingsPct: number } | null> {
+  /** The org's NAMED incumbent model, when it named one at onboarding —
+   * the personal counterfactual (2026-08-28, operator: the comparison
+   * should be what they'd actually run, not the premium ceiling). */
+  incumbentModel?: string,
+): Promise<ExpectedProjection | null> {
   let q = 0, cost = 0, base = 0, baseQ = 0, covered = 0;
+  let incQ = 0, incCost = 0, incCovered = 0;
+  const incHash = incumbentModel !== undefined ? strategyHash({ type: 'single', model: incumbentModel }) : null;
   for (const m of mix) {
     const a = assignments.find((x) => x.clusterId === m.clusterId);
     if (!a || a.quality === null || a.costPer1K === null) continue;
@@ -300,6 +318,14 @@ export async function expectedForMix(
     cost += m.share * a.costPer1K;
     base += m.share * best.c;
     baseQ += m.share * best.q;
+    if (incHash !== null) {
+      const inc = await measuredSinglePoint(db, m.clusterId, incHash);
+      if (inc !== null) {
+        incCovered += m.share;
+        incQ += m.share * inc.quality;
+        incCost += m.share * inc.costPer1K;
+      }
+    }
   }
   if (covered <= 0 || base <= 0) return null;
   return {
@@ -312,6 +338,15 @@ export async function expectedForMix(
     // trade must be visible, never implied away.
     baselineQuality: baseQ / covered,
     savingsPct: Math.max(0, 1 - cost / base),
+    incumbent:
+      incumbentModel !== undefined && incCovered > 0 && incCost > 0
+        ? {
+            model: incumbentModel,
+            quality: incQ / incCovered,
+            costPer1K: incCost / incCovered,
+            coverage: incCovered / covered,
+          }
+        : null,
   };
 }
 

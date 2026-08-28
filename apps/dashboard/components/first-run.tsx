@@ -35,7 +35,14 @@ interface InterpretResponse {
   mix: Array<{ clusterId: string; share: number }>;
   router: { name: string; version: number; provisional: boolean };
   assignments: Array<{ clusterId: string; share: number; label: string; quality: number | null; costPer1K: number | null }>;
-  expected: { quality: number; costPer1K: number; baselineCostPer1K: number; baselineQuality?: number; savingsPct: number } | null;
+  expected: {
+    quality: number;
+    costPer1K: number;
+    baselineCostPer1K: number;
+    baselineQuality?: number;
+    savingsPct: number;
+    incumbent?: { model: string; quality: number; costPer1K: number; coverage: number } | null;
+  } | null;
 }
 
 const SAMPLE = 'Is this review positive, negative, or neutral? "Crashed twice, support never replied."';
@@ -294,17 +301,32 @@ export function FirstRunGate() {
                     {/* The honest triangle (2026-08-28): both qualities AND
                         both costs on the table — the trade is visible, and
                         price speaks as a ratio bound to quality, never a
-                        naked percent-off (the endorsed-landing formula). */}
-                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
-                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%{interp.expected.baselineQuality !== undefined ? <span className="text-faint"> vs {(interp.expected.baselineQuality * 100).toFixed(1)}</span> : null}</span></span>
-                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
-                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best scorer, everywhere</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
-                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">your price</span><span className="font-semibold text-kept">{priceVsBaseline(interp.expected.costPer1K, interp.expected.baselineCostPer1K)}</span></span>
-                    </div>
+                        naked percent-off (the endorsed-landing formula).
+                        The counterfactual LADDER (operator, same day): the
+                        org's NAMED incumbent when we've measured it — the
+                        personal comparison — else the best-scorer ceiling,
+                        labeled as the ceiling it is. Never a simulation of
+                        someone else's router: unmeasurable claims are the
+                        actual swindle. */}
+                    {interp.expected.incumbent ? (
+                      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4" data-testid="expected-vs-incumbent">
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%<span className="text-faint"> vs {(interp.expected.incumbent.quality * 100).toFixed(1)}</span></span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">{interp.expected.incumbent.model}, everywhere</span><span className="text-ink">${interp.expected.incumbent.costPer1K.toFixed(2)}/1K</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">your price</span><span className="font-semibold text-kept">{priceVsBaseline(interp.expected.costPer1K, interp.expected.incumbent.costPer1K)}</span></span>
+                      </div>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%{interp.expected.baselineQuality !== undefined ? <span className="text-faint"> vs {(interp.expected.baselineQuality * 100).toFixed(1)}</span> : null}</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best scorer, everywhere</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">your price</span><span className="font-semibold text-kept">{priceVsBaseline(interp.expected.costPer1K, interp.expected.baselineCostPer1K)}</span></span>
+                      </div>
+                    )}
                     <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
-                      the comparison is the premium counterfactual — the top-scoring model on every
-                      request. your Savings page verifies against what you actually pay, per receipt
-                      — never below what you get now
+                      {interp.expected.incumbent
+                        ? <>measured against the model you named — {interp.expected.incumbent.model} on every request, from live suite evidence. your Savings page verifies against what you actually pay, per receipt — never below what you get now</>
+                        : <>the comparison is the premium counterfactual — the top-scoring model on every request (you&rsquo;re starting fresh, so there&rsquo;s no incumbent bill to compare). your Savings page verifies what you actually keep, per receipt</>}
                     </p>
                   </>
                 )}

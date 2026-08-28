@@ -289,3 +289,53 @@ describe('O2 — the what-if: candidate policy in, the router it would compile o
   });
 });
 
+
+describe('the counterfactual ladder (2026-08-28: measured incumbent over the ceiling)', () => {
+  it('a NAMED incumbent with live eval evidence becomes the personal counterfactual', async () => {
+    const { upsertOrgIncumbents, insertEvalResult } = await import('@potion/db');
+    await upsertOrgIncumbents(h.db, {
+      orgId: ORG, models: ['mock-incumbent'], other: null, samplingConsent: true,
+    });
+    // Live evidence for the incumbent on the mix's cluster — DOMINATED (not
+    // on the frontier), which is exactly the case that matters.
+    const incHash = strategyHash({ type: 'single', model: 'mock-incumbent' });
+    for (let i = 0; i < 3; i++) {
+      await insertEvalResult(h.db, {
+        cacheKey: `ck-inc-${i}`, runId: 'run-inc', itemId: `item-${i}`, clusterId: 'summarization',
+        strategyHash: incHash, strategyConfig: { type: 'single', model: 'mock-incumbent' },
+        quality: 0.8, scorer: 'judge', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150, costUsd: 0.004, latencyMs: 700 },
+        latencyMs: { total: 700 }, modelVersions: {}, pricesVersion: 'pv-r1', providerMode: 'live',
+        createdAt: new Date().toISOString(),
+      } as never);
+    }
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/onboarding/interpret',
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: { description: 'summarize research papers into a weekly digest' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { expected: { incumbent: { model: string; quality: number; costPer1K: number } | null } | null };
+    expect(body.expected).not.toBeNull();
+    expect(body.expected!.incumbent).not.toBeNull();
+    expect(body.expected!.incumbent!.model).toBe('mock-incumbent');
+    expect(body.expected!.incumbent!.quality).toBeCloseTo(0.8, 5);
+    expect(body.expected!.incumbent!.costPer1K).toBeCloseTo(4, 5); // $0.004 × 1000
+  });
+
+  it('no live evidence for the named model → incumbent leg is null, never invented', async () => {
+    const { upsertOrgIncumbents } = await import('@potion/db');
+    await upsertOrgIncumbents(h.db, {
+      orgId: ORG, models: ['mock-never-measured'], other: null, samplingConsent: true,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/onboarding/interpret',
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: { description: 'summarize research papers into a weekly digest' },
+    });
+    const body = res.json() as { expected: { incumbent: unknown } | null };
+    expect(body.expected).not.toBeNull();
+    expect(body.expected!.incumbent).toBeNull();
+  });
+});
