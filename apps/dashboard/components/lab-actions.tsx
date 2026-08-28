@@ -337,7 +337,10 @@ export function InterviewForm() {
     setAccounts('web');
     setWorth('3');
     setWhenUnsure('ask-first');
-    setQualityBar('nothing important missed, no duplicates across days, every claim linked to its source');
+    // 'no duplicates across days' comes BACK when P3's beat memory makes
+    // it enforceable — an example must never promise what the runtime
+    // cannot yet keep (the theater ban applies to sample text too).
+    setQualityBar('nothing important missed, every claim linked to its source, no filler');
     setProduces('one brief: two act-now items up top, then a scannable list grouped by company');
     setNever('never email or reply to anyone\nnever act on anything — drafts only');
     setExample(

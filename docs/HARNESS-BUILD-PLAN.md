@@ -188,3 +188,17 @@ demo is the product's existence proof; everything after it ships alone and
 compounds. P2 before P3/P4 because measurement precedes improvement,
 always. P5 before P6 so the genius door opens onto a multi-shape runtime
 rather than a single-shape one.
+
+## The showcase law (added 2026-08-28, operator review)
+
+The recipe card's example is part of the product's claim surface, so it
+obeys the theater ban like everything else: it may only promise what the
+runtime can enforce TODAY. Corollary: every phase's definition-of-done
+includes RE-CHOOSING the showcase to exercise the new capability — after
+P3 it promises "only what's new since yesterday"; after gmail it reads the
+operator's actual inbox; after act-verbs it drafts and files under
+supervision. The example sits exactly at the product's frontier, never
+behind it and never ahead of it. Until then, the honest answer to "a chat
+app could do this" is: as output, yes — as an unattended, budgeted,
+contract-checked, receipted operation, no — and the gap becomes unfakeable
+phase by phase rather than argued.
