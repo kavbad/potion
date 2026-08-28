@@ -297,6 +297,12 @@ export function FirstRunGate() {
                     best score money can buy sets the bar, and your policy picks the point under it
                   </p>
                 ) : null}
+                {interp.rule ? (
+                  <p className="mt-2 font-mono text-[12px] leading-relaxed text-soft" data-testid="reveal-rule">
+                    why these choices: your starting rule — {interp.rule.toLowerCase().replace(/\.$/, '')}. change it
+                    anytime on your Router page; measurement personalizes it from week one.
+                  </p>
+                ) : null}
                 {interp.expected && (
                   <>
                     {/* The honest triangle (2026-08-28): both qualities AND
@@ -324,12 +330,6 @@ export function FirstRunGate() {
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">saves vs the best model, per task</span><span className="font-semibold text-kept">{savingsWords(interp.expected.costPer1K, interp.expected.baselineCostPer1K)}</span></span>
                       </div>
                     )}
-                    {interp.rule ? (
-                      <p className="mt-2 font-mono text-[12px] leading-relaxed text-soft" data-testid="reveal-rule">
-                        why this quality: your starting rule — {interp.rule.toLowerCase()}. change it
-                        anytime on your Router page; measurement personalizes it from week one.
-                      </p>
-                    ) : null}
                     <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
                       {interp.expected.incumbent
                         ? <>measured against the model you named — {interp.expected.incumbent.model} on every request, from live suite evidence. your Savings page verifies against what you actually pay, per receipt — never below what you get now</>

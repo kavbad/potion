@@ -29,7 +29,7 @@ import {
   getOrgById,
   getRouterInterpretation,
   listClusters,
-  listPolicies,
+  listServingPolicies,
   listRequestLogs,
   listRouterVersions,
   type PotionDb,
@@ -103,7 +103,9 @@ export async function compileAndMintRouter(
 
   // The org's bound policy — connection.ts's exact resolution.
   let policy: Policy | null = null;
-  const firstPolicy = (await listPolicies(db, orgId))[0];
+  // Serving policies only (2026-08-28): the operator's own router page read
+  // the Lab's internal lab-io row — floor 0.00 — as the org's rule.
+  const firstPolicy = (await listServingPolicies(db, orgId))[0];
   if (firstPolicy) {
     const parsed = PolicySchema.safeParse(firstPolicy.config);
     if (parsed.success) policy = parsed.data;

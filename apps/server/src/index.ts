@@ -18,6 +18,21 @@ const app = await buildServer({
 // exit 0 (force 1 past the cap) — see src/shutdown.ts.
 installShutdownSignalHandlers(app, app.potion, { log: (msg) => console.log(`[potion] ${msg}`) });
 // ---- end M3 #27 HA ----
+// 2026-08-28 one-shot repair: customer keys that got bound to the Lab's
+// internal policy rows (lab-io at floor ZERO, dial pins) — the damage the
+// serving-policy discipline now prevents — are rebound to the org's real
+// policy, minting the default when none exists. Logged per key; a clean
+// fleet logs nothing.
+{
+  const { repairInternalPolicyBindings } = await import('@potion/db');
+  const { DEFAULT_ORG_POLICY } = await import('./routing/default-policy.js');
+  const repaired = await repairInternalPolicyBindings(app.potion.db.db, DEFAULT_ORG_POLICY);
+  for (const r of repaired) {
+    console.log(`[potion] policy repair: org ${r.orgId} key ${r.keyId} rebound ${r.from} → ${r.to}`);
+  }
+  if (repaired.length > 0) console.log(`[potion] policy repair: ${repaired.length} key(s) rebound off internal policies`);
+}
+
 // P1 (the clock): armed standing missions start their own checks. Gated by
 // POTION_LAB_SCHEDULER ('0' disables); the interval is unref'd so shutdown
 // never waits on it.

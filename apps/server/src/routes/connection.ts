@@ -25,7 +25,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Policy } from '@potion/core';
 import { PolicySchema } from '@potion/core';
-import { getOrgById, listApiKeys, listPolicies, listRequestLogs } from '@potion/db';
+import { getOrgById, listApiKeys, listRequestLogs, listServingPolicies } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import type { PotionContext } from '../context.js';
@@ -128,7 +128,7 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
     // what a self-serve signup bound, and it is what /api/endpoint-snippet
     // falls back to, so both surfaces name the same policy.
     const connOrg = await getOrgById(db, orgId);
-    const policies = await listPolicies(db, orgId);
+    const policies = await listServingPolicies(db, orgId);
     const firstPolicy = policies[0];
     let policy: Policy | null = null;
     if (firstPolicy) {

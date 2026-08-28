@@ -39,6 +39,9 @@ import {
   upsertRouterInterpretation,
   getRouterInterpretation,
   getOrgIncumbents,
+  listServingPolicies,
+  listServingApiKeys,
+  getFirstServingApiKeyWithPolicy,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -504,7 +507,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     // settings rebind must not silently drop them (PUT /api/floor precedent).
     let effective = policy;
     if (rebindKeys) {
-      const first = await getFirstApiKeyWithPolicy(db, org.orgId);
+      const first = await getFirstServingApiKeyWithPolicy(db, org.orgId);
       const current = first?.policyId ? ((await getPolicyById(db, org.orgId, first.policyId))?.config ?? null) : null;
       effective = { ...policy, ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
     }
@@ -513,7 +516,9 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
 
     let keysRebound = 0;
     if (rebindKeys) {
-      const live = (await listApiKeys(db, org.orgId)).filter((k) => !k.revokedAt);
+      // CUSTOMER keys only (2026-08-28): a settings rebind must never clobber
+      // the Lab's in-flight run pins or its ephemeral io keys.
+      const live = (await listServingApiKeys(db, org.orgId)).filter((k) => !k.revokedAt);
       for (const k of live) await updateApiKeyPolicy(db, org.orgId, k.id, id);
       keysRebound = live.length;
     }
@@ -709,7 +714,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
 
     // ---- the reveal: entirely from existing evidence, zero extra spend ----
     let policy: Policy | null = null;
-    const bound = (await listPolicies(db, orgId))[0];
+    const bound = (await listServingPolicies(db, orgId))[0];
     if (bound) {
       const parsed = PolicySchema.safeParse(bound.config);
       if (parsed.success) policy = parsed.data;

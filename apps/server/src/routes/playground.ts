@@ -39,7 +39,7 @@ import {
   type Policy,
   flattenWireMessage,
 } from '@potion/core';
-import { getFirstApiKeyWithPolicy, getPolicyById } from '@potion/db';
+import { getFirstServingApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
 import type { RankedAssignment } from '@potion/cluster';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
@@ -135,7 +135,7 @@ async function resolvePlaygroundPoint(
   // (same resolution as the dashboard's operating point); without a policy
   // the documented highest-quality fallback serves.
   let policy: Policy | null = null;
-  const key = await getFirstApiKeyWithPolicy(ctx.db.db, orgId);
+  const key = await getFirstServingApiKeyWithPolicy(ctx.db.db, orgId);
   if (key?.policyId) {
     const row = await getPolicyById(ctx.db.db, orgId, key.policyId);
     policy = row?.config ?? null;
@@ -220,7 +220,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
     // The org's floor, for the Try page's rules (0.95 when the policy has none).
     let boundPolicy: Policy | null = null;
     {
-      const k = await getFirstApiKeyWithPolicy(ctx.db.db, org.orgId);
+      const k = await getFirstServingApiKeyWithPolicy(ctx.db.db, org.orgId);
       const row = k?.policyId ? await getPolicyById(ctx.db.db, org.orgId, k.policyId) : null;
       boundPolicy = row?.config ?? null;
     }

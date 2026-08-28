@@ -66,7 +66,7 @@ import {
   rotateProviderKey,
   setProviderKeyStatus,
   touchProviderKeyValidation,
-  type ProviderKeyRow, listPolicies, insertPolicy, insertCustodyAudit } from '@potion/db';
+  type ProviderKeyRow, listServingPolicies, insertPolicy, insertCustodyAudit } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -414,7 +414,9 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
     // at least 0.95 — which the dashboard lets them change later.
     let boundPolicyId = policyId;
     if (boundPolicyId === undefined) {
-      const existing = await listPolicies(db, org.orgId);
+      // Serving policies only (2026-08-28): the Lab's internal rows (lab-io
+      // at floor ZERO, dial pins) must never become a customer key's rule.
+      const existing = await listServingPolicies(db, org.orgId);
       if (existing.length > 0) {
         boundPolicyId = existing[0]!.id;
       } else {
