@@ -169,3 +169,25 @@ describe('the destination is never anything but a same-origin path', () => {
     );
   });
 });
+
+describe('the one-retry law (2026-08-28: a racy 401 cleared a fresh session)', () => {
+  it('a 401 that succeeds on retry returns the body — no redirect, session kept', async () => {
+    let calls = 0;
+    globalThis.fetch = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? new Response(JSON.stringify({ error: { message: 'nope' } }), { status: 401, headers: { 'content-type': 'application/json' } })
+        : new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    const out = await fetchOrRecover<{ ok: boolean }>('/api/flaky');
+    expect(out.ok).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it('a 401 that REPEATS still recovers through the clear route', async () => {
+    respondWith(401);
+    const to = await redirectOf(() => fetchOrRecover('/api/dead'));
+    expect(to).toContain('/api/auth/clear');
+    expect((globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(2);
+  });
+});

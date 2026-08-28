@@ -30,6 +30,18 @@ import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+/** The end of a session is SAID, never a silent teleport (2026-08-28: the
+ * operator's session was cleared mid-flow and the landing rendered with no
+ * explanation — "it signed me out" should never be a mystery). */
+function SessionEndedNote() {
+  return (
+    <div className="border-b border-[#d9d5cb] bg-[#fbfaf7] px-4 py-2.5 text-center text-[13.5px] text-soft" data-testid="session-ended">
+      Your session ended, so you were signed out — nothing was lost.{' '}
+      <a href="/login" className="font-medium text-accent underline">Sign in again →</a>
+    </div>
+  );
+}
+
 export default async function ConnectPage({
   searchParams,
 }: {
@@ -44,6 +56,7 @@ export default async function ConnectPage({
   if ((await sessionCookieHeader()) === undefined) {
     return (
       <SiteShell>
+        {alreadyCleared ? <SessionEndedNote /> : null}
         <Landing />
       </SiteShell>
     );
@@ -53,7 +66,18 @@ export default async function ConnectPage({
   let activity: RoutingActivityResponse | null = null;
   let unreachable = false;
   try {
-    conn = await apiFetch<ConnectionResponse>('/api/connection');
+    // ONE retry before believing a 401 (2026-08-28 incident: a fresh,
+    // working session was cleared by a single racy 401 on this read —
+    // mid-onboarding, the operator was silently dumped on the landing page.
+    // A transient rejection must not cost the visitor their session; only a
+    // 401 that REPEATS is treated as a dead cookie).
+    try {
+      conn = await apiFetch<ConnectionResponse>('/api/connection');
+    } catch (first) {
+      if (!isSessionExpired(first)) throw first;
+      await new Promise((r) => setTimeout(r, 300));
+      conn = await apiFetch<ConnectionResponse>('/api/connection');
+    }
     activity = await apiFetch<RoutingActivityResponse>('/api/routing-activity?limit=8').catch(() => null);
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
@@ -70,7 +94,7 @@ export default async function ConnectPage({
     // renders here instead of redirecting on to /login the way
     // recoverSession does for every other page.
     else if (isSessionExpired(e)) {
-      if (alreadyCleared) return <SiteShell><Landing /></SiteShell>;
+      if (alreadyCleared) return <SiteShell><SessionEndedNote /><Landing /></SiteShell>;
       await recoverSession();
     }
     else throw e;

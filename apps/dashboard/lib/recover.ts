@@ -76,7 +76,18 @@ export async function fetchOrRecover<T>(path: string, init?: RequestInit): Promi
   try {
     return await apiFetch<T>(path, init);
   } catch (e) {
-    if (isSessionExpired(e)) await recoverSession();
+    // ONE retry before believing a 401 (2026-08-28: a single racy rejection
+    // on '/' cleared a fresh, working session mid-onboarding). A transient
+    // 401 must not cost the visitor their session — only one that repeats.
+    if (isSessionExpired(e)) {
+      await new Promise((r) => setTimeout(r, 300));
+      try {
+        return await apiFetch<T>(path, init);
+      } catch (second) {
+        if (isSessionExpired(second)) await recoverSession();
+        throw second;
+      }
+    }
     throw e;
   }
 }
