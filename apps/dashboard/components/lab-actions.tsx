@@ -257,6 +257,7 @@ export function InterviewForm() {
   const [never, setNever] = useState('');
   const [whenUnsure, setWhenUnsure] = useState<'ask-first' | 'press-on'>('ask-first');
   const [cadence, setCadence] = useState<'' | 'hourly' | 'daily' | 'weekly'>('');
+  const [exampleOpen, setExampleOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [born, setBorn] = useState<GenerateResponse | null>(null);
@@ -309,6 +310,28 @@ export function InterviewForm() {
     }
   }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, router]);
 
+  // "Show me a great one" (operator, 2026-08-28): one click fills every
+  // field with a coherent example worker, so the card teaches by a worked
+  // example as well as by its questions. Deterministic, client-side,
+  // everything editable afterwards — a starting point, never a submission.
+  const fillExample = useCallback(() => {
+    setGoal(
+      'Every weekday morning, read the newsletters and alerts in my inbox, pull out anything that moves our market — competitor launches, pricing changes, funding rounds — and draft me a five-minute brief with the two things I should act on first',
+    );
+    setKind('standing');
+    setCadence('daily');
+    setAccounts('gmail');
+    setWorth('3');
+    setWhenUnsure('ask-first');
+    setQualityBar('nothing important missed, no duplicates across days, every claim linked to its source');
+    setProduces('one brief: two act-now items up top, then a scannable list grouped by company');
+    setNever('never email or reply to anyone\nnever act on anything — drafts only');
+    setExample(
+      'ACT NOW · Northwind cut their Pro tier 20% (pricing page, changed overnight) — undercuts our renewal pitch for the Meridian account.\nACT NOW · Contoso launched bulk import (their changelog) — closes the gap our sales deck leans on.\n\nBY COMPANY\nNorthwind — Pro tier $49→$39 · pricing page\nContoso — bulk CSV import shipped · changelog\nFabrikam — quiet: no changes since the Series B note (Aug 12)',
+    );
+    setExampleOpen(true);
+  }, []);
+
   if (born !== null) return <BirthSequence body={born} />;
 
   const cap = fuelPreview(Number(worth));
@@ -325,6 +348,17 @@ export function InterviewForm() {
 
   return (
     <div className="mt-4" data-testid="interview-form">
+      <div className="mb-4 flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          onClick={fillExample}
+          className="border border-accent/50 px-3 py-1.5 font-mono text-[12.5px] text-accent hover:bg-accent hover:text-white"
+          data-testid="fill-example"
+        >
+          show me a great one — fill every field with an example
+        </button>
+        <span className="font-mono text-[12px] text-faint">a starting point, not a submission — edit anything, then hire</span>
+      </div>
       <div>
         <div className={LABEL_ROW}>
           <label htmlFor="lab-q-goal">the job, in your words</label>
@@ -561,7 +595,7 @@ export function InterviewForm() {
           data-testid="q-never"
         />
       </div>
-      <details className="mt-4">
+      <details className="mt-4" open={exampleOpen} onToggle={(e) => setExampleOpen((e.target as HTMLDetailsElement).open)}>
         <summary className="cursor-pointer font-mono text-[12px] uppercase tracking-[0.13em] text-faint hover:text-accent">
           paste an example of a great result · optional
         </summary>
