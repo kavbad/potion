@@ -10,5 +10,6 @@ export { parseHarnessSpec, parseHarnessSpecText } from './parse.js';
 export { harnessSpecHash } from './hash.js';
 // Step 3 uses the same scanner on every checkpoint payload before write —
 // the custody rule applied to run records, not just specs.
-export { scanRawValue } from './security.js';
+export { redactSecrets, scanRawValue } from './security.js';
+export { BRIEF_CONTRACT_PROMPT, BRIEF_LIMITS, BriefSchema, parseBrief, type Brief, type ParseBriefResult } from './contract.js';
 export * as SPEC_LIMITS from './limits.js';

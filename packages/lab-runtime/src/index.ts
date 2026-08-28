@@ -6,7 +6,9 @@
 // deps.test.ts makes "no provider-call paths" structural: @potion/providers
 // must not appear anywhere in this package's dependency tree.
 export { ServingClient, type ServingResult, type ServingRequest } from './serving-client.js';
-export { runLeg, systemClock, WRAP_UP_PROMPT, wrapUpMessage, type Clock, type LabTool, type LegOutcome, type RunLegOptions } from './loop.js';
+export { contractRepairMessage, contractRepairsIn, CONTRACT_REPAIR_PREFIX, runLeg, systemClock, WRAP_UP_PROMPT, wrapUpMessage, type Clock, type LabTool, type LegOutcome, type RunLegOptions } from './loop.js';
+export { extractDeliverable, type DeliverableResult } from './deliverable.js';
+export { buildWebLabTools, checkUrl, htmlToText, isPrivateAddress, parseFeed, WEB_LIMITS, type WebToolDeps } from './web-tools.js';
 export { buildStepPayload, SecretInCheckpointError, type StepPayload } from './checkpoint.js';
 export { spansForSteps, capContent, SPAN_CONTENT_MAX_CHARS, SPAN_TRUNCATION_MARKER } from './spans.js';
 export {

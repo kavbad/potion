@@ -60,6 +60,10 @@ import {
   revokeApiKey,
   setLabMemoryKey,
   upsertLabHarness,
+  armLabMission,
+  getLabMission,
+  pauseLabMission,
+  type LabMissionRow,
   answerLabRun,
   killLabRun,
 } from '@potion/db';
@@ -80,7 +84,7 @@ import {
   listActionGrants,
   listLabStepsForHarness,
 } from '@potion/db';
-import { extractPoreEvidence, runGraduationPass } from '@potion/lab-runtime';
+import { extractDeliverable, extractPoreEvidence, runGraduationPass } from '@potion/lab-runtime';
 import {
   applyDialPosition,
   dialViews,
@@ -128,6 +132,7 @@ import type { PotionQueue } from '@potion/queue';
 import { openAiError, parseCookies, roleAtLeast } from '../auth.js';
 import { publicBaseUrl } from '../public-url.js';
 import { actorOf } from './keys.js';
+import { missionWindow } from '../lab-scheduler.js';
 import type { PotionContext } from '../context.js';
 
 export interface LabRoutesOptions {
@@ -135,6 +140,26 @@ export interface LabRoutesOptions {
 }
 
 const notFound = openAiError('not found', 'invalid_request_error', 'lab_not_found');
+
+/** Mission DTO — armed state + the next due instant (derived, never stored). */
+function missionDto(m: LabMissionRow | null): {
+  state: 'armed' | 'paused';
+  cadenceCron: string;
+  lastWindowKey: string | null;
+  lastNote: string | null;
+  nextDueAt: string | null;
+} | null {
+  if (m === null) return null;
+  const w = missionWindow(m.cadenceCron, new Date());
+  let nextDueAt: string | null = null;
+  if (w !== null) {
+    // The next boundary after now: current window's due if still ahead,
+    // else the following period.
+    const period = m.cadenceCron === '0 * * * *' ? 3_600_000 : m.cadenceCron === '0 9 * * *' ? 86_400_000 : 7 * 86_400_000;
+    nextDueAt = (w.dueAt > new Date() ? w.dueAt : new Date(w.dueAt.getTime() + period)).toISOString();
+  }
+  return { state: m.state, cadenceCron: m.cadenceCron, lastWindowKey: m.lastWindowKey, lastNote: m.lastNote, nextDueAt };
+}
 
 function forbidden(role: string, action: string) {
   return openAiError(
@@ -421,6 +446,8 @@ export function registerLabRoutes(
       // The canonical spec FILE, byte truth — the machinery view edits
       // this, not a re-serialization (round-trip honesty).
       specText: row.specText,
+      // P1 (the clock): armed state for standing missions; null when never armed.
+      mission: missionDto(await getLabMission(db, org.orgId, row.harnessHash)),
       sidecar: row.sidecar,
       superpowers: await superpowerPosture(org.orgId, spec),
       dial: {
@@ -505,6 +532,48 @@ export function registerLabRoutes(
       view,
       policyRef: policyRow.name,
     });
+  });
+
+  // ---- POST /api/lab/harnesses/:hash/arm | /pause (admin) — the clock ----
+  // Arming is the explicit act that lets a STANDING mission run itself on
+  // its cadence. It binds to ONE content-addressed version: an edit mints a
+  // new hash and the operator re-arms deliberately. Requirements are typed:
+  // standing kind, a cron check-in in the spec (the recipe card's cadence),
+  // and a cadence the scheduler supports.
+  app.post('/api/lab/harnesses/:hash/arm', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'arm missions'));
+    }
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    const parsed = parseHarnessSpecText(row.specText);
+    if (!parsed.ok) return reply.code(409).send({ ok: false, gap: { code: 'spec-invalid' } });
+    if (parsed.spec.mission.kind !== 'standing') {
+      return reply.code(400).send({ error: 'invalid_body', message: 'only a standing mission can be armed — a task runs once and finishes' });
+    }
+    const cron = parsed.spec.checkIns.find((c) => c.trigger === 'cron');
+    if (cron === undefined || !('schedule' in cron)) {
+      return reply.code(400).send({ error: 'invalid_body', message: 'give this mission a schedule first (the "how often it checks" field, or a cron check-in in the spec)' });
+    }
+    if (missionWindow(cron.schedule, new Date()) === null) {
+      return reply.code(400).send({ error: 'invalid_body', message: `the scheduler supports hourly ('0 * * * *'), daily 09:00 UTC ('0 9 * * *') and weekly Monday 09:00 UTC ('0 9 * * 1') — got '${cron.schedule}'` });
+    }
+    await armLabMission(db, { orgId: org.orgId, harnessHash: row.harnessHash, cadenceCron: cron.schedule, armedBy: actorOf(req) });
+    const mission = await getLabMission(db, org.orgId, row.harnessHash);
+    return reply.send({ ok: true, mission: missionDto(mission) });
+  });
+
+  app.post('/api/lab/harnesses/:hash/pause', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'pause missions'));
+    }
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    await pauseLabMission(db, org.orgId, row.harnessHash);
+    const mission = await getLabMission(db, org.orgId, row.harnessHash);
+    return reply.send({ ok: true, mission: missionDto(mission) });
   });
 
   // ---- PUT /api/lab/harnesses/:hash/spec (admin) — the open hood ----
@@ -783,6 +852,13 @@ export function registerLabRoutes(
         estPendingUsd: estPendingTotal,
         // No blended figure EXISTS in this DTO — deliberate (the DoD pin).
       },
+      // P1 (the mouth): the filed deliverable, derived from the record by
+      // the SAME parser the completion law used — no second storage, no
+      // second truth. null when the contract wasn't met (honest absence).
+      deliverable: extractDeliverable(
+        run.spec as HarnessSpec,
+        steps.map((s) => ({ seq: s.seq, kind: s.kind, payload: s.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } })),
+      ),
     });
   });
 
@@ -1147,6 +1223,23 @@ export function registerLabRoutes(
     // that is not `ready` (unverified endpoint / unauthored OAuth) yields
     // null and the route 404s — unconnectable is structural, not a note.
     const pkgFound = CONNECTOR_ID_RE.test(id) ? getPackage(id) : null;
+    // P1: a BUILTIN package has no OAuth to start — no vendor, no
+    // credentials. "Connect" is a pure permission grant, minted here
+    // directly by an explicit admin act; the envelope column carries a
+    // typed placeholder (nothing ever unseals it — builtins never resolve
+    // against a connector endpoint) and revoke cuts it like any grant.
+    if (pkgFound !== null && pkgFound.connect.status === 'builtin') {
+      await upsertLabGrant(db, {
+        id: `grant-${pkgFound.id}-${randomUUID().slice(0, 8)}`,
+        orgId: org.orgId,
+        connectorId: pkgFound.id,
+        superpowerId: pkgFound.id,
+        scopesGranted: [...pkgFound.defaultScopes],
+        tokenEnvelope: 'builtin:no-credential',
+        grantedBy: actorOf(req),
+      });
+      return reply.send({ granted: true });
+    }
     const raw = pkgFound === null ? null : toConnectorDef(pkgFound);
     const connector = raw === null ? null : withEndpointOverrides(raw);
     if (connector === null) return reply.code(404).send(notFound);

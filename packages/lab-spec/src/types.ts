@@ -85,6 +85,10 @@ export interface HarnessSpec {
   rules: string[];
   fuel: HarnessFuel;
   checkIns: HarnessCheckIn[];
+  /** P1 (the mouth): the output contract. When present, the runtime's
+   * completion law requires the final answer of a standing check to BE the
+   * deliverable — parsed and schema-checked before the run may complete. */
+  contract?: { type: 'brief' } | undefined;
 }
 
 export type SpecIssueCode =

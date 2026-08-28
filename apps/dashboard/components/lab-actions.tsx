@@ -219,6 +219,7 @@ const ACCOUNT_ALIASES: Record<string, string[]> = {
   'google-calendar': ['calendar', 'meeting', 'meetings'],
   'google-sheets': ['spreadsheet', 'spreadsheets', 'sheet', 'sheets'],
   'google-drive': ['drive', 'files', 'documents'],
+  web: ['website', 'websites', 'web', 'feeds', 'rss', 'blog', 'blogs', 'changelog', 'changelogs', 'pricing page', 'pricing pages', 'news'],
 };
 
 /** Deterministic account detection from the job text: direct catalog-name
@@ -248,7 +249,7 @@ const STANDING_HINT = /\b(daily|weekly|hourly|every|each|monitor|monitors|watch|
  * stale authored answer on an edited mission would silently misclassify —
  * the exact failure the never-silent rule exists to prevent). */
 const EXAMPLE_GOAL =
-  'Every weekday morning, read the newsletters and alerts in my inbox, pull out anything that moves our market — competitor launches, pricing changes, funding rounds — and draft me a five-minute brief with the two things I should act on first';
+  'Every weekday morning, read the Hacker News front page (https://news.ycombinator.com) and the TechCrunch feed (https://techcrunch.com/feed/), pull out anything that moves the AI infrastructure market \u2014 launches, pricing changes, funding rounds \u2014 and draft me a five-minute brief with the two things I should act on first';
 const EXAMPLE_CLUSTER = 'summarization';
 
 export function InterviewForm() {
@@ -333,7 +334,7 @@ export function InterviewForm() {
     setGoal(EXAMPLE_GOAL);
     setKind('standing');
     setCadence('daily');
-    setAccounts('gmail');
+    setAccounts('web');
     setWorth('3');
     setWhenUnsure('ask-first');
     setQualityBar('nothing important missed, no duplicates across days, every claim linked to its source');
@@ -947,7 +948,7 @@ interface ConnectorDto {
   /** Step 11 honest tiering: the PROOF tier and the CONNECT posture are
    * different claims, so the catalog shows both. */
   tier: 'fixture-authored' | 'fixture-recorded' | 'live-proven';
-  connectStatus: 'ready' | 'endpoint-unverified' | 'oauth-unauthored';
+  connectStatus: 'ready' | 'endpoint-unverified' | 'oauth-unauthored' | 'builtin';
   connectNote: string | null;
   fixtureAgeDays: number | null;
   scopesOffered: string[];
@@ -1015,6 +1016,18 @@ function ConnectorRow({
         >
           Revoke
         </button>
+      ) : c.connectStatus === 'builtin' ? (
+        // P1: a builtin runs inside Potion — no account, no OAuth. Enabling
+        // it is a pure permission grant, revocable like any other.
+        <button
+          onClick={() => onConnect(c.connectorId)}
+          disabled={busy}
+          title={c.connectNote ?? ''}
+          className="bg-ink px-3 py-1 text-[12px] font-medium text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+          data-testid={`enable-${c.connectorId}`}
+        >
+          Enable — no account needed
+        </button>
       ) : c.connectStatus === 'ready' ? (
         <button
           onClick={() => onConnect(c.connectorId)}
@@ -1059,8 +1072,10 @@ export function ConnectorPanel({ declared = [] }: { declared?: string[] }) {
       setNote(null);
       try {
         const res = await fetch(`/api/lab/connectors/${id}/oauth/start`, { method: 'POST' });
-        const body = (await res.json()) as { authorizationUrl?: string; error?: { message?: string } };
-        if (res.ok && body.authorizationUrl) {
+        const body = (await res.json()) as { authorizationUrl?: string; granted?: boolean; error?: { message?: string } };
+        if (res.ok && body.granted === true) {
+          await load(); // builtin: the grant is minted — no redirect, no vendor
+        } else if (res.ok && body.authorizationUrl) {
           window.location.href = body.authorizationUrl; // the operator approves BY HAND
         } else {
           setNote(body.error?.message ?? `connect failed (${res.status})`);
@@ -1069,7 +1084,7 @@ export function ConnectorPanel({ declared = [] }: { declared?: string[] }) {
         setBusy(false);
       }
     },
-    [],
+    [load],
   );
 
   const revoke = useCallback(

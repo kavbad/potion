@@ -135,5 +135,10 @@ export const HarnessSpecSchema = z
     rules: z.array(z.string().min(1).max(MAX_RULE_CHARS)).max(MAX_RULES),
     fuel: FuelSchema,
     checkIns: z.array(CheckInSchema).max(MAX_CHECKINS),
+    // P1 (the mouth): the output CONTRACT. Optional — a contract-less spec
+    // behaves exactly as before, byte-for-byte. 'brief' is the first and
+    // only contract type; the deliverable schema lives in contract.ts and
+    // is enforced by the runtime's completion law, not here.
+    contract: z.object({ type: z.literal('brief') }).strict().optional(),
   })
   .strict();

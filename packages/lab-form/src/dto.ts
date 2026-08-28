@@ -3,7 +3,7 @@
 // canonical client types for them. The audit's source accessors are typed
 // against THESE, so a route reshape is a compile error here, and the
 // walkthrough validates them against live responses.
-import type { HarnessSpec } from '@potion/lab-spec';
+import type { Brief, HarnessSpec } from '@potion/lab-spec';
 
 export interface DialViewDto {
   feasible: boolean;
@@ -56,6 +56,14 @@ export interface HarnessDto {
      * derivation (grantConnectionStatus) — never a UI guess. */
     status: 'not-connected' | 'connected' | 'expired' | 'revoked';
   }>;
+  /** P1 (the clock): armed state for standing missions; null = never armed. */
+  mission?: {
+    state: 'armed' | 'paused';
+    cadenceCron: string;
+    lastWindowKey: string | null;
+    lastNote: string | null;
+    nextDueAt: string | null;
+  } | null;
   dial: {
     brain: { ok: boolean; frontierId?: string; views?: DialViewDto[]; gap?: unknown };
     tools?: { ok: boolean; frontierId?: string; views?: DialViewDto[]; gap?: unknown };
@@ -102,4 +110,7 @@ export interface RunDto {
   superpowers: Array<{ id: string; status: 'not-connected' | 'connected' | 'expired' | 'revoked' }>;
   steps: RunStepDto[];
   cost: { meteredUsd: number; estPendingUsd: number };
+  /** P1 (the mouth): the filed brief, derived from the record by the same
+   * parser the completion law used. null/absent = no deliverable (honest). */
+  deliverable?: { brief: Brief; atSeq: number } | null;
 }

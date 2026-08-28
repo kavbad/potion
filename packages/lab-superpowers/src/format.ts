@@ -53,7 +53,12 @@ export interface SuperpowerTool {
 export type ConnectPosture =
   | { status: 'ready'; baseUrl: string; oauth: ConnectorOauth; revocationUrl?: string }
   | { status: 'endpoint-unverified'; note: string }
-  | { status: 'oauth-unauthored'; baseUrl: string; note: string };
+  | { status: 'oauth-unauthored'; baseUrl: string; note: string }
+  /** P1: implemented IN-PROCESS by the runtime — no vendor, no endpoint,
+   * no OAuth, no credentials. Connect mints a permission grant directly
+   * (an explicit admin act; the ledger stays uniform), and toConnectorDef
+   * still returns null: a builtin is not an MCP connector. */
+  | { status: 'builtin'; note: string };
 
 export interface SuperpowerPackage {
   id: string;

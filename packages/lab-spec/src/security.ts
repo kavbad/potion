@@ -51,6 +51,20 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'env-assignment', re: /\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS)\s*=\s*\S{8,}/ },
 ];
 
+/** P1 (web hands): redact key-shaped content from UNTRUSTED FETCHED TEXT
+ * before it enters a model context or a durable step. Same vocabulary as
+ * the scan (one source of truth — the Step 12 drift lesson); redaction not
+ * refusal, because a public page QUOTING a key shape is the page's problem,
+ * not a reason to kill the run. Global flags are applied here, never stored
+ * on the shared patterns (lastIndex state hazard). */
+export function redactSecrets(text: string): string {
+  let out = text;
+  for (const { name, re } of SECRET_PATTERNS) {
+    out = out.replace(new RegExp(re.source, 'g'), `[redacted:${name}]`);
+  }
+  return out;
+}
+
 /** Linear per-string scan — the F21 lesson is standing: no
  * repetition-quantified regex over untrusted input on a parse path.
  * (Each SECRET_PATTERN above is anchored to a literal prefix; none is of

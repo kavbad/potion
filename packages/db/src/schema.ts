@@ -1772,6 +1772,28 @@ export const routerInterpretations = pgTable('router_interpretations', {
 });
 export type RouterInterpretationRow = typeof routerInterpretations.$inferSelect;
 
+/** P1 (the clock): armed/paused state of a standing mission, bound to one
+ * content-addressed harness version. The scheduler's dedup is
+ * last_window_key: at most one check per cadence window, ever. */
+export const labMissions = pgTable(
+  'lab_missions',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    harnessHash: text('harness_hash').notNull(),
+    state: text('state').$type<'armed' | 'paused'>().notNull().default('paused'),
+    cadenceCron: text('cadence_cron').notNull(),
+    armedBy: text('armed_by').notNull(),
+    armedAt: timestamp('armed_at', { withTimezone: true }).notNull().defaultNow(),
+    lastWindowKey: text('last_window_key'),
+    lastNote: text('last_note'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.harnessHash] })],
+);
+export type LabMissionRow = typeof labMissions.$inferSelect;
+
 export type LabHarnessRow = typeof labHarnesses.$inferSelect;
 
 /** Lab Step 10: superpower grants (0038) — the first REVERSIBLE secret

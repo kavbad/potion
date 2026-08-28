@@ -34,7 +34,10 @@ describe('T8 audit exhibit — complete, both directions', () => {
     const auditKeys = AUDIT.rows.map((r) => key(r.pkg, r.tool)).sort();
     expect(auditKeys).toEqual(catalogKeys);
     expect(new Set(auditKeys).size).toBe(auditKeys.length); // no duplicate rows
-    expect(catalogKeys.length).toBe(116);
+    // 116 vendor-mapped tools at the T8 audit + 2 in-process web builtins
+    // (P1, 2026-08-28 — their rows cite the runtime implementation, not a
+    // vendor endpoint, because there is none).
+    expect(catalogKeys.length).toBe(118);
   });
 
   it('every row cites a vendor operation — no blank verdicts padding the count', () => {

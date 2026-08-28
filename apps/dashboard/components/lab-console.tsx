@@ -27,6 +27,7 @@ import {
   type MemoryDto,
   type RunDto,
 } from '@potion/lab-form';
+import { BriefView } from './lab-brief';
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
@@ -366,6 +367,13 @@ export function LabConsole({
           </form>
           <p className="mt-2 font-mono text-[12px] text-faint">every answer lands on the permission record as evidence</p>
           {answerError && <p className="mt-1 text-[12.5px] text-refuse" data-testid="answer-error">{answerError}</p>}
+        </div>
+      ) : null}
+
+      {/* ================= the deliverable (P1: the mouth) ================= */}
+      {run?.deliverable != null ? (
+        <div className="mt-4">
+          <BriefView brief={run.deliverable.brief} />
         </div>
       ) : null}
 

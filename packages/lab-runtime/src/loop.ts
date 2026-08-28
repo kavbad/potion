@@ -28,7 +28,7 @@ import {
   type LabClaim,
   type PotionDb,
 } from '@potion/db';
-import type { HarnessSpec } from '@potion/lab-spec';
+import { BRIEF_CONTRACT_PROMPT, parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import { buildStepPayload, SecretInCheckpointError, type StepPayload } from './checkpoint.js';
 import type { ServingClient } from './serving-client.js';
 
@@ -176,7 +176,30 @@ export function systemPrompt(
       : '';
   const guidance =
     toolGuidance.length > 0 ? `\nYour connected superpowers:\n${toolGuidance.map((g) => `- ${g}`).join('\n')}` : '';
-  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}\nWhen the mission is complete, answer normally with no tool calls.`;
+  // P1 contract (the mouth): contract-bearing specs get the deliverable
+  // instructions; contract-less prompts stay byte-identical (A2 discipline).
+  const contract = spec.contract !== undefined ? `\n${BRIEF_CONTRACT_PROMPT}` : '';
+  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${contract}\nWhen the mission is complete, answer normally with no tool calls.`;
+}
+
+/** P1 contract law — the repair prompt. A pure function of the parse issues
+ * so live and replay derive IDENTICAL messages from the same recorded
+ * response text. The prefix is the counter: the loop counts repair messages
+ * in the conversation (rebuilt from durable steps on resume), never in
+ * transient state. */
+export const CONTRACT_REPAIR_PREFIX = 'Contract violation — your reply was not a valid deliverable.';
+export function contractRepairMessage(issues: string[]): ChatMessage {
+  return {
+    role: 'user',
+    content: `${CONTRACT_REPAIR_PREFIX} Issues: ${issues.join('; ')}. Reply with ONLY the corrected JSON deliverable — no prose.`,
+  };
+}
+/** Repairs already spent in this conversation — derived from the messages
+ * themselves so leg resume and replay count identically. */
+export function contractRepairsIn(messages: ChatMessage[]): number {
+  return messages.filter(
+    (m) => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith(CONTRACT_REPAIR_PREFIX),
+  ).length;
 }
 
 /** Rebuild the conversation from checkpointed steps — replay-grade: the
@@ -518,6 +541,27 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           if (estSpentUsd >= opts.spec.fuel.maxUsdPerRun) {
             await fenced.transition('killed-budget', `fuel exhausted: est $${estSpentUsd.toFixed(4)} >= maxUsdPerRun $${opts.spec.fuel.maxUsdPerRun}`);
             return { status: 'killed-budget', reason: 'fuel', steps: stepsThisLeg };
+          }
+          // P1 contract law (the mouth, 2026-08-28): a contract-bearing
+          // check completes ONLY on a parsed, schema-valid deliverable.
+          // One repair round (a paid step, counted from the conversation so
+          // resume and replay agree), then a typed failure — a check that
+          // cannot state its deliverable did not complete, and the run
+          // record says so instead of a prose answer masquerading as done.
+          // MIRRORED in replay.ts (same commit).
+          if (opts.spec.contract !== undefined) {
+            const parsedBrief = parseBrief(result.text);
+            if (!parsedBrief.ok) {
+              if (contractRepairsIn(messages) < 1) {
+                messages.push(contractRepairMessage(parsedBrief.issues));
+                continue;
+              }
+              const reason = `contract-violation: the check ended without a valid deliverable (${parsedBrief.issues.join('; ')})`;
+              await fenced.transition('failed', reason);
+              return { status: 'failed', reason: 'contract-violation', steps: stepsThisLeg };
+            }
+            await fenced.transition('completed', 'check complete — deliverable filed; the mission rests until its next check');
+            return { status: 'completed', steps: stepsThisLeg };
           }
           await fenced.transition('completed', 'check complete — a standing mission rests until its next check');
           return { status: 'completed', steps: stepsThisLeg };

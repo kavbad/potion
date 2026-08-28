@@ -134,6 +134,8 @@ import {
   orgs,
   deleteSpansOlderThan,
   getOrgTraceRetentionDays,
+  grantConnectionStatus,
+  listLabGrants,
   listOrgIdsWithSpans,
   listTracesForClustering,
   redactSpanAttrs,
@@ -150,10 +152,10 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildMcpLabTools, resumeRun, ServingClient, type LegOutcome, type McpLegSetup } from '@potion/lab-runtime';
+import { buildMcpLabTools, buildWebLabTools, resumeRun, ServingClient, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
-import { connectableConnectors } from '@potion/lab-superpowers';
+import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -4376,6 +4378,9 @@ export interface LabRunHandlerDeps {
   masterKeyProvider?: MasterKeyProvider;
   connectors?: readonly ConnectorDef[];
   mcpFetch?: typeof fetch;
+  /** P1: injected fetch/lookup for the builtin web tools (tests + local
+   * walkthroughs); production uses the defaults. */
+  webToolDeps?: WebToolDeps;
 }
 
 export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run'> {
@@ -4473,23 +4478,67 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           : null;
       const masterKeyProvider =
         deps.masterKeyProvider ?? createMasterKeyProvider({ env: process.env, persistDir });
+      // P1 (the hands): BUILTIN superpowers — implemented in-process by the
+      // runtime, credential-less, permission-granted like everything else —
+      // split from the MCP set. The MCP leg sees only external declarations
+      // (a builtin id must never resolve against a connector endpoint), and
+      // builtin tools mount once per run through the SAME grant ledger: no
+      // active grant, no tools, and a typed leg note says so.
+      const BUILTIN_IDS = new Set(['web']);
+      const builtinDeclared = spec.superpowers.filter((s) => BUILTIN_IDS.has(s.id));
+      const externalSpec: HarnessSpec = {
+        ...spec,
+        superpowers: spec.superpowers.filter((s) => !BUILTIN_IDS.has(s.id)),
+      };
+      const builtinLeg = async (): Promise<Pick<McpLegSetup, 'tools' | 'guidance' | 'legNotes'>> => {
+        if (builtinDeclared.length === 0) return { tools: [], guidance: [], legNotes: [] };
+        const grants = await listLabGrants(ctx.db, payload.orgId);
+        const tools: McpLegSetup['tools'] = [];
+        const guidance: string[] = [];
+        const legNotes: McpLegSetup['legNotes'] = [];
+        for (const s of builtinDeclared) {
+          const status = grantConnectionStatus(grants.find((g) => g.connectorId === s.id) ?? null);
+          if (status === 'connected') {
+            if (s.id === 'web') {
+              tools.push(...buildWebLabTools(deps.webToolDeps ?? {}));
+              const pkgWeb = getPackage('web');
+              if (pkgWeb !== null) guidance.push(pkgWeb.usage.preamble);
+            }
+            continue;
+          }
+          legNotes.push({
+            toolName: s.id,
+            note: { superpowerUnavailable: { connectorId: s.id, status, detail: 'enable it on the worker page — one click, no account needed' } },
+          });
+        }
+        return { tools, guidance, legNotes };
+      };
       const masterKey =
-        spec.superpowers.length > 0 ? await masterKeyProvider.getMasterKey() : null;
-      const mcpLeg = async (): Promise<McpLegSetup> =>
-        masterKey === null
-          ? { tools: [], guidance: [], legNotes: [], close: async () => {} }
-          : buildMcpLabTools({
-              db: ctx.db,
-              orgId: payload.orgId,
-              runId: payload.runId,
-              masterKey,
-              spec,
-              // Step 11: the CATALOG is the connector source. Only packages
-              // that are `ready` (endpoint + OAuth authored) compile to a
-              // ConnectorDef, so an unverified package cannot be reached.
-              connectors: deps.connectors ?? connectableConnectors(),
-              ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
-            });
+        externalSpec.superpowers.length > 0 ? await masterKeyProvider.getMasterKey() : null;
+      const mcpLeg = async (): Promise<McpLegSetup> => {
+        const builtins = await builtinLeg();
+        const mcp: McpLegSetup =
+          masterKey === null
+            ? { tools: [], guidance: [], legNotes: [], close: async () => {} }
+            : await buildMcpLabTools({
+                db: ctx.db,
+                orgId: payload.orgId,
+                runId: payload.runId,
+                masterKey,
+                spec: externalSpec,
+                // Step 11: the CATALOG is the connector source. Only packages
+                // that are `ready` (endpoint + OAuth authored) compile to a
+                // ConnectorDef, so an unverified package cannot be reached.
+                connectors: deps.connectors ?? connectableConnectors(),
+                ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
+              });
+        return {
+          tools: [...builtins.tools, ...mcp.tools],
+          guidance: [...builtins.guidance, ...mcp.guidance],
+          legNotes: [...builtins.legNotes, ...mcp.legNotes],
+          close: mcp.close,
+        };
+      };
 
       let leg = await mcpLeg();
       let outcome: LegOutcome;

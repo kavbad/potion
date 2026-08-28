@@ -1,0 +1,91 @@
+'use client';
+// Mission control (P1, "the clock") — the explicit arm. A trial stays a
+// trial; nothing runs itself until an admin arms the mission, and the
+// armed state binds to THIS content-addressed version (an edit mints a new
+// hash — re-arm deliberately). Words over chrome: state, cadence, next
+// check, last note. Every value is a real row field or derived server-side.
+import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import type { HarnessDto } from '@potion/lab-form';
+
+const CADENCE_WORDS: Record<string, string> = {
+  '0 * * * *': 'hourly',
+  '0 9 * * *': 'daily at 09:00 UTC',
+  '0 9 * * 1': 'weekly, Monday 09:00 UTC',
+};
+
+export function MissionControl({
+  harness,
+  role,
+}: {
+  harness: HarnessDto;
+  role: 'admin' | 'member' | 'viewer';
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const mission = harness.mission ?? null;
+  const spec = harness.spec;
+
+  const flip = useCallback(async (to: 'arm' | 'pause') => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch(`/api/lab/harnesses/${harness.harnessHash}/${to}`, { method: 'POST' });
+      const body = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+      if (!res.ok) setNote(body.message ?? `${to} failed (${res.status})`);
+      else router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }, [harness.harnessHash, router]);
+
+  if (spec === null || spec.mission.kind !== 'standing') return null;
+  const cron = spec.checkIns.find((c) => c.trigger === 'cron');
+  const armed = mission?.state === 'armed';
+
+  return (
+    <section
+      className={`mt-8 border px-6 py-4 ${armed ? 'border-accent/60 bg-[#fbfaf7]' : 'border-[#d9d5cb] bg-[#fbfaf7]'}`}
+      data-testid="mission-control"
+      data-armed={armed}
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className={`border px-2 py-0.5 font-mono text-[12px] uppercase tracking-[0.1em] ${armed ? 'border-accent text-accent' : 'border-[#c4bfb2] text-soft'}`}>
+          {armed ? 'armed' : 'paused'}
+        </span>
+        <span className="text-[13.5px] text-soft">
+          {armed ? (
+            <>
+              runs itself {CADENCE_WORDS[mission!.cadenceCron] ?? mission!.cadenceCron}
+              {mission!.nextDueAt !== null ? <> · next check {new Date(mission!.nextDueAt).toUTCString().replace(':00 GMT', ' UTC')}</> : null}
+            </>
+          ) : cron !== undefined && 'schedule' in cron ? (
+            <>armed, it would run {CADENCE_WORDS[cron.schedule] ?? cron.schedule} — until then, nothing starts by itself</>
+          ) : (
+            <>give it a schedule (the &ldquo;how often it checks&rdquo; field) to make it armable</>
+          )}
+        </span>
+        {role === 'admin' && cron !== undefined ? (
+          <button
+            type="button"
+            onClick={() => void flip(armed ? 'pause' : 'arm')}
+            disabled={busy}
+            className={armed
+              ? 'border border-[#c4bfb2] px-4 py-1.5 text-[13px] text-soft hover:border-refuse hover:text-refuse disabled:opacity-40'
+              : 'bg-ink px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40'}
+            data-testid="mission-flip"
+          >
+            {busy ? '…' : armed ? 'Pause the mission' : 'Arm the mission'}
+          </button>
+        ) : null}
+      </div>
+      {mission?.lastNote ? (
+        <p className="mt-2 font-mono text-[12px] text-faint" data-testid="mission-note">
+          scheduler: {mission.lastNote}
+        </p>
+      ) : null}
+      {note ? <p className="mt-2 text-[12.5px] text-refuse">{note}</p> : null}
+    </section>
+  );
+}

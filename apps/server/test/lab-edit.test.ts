@@ -259,3 +259,78 @@ describe('PUT /api/lab/harnesses/:hash/spec — the open hood (2026-08-27)', () 
     expect((res.json() as { unchanged?: boolean }).unchanged).toBe(true);
   });
 });
+
+describe('P1 — arm/pause + the scheduler window math', () => {
+  it('arming requires standing + a supported cron; pause flips state', async () => {
+    const { missionWindow } = await import('../src/lab-scheduler.js');
+    // Window math, pinned:
+    const now = new Date('2026-08-28T10:30:00Z');
+    expect(missionWindow('0 * * * *', now)).toEqual({ key: '2026-08-28T10', dueAt: new Date('2026-08-28T10:00:00Z') });
+    expect(missionWindow('0 9 * * *', now)).toEqual({ key: '2026-08-28', dueAt: new Date('2026-08-28T09:00:00Z') });
+    const daily = missionWindow('0 9 * * *', new Date('2026-08-28T08:59:00Z'));
+    expect(daily!.key.startsWith('pre-')).toBe(true); // before 09:00 — not due
+    // 2026-08-28 is a Friday → the week anchors on Monday the 24th.
+    expect(missionWindow('0 9 * * 1', now)).toEqual({ key: 'wk-2026-08-24', dueAt: new Date('2026-08-24T09:00:00Z') });
+    expect(missionWindow('*/5 * * * *', now)).toBeNull(); // unsupported → typed
+
+    const s = spec({
+      name: 'armable harness',
+      mission: { kind: 'standing', goal: 'watch things' },
+      contract: { type: 'brief' },
+      checkIns: [{ trigger: 'cron', schedule: '0 9 * * *', question: 'anything meaningful?' }],
+    });
+    const hash = await seedCatalog(s);
+    const armed = await post(`/api/lab/harnesses/${hash}/arm`, {});
+    expect(armed.statusCode).toBe(200);
+    const armedBody = armed.json() as { mission: { state: string; nextDueAt: string | null } };
+    expect(armedBody.mission.state).toBe('armed');
+    expect(armedBody.mission.nextDueAt).not.toBeNull();
+    const paused = await post(`/api/lab/harnesses/${hash}/pause`, {});
+    expect((paused.json() as { mission: { state: string } }).mission.state).toBe('paused');
+
+    // A task mission cannot be armed — typed 400.
+    const t = spec({ name: 'task harness p1' });
+    const tHash = await seedCatalog(t);
+    expect((await post(`/api/lab/harnesses/${tHash}/arm`, {})).statusCode).toBe(400);
+    // A standing mission WITHOUT a schedule cannot be armed — typed 400.
+    const noCron = spec({ name: 'no-cron standing', mission: { kind: 'standing', goal: 'watch' } });
+    const ncHash = await seedCatalog(noCron);
+    expect((await post(`/api/lab/harnesses/${ncHash}/arm`, {})).statusCode).toBe(400);
+  });
+
+  it('schedulerTick starts exactly ONE check per window, skips handled windows, and never bursts', async () => {
+    const { schedulerTick } = await import('../src/lab-scheduler.js');
+    const { armLabMission, getLabMission, getLabRun } = await import('@potion/db');
+    const s = spec({
+      name: 'tick harness',
+      mission: { kind: 'standing', goal: 'watch things' },
+      contract: { type: 'brief' },
+      checkIns: [{ trigger: 'cron', schedule: '0 9 * * *', question: 'anything?' }],
+    });
+    const hash = await seedCatalog(s);
+    await armLabMission(h.db, { orgId: ORG, harnessHash: hash, cadenceCron: '0 9 * * *', armedBy: 'test' });
+    const enqueued: Array<{ kind: string; runId: string }> = [];
+    const queue = { enqueue: async (kind: string, payload: { runId: string }) => { enqueued.push({ kind, runId: payload.runId }); return 'job-1'; } };
+    const at = new Date('2026-08-28T09:05:00Z');
+    await schedulerTick({ db: h, queue: queue as never }, at);
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.runId).toBe(`chk-${hash.slice(0, 8)}-2026-08-28`);
+    const run = await getLabRun(h.db, enqueued[0]!.runId, ORG);
+    expect(run!.state).toBe('pending');
+    // Same window, second tick: handled — nothing new (two dedups agree).
+    await schedulerTick({ db: h, queue: queue as never }, new Date('2026-08-28T09:30:00Z'));
+    expect(enqueued).toHaveLength(1);
+    // A MISSED window is skipped, never bursted: next day's tick starts
+    // one check for THAT day only.
+    await schedulerTick({ db: h, queue: queue as never }, new Date('2026-08-30T09:05:00Z'));
+    expect(enqueued).toHaveLength(2);
+    expect(enqueued[1]!.runId).toBe(`chk-${hash.slice(0, 8)}-2026-08-30`);
+    const m = await getLabMission(h.db, ORG, hash);
+    expect(m!.lastWindowKey).toBe('2026-08-30');
+    // Paused: nothing starts.
+    const { pauseLabMission } = await import('@potion/db');
+    await pauseLabMission(h.db, ORG, hash);
+    await schedulerTick({ db: h, queue: queue as never }, new Date('2026-08-31T09:05:00Z'));
+    expect(enqueued).toHaveLength(2);
+  });
+});

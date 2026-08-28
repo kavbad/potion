@@ -26,6 +26,7 @@ export * from './repos/lab-runs.js';
 export * from './repos/lab-felt.js';
 export * from './repos/lab-harnesses.js';
 export * from './repos/lab-grants.js';
+export * from './repos/lab-missions.js';
 export * from './repos/lab-grants-runtime.js';
 export * from './repos/cluster-rubrics.js';
 export * from './repos/cluster-incumbents.js';

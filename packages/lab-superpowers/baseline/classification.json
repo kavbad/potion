@@ -259,6 +259,14 @@
       "list_payment_intents": "read"
     }
   },
+  "web": {
+    "version": "1.0.0",
+    "contentHash": "8e43ed267ec7f13ad9dc4927da3ba0b689d25dfa730aced42d4144d719a823af",
+    "actions": {
+      "web_feed": "read",
+      "web_fetch": "read"
+    }
+  },
   "webflow": {
     "version": "1.0.0",
     "contentHash": "b69b6954d5bf29b0e6a1376a3a79e80d6e412aa11fe6d81ed596a92caa3c0aae",

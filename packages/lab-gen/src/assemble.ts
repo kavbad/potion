@@ -95,6 +95,11 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
     // yet wired) burns to its hard stop with no human touchpoint; tasks
     // complete on their own done-definition and stay check-in-free unless
     // tool-bearing.
+    // P1 (the mouth): standing missions carry the brief contract — the
+    // check's final answer must BE the deliverable, schema-checked by the
+    // runtime's completion law. Tasks keep their done-definition semantics
+    // unchanged (contract-less specs behave byte-identically to before).
+    ...(answers.kind === 'standing' ? { contract: { type: 'brief' as const } } : {}),
     checkIns: [
       // 'ask-first' extends the half-budget check-in to TASK missions too;
       // it never removes the standing default (additive-only safety).

@@ -17,9 +17,9 @@
 // derivation, so one drift stays local instead of cascading through the
 // stream.
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
-import type { HarnessSpec } from '@potion/lab-spec';
+import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
 
 export type ReplayDivergenceCode =
   | 'request-drift'
@@ -102,6 +102,8 @@ export function replayRun(
     (s) => s.kind === 'model' && (s.payload.requestPayload as { tools?: unknown } | undefined)?.tools !== undefined,
   );
   let expectWrapUp = false;
+  // P1 contract law: repair rounds spent (mirrors the loop's conversation-derived count).
+  let contractRepairs = 0;
 
   for (const step of ordered) {
     const p = step.payload;
@@ -176,8 +178,25 @@ export function replayRun(
       // mission's no-tool natural stop completes the CHECK — the replay
       // must derive what the loop now does, or every honest standing
       // record reads as divergence.
+      // 2026-08-28 (P1 contract law, mirrored same commit): a
+      // contract-bearing check completes ONLY on a parsed deliverable;
+      // one repair round (the repair message re-derived from the SAME
+      // recorded response text, so the next request comparison holds),
+      // then a failed terminal. Contract-less standing is unchanged.
       if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'standing' && derivedTerminal === null && estSpent < spec.fuel.maxUsdPerRun) {
-        derivedTerminal = { state: 'completed', atSeq: step.seq };
+        if (spec.contract !== undefined) {
+          const parsedBrief = parseBrief(p.responseText ?? '');
+          if (parsedBrief.ok) {
+            derivedTerminal = { state: 'completed', atSeq: step.seq };
+          } else if (contractRepairs < 1) {
+            contractRepairs += 1;
+            messages.push(contractRepairMessage(parsedBrief.issues));
+          } else {
+            derivedTerminal = { state: 'failed', atSeq: step.seq };
+          }
+        } else {
+          derivedTerminal = { state: 'completed', atSeq: step.seq };
+        }
       }
       if (estSpent >= spec.fuel.maxUsdPerRun && derivedTerminal === null) {
         derivedTerminal = { state: 'killed-budget', atSeq: step.seq };

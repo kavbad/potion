@@ -244,8 +244,17 @@ describe.each(CATALOG.map((p) => [p.id, p] as const))('mini-eval: %s', (id, pkg)
     });
     const actTool = leg.tools.find((t) => t.external);
     const readTool = leg.tools.find((t) => !t.external);
-    expect(actTool, `${id} has no act tool visible — the pore proof would be vacuous`).toBeDefined();
     expect(readTool, `${id} has no read tool visible`).toBeDefined();
+    // READ-ONLY BY CONSTRUCTION (P1: the web builtin): a package that
+    // declares no act tool proves a STRONGER claim than a gating one — no
+    // call it can make fires the pore because no gate-worthy verb exists.
+    // Assert that structurally instead of skipping silently.
+    if (pkg.tools.every((t) => t.action === 'read')) {
+      expect(actTool, `${id} declares read-only but compiled an external tool`).toBeUndefined();
+      expect(leg.tools.every((t) => !t.external)).toBe(true);
+      return;
+    }
+    expect(actTool, `${id} has no act tool visible — the pore proof would be vacuous`).toBeDefined();
 
     // READ: runs without suspending.
     const readCall = {

@@ -10,6 +10,7 @@ import { fetchOrRecover } from '@/lib/recover';
 import { LabConsole } from '@/components/lab-console';
 import { ConnectorPanel } from '@/components/lab-actions';
 import { LabMachinery } from '@/components/lab-machinery';
+import { MissionControl } from '@/components/lab-mission';
 import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import { BenchLabel, CARD, LabStage, SpecimenMark } from '@/components/lab-bench';
 import type { HarnessDto, MemoryDto } from '@potion/lab-form';
@@ -159,6 +160,9 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
         </p>
       ) : (
         <>
+          {/* ---- the clock: arm/pause a standing mission ---- */}
+          <MissionControl harness={harness} role={me.role} />
+
           {/* ---- the newborn guide: a next step before any instrument ---- */}
           {latest === null ? <WhatHappensNow spec={harness.spec} /> : null}
 

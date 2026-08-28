@@ -819,6 +819,20 @@
    "verdict": "correct",
    "confidence": "verified",
    "vendorOperation": "POST /users/{id}/meetings \u2014 with registrants/calendar it emails invitees"
+  },
+  {
+   "pkg": "web",
+   "tool": "web_fetch",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "in-process HTTP GET (lab-runtime web-tools.ts) \u2014 read-only by construction; no write verb exists in the implementation"
+  },
+  {
+   "pkg": "web",
+   "tool": "web_feed",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "in-process HTTP GET + RSS/Atom parse (lab-runtime web-tools.ts) \u2014 read-only by construction"
   }
  ]
 }
