@@ -31,8 +31,8 @@
 // TODO — wire POTION_SMTP_HOST / POTION_SMTP_PORT / POTION_SMTP_USER /
 // POTION_SMTP_PASS / POTION_SMTP_FROM to a real transport (e.g. nodemailer)
 // outside the sandbox; there is NO live email in this build.
-import { randomBytes, randomUUID } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { sha256 } from '@potion/core';
 import {
@@ -79,6 +79,10 @@ export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
+  /** Optional HTML body (2026-08-28: the plain-text-only email showed a raw
+   * 51-char URL that some clients never linkified — a user transcribed it
+   * by hand, three times, mangled: rM_DN2e0yf6…). */
+  html?: string;
 }
 
 export type SendEmail = (msg: EmailMessage) => Promise<void>;
@@ -244,6 +248,12 @@ export function magicLinkInResponseEnabled(env: NodeJS.ProcessEnv = process.env)
  * Returns the raw link — the CALLER decides whether to surface it (dev
  * bypass / operator hand-delivery) or rely on the email side effect.
  */
+/** The code credential's stored preimage — bound to the (lowercased) email
+ * so eight digits alone identify nothing. */
+export function signInCodePreimage(email: string, code: string): string {
+  return `code:${email.trim().toLowerCase()}:${code.replace(/\D/g, '')}`;
+}
+
 export async function issueMagicLink(
   db: PotionDb,
   email: string,
@@ -258,14 +268,37 @@ export async function issueMagicLink(
     orgId,
     expiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MS),
   });
+  // The TYPE-ABLE fallback (2026-08-28): a second single-use credential —
+  // eight digits a human can carry between devices without transcribing a
+  // 51-char URL (which a real user did, by hand, mangled, three times).
+  // Stored as its own magic-link row: same TTL, same atomic single-use
+  // consume; the hash binds the code to the EMAIL so a code is meaningless
+  // without knowing whose it is.
+  const code = String(randomInt(10000000, 100000000)); // crypto-grade (node:crypto)
+  await createMagicLink(db, {
+    tokenHash: sha256(signInCodePreimage(email, code)),
+    email,
+    orgId,
+    expiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MS),
+  });
+  const codeShown = `${code.slice(0, 4)} ${code.slice(4)}`;
   const link = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
   const message = {
     to: email,
     subject: 'Your Potion sign-in link',
     text:
       `Sign in to Potion: ${link}\n\n` +
-      `This link is single-use and expires in 15 minutes. If you did not request it, ignore this email.\n\n` +
+      `On another device? Enter this code on the sign-in page instead: ${codeShown}\n\n` +
+      `Link and code are single-use and expire in 15 minutes. If you did not request them, ignore this email.\n\n` +
       `— Potion, a product by Mutiny`,
+    html:
+      `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px 8px;color:#1c1a17">` +
+      `<p style="font-size:15px">Sign in to Potion:</p>` +
+      `<p><a href="${link}" style="display:inline-block;background:#1c1a17;color:#f4f2ec;text-decoration:none;padding:12px 22px;font-size:15px;font-weight:600">Sign in &rarr;</a></p>` +
+      `<p style="font-size:13px;color:#6f6a5e">On another device? Enter this code on the sign-in page instead:</p>` +
+      `<p style="font-family:ui-monospace,Menlo,monospace;font-size:24px;letter-spacing:0.12em;margin:4px 0 16px">${codeShown}</p>` +
+      `<p style="font-size:12px;color:#8a857a">Link and code are single-use and expire in 15 minutes. If you did not request them, ignore this email.<br>&mdash; Potion, a product by Mutiny</p>` +
+      `</div>`,
   };
   try {
     await sendEmail(message);
@@ -344,17 +377,9 @@ export function registerAuthRoutes(
   });
 
   // ---------- GET /auth/verify ----------
-  app.get('/auth/verify', async (req, reply) => {
-    const { token } = req.query as { token?: string };
-    if (!token) {
-      return reply.code(400).send(openAiError('missing token', 'invalid_request_error'));
-    }
-    const link = await consumeMagicLink(db, sha256(token));
-    if (!link) {
-      return reply
-        .code(401)
-        .send(openAiError('invalid, expired, or already-used link', 'invalid_request_error', 'invalid_token'));
-    }
+  /** Everything after a credential is CONSUMED — link and code share it
+   * verbatim, so the two paths cannot drift (2026-08-28). */
+  async function completeSignIn(req: FastifyRequest, reply: FastifyReply, link: { email: string; orgId: string }) {
     const user = await getUserByEmail(db, link.email);
     if (!user) {
       return reply
@@ -409,6 +434,52 @@ export function registerAuthRoutes(
         expiresAt: expiresAt.toISOString(),
       },
     });
+  }
+
+  // ---------- POST /auth/verify-code ----------
+  // The type-able path (2026-08-28): eight digits from the email, entered on
+  // the sign-in page — for the person reading the email on one device and
+  // signing in on another. Same single-use consume, same TTL, same session
+  // mint as the link (completeSignIn is shared verbatim). Attempts are
+  // limited per email (in-memory: honest for a single-instance deploy;
+  // consume itself is atomic regardless).
+  const codeAttempts = new Map<string, { n: number; resetAt: number }>();
+  app.post('/auth/verify-code', async (req, reply) => {
+    const parsed = z
+      .object({ email: z.string().email().max(320), code: z.string().min(8).max(12) })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(openAiError('email and the 8-digit code are required', 'invalid_request_error'));
+    }
+    const email = parsed.data.email.trim().toLowerCase();
+    const now = Date.now();
+    const slot = codeAttempts.get(email);
+    if (slot !== undefined && slot.resetAt > now && slot.n >= 6) {
+      return reply.code(429).send(openAiError('too many attempts — request a fresh email and try again in a few minutes', 'invalid_request_error', 'rate_limited'));
+    }
+    codeAttempts.set(email, slot !== undefined && slot.resetAt > now ? { n: slot.n + 1, resetAt: slot.resetAt } : { n: 1, resetAt: now + 15 * 60_000 });
+    const link = await consumeMagicLink(db, sha256(signInCodePreimage(email, parsed.data.code)));
+    if (!link) {
+      return reply
+        .code(401)
+        .send(openAiError('invalid, expired, or already-used code — request a fresh email', 'invalid_request_error', 'invalid_token'));
+    }
+    codeAttempts.delete(email);
+    return completeSignIn(req, reply, link);
+  });
+
+  app.get('/auth/verify', async (req, reply) => {
+    const { token } = req.query as { token?: string };
+    if (!token) {
+      return reply.code(400).send(openAiError('missing token', 'invalid_request_error'));
+    }
+    const link = await consumeMagicLink(db, sha256(token));
+    if (!link) {
+      return reply
+        .code(401)
+        .send(openAiError('invalid, expired, or already-used link', 'invalid_request_error', 'invalid_token'));
+    }
+    return completeSignIn(req, reply, link);
   });
 
   // ---------- POST /auth/logout ----------

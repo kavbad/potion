@@ -573,3 +573,67 @@ describe('self-serve signup (POTION_SELF_SERVE=1, dev bypass OFF)', () => {
     expect(magicLinkInResponseEnabled({ POTION_MAGIC_LINK_IN_RESPONSE: 'true' })).toBe(true);
   });
 });
+
+describe('sign-in codes (2026-08-28: the type-able fallback)', () => {
+  it('a minted code signs in exactly like the link — same session mint, single-use', async () => {
+    const { createMagicLink, getUserByEmail: getU } = await import('@potion/db');
+    const { signInCodePreimage } = await import('../src/routes/auth.js');
+    const { sha256: h } = await import('@potion/core');
+    await signIn('code-user@acme.com'); // provisions the org
+    const user = await getU(db(), 'code-user@acme.com');
+    const { listMembershipsByUser: listM } = await import('@potion/db');
+    const orgId = (await listM(db(), user!.id))[0]!.orgId;
+    await createMagicLink(db(), {
+      tokenHash: h(signInCodePreimage('Code-User@acme.com', '12345678')),
+      email: 'code-user@acme.com',
+      orgId,
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/auth/verify-code',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'CODE-USER@acme.com', code: '1234 5678'.replace(' ', '') },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().token).toMatch(/^ps_/);
+    expect((res.headers['set-cookie'] as string)).toContain('HttpOnly');
+    // Single-use: the same code again is dead.
+    const again = await app.inject({
+      method: 'POST', url: '/auth/verify-code',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'code-user@acme.com', code: '12345678' },
+    });
+    expect(again.statusCode).toBe(401);
+  });
+
+  it('wrong codes 401 and repeated attempts hit the limiter', async () => {
+    for (let i = 0; i < 6; i++) {
+      const r = await app.inject({
+        method: 'POST', url: '/auth/verify-code',
+        headers: { 'content-type': 'application/json' },
+        payload: { email: 'limited@acme.com', code: '00000000' },
+      });
+      expect(r.statusCode).toBe(401);
+    }
+    const blocked = await app.inject({
+      method: 'POST', url: '/auth/verify-code',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'limited@acme.com', code: '00000000' },
+    });
+    expect(blocked.statusCode).toBe(429);
+  });
+
+  it('the sign-in email carries BOTH a clickable HTML button and the code', async () => {
+    const { issueMagicLink } = await import('../src/routes/auth.js');
+    const { getUserByEmail: getU2, listMembershipsByUser: listM2 } = await import('@potion/db');
+    const orgId = (await listM2(db(), (await getU2(db(), 'code-user@acme.com'))!.id))[0]!.orgId;
+    const captured: Array<{ text: string; html?: string }> = [];
+    await issueMagicLink(db(), 'email-shape@acme.com', orgId, 'https://example.test', async (m) => {
+      captured.push({ text: m.text, ...(m.html !== undefined ? { html: m.html } : {}) });
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.html).toContain('<a href="https://example.test/auth/verify?token=ml_');
+    expect(captured[0]!.text).toMatch(/code.*: \d{4} \d{4}/i);
+    expect(captured[0]!.html).toMatch(/\d{4} \d{4}/);
+  });
+});

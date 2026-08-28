@@ -25,6 +25,11 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'entering'>('idle');
   const [devLink, setDevLink] = useState<string | null>(null);
+  // The type-able path (2026-08-28): the email carries an 8-digit code for
+  // signing in on a different device than the inbox — nobody should ever
+  // transcribe a 51-character link by hand.
+  const [code, setCode] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(error);
 
   async function submit(e: React.FormEvent) {
@@ -57,6 +62,29 @@ function LoginForm() {
     } catch {
       setFormError('the Potion API is unreachable — start apps/server first.');
       setState('idle');
+    }
+  }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    setCodeBusy(true);
+    setFormError(null);
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: { message?: string } } | null;
+      if (res.ok && body?.ok) {
+        window.location.assign('/');
+        return;
+      }
+      setFormError(body?.error?.message ?? 'that code did not work — request a fresh email');
+    } catch {
+      setFormError('the Potion API is unreachable.');
+    } finally {
+      setCodeBusy(false);
     }
   }
 
@@ -95,6 +123,31 @@ function LoginForm() {
               We sent a single-use sign-in link to{' '}
               <span className="font-medium text-ink">{email}</span>. It expires in 15 minutes.
             </p>
+            <form onSubmit={submitCode} className="space-y-2 border-t border-dashed border-[#d9d5cb] pt-3">
+              <label className="block text-sm text-soft" htmlFor="signin-code">
+                Reading the email on another device? Type the 8-digit code from it:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="signin-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="1234 5678"
+                  className="w-36 rounded-md border border-line bg-paper px-3 py-2 font-mono text-sm tracking-[0.08em] text-ink placeholder:text-faint focus:border-accent focus:outline-none"
+                  data-testid="signin-code"
+                />
+                <button
+                  type="submit"
+                  disabled={codeBusy || code.replace(/\D/g, '').length !== 8}
+                  className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
+                  data-testid="signin-code-submit"
+                >
+                  {codeBusy ? 'Checking…' : 'Sign in'}
+                </button>
+              </div>
+            </form>
             <button
               type="button"
               onClick={() => setState('idle')}

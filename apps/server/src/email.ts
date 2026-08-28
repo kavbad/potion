@@ -16,7 +16,7 @@ export function resendSendEmail(opts: { apiKey: string; from: string; replyTo?: 
     const res = await f('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: opts.from, to: [msg.to], subject: msg.subject, text: msg.text, ...(opts.replyTo ? { reply_to: opts.replyTo } : {}) }),
+      body: JSON.stringify({ from: opts.from, to: [msg.to], subject: msg.subject, text: msg.text, ...(msg.html !== undefined ? { html: msg.html } : {}), ...(opts.replyTo ? { reply_to: opts.replyTo } : {}) }),
     });
     if (!res.ok) {
       // Never leak the link into logs on failure — only the status.
