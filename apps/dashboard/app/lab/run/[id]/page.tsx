@@ -24,7 +24,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   return (
     <main className="mx-auto max-w-5xl">
       <nav className="mb-3 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-        <Link href="/lab" className="text-soft hover:text-accent">Potion Lab</Link>
+        <Link href="/lab" className="text-soft hover:text-accent">Agents</Link>
         {' · '}<Link href={`/lab/harness/${run.harnessHash}`} className="text-soft hover:text-accent">{harness.name}</Link>
         {' · '}run <code className="normal-case">{id.slice(0, 12)}…</code>
       </nav>

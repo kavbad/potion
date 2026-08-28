@@ -159,6 +159,38 @@ const FIELD_CLS =
   'w-full border border-[#c4bfb2] bg-white px-3 py-2 font-mono text-[13px] text-ink placeholder:text-faint focus:border-accent focus:outline-none';
 const LABEL_ROW = 'flex items-center gap-1.5 font-mono text-[12px] uppercase tracking-[0.13em] text-soft';
 
+/** Alias → connector-id hints for the account autofill. An alias only
+ * fires when the target id actually exists in the org's catalog — the
+ * suggestion never invents a connector. */
+const ACCOUNT_ALIASES: Record<string, string[]> = {
+  gmail: ['email', 'emails', 'inbox', 'mail', 'mailbox'],
+  github: ['repo', 'repos', 'repository', 'pull request', 'pull requests', 'commit'],
+  slack: ['channel', 'dm'],
+  notion: ['wiki'],
+  'google-calendar': ['calendar', 'meeting', 'meetings'],
+  'google-sheets': ['spreadsheet', 'spreadsheets', 'sheet', 'sheets'],
+  'google-drive': ['drive', 'files', 'documents'],
+};
+
+/** Deterministic account detection from the job text: direct catalog-name
+ * mentions first, then aliases. Pure — same goal, same suggestions. */
+function detectAccounts(goal: string, catalog: Array<{ connectorId: string; displayName: string }>): string[] {
+  const text = ` ${goal.toLowerCase()} `;
+  const hits = new Set<string>();
+  for (const c of catalog) {
+    if (text.includes(c.connectorId.toLowerCase()) || text.includes(c.displayName.toLowerCase())) {
+      hits.add(c.connectorId);
+    }
+  }
+  for (const [id, aliases] of Object.entries(ACCOUNT_ALIASES)) {
+    if (!catalog.some((c) => c.connectorId === id)) continue;
+    if (aliases.some((a) => text.includes(` ${a} `) || text.includes(` ${a},`) || text.includes(` ${a}.`))) hits.add(id);
+  }
+  return [...hits].sort();
+}
+
+const STANDING_HINT = /\b(daily|weekly|hourly|every|each|monitor|monitors|watch|watches|ongoing|continuously|whenever|keep)\b/i;
+
 export function InterviewForm() {
   const router = useRouter();
   const [goal, setGoal] = useState('');
@@ -169,6 +201,16 @@ export function InterviewForm() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [born, setBorn] = useState<GenerateResponse | null>(null);
+  const [catalog, setCatalog] = useState<Array<{ connectorId: string; displayName: string }>>([]);
+  useEffect(() => {
+    fetch('/api/lab/connectors', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        const list = (b as { connectors?: Array<{ connectorId: string; displayName: string }> } | null)?.connectors;
+        if (list) setCatalog(list.map((c) => ({ connectorId: c.connectorId, displayName: c.displayName })));
+      })
+      .catch(() => null);
+  }, []);
 
   const submit = useCallback(async (clusterChoice?: string) => {
     setBusy(true);
@@ -203,6 +245,13 @@ export function InterviewForm() {
   if (born !== null) return <BirthSequence body={born} />;
 
   const cap = fuelPreview(Number(worth));
+  // Autofill (operator, 2026-08-27): the job text already names what it
+  // touches — offer it back as tap-to-add chips, never silent writes.
+  const currentAccounts = accounts.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  const accountSuggestions = goal.trim().length >= 8
+    ? detectAccounts(goal, catalog).filter((id) => !currentAccounts.includes(id))
+    : [];
+  const suggestStanding = kind === 'task' && STANDING_HINT.test(goal);
   const gaps = result?.gaps ?? [];
   const clusterGap = gaps.find((g) => g.code === 'cluster-uncertain');
   const evidenceGaps = gaps.filter((g) => g.code !== 'cluster-uncertain');
@@ -248,6 +297,16 @@ export function InterviewForm() {
             <option value="task">one-off task</option>
             <option value="standing">standing mission</option>
           </select>
+          {suggestStanding && (
+            <button
+              type="button"
+              onClick={() => setKind('standing')}
+              className="mt-1.5 border border-accent/50 px-2 py-0.5 font-mono text-[12px] text-accent hover:bg-accent hover:text-white"
+              data-testid="suggest-standing"
+            >
+              sounds like a standing mission — switch
+            </button>
+          )}
         </div>
         <div>
           <div className={LABEL_ROW}>
@@ -267,6 +326,21 @@ export function InterviewForm() {
             className={`${FIELD_CLS} mt-1.5`}
             data-testid="q-accounts"
           />
+          {accountSuggestions.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="account-suggestions">
+              <span className="font-mono text-[11.5px] text-faint">from the job:</span>
+              {accountSuggestions.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAccounts((cur) => (cur.trim() ? `${cur.replace(/,\s*$/, '')}, ${id}` : id))}
+                  className="border border-accent/50 px-2 py-0.5 font-mono text-[12px] text-accent hover:bg-accent hover:text-white"
+                >
+                  + {id}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <div className={LABEL_ROW}>
