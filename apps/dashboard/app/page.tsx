@@ -25,7 +25,7 @@ import { ApiUnreachable, apiFetch, isSessionExpired, sessionCookieHeader } from 
 import { recoverSession } from '@/lib/recover';
 import { Landing } from '@/components/landing';
 import { SiteShell } from '@/components/site-header';
-import { HomeOverview } from '@/components/home-overview';
+import { RouterHome } from '@/components/router-home';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -88,5 +88,5 @@ export default async function ConnectPage({
     );
   }
 
-  return <HomeOverview conn={conn} initialActivity={activity} />;
+  return <RouterHome conn={conn} initialActivity={activity} />;
 }

@@ -122,7 +122,7 @@ export function TodayPulse() {
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-soft">
         {hasBaseline ? (
-          <>kept this month, of <span className="text-ink">{money(spentWithout)}</span> you would have spent — verified receipt by receipt</>
+          <>your router kept this month, of <span className="text-ink">{money(spentWithout)}</span> you would have spent — verified receipt by receipt</>
         ) : hasTraffic ? (
           <>kept so far — your savings become a measurement against <em>your</em> model once you name it in <Link href="/settings/controls" className="text-accent underline">Controls</Link></>
         ) : (

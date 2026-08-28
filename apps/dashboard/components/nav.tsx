@@ -24,12 +24,10 @@ import { usePathname } from 'next/navigation';
  * destination.
  */
 const PRIMARY = [
-  { href: '/', label: 'Today', hint: 'What routed, what it cost, what it saved' },
-  { href: '/router', label: 'Router', hint: 'The router Potion compiled for you — assignments, evidence, versions' },
-  { href: '/receipts', label: 'Receipts', hint: 'Every token, accounted for' },
-  { href: '/frontiers', label: 'Evidence', hint: 'The measurements behind your routing' },
+  // 2026-08-27 redesign: the router IS the home — one protagonist, six doors.
+  { href: '/', label: 'Router', hint: 'Your router — what it saved, how it decides, every version' },
+  { href: '/receipts', label: 'Receipts', hint: 'Every request, accounted for — try one live' },
   { href: '/usage', label: 'Savings', hint: 'What you kept, verified per receipt' },
-  { href: '/try', label: 'Try', hint: 'Send anything; watch the receipt happen' },
   { href: '/lab', label: 'Lab', hint: 'Where a company employs agents — supervised, then earned autonomy' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, team, audit' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
@@ -40,6 +38,8 @@ const PRIMARY = [
  * /frontiers — the measured evidence itself — was reachable from nowhere,
  * which was a discoverability bug, not restraint.) */
 const ADVANCED = [
+  { href: '/frontiers', label: 'Evidence (frontiers)' },
+  { href: '/try', label: 'Try a request' },
   { href: '/reports', label: 'Guarantee report' },
   { href: '/traces', label: 'Journeys (agent traces)' },
   { href: '/build', label: 'Help me choose a policy' },
