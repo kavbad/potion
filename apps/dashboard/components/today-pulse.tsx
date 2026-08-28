@@ -57,6 +57,7 @@ export function TodayPulse() {
   const [log, setLog] = useState<ChangelogEntry[] | null>(null);
   const [learning, setLearning] = useState<LearningState | null>(null);
   const [budget, setBudget] = useState<BudgetState | null>(null);
+  const [feedOpen, setFeedOpen] = useState(false);
   const [router, setRouter] = useState<{ name: string; version: number; mintedAt: string; document: { changes: string[] } } | null>(null);
 
   useEffect(() => {
@@ -99,18 +100,60 @@ export function TodayPulse() {
     });
   }
 
-  // ---- the narrated feed: frontier movements + the learning week ----
-  // R2: the router's own movement leads the feed while it is fresh — the
-  // change lines come from the minted version, verbatim.
+  // ---- the feed (redesign 2026-08-27: operator "two things max, and I
+  // don't get the value"). Three rules now govern it:
+  //   1. HUMAN SENTENCES, never engine narrative — a re-measure is COUNTED
+  //      ("3 options proved in, 7 beaten out"), not recited per strategy;
+  //   2. every line answers "what does this mean for MY router";
+  //   3. two lines show; the rest live behind one quiet toggle.
   const routerFresh =
     router !== null && router.version > 1 &&
     Date.now() - new Date(router.mintedAt).getTime() < 14 * 86_400_000
       ? router
       : null;
-  const moves = (log ?? []).slice(0, 3);
   const sampling = learning
     ? Object.entries(learning.samples).filter(([, n]) => n > 0).sort(([, a], [, b]) => b - a).slice(0, 2)
     : [];
+
+  interface FeedItem { key: string; when: string; head: string; rest: React.ReactNode; href: string; link: string }
+  const feedItems: FeedItem[] = [];
+  if (routerFresh !== null) {
+    feedItems.push({
+      key: 'router',
+      when: new Date(routerFresh.mintedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      head: `Your router moved to v${routerFresh.version}`,
+      rest: <>{' — '}{routerFresh.document.changes[0] ?? ''}{routerFresh.document.changes.length > 1 ? ` · +${routerFresh.document.changes.length - 1} more` : ''}</>,
+      href: '/', link: `v${routerFresh.version} →`,
+    });
+  }
+  for (const m of (log ?? []).slice(0, 6)) {
+    // Count the engine narrative instead of reciting it: N proved in, M out.
+    const added = (m.narrative.match(/is new on the frontier/g) ?? []).length;
+    const dropped = (m.narrative.match(/fell off the frontier/g) ?? []).length;
+    const summary =
+      added > 0 || dropped > 0
+        ? [
+            added > 0 ? `${added} option${added === 1 ? '' : 's'} proved in` : null,
+            dropped > 0 ? `${dropped} beaten out` : null,
+          ].filter(Boolean).join(', ')
+        : (m.narrative.split('. ')[0] ?? '').slice(0, 90);
+    feedItems.push({
+      key: `${m.clusterId}-${m.toVersion}`,
+      when: new Date(m.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      head: `${m.name} re-measured`,
+      rest: <>{' — '}{summary}.{m.kind === 'held-back' ? <> Your pin is holding v{m.fromVersion}.</> : <> Your router re-checks its pick against this automatically.</>}</>,
+      href: '/settings/frontier', link: `v${m.toVersion} →`,
+    });
+  }
+  for (const [cid, n] of sampling) {
+    feedItems.push({
+      key: `sampling-${cid}`,
+      when: 'this week',
+      head: `Measuring your ${cid}`,
+      rest: <>{' — '}{n} sample{n === 1 ? '' : 's'} toward your own quality bar for this work.</>,
+      href: '/settings/controls', link: 'details →',
+    });
+  }
 
   return (
     <div>
@@ -130,41 +173,29 @@ export function TodayPulse() {
         )}
       </p>
 
-      {(routerFresh !== null || moves.length > 0 || sampling.length > 0) && (
+      {feedItems.length > 0 && (
         <div className="mt-7">
           <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
-            <span>Lately, narrated</span>
-            <span>every line links to its evidence</span>
+            <span>Lately</span>
+            <span>your router recompiles from these — every line links to evidence</span>
           </div>
-          {routerFresh !== null && (
-            <div className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
-              <span className="font-mono text-[12px] text-faint">{new Date(routerFresh.mintedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-              <span>
-                <span className="font-medium text-ink">Your router moved to v{routerFresh.version}</span>
-                {' — '}{routerFresh.document.changes.slice(0, 2).join(' · ')}
-                {routerFresh.document.changes.length > 2 ? ` · +${routerFresh.document.changes.length - 2} more` : ''}
-              </span>
-              <Link href="/router" className="font-mono text-[12px] text-accent">v{routerFresh.version} →</Link>
+          {feedItems.slice(0, feedOpen ? feedItems.length : 2).map((f) => (
+            <div key={f.key} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
+              <span className="font-mono text-[12px] text-faint">{f.when}</span>
+              <span><span className="font-medium text-ink">{f.head}</span>{f.rest}</span>
+              <Link href={f.href} className="font-mono text-[12px] text-accent">{f.link}</Link>
             </div>
+          ))}
+          {feedItems.length > 2 && (
+            <button
+              type="button"
+              onClick={() => setFeedOpen((o) => !o)}
+              className="mt-2 font-mono text-[12px] text-faint hover:text-accent"
+              data-testid="feed-toggle"
+            >
+              {feedOpen ? 'show less ↑' : `show ${feedItems.length - 2} more ↓`}
+            </button>
           )}
-          {moves.map((m) => (
-            <div key={`${m.clusterId}-${m.toVersion}`} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
-              <span className="font-mono text-[12px] text-faint">{new Date(m.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-              <span>
-                <span className="font-medium text-ink">{m.name}</span>{' '}
-                {m.kind === 'held-back' ? <>— a newer frontier exists; your pin is holding v{m.fromVersion}. </> : null}
-                {m.narrative}
-              </span>
-              <Link href="/settings/frontier" className="font-mono text-[12px] text-accent">v{m.toVersion} →</Link>
-            </div>
-          ))}
-          {sampling.map(([cid, n]) => (
-            <div key={cid} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">
-              <span className="font-mono text-[12px] text-faint">this week</span>
-              <span><span className="font-medium text-ink">Measuring your {cid}</span> — {n} sample{n === 1 ? '' : 's'} so far; your personal bar proposal arrives as coverage fills.</span>
-              <Link href="/settings/controls" className="font-mono text-[12px] text-accent">details →</Link>
-            </div>
-          ))}
         </div>
       )}
 
