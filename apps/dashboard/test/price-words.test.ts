@@ -1,7 +1,7 @@
 // The house's price language (2026-08-28): ratios bound to quality, never a
 // naked percent-off that rounds toward disbelief.
 import { describe, expect, it } from 'vitest';
-import { priceVsBaseline } from '@/lib/price-words';
+import { priceVsBaseline, savingsWords } from '@/lib/price-words';
 
 describe('priceVsBaseline', () => {
   it('the operator screenshot case: $0.06 vs $19.96 → a ratio, never 100%', () => {
@@ -18,5 +18,17 @@ describe('priceVsBaseline', () => {
     expect(priceVsBaseline(0, 10)).toBe('—');
     expect(priceVsBaseline(10, 5)).toBe('—');
     expect(priceVsBaseline(10, 10)).toBe('—');
+  });
+});
+
+describe('savingsWords — percent with its comparator named by the caller', () => {
+  it('the operator case: percent AND ratio together, never 100%', () => {
+    expect(savingsWords(0.06, 19.96)).toBe('99.7% (1/330th the price)');
+  });
+  it('small gaps: percent alone', () => {
+    expect(savingsWords(6, 10)).toBe('40%');
+  });
+  it('degenerate → dash', () => {
+    expect(savingsWords(10, 5)).toBe('—');
   });
 });

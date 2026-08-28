@@ -46,6 +46,7 @@
 // api-key credentials additionally need the 'admin' scope); POST /api/keys
 // stays member+ per the Wave-2 RBAC matrix (connecting a key is a member
 // action); reads are viewer+ via the dashboard auth hook.
+import { DEFAULT_ORG_POLICY } from '../routing/default-policy.js';
 import {
   randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -422,7 +423,7 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
           id: boundPolicyId,
           orgId: org.orgId,
           name: 'default',
-          config: { type: 'min_cost', qualityFloor: 0.95 },
+          config: DEFAULT_ORG_POLICY,
         });
       }
     }

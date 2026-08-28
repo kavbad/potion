@@ -20,7 +20,7 @@ import { usePathname } from 'next/navigation';
 import { Mark } from '@/components/mark';
 import { ReceiptCard } from '@/components/primitives';
 import { routeOnce, type Receipt } from '@/components/try-request';
-import { priceVsBaseline } from '@/lib/price-words';
+import { savingsWords } from '@/lib/price-words';
 
 const CHOICES: Array<{ key: string; label: string; sub: string; models: string[]; other: string | null }> = [
   { key: 'openai', label: 'OpenAI', sub: 'GPT models', models: ['or-gpt-full'], other: null },
@@ -32,6 +32,7 @@ const CHOICES: Array<{ key: string; label: string; sub: string; models: string[]
 
 interface InterpretResponse {
   summary: string;
+  rule?: string;
   mix: Array<{ clusterId: string; share: number }>;
   router: { name: string; version: number; provisional: boolean };
   assignments: Array<{ clusterId: string; share: number; label: string; quality: number | null; costPer1K: number | null }>;
@@ -313,16 +314,22 @@ export function FirstRunGate() {
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%<span className="text-faint"> vs {(interp.expected.incumbent.quality * 100).toFixed(1)}</span></span></span>
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">{interp.expected.incumbent.model}, everywhere</span><span className="text-ink">${interp.expected.incumbent.costPer1K.toFixed(2)}/1K</span></span>
-                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">your price</span><span className="font-semibold text-kept">{priceVsBaseline(interp.expected.costPer1K, interp.expected.incumbent.costPer1K)}</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">saves vs {interp.expected.incumbent.model}</span><span className="font-semibold text-kept">{savingsWords(interp.expected.costPer1K, interp.expected.incumbent.costPer1K)}</span></span>
                       </div>
                     ) : (
                       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%{interp.expected.baselineQuality !== undefined ? <span className="text-faint"> vs {(interp.expected.baselineQuality * 100).toFixed(1)}</span> : null}</span></span>
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
                         <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best scorer, everywhere</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
-                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">your price</span><span className="font-semibold text-kept">{priceVsBaseline(interp.expected.costPer1K, interp.expected.baselineCostPer1K)}</span></span>
+                        <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">saves vs the best model, per task</span><span className="font-semibold text-kept">{savingsWords(interp.expected.costPer1K, interp.expected.baselineCostPer1K)}</span></span>
                       </div>
                     )}
+                    {interp.rule ? (
+                      <p className="mt-2 font-mono text-[12px] leading-relaxed text-soft" data-testid="reveal-rule">
+                        why this quality: your starting rule — {interp.rule.toLowerCase()}. change it
+                        anytime on your Router page; measurement personalizes it from week one.
+                      </p>
+                    ) : null}
                     <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
                       {interp.expected.incumbent
                         ? <>measured against the model you named — {interp.expected.incumbent.model} on every request, from live suite evidence. your Savings page verifies against what you actually pay, per receipt — never below what you get now</>

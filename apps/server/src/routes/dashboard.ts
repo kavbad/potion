@@ -8,6 +8,7 @@
 // encryption + serving), and the lifecycle (rotate/revoke/validate/audit)
 // lives there. maskProviderKey moved with them.
 import { randomUUID } from 'node:crypto';
+import { DEFAULT_ORG_POLICY } from '../routing/default-policy.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -96,7 +97,10 @@ function parseJsonl(text: string): string[] {
 // ---------- GET /api/endpoint-snippet ----------
 
 const POLICY_DEFAULTS: Record<Policy['type'], Policy> = {
-  max_quality: { type: 'max_quality', costCeilingPer1K: 1.0 },
+  // $5/1K (2026-08-28): the old $1.00 — a tenth of a cent per request —
+  // priced out the entire mid-tier and pinned weak kinds of work to weak
+  // points whenever a bare 'max_quality' was asked for.
+  max_quality: { type: 'max_quality', costCeilingPer1K: 5.0 },
   min_cost: { type: 'min_cost', qualityFloor: 0.8 },
   latency_bound: { type: 'latency_bound', p95Ms: 1000 },
   // G2.6: the two existing single-constraint defaults, stated together.
@@ -710,7 +714,10 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
       const parsed = PolicySchema.safeParse(bound.config);
       if (parsed.success) policy = parsed.data;
     }
-    const revealPolicy = policy ?? POLICY_DEFAULTS.max_quality;
+    // The reveal previews under the SAME rule the key mint will bind
+    // (2026-08-28 coherence fix) — never a different router than the org
+    // actually gets.
+    const revealPolicy = policy ?? DEFAULT_ORG_POLICY;
     const assignments = await assignmentsUnderPolicy(ctx, db, orgId, revealPolicy, (m) => app.log.warn(m));
     const expected = await expectedForMix(db, orgId, assignments, mix, (await getOrgIncumbents(db, orgId))?.models[0]);
     // The interpretation changed the document — mint the version now so the
@@ -722,6 +729,9 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
       mix,
       source,
       router: { name: compiled.name, version: compiled.version, provisional: true },
+      // The rule the numbers were chosen under — the reveal must ANSWER
+      // "why this quality" instead of leaving it to look arbitrary.
+      rule: describePolicy(revealPolicy),
       assignments: mix
         .map((m) => {
           const a = assignments.find((x) => x.clusterId === m.clusterId);
