@@ -15,7 +15,7 @@ import {
 import type { ServingClient } from '@potion/lab-runtime';
 import { fillBrainSlot, type AutopilotChoice, type GenerationGap } from './autopilot.js';
 import { assignCluster } from './cluster.js';
-import { accountSlug, assembleSpec, sanitizeVerbatim, specToText } from './assemble.js';
+import { accountSlug, assembleSpec, recipeRules, sanitizeVerbatim, specToText } from './assemble.js';
 import { extractMission, type Extraction } from './extract.js';
 import type { InterviewAnswers, TaxonomyCluster } from './interview.js';
 
@@ -28,6 +28,15 @@ export interface ChoicesSidecar {
    * (rewritten basis, emptied choices) is detected against itself. */
   choicesHash: string;
   choices: AutopilotChoice[];
+  /** The work PROFILE — the kinds of work the mission contains, primary
+   * first (extraction's alsoClusters, deduped by code). Interpretation
+   * provenance, not spec law: serving routes each step per-request
+   * regardless; this records what the build READ in the mission. */
+  workProfile?: TaxonomyCluster[];
+  /** Set by the respec path (operator-edited spec): the catalog row this
+   * spec was edited from. An operator-authored sidecar carries no
+   * autopilot choices — the orphaning is the design, this field names it. */
+  editedFrom?: string;
 }
 
 export interface DraftSpec {
@@ -92,6 +101,17 @@ export async function generateSpec(answers: InterviewAnswers, deps: GenerateDeps
   if (longRule !== undefined) {
     return { kind: 'refused', reason: 'answers-too-large', detail: `a rule exceeds ${SPEC_LIMITS.MAX_RULE_CHARS} characters` };
   }
+  // Recipe fields become rules with a short named prefix — the same
+  // truncated-governance doctrine applies: arrive whole or refuse.
+  const RECIPE_PREFIX_BUDGET = 20;
+  for (const [field, value] of [['qualityBar', answers.qualityBar], ['produces', answers.produces]] as const) {
+    if (value !== undefined && sanitizeVerbatim(value).length > SPEC_LIMITS.MAX_RULE_CHARS - RECIPE_PREFIX_BUDGET) {
+      return { kind: 'refused', reason: 'answers-too-large', detail: `${field} exceeds ${SPEC_LIMITS.MAX_RULE_CHARS - RECIPE_PREFIX_BUDGET} characters` };
+    }
+  }
+  if (constraints.length + recipeRules(answers).length > SPEC_LIMITS.MAX_RULES) {
+    return { kind: 'refused', reason: 'answers-too-large', detail: `rules plus recipe fields exceed the ${SPEC_LIMITS.MAX_RULES}-rule cap` };
+  }
   if (new Set(answers.accounts.map(accountSlug)).size > SPEC_LIMITS.MAX_SUPERPOWERS) {
     return { kind: 'refused', reason: 'answers-too-large', detail: `more than ${SPEC_LIMITS.MAX_SUPERPOWERS} distinct accounts` };
   }
@@ -150,11 +170,18 @@ export async function generateSpec(answers: InterviewAnswers, deps: GenerateDeps
     );
   }
   const choices = [filled.choice];
+  // The work profile: primary first, then the extraction's alsoClusters —
+  // deduped by code, the enum bound at the schema. A one-kind mission
+  // yields a one-entry profile (that fact is information too).
+  const workProfile: TaxonomyCluster[] = [
+    assignment.clusterId,
+    ...(extraction.alsoClusters ?? []).filter((c, i, arr) => c !== assignment.clusterId && arr.indexOf(c) === i),
+  ];
   return {
     kind: 'complete',
     specText,
     spec: parsed.spec,
-    sidecar: { specHash: harnessSpecHash(spec), choicesHash: sha256(canonicalJson(choices)), choices },
+    sidecar: { specHash: harnessSpecHash(spec), choicesHash: sha256(canonicalJson(choices)), choices, workProfile },
   };
 }
 

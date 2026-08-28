@@ -195,3 +195,67 @@ describe('run DTO anomaly flags (Step 9 typed parse)', () => {
     expect(step.latencyViolated).toBe(true);
   });
 });
+
+describe('PUT /api/lab/harnesses/:hash/spec — the open hood (2026-08-27)', () => {
+  function put(url: string, payload: unknown) {
+    return app.inject({
+      method: 'PUT',
+      url,
+      headers: { cookie: COOKIE, 'content-type': 'application/json' },
+      payload: payload as Record<string, unknown>,
+    });
+  }
+
+  it('a valid whole-file edit mints a NEW content-addressed row; prior row untouched; sidecar names the lineage', async () => {
+    const s = spec({ name: 'hood harness' });
+    const hash = await seedCatalog(s);
+    const edited = { ...s, rules: ['first rule', 'Done well means: sharp and short'] };
+    delete (edited as { hash?: string }).hash;
+    const res = await put(`/api/lab/harnesses/${hash}/spec`, { specText: JSON.stringify(edited, null, 2) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { ok: boolean; harnessHash: string; previousHash: string };
+    expect(body.ok).toBe(true);
+    expect(body.previousHash).toBe(hash);
+    expect(body.harnessHash).not.toBe(hash);
+    const prior = await getLabHarness(h.db, ORG, hash);
+    expect(prior?.harnessHash).toBe(hash);
+    const minted = await getLabHarness(h.db, ORG, body.harnessHash);
+    const sidecar = minted?.sidecar as { editedFrom?: string; choices: unknown[] };
+    expect(sidecar.editedFrom).toBe(hash);
+    expect(sidecar.choices).toEqual([]);
+    const reparsed = parseHarnessSpecText(minted!.specText);
+    expect(reparsed.ok).toBe(true);
+  });
+
+  it('an invalid edit returns the TYPED issue list (path + code), never a laundered 400', async () => {
+    const s = spec({ name: 'hood harness invalid' });
+    const hash = await seedCatalog(s);
+    const bad = { ...s, fuel: { maxUsdPerRun: 0.25 } }; // hardStop missing — unrepresentable
+    delete (bad as { hash?: string }).hash;
+    const res = await put(`/api/lab/harnesses/${hash}/spec`, { specText: JSON.stringify(bad) });
+    expect(res.statusCode).toBe(422);
+    const body = res.json() as { ok: boolean; issues: Array<{ code: string; path: string }> };
+    expect(body.ok).toBe(false);
+    expect(body.issues.length).toBeGreaterThan(0);
+    expect(body.issues.some((i) => i.path.startsWith('fuel'))).toBe(true);
+  });
+
+  it('a stale embedded hash is a tamper rejection; stripping it saves fine', async () => {
+    const s = spec({ name: 'hood harness tamper' });
+    const hash = await seedCatalog(s);
+    const tampered = { ...s, rules: ['changed'], hash };
+    const res = await put(`/api/lab/harnesses/${hash}/spec`, { specText: JSON.stringify(tampered) });
+    expect(res.statusCode).toBe(422);
+    const body = res.json() as { issues: Array<{ code: string }> };
+    expect(body.issues.some((i) => i.code === 'hash-mismatch')).toBe(true);
+  });
+
+  it('an unchanged file is acknowledged, not re-minted', async () => {
+    const s = spec({ name: 'hood harness unchanged' });
+    const hash = await seedCatalog(s);
+    const row = await getLabHarness(h.db, ORG, hash);
+    const res = await put(`/api/lab/harnesses/${hash}/spec`, { specText: row!.specText });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { unchanged?: boolean }).unchanged).toBe(true);
+  });
+});

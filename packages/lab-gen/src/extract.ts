@@ -21,6 +21,11 @@ export const ExtractionSchema = z
     /** The model's cluster opinion — reconciled with the lexical score,
      * never trusted alone. Enum-bound to the taxonomy. */
     clusterHint: z.enum(TAXONOMY_CLUSTERS),
+    /** Other kinds of work the mission genuinely contains (the work
+     * PROFILE — a real agent's run is a mix, and serving routes each step
+     * per-request). Enum-bound, capped, deduped against the primary by
+     * code. Optional so pre-profile extractions stay parseable. */
+    alsoClusters: z.array(z.enum(TAXONOMY_CLUSTERS)).max(3).optional(),
   })
   .strict();
 
@@ -34,15 +39,19 @@ function extractionPrompt(answers: InterviewAnswers): string {
   return [
     'You convert a mission interview into a STRICT JSON object. Reply with JSON only — no prose, no code fences.',
     'Schema: {"normalizedGoal": string, "doneDefinition"?: string, "nameSlug": string (kebab-case, <=60 chars), "clusterHint": one of ' +
-      JSON.stringify(TAXONOMY_CLUSTERS) + '}',
+      JSON.stringify(TAXONOMY_CLUSTERS) + ', "alsoClusters"?: up to 3 more from the same list}',
     'Rules: normalizedGoal restates the goal imperatively and self-contained. ' +
-      'doneDefinition ONLY for kind=task, sharpened to be objectively checkable. ' +
-      'clusterHint is the single best-fitting cluster for the goal.',
+      'doneDefinition ONLY for kind=task, sharpened to be objectively checkable (fold in the quality bar and deliverable shape when given). ' +
+      'clusterHint is the single best-fitting cluster for the goal. ' +
+      'alsoClusters are OTHER kinds of work the mission genuinely contains — omit rather than pad.',
     'Interview answers:',
     JSON.stringify({
       goal: answers.goal,
       kind: answers.kind,
       ...(answers.doneDefinition !== undefined ? { doneDefinition: answers.doneDefinition } : {}),
+      ...(answers.qualityBar !== undefined ? { doneWellMeans: answers.qualityBar } : {}),
+      ...(answers.produces !== undefined ? { shouldProduce: answers.produces } : {}),
+      ...(answers.exampleResult !== undefined ? { exampleOfAGreatResult: answers.exampleResult } : {}),
     }),
   ].join('\n');
 }

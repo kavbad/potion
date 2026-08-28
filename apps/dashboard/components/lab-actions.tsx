@@ -79,11 +79,17 @@ interface GenerateResponse {
   name?: string;
   clusterId?: string;
   spec?: {
-    mission?: { goal?: string };
+    mission?: { kind?: 'task' | 'standing'; goal?: string; doneDefinition?: string };
     fuel?: { maxUsdPerRun?: number };
     superpowers?: Array<{ id: string }>;
+    rules?: string[];
+    memory?: { enabled?: boolean };
+    checkIns?: Array<{ trigger: string; fraction?: number; schedule?: string }>;
   };
-  sidecar?: { choices?: Array<{ basis?: { frontierVersion?: number; strategyHash?: string } }> };
+  sidecar?: {
+    choices?: Array<{ basis?: { frontierVersion?: number; strategyHash?: string } }>;
+    workProfile?: string[];
+  };
   gaps?: Array<{ code: string; question?: string; candidates?: string[]; clusterId?: string }>;
   reason?: string;
   detail?: string;
@@ -105,17 +111,51 @@ function fuelPreview(worthUsd: number): number | null {
 function BirthSequence({ body }: { body: GenerateResponse }) {
   const basis = body.sidecar?.choices?.[0]?.basis;
   const powers = body.spec?.superpowers ?? [];
+  // The work profile — the genome's headline organ (2026-08-27): a real
+  // agent's run is a mix of kinds, and serving routes each step by its
+  // kind. One kind is information too, so the profile always shows.
+  const profile = body.sidecar?.workProfile ?? (body.clusterId ? [body.clusterId] : []);
+  const profileLine =
+    profile.length > 1
+      ? `mostly ${profile[0]} · also ${profile.slice(1).join(', ')} — each step is routed to the model measured best for its kind`
+      : `${profile[0] ?? '—'} — each step is still routed by its kind as the work unfolds`;
+  const rules = body.spec?.rules ?? [];
+  const checkIns = body.spec?.checkIns ?? [];
+  const checkInWords = [
+    ...(checkIns.some((c) => c.trigger === 'before-external-action') ? ['asks before every external action'] : []),
+    ...(checkIns.some((c) => c.trigger === 'on-budget-fraction') ? ['checks in at half its budget'] : []),
+    ...(checkIns.filter((c) => c.trigger === 'cron').map((c) => {
+      const words: Record<string, string> = {
+        '0 * * * *': 'hourly', '0 9 * * *': 'daily at 9:00', '0 9 * * 1': 'weekly, Monday 9:00',
+      };
+      return `on a schedule — ${words[c.schedule ?? ''] ?? c.schedule ?? 'cron'}`;
+    })),
+  ];
+  const mission = body.spec?.mission;
   const lines: Array<{ k: string; v: string }> = [
-    { k: 'mission understood', v: body.spec?.mission?.goal ?? '—' },
+    { k: 'mission understood', v: mission?.goal ?? '—' },
     { k: 'named', v: body.name ?? '—' },
-    { k: 'kind of work', v: body.clusterId ?? '—' },
+    { k: 'work profile', v: profileLine },
     {
-      k: 'brain chosen from live evidence',
-      v: basis ? `frontier v${basis.frontierVersion} · strategy ${(basis.strategyHash ?? '').slice(0, 8)}` : '—',
+      k: 'brain, per step',
+      v: basis
+        ? `your router picks per step · anchor: frontier v${basis.frontierVersion} · strategy ${(basis.strategyHash ?? '').slice(0, 8)}`
+        : '—',
     },
+    ...(mission?.kind === 'task' && mission.doneDefinition !== undefined
+      ? [{ k: 'done when', v: mission.doneDefinition }]
+      : []),
+    ...(rules.length > 0
+      ? [{ k: `rules · ${rules.length}`, v: rules[0]! + (rules.length > 1 ? ` (+${rules.length - 1} more)` : '') }]
+      : []),
+    ...(checkInWords.length > 0 ? [{ k: 'checks in', v: checkInWords.join(' · ') }] : []),
     {
       k: 'spending cap',
       v: body.spec?.fuel?.maxUsdPerRun !== undefined ? `$${body.spec.fuel.maxUsdPerRun.toFixed(2)} per run · hard stop` : '—',
+    },
+    {
+      k: 'memory',
+      v: body.spec?.memory?.enabled === true ? 'keeps memory between checks — you can read and edit it' : 'none — each run starts fresh',
     },
     powers.length > 0
       ? { k: 'accounts declared', v: `${powers.map((p) => p.id).join(', ')} — asks you before every external action` }
@@ -143,13 +183,22 @@ function BirthSequence({ body }: { body: GenerateResponse }) {
         ))}
       </dl>
       {shown >= lines.length && body.harnessHash ? (
-        <a
-          href={`/lab/harness/${body.harnessHash}?born=1`}
-          className="mt-4 inline-block bg-ink px-5 py-2.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90"
-          data-testid="birth-open"
-        >
-          Meet {body.name ?? 'your worker'} →
-        </a>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <a
+            href={`/lab/harness/${body.harnessHash}?born=1`}
+            className="inline-block bg-ink px-5 py-2.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90"
+            data-testid="birth-open"
+          >
+            Meet {body.name ?? 'your worker'} →
+          </a>
+          <a
+            href={`/lab/harness/${body.harnessHash}#machinery`}
+            className="font-mono text-[12.5px] text-soft underline hover:text-accent"
+            data-testid="birth-machinery"
+          >
+            open the machinery — the spec file, editable to the detail
+          </a>
+        </div>
       ) : null}
     </div>
   );
@@ -198,6 +247,16 @@ export function InterviewForm() {
   const [done, setDone] = useState('');
   const [accounts, setAccounts] = useState('');
   const [worth, setWorth] = useState('1');
+  // The recipe card (2026-08-27): each field is one consideration a good
+  // agent-builder weighs — the form itself does the teaching, so nobody
+  // faces a blank prompt wondering what to think about. All optional; a
+  // blank field is drafted from the job by the build, never invented.
+  const [qualityBar, setQualityBar] = useState('');
+  const [produces, setProduces] = useState('');
+  const [example, setExample] = useState('');
+  const [never, setNever] = useState('');
+  const [whenUnsure, setWhenUnsure] = useState<'ask-first' | 'press-on'>('ask-first');
+  const [cadence, setCadence] = useState<'' | 'hourly' | 'daily' | 'weekly'>('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [born, setBorn] = useState<GenerateResponse | null>(null);
@@ -227,6 +286,14 @@ export function InterviewForm() {
             accounts: accounts.split(',').map((s) => s.trim()).filter(Boolean),
             worthUsd: Number(worth),
             ...(clusterChoice !== undefined ? { clusterChoice } : {}),
+            ...(qualityBar.trim() ? { qualityBar: qualityBar.trim() } : {}),
+            ...(produces.trim() ? { produces: produces.trim() } : {}),
+            ...(example.trim() ? { exampleResult: example.trim() } : {}),
+            ...(never.trim()
+              ? { constraints: never.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 20) }
+              : {}),
+            whenUnsure,
+            ...(kind === 'standing' && cadence !== '' ? { cadence } : {}),
           },
         }),
       });
@@ -240,7 +307,7 @@ export function InterviewForm() {
     } finally {
       setBusy(false);
     }
-  }, [goal, kind, done, accounts, worth, router]);
+  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, router]);
 
   if (born !== null) return <BirthSequence body={born} />;
 
@@ -368,26 +435,157 @@ export function InterviewForm() {
           </p>
         </div>
       </div>
-      {kind === 'task' ? (
-        <div className="mt-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {kind === 'task' ? (
+          <div>
+            <div className={LABEL_ROW}>
+              <label htmlFor="lab-q-done">how it knows it&apos;s done</label>
+              <InfoDot label="done">
+                An objectively checkable finish line — &ldquo;the brief is in my inbox&rdquo;,
+                &ldquo;the spreadsheet has a row per company&rdquo;. The worker uses it to decide when
+                to stop and report, instead of running forever or quitting early. Leave it blank and
+                Potion drafts one from the job — you&rsquo;ll see it on the built worker.
+              </InfoDot>
+            </div>
+            <input
+              id="lab-q-done"
+              value={done}
+              onChange={(e) => setDone(e.target.value)}
+              placeholder="the brief is in my inbox"
+              className={`${FIELD_CLS} mt-1.5`}
+              data-testid="q-done"
+            />
+          </div>
+        ) : (
+          <div>
+            <div className={LABEL_ROW}>
+              <label htmlFor="lab-q-cadence">how often it checks</label>
+              <InfoDot label="cadence">
+                A standing mission works in cycles. Pick a rhythm and the worker also checks in with
+                you on that schedule — a scheduled question, on its record, that you answer. Leave it
+                unset and it still checks in with you partway through each cycle&rsquo;s budget.
+              </InfoDot>
+            </div>
+            <select
+              id="lab-q-cadence"
+              value={cadence}
+              onChange={(e) => setCadence(e.target.value as typeof cadence)}
+              className={`${FIELD_CLS} mt-1.5`}
+              data-testid="q-cadence"
+            >
+              <option value="">no schedule — budget check-ins only</option>
+              <option value="hourly">hourly</option>
+              <option value="daily">daily, 9:00</option>
+              <option value="weekly">weekly, Monday 9:00</option>
+            </select>
+          </div>
+        )}
+        <div>
           <div className={LABEL_ROW}>
-            <label htmlFor="lab-q-done">how it knows it&apos;s done</label>
-            <InfoDot label="done">
-              An objectively checkable finish line — &ldquo;the brief is in my inbox&rdquo;,
-              &ldquo;the spreadsheet has a row per company&rdquo;. The worker uses it to decide when
-              to stop and report, instead of running forever or quitting early.
+            <label htmlFor="lab-q-unsure">when unsure, it should</label>
+            <InfoDot label="when unsure">
+              Escalation is a design choice, so it is asked, not assumed. <b>Ask first</b> adds a
+              check-in halfway through the budget — the worker pauses and shows you where it is.
+              <b> Press on</b> lets it use its own judgment to the finish under the hard cap. Either
+              way, it always asks before any external action until it earns that autonomy.
+            </InfoDot>
+          </div>
+          <select
+            id="lab-q-unsure"
+            value={whenUnsure}
+            onChange={(e) => setWhenUnsure(e.target.value as 'ask-first' | 'press-on')}
+            className={`${FIELD_CLS} mt-1.5`}
+            data-testid="q-unsure"
+          >
+            <option value="ask-first">ask first — check in at half budget</option>
+            <option value="press-on">press on — report at the end</option>
+          </select>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-bar">done well means…</label>
+            <InfoDot label="done well means">
+              Quality needs a definition — &ldquo;finished&rdquo; and &ldquo;finished well&rdquo; are
+              different claims. Whatever you write here becomes a standing rule the worker reads on
+              every single step: &ldquo;covers every company, no filler, numbers sourced&rdquo;.
+              Optional — but the workers with a stated bar are the ones worth keeping.
             </InfoDot>
           </div>
           <input
-            id="lab-q-done"
-            value={done}
-            onChange={(e) => setDone(e.target.value)}
-            placeholder="the brief is in my inbox"
+            id="lab-q-bar"
+            value={qualityBar}
+            onChange={(e) => setQualityBar(e.target.value)}
+            placeholder="specific, sourced, no filler"
             className={`${FIELD_CLS} mt-1.5`}
-            data-testid="q-done"
+            data-testid="q-bar"
           />
         </div>
-      ) : null}
+        <div>
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-produces">it should produce…</label>
+            <InfoDot label="it should produce">
+              Output has a shape — a three-bullet summary, a draft reply, a table, a ranked list.
+              Naming the shape becomes a standing rule the worker reads on every step, and is the
+              single cheapest way to get what you actually wanted.
+            </InfoDot>
+          </div>
+          <input
+            id="lab-q-produces"
+            value={produces}
+            onChange={(e) => setProduces(e.target.value)}
+            placeholder="a three-bullet summary with links"
+            className={`${FIELD_CLS} mt-1.5`}
+            data-testid="q-produces"
+          />
+        </div>
+      </div>
+      <div className="mt-4">
+        <div className={LABEL_ROW}>
+          <label htmlFor="lab-q-never">it must never…</label>
+          <InfoDot label="it must never">
+            Scope has edges — say where they are, one per line: &ldquo;never email anyone&rdquo;,
+            &ldquo;never touch the main branch&rdquo;. Each line becomes a hard rule on the
+            worker&rsquo;s record, verbatim, read on every step. Rules arrive whole or the build
+            refuses — they are never silently trimmed.
+          </InfoDot>
+        </div>
+        <textarea
+          id="lab-q-never"
+          value={never}
+          onChange={(e) => setNever(e.target.value)}
+          rows={2}
+          placeholder={'never email anyone\nnever spend outside its budget'}
+          className={`${FIELD_CLS} mt-1.5 resize-none`}
+          data-testid="q-never"
+        />
+      </div>
+      <details className="mt-4">
+        <summary className="cursor-pointer font-mono text-[12px] uppercase tracking-[0.13em] text-faint hover:text-accent">
+          paste an example of a great result · optional
+        </summary>
+        <div className="mt-2">
+          <div className={LABEL_ROW}>
+            <label htmlFor="lab-q-example">a great result looks like…</label>
+            <InfoDot label="a great result">
+              Concreteness beats adjectives: one pasted example of what you&rsquo;d love to receive
+              teaches the build more than a paragraph of description. It is read while your worker is
+              being designed — it is not stored on the worker, and secrets are refused before
+              anything is read.
+            </InfoDot>
+          </div>
+          <textarea
+            id="lab-q-example"
+            value={example}
+            onChange={(e) => setExample(e.target.value)}
+            rows={4}
+            placeholder="ACME — raised a $12M Series A (TechCrunch, Tue) — relevant to us because…"
+            className={`${FIELD_CLS} mt-1.5 resize-y`}
+            data-testid="q-example"
+          />
+        </div>
+      </details>
       <div className="mt-5 flex flex-wrap items-center gap-4">
         <button
           onClick={() => void submit()}

@@ -243,3 +243,34 @@ describe('generateSpec — refusals and drafts', () => {
     expect(calls()).toBe(0);
   });
 });
+
+describe('recipe card at the generate gate (2026-08-27)', () => {
+  it('oversize qualityBar is a typed refusal, never truncated governance', async () => {
+    const r = await generateSpec(
+      { goal: 'summarize notes weekly into a digest', kind: 'task', doneDefinition: 'digest exists', accounts: [], worthUsd: 2, qualityBar: 'x'.repeat(2000) },
+      { client: scripted([]).client, loadFrontier: async () => null },
+    );
+    expect(r.kind).toBe('refused');
+    if (r.kind === 'refused') expect(r.reason).toBe('answers-too-large');
+  });
+
+  it('the work profile is primary-first and deduped against alsoClusters', async () => {
+    const { client } = scripted([
+      JSON.stringify({
+        normalizedGoal: 'Summarize the weekly notes into a digest.',
+        doneDefinition: 'A digest exists.',
+        nameSlug: 'weekly-digest',
+        clusterHint: 'summarization',
+        alsoClusters: ['summarization', 'extraction', 'rag-answer'],
+      }),
+    ]);
+    const r = await generateSpec(
+      { goal: 'summarize notes weekly into a digest', kind: 'task', doneDefinition: 'digest exists', accounts: [], worthUsd: 2 },
+      { client, loadFrontier: async () => FRONTIER },
+    );
+    expect(r.kind).toBe('complete');
+    if (r.kind === 'complete') {
+      expect(r.sidecar.workProfile).toEqual(['summarization', 'extraction', 'rag-answer']);
+    }
+  });
+});

@@ -32,6 +32,26 @@ export function sanitizeVerbatim(text: string): string {
   return text.replace(/[\u0000-\u001F\u007F]/g, ' ').trim();
 }
 
+/** Recipe cadence → a FIXED cron by code (the user never writes cron). */
+export const CADENCE_CRON: Record<'hourly' | 'daily' | 'weekly', string> = {
+  hourly: '0 * * * *',
+  daily: '0 9 * * *',
+  weekly: '0 9 * * 1',
+};
+
+/** Recipe-card fields → deterministic rules. The prefix names the field so
+ * the spec stays self-describing when read raw; the content is verbatim
+ * (sanitized, capped) — the runtime injects rules[] into the system prompt,
+ * which is what makes these load-bearing rather than decorative. */
+export function recipeRules(answers: InterviewAnswers): string[] {
+  const out: string[] = [];
+  const bar = answers.qualityBar !== undefined ? sanitizeVerbatim(answers.qualityBar) : '';
+  if (bar.length > 0) out.push(`Done well means: ${bar}`.slice(0, SPEC_LIMITS.MAX_RULE_CHARS));
+  const prod = answers.produces !== undefined ? sanitizeVerbatim(answers.produces) : '';
+  if (prod.length > 0) out.push(`Deliverable: ${prod}`.slice(0, SPEC_LIMITS.MAX_RULE_CHARS));
+  return out;
+}
+
 export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, policy: Policy): HarnessSpec {
   // Step 11 §6 — LEAST PRIVILEGE BY DEFAULT: a declared superpower carries
   // its catalog package's `defaultScopes`, which is the MINIMUM that
@@ -41,10 +61,15 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
   const superpowers = [...new Set(answers.accounts.map(accountSlug))]
     .slice(0, SPEC_LIMITS.MAX_SUPERPOWERS)
     .map((id) => ({ id, scopes: [...(getPackage(id)?.defaultScopes ?? [])] }));
-  const rules = (answers.constraints ?? [])
-    .map((r) => sanitizeVerbatim(r).slice(0, SPEC_LIMITS.MAX_RULE_CHARS))
-    .filter((r) => r.length > 0)
-    .slice(0, SPEC_LIMITS.MAX_RULES);
+  // Recipe rules FIRST (the quality bar and deliverable are read before
+  // governance), then the operator's verbatim must-nevers. The combined
+  // overflow refusal lives in generate.ts — no silent truncation here.
+  const rules = [
+    ...recipeRules(answers),
+    ...(answers.constraints ?? [])
+      .map((r) => sanitizeVerbatim(r).slice(0, SPEC_LIMITS.MAX_RULE_CHARS))
+      .filter((r) => r.length > 0),
+  ].slice(0, SPEC_LIMITS.MAX_RULES);
   return {
     specVersion: 1,
     name: extraction.nameSlug,
@@ -71,8 +96,21 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
     // complete on their own done-definition and stay check-in-free unless
     // tool-bearing.
     checkIns: [
-      ...(answers.kind === 'standing' ? [{ trigger: 'on-budget-fraction', fraction: 0.5 } as const] : []),
+      // 'ask-first' extends the half-budget check-in to TASK missions too;
+      // it never removes the standing default (additive-only safety).
+      ...(answers.kind === 'standing' || answers.whenUnsure === 'ask-first'
+        ? [{ trigger: 'on-budget-fraction', fraction: 0.5 } as const]
+        : []),
       ...(superpowers.length > 0 ? [{ trigger: 'before-external-action' } as const] : []),
+      // Recipe cadence (standing only): a scheduled human touchpoint, cron
+      // fixed by code — the enum is the whole input surface.
+      ...(answers.kind === 'standing' && answers.cadence !== undefined
+        ? [{
+            trigger: 'cron' as const,
+            schedule: CADENCE_CRON[answers.cadence],
+            question: 'Scheduled check-in: anything meaningful since the last check? Anything the operator should decide?',
+          }]
+        : []),
     ],
   };
 }

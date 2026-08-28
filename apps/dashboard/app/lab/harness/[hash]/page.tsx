@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { fetchOrRecover } from '@/lib/recover';
 import { LabConsole } from '@/components/lab-console';
 import { ConnectorPanel } from '@/components/lab-actions';
+import { LabMachinery } from '@/components/lab-machinery';
 import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import { BenchLabel, CARD, LabStage, SpecimenMark } from '@/components/lab-bench';
 import type { HarnessDto, MemoryDto } from '@potion/lab-form';
@@ -187,6 +188,10 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
               </div>
             </section>
           ) : null}
+
+          {/* ---- the machinery: the spec file, its provenance, its laws —
+               editable to the detail (2026-08-27: "this is a LAB") ---- */}
+          <LabMachinery harness={harness} role={me.role} />
 
           {/* ---- run it elsewhere: the OpenClaw wiring card ---- */}
           <section className={`mt-8 ${CARD} px-6 py-5`}>

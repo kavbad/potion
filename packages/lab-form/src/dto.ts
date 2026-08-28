@@ -25,13 +25,29 @@ export interface HarnessDto {
   clusterId: string;
   createdAt: string;
   spec: HarnessSpec | null;
+  /** The canonical spec FILE — byte truth for the machinery editor. */
+  specText?: string;
   sidecar: {
     specHash: string;
     choicesHash: string;
     choices: Array<{
       slot: 'brain.policy' | 'brain.toolPolicy';
-      basis: { clusterId: string; frontierId: string; strategyHash: string; providerMode: string };
+      basis: {
+        clusterId: string;
+        frontierId: string;
+        frontierVersion?: number;
+        strategyHash: string;
+        providerMode: string;
+        suiteContentHash?: string;
+      };
+      partition?: 'single-only' | 'full';
+      alternatives?: number;
     }>;
+    /** The work profile — kinds of work the mission contains, primary
+     * first (interpretation provenance; serving routes per step). */
+    workProfile?: string[];
+    /** Set when the spec was operator-edited: the row it was edited from. */
+    editedFrom?: string;
   };
   superpowers: Array<{
     id: string;

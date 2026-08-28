@@ -170,6 +170,14 @@ const ANSWERS_SCHEMA = z
     constraints: z.array(z.string().min(1).max(500)).max(20).optional(),
     /** Answer to a cluster-uncertain draft — enum-bound, authoritative. */
     clusterChoice: z.enum(TAXONOMY_CLUSTERS).optional(),
+    /** Recipe card (2026-08-27): each optional field is one consideration
+     * a good agent-builder weighs; each lands in a real spec slot in
+     * lab-gen (never decoration, never invented when absent). */
+    qualityBar: z.string().min(1).max(500).optional(),
+    produces: z.string().min(1).max(500).optional(),
+    exampleResult: z.string().min(1).max(2000).optional(),
+    whenUnsure: z.enum(['ask-first', 'press-on']).optional(),
+    cadence: z.enum(['hourly', 'daily', 'weekly']).optional(),
   })
   .strict();
 
@@ -315,6 +323,11 @@ export function registerLabRoutes(
       ...(a.doneDefinition !== undefined ? { doneDefinition: a.doneDefinition } : {}),
       ...(a.constraints !== undefined ? { constraints: a.constraints } : {}),
       ...(a.clusterChoice !== undefined ? { clusterChoice: a.clusterChoice } : {}),
+      ...(a.qualityBar !== undefined ? { qualityBar: a.qualityBar } : {}),
+      ...(a.produces !== undefined ? { produces: a.produces } : {}),
+      ...(a.exampleResult !== undefined ? { exampleResult: a.exampleResult } : {}),
+      ...(a.whenUnsure !== undefined ? { whenUnsure: a.whenUnsure } : {}),
+      ...(a.cadence !== undefined ? { cadence: a.cadence } : {}),
     };
     const result = await withEphemeralKey(org.orgId, async (rawKey) => {
       const client = new ServingClient({ baseUrl: 'http://lab.injected', apiKey: rawKey, fetchFn: injectFetch });
@@ -405,6 +418,9 @@ export function registerLabRoutes(
       clusterId: row.clusterId,
       createdAt: row.createdAt,
       spec,
+      // The canonical spec FILE, byte truth — the machinery view edits
+      // this, not a re-serialization (round-trip honesty).
+      specText: row.specText,
       sidecar: row.sidecar,
       superpowers: await superpowerPosture(org.orgId, spec),
       dial: {
@@ -489,6 +505,61 @@ export function registerLabRoutes(
       view,
       policyRef: policyRow.name,
     });
+  });
+
+  // ---- PUT /api/lab/harnesses/:hash/spec (admin) — the open hood ----
+  // The operator's 2026-08-27 brief: "under the hood must be editable —
+  // this is a LAB". The entire spec file is writable, through EVERY custody
+  // gate parseHarnessSpecText enforces (schema, size, control characters,
+  // key-shaped secrets, tamper-evident hash). Failures return the TYPED
+  // issue list — path, code, message — never a laundered 400. A valid edit
+  // mints a NEW content-addressed catalog row (dial-motion precedent): the
+  // prior row and every run frozen from it are untouched. The autopilot
+  // sidecar is deliberately ORPHANED — an operator-authored spec carries
+  // operator provenance, and editedFrom names the lineage.
+  app.put('/api/lab/harnesses/:hash/spec', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'edit the spec'));
+    }
+    const body = z.object({ specText: z.string().min(2).max(80_000) }).safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_body',
+        message: body.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+      });
+    }
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    const parsed = parseHarnessSpecText(body.data.specText);
+    if (!parsed.ok) {
+      return reply.code(422).send({ ok: false, issues: parsed.issues });
+    }
+    if (parsed.hash === row.harnessHash) {
+      return reply.send({ ok: true, harnessHash: row.harnessHash, unchanged: true });
+    }
+    // Re-canonicalize: the stored file is ALWAYS canonical bytes with the
+    // embedded hash, whatever formatting the editor sent.
+    const canonicalText = canonicalJson({ ...parsed.spec, hash: parsed.hash });
+    const prior = row.sidecar as ChoicesSidecar;
+    const sidecar: ChoicesSidecar = {
+      specHash: parsed.hash,
+      choicesHash: sha256(canonicalJson([])),
+      choices: [],
+      editedFrom: row.harnessHash,
+    };
+    if (prior?.workProfile !== undefined) sidecar.workProfile = prior.workProfile;
+    await upsertLabHarness(db, {
+      orgId: org.orgId,
+      harnessHash: parsed.hash,
+      name: parsed.spec.name,
+      specText: canonicalText,
+      sidecar,
+      // The cluster is interpretation provenance, not spec law — an edit
+      // keeps the reading (re-describe the mission to change it).
+      clusterId: row.clusterId,
+    });
+    return reply.send({ ok: true, harnessHash: parsed.hash, previousHash: row.harnessHash, name: parsed.spec.name });
   });
 
   // ---- POST /api/lab/harnesses/:hash/felt (member) — cap-bound, cached ----
