@@ -62,51 +62,13 @@
           ]
         }
       }
-    },
-    {
-      "seq": 2,
-      "kind": "model",
-      "payload": {
-        "kind": "model",
-        "slot": "brain",
-        "usage": {
-          "totalTokens": 15,
-          "promptTokens": 10,
-          "completionTokens": 5
-        },
-        "clockMs": 1780000003000,
-        "rngSample": 0.010081487242132425,
-        "toolCalls": [],
-        "estCostUsd": 0.00015,
-        "completionId": "chatcmpl-golden0002",
-        "finishReason": "stop",
-        "responseText": "observation two.",
-        "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
-        "requestPayload": {
-          "model": "potion-auto",
-          "messages": [
-            {
-              "role": "system",
-              "content": "You are a harness named 'golden standing harness'.\nMission (standing): watch the queue\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
-            },
-            {
-              "role": "user",
-              "content": "Begin the mission."
-            },
-            {
-              "role": "assistant",
-              "content": "observation one."
-            }
-          ]
-        }
-      }
     }
   ],
   "terminal": {
-    "state": "running",
-    "reason": null
+    "state": "completed",
+    "reason": "check complete — a standing mission rests until its next check"
   },
   "outcomes": [
-    "leg-cap"
+    "completed"
   ]
 }

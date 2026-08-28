@@ -223,8 +223,25 @@ describe('DoD leg 3: spec drift refuses a resume (F7 applied to runs)', () => {
       name: 'drift harness',
       mission: { kind: 'standing', goal: 'stand by' },
     });
+    // 2026-08-27: standing legs now COMPLETE on a no-tool natural stop, so a
+    // real mock response would end this run terminally and the resume would
+    // refuse as 'terminal' before drift is ever checked. The drift check
+    // needs a genuinely NON-terminal run — a truncated ('length') response
+    // parks the leg at its cap without completing it.
+    const lengthClient = {
+      complete: async () => ({
+        kind: 'ok' as const,
+        completionId: 'c-drift',
+        text: 'working…',
+        toolCalls: [],
+        finishReason: 'length',
+        usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+        frontierTrace: 'cluster=summarization;strategy=x;frontier=v1;policy=compound;fallback=0;provenance=mock',
+      }),
+      emitSpans: async () => {},
+    } as unknown as ServingClient;
     const { runId } = await startRun({
-      db: h.db, client, orgId: ORG, specText: JSON.stringify(s), maxStepsPerLeg: 1,
+      db: h.db, client: lengthClient, orgId: ORG, specText: JSON.stringify(s), maxStepsPerLeg: 1,
     });
     const edited = { ...s, rules: ['a new rule that changes what this harness IS'] };
     expect(harnessSpecHash(edited)).not.toBe(harnessSpecHash(s));

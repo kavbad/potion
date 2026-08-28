@@ -374,6 +374,10 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     }
 
     let stepsThisLeg = 0;
+    // 2026-08-27 stall breaker: the previous NO-TOOL response text — two
+    // identical answers in a row mean the loop is feeding the model its own
+    // echo, and every further call burns money for nothing.
+    let lastResponseText: string | null = null;
     while (stepsThisLeg < maxSteps) {
       // ---- fuel hard stop (harness-level; the org-level one is serving's) ----
       if (estSpentUsd >= opts.spec.fuel.maxUsdPerRun) {
@@ -492,8 +496,35 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         continue;
       }
 
-      // No tool calls + natural stop → a TASK mission is complete. Standing
-      // missions keep going until the leg cap (heartbeat-shaped by design).
+      // ---- no-tool responses: completion and the stall breaker ----
+      if (result.toolCalls.length === 0) {
+        // Stall breaker (2026-08-27 prod incident): an identical repeat of
+        // the previous answer is the loop echoing — 21 identical thoughts
+        // burned a run to its hard stop. Stop, and say what to fix.
+        if (lastResponseText !== null && result.text === lastResponseText && result.text.length > 0) {
+          const reason =
+            'stalled: the worker repeated itself without progress — it likely needs more detail ' +
+            'in its mission (what exactly should it act on?). Edit the goal or add a rule, then run again.';
+          await fenced.transition('failed', reason);
+          return { status: 'failed', reason: 'stalled', steps: stepsThisLeg };
+        }
+        lastResponseText = result.text;
+        // STANDING + natural stop → the CHECK is complete (2026-08-27). The
+        // old rule — "keep going until the leg cap, heartbeat-shaped" — made
+        // a tool-less standing worker re-ask the model against its own echo
+        // until the fuel gate. A standing mission continues across CHECKS,
+        // never by spinning one leg's context. The hard stop still wins.
+        if (opts.spec.mission.kind === 'standing' && result.finishReason === 'stop') {
+          if (estSpentUsd >= opts.spec.fuel.maxUsdPerRun) {
+            await fenced.transition('killed-budget', `fuel exhausted: est $${estSpentUsd.toFixed(4)} >= maxUsdPerRun $${opts.spec.fuel.maxUsdPerRun}`);
+            return { status: 'killed-budget', reason: 'fuel', steps: stepsThisLeg };
+          }
+          await fenced.transition('completed', 'check complete — a standing mission rests until its next check');
+          return { status: 'completed', steps: stepsThisLeg };
+        }
+      }
+
+      // No tool calls + natural stop → a TASK mission is complete.
       if (opts.spec.mission.kind === 'task' && result.finishReason === 'stop') {
         // Step 8: TOOL-BEARING runs end with ONE deliberate tool-free call
         // — the wrap-up — served under brain.policy and stamped 'brain'

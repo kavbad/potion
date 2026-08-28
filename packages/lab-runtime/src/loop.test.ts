@@ -187,6 +187,38 @@ describe('fuel hard stop (harness-level)', () => {
   }, 60_000);
 });
 
+describe('standing legs complete; stalls break (2026-08-27 incident)', () => {
+  it('a standing mission with a no-tool natural stop completes its CHECK in one model call', async () => {
+    const s = spec();
+    const standing = { ...s, mission: { kind: 'standing' as const, goal: 'watch things' } };
+    const { h, hash } = await freshRun(standing);
+    const client = scripted([
+      ok({ text: 'Nothing meaningful changed since the last check.', finishReason: 'stop' }),
+      ok({ text: 'never reached' }),
+    ]);
+    const out = await runLeg({ db: h.db, client, runId: 'run-loop', orgId: ORG, spec: standing, harnessHash: hash });
+    expect(out.status).toBe('completed');
+    expect(await listLabSteps(h.db, 'run-loop', ORG)).toHaveLength(1);
+    await h.close();
+  }, 60_000);
+
+  it('two identical no-tool answers stall the run with an actionable reason, not a burn', async () => {
+    const s = spec();
+    const { h, hash } = await freshRun(s);
+    // finishReason 'length' so the task-completion branch never fires.
+    const client = scripted([
+      ok({ text: 'I need more details to proceed.', finishReason: 'length' }),
+      ok({ text: 'I need more details to proceed.', finishReason: 'length' }),
+      ok({ text: 'never reached' }),
+    ]);
+    const out = await runLeg({ db: h.db, client, runId: 'run-loop', orgId: ORG, spec: s, harnessHash: hash });
+    expect(out.status).toBe('failed');
+    if (out.status === 'failed') expect(out.reason).toBe('stalled');
+    expect(await listLabSteps(h.db, 'run-loop', ORG)).toHaveLength(2);
+    await h.close();
+  }, 60_000);
+});
+
 describe('the secret gate (review addition 2)', () => {
   it('a tool output carrying key-shaped material refuses the checkpoint and fails the run typed', async () => {
     const s = spec();

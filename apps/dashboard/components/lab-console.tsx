@@ -238,13 +238,22 @@ export function LabConsole({
     }
   }, [harness.harnessHash]);
 
+  const [answerError, setAnswerError] = useState<string | null>(null);
   const sendAnswer = useCallback(async () => {
     if (runId === null) return;
     const res = await fetch(`/api/lab/runs/${runId}/answer`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answer }),
     });
-    if (res.status === 202) setAnswer('');
+    if (res.status === 202) {
+      setAnswer('');
+      setAnswerError(null);
+    } else {
+      // 2026-08-27 incident: a swallowed 409 reads as a dead button. Say
+      // what the run actually is; the next poll updates the whole console.
+      const b = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      setAnswerError(b?.error?.message ?? `answer failed (${res.status})`);
+    }
   }, [runId, answer]);
 
   const kill = useCallback(() => {
@@ -356,6 +365,7 @@ export function LabConsole({
             </button>
           </form>
           <p className="mt-2 font-mono text-[12px] text-faint">every answer lands on the permission record as evidence</p>
+          {answerError && <p className="mt-1 text-[12.5px] text-refuse" data-testid="answer-error">{answerError}</p>}
         </div>
       ) : null}
 

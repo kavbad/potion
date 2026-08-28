@@ -172,6 +172,13 @@ export function replayRun(
           derivedTerminal = { state: 'completed', atSeq: step.seq };
         }
       }
+      // 2026-08-27 (mirrors the loop's law, same commit): a STANDING
+      // mission's no-tool natural stop completes the CHECK — the replay
+      // must derive what the loop now does, or every honest standing
+      // record reads as divergence.
+      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'standing' && derivedTerminal === null && estSpent < spec.fuel.maxUsdPerRun) {
+        derivedTerminal = { state: 'completed', atSeq: step.seq };
+      }
       if (estSpent >= spec.fuel.maxUsdPerRun && derivedTerminal === null) {
         derivedTerminal = { state: 'killed-budget', atSeq: step.seq };
       }
