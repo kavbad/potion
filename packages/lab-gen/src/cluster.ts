@@ -38,12 +38,21 @@ export interface ClusterUncertain {
   question: string;
 }
 
+/** Keyword → word-boundary matcher. Substring matching burned us live
+ * (2026-08-28): 'pr' matched inside "pricing", dragging code-review into
+ * the candidates of a market-brief mission and flattening the signal into
+ * a needless cluster-uncertain draft. Short tokens must match whole words;
+ * multi-word phrases keep matching across their own boundaries. */
+function kwRegex(kw: string): RegExp {
+  return new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+}
+
 function lexicalScores(goal: string): Map<TaxonomyCluster, number> {
   const text = goal.toLowerCase();
   const scores = new Map<TaxonomyCluster, number>();
   for (const cluster of TAXONOMY_CLUSTERS) {
     let s = 0;
-    for (const kw of DESCRIPTORS[cluster]) if (text.includes(kw)) s += 1;
+    for (const kw of DESCRIPTORS[cluster]) if (kwRegex(kw).test(text)) s += 1;
     scores.set(cluster, s);
   }
   return scores;

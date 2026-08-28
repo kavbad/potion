@@ -240,6 +240,17 @@ function detectAccounts(goal: string, catalog: Array<{ connectorId: string; disp
 
 const STANDING_HINT = /\b(daily|weekly|hourly|every|each|monitor|monitors|watch|watches|ongoing|continuously|whenever|keep)\b/i;
 
+/** The showcase example (operator, 2026-08-28). An authored example ships
+ * with its author's answer to the kind-of-work question: EXAMPLE_CLUSTER is
+ * sent as the authoritative clusterChoice — but ONLY while the goal is
+ * still verbatim EXAMPLE_GOAL. The moment the operator makes the mission
+ * their own, the choice is dropped and the real interpretation runs (a
+ * stale authored answer on an edited mission would silently misclassify —
+ * the exact failure the never-silent rule exists to prevent). */
+const EXAMPLE_GOAL =
+  'Every weekday morning, read the newsletters and alerts in my inbox, pull out anything that moves our market — competitor launches, pricing changes, funding rounds — and draft me a five-minute brief with the two things I should act on first';
+const EXAMPLE_CLUSTER = 'summarization';
+
 export function InterviewForm() {
   const router = useRouter();
   const [goal, setGoal] = useState('');
@@ -286,7 +297,11 @@ export function InterviewForm() {
             ...(kind === 'task' && done ? { doneDefinition: done } : {}),
             accounts: accounts.split(',').map((s) => s.trim()).filter(Boolean),
             worthUsd: Number(worth),
-            ...(clusterChoice !== undefined ? { clusterChoice } : {}),
+            ...(clusterChoice !== undefined
+              ? { clusterChoice }
+              : goal === EXAMPLE_GOAL
+                ? { clusterChoice: EXAMPLE_CLUSTER }
+                : {}),
             ...(qualityBar.trim() ? { qualityBar: qualityBar.trim() } : {}),
             ...(produces.trim() ? { produces: produces.trim() } : {}),
             ...(example.trim() ? { exampleResult: example.trim() } : {}),
@@ -315,9 +330,7 @@ export function InterviewForm() {
   // example as well as by its questions. Deterministic, client-side,
   // everything editable afterwards — a starting point, never a submission.
   const fillExample = useCallback(() => {
-    setGoal(
-      'Every weekday morning, read the newsletters and alerts in my inbox, pull out anything that moves our market — competitor launches, pricing changes, funding rounds — and draft me a five-minute brief with the two things I should act on first',
-    );
+    setGoal(EXAMPLE_GOAL);
     setKind('standing');
     setCadence('daily');
     setAccounts('gmail');
