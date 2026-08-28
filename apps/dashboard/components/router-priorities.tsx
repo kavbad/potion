@@ -11,6 +11,7 @@
 // The asymmetry holds by shape: there is no model picker here. You state
 // what you want; Potion recompiles.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { priceVsBaseline } from '@/lib/price-words';
 import type { Policy } from '@potion/core';
 
 interface WhatIfAssignment {
@@ -25,7 +26,7 @@ interface WhatIfAssignment {
 interface WhatIfResponse {
   description: string;
   assignments: WhatIfAssignment[];
-  expected: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
+  expected: { quality: number; costPer1K: number; baselineCostPer1K: number; baselineQuality?: number; savingsPct: number } | null;
 }
 
 interface CurrentAssignment {
@@ -211,7 +212,7 @@ export function RouterPriorities({
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 font-mono text-[13px] tabular-nums">
                 <span className="text-ink">quality {(preview.expected.quality * 100).toFixed(1)}%{qualityDelta !== null && Math.abs(qualityDelta) >= 0.0005 ? <span className={qualityDelta > 0 ? 'text-kept' : 'text-warn'}> ({qualityDelta > 0 ? '+' : ''}{(qualityDelta * 100).toFixed(1)})</span> : null}</span>
                 <span className="text-ink">${preview.expected.costPer1K.toFixed(2)}/1K{costDelta !== null && Math.abs(costDelta) >= 0.005 ? <span className={costDelta > 0 ? 'text-warn' : 'text-kept'}> ({costDelta > 0 ? '+' : ''}{Math.round(costDelta * 100)}%)</span> : null}</span>
-                <span className="text-kept">saves {Math.round(preview.expected.savingsPct * 100)}% vs best-scorer</span>
+                <span className="text-kept">{priceVsBaseline(preview.expected.costPer1K, preview.expected.baselineCostPer1K)} vs the best scorer</span>
               </div>
             )}
             {changed.length > 0 ? (

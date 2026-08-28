@@ -15,6 +15,7 @@
 // prefers-reduced-motion kills all of them. "Maintained" is never claimed
 // where it cannot be verified — the rule itself is shown instead.
 import { useEffect, useMemo, useState } from 'react';
+import { priceVsBaseline } from '@/lib/price-words';
 import Link from 'next/link';
 import type { Policy } from '@potion/core';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
@@ -53,7 +54,7 @@ interface RouterResponse {
     assignments: Assignment[];
     changes: string[];
     interpreted?: { summary: string; mix: Array<{ clusterId: string; share: number }> };
-    expected?: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
+    expected?: { quality: number; costPer1K: number; baselineCostPer1K: number; baselineQuality?: number; savingsPct: number } | null;
   };
   history: Array<{ version: number; createdAt: string; changes: string[] }>;
 }
@@ -353,7 +354,7 @@ export function RouterHome({
               expected at your described mix:{' '}
               <span className="text-ink">{(doc.expected.quality * 100).toFixed(1)}% quality</span> ·{' '}
               <span className="text-ink">${doc.expected.costPer1K.toFixed(2)}/1K requests</span> ·{' '}
-              <span className="font-semibold text-kept">saves {Math.round(doc.expected.savingsPct * 100)}% vs best-scorer</span>
+              <span className="font-semibold text-kept">{priceVsBaseline(doc.expected.costPer1K, doc.expected.baselineCostPer1K)} vs the best scorer everywhere</span>
             </p>
           )}
 

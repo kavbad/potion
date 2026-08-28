@@ -20,6 +20,7 @@ import { usePathname } from 'next/navigation';
 import { Mark } from '@/components/mark';
 import { ReceiptCard } from '@/components/primitives';
 import { routeOnce, type Receipt } from '@/components/try-request';
+import { priceVsBaseline } from '@/lib/price-words';
 
 const CHOICES: Array<{ key: string; label: string; sub: string; models: string[]; other: string | null }> = [
   { key: 'openai', label: 'OpenAI', sub: 'GPT models', models: ['or-gpt-full'], other: null },
@@ -34,7 +35,7 @@ interface InterpretResponse {
   mix: Array<{ clusterId: string; share: number }>;
   router: { name: string; version: number; provisional: boolean };
   assignments: Array<{ clusterId: string; share: number; label: string; quality: number | null; costPer1K: number | null }>;
-  expected: { quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null;
+  expected: { quality: number; costPer1K: number; baselineCostPer1K: number; baselineQuality?: number; savingsPct: number } | null;
 }
 
 const SAMPLE = 'Is this review positive, negative, or neutral? "Crashed twice, support never replied."';
@@ -289,12 +290,23 @@ export function FirstRunGate() {
                   </p>
                 ) : null}
                 {interp.expected && (
-                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
-                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%</span></span>
-                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
-                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best-scorer baseline</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
-                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected savings</span><span className="font-semibold text-kept">{formatSavingsPct(interp.expected.savingsPct)}</span></span>
-                  </div>
+                  <>
+                    {/* The honest triangle (2026-08-28): both qualities AND
+                        both costs on the table — the trade is visible, and
+                        price speaks as a ratio bound to quality, never a
+                        naked percent-off (the endorsed-landing formula). */}
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
+                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%{interp.expected.baselineQuality !== undefined ? <span className="text-faint"> vs {(interp.expected.baselineQuality * 100).toFixed(1)}</span> : null}</span></span>
+                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
+                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best scorer, everywhere</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
+                      <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">your price</span><span className="font-semibold text-kept">{priceVsBaseline(interp.expected.costPer1K, interp.expected.baselineCostPer1K)}</span></span>
+                    </div>
+                    <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
+                      the comparison is the premium counterfactual — the top-scoring model on every
+                      request. your Savings page verifies against what you actually pay, per receipt
+                      — never below what you get now
+                    </p>
+                  </>
                 )}
               </div>
               {/* The learning promise — the product's core loop, said plainly
@@ -469,14 +481,4 @@ export function FirstRunGate() {
   );
 }
 
-/** Savings display that never lies upward: one decimal in the 99s, and
- * never "100%" — a rounded 100 reads as fake precisely when the real
- * number is most impressive (the operator's screenshot: $19.96 → $0.06 is
- * 99.7%, not 100%). */
-function formatSavingsPct(frac: number): string {
-  const pct = frac * 100;
-  if (pct >= 99.95) return '99.9%';
-  if (pct >= 99) return `${pct.toFixed(1)}%`;
-  return `${Math.round(pct)}%`;
-}
 

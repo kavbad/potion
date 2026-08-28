@@ -284,8 +284,8 @@ export async function expectedForMix(
   orgId: string,
   assignments: RouterAssignment[],
   mix: Array<{ clusterId: string; share: number }>,
-): Promise<{ quality: number; costPer1K: number; baselineCostPer1K: number; savingsPct: number } | null> {
-  let q = 0, cost = 0, base = 0, covered = 0;
+): Promise<{ quality: number; costPer1K: number; baselineCostPer1K: number; baselineQuality: number; savingsPct: number } | null> {
+  let q = 0, cost = 0, base = 0, baseQ = 0, covered = 0;
   for (const m of mix) {
     const a = assignments.find((x) => x.clusterId === m.clusterId);
     if (!a || a.quality === null || a.costPer1K === null) continue;
@@ -299,12 +299,18 @@ export async function expectedForMix(
     q += m.share * a.quality;
     cost += m.share * a.costPer1K;
     base += m.share * best.c;
+    baseQ += m.share * best.q;
   }
   if (covered <= 0 || base <= 0) return null;
   return {
     quality: q / covered,
     costPer1K: cost / covered,
     baselineCostPer1K: base / covered,
+    // The baseline's own quality (2026-08-28, operator: "how the hell are
+    // we saving 99.7%"): a cost comparison against the premium
+    // counterfactual is only honest with BOTH qualities on the table — the
+    // trade must be visible, never implied away.
+    baselineQuality: baseQ / covered,
     savingsPct: Math.max(0, 1 - cost / base),
   };
 }
