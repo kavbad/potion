@@ -66,7 +66,7 @@ function decide(i: number): Decision {
 }
 
 // The right lane's field: the cluster's points on a small log-cost × quality plane.
-const FX0 = 470, FX1 = 700, FY0 = 60, FY1 = 200;
+const FX0 = 452, FX1 = 724, FY0 = 48, FY1 = 208;
 function fieldScales(points: { quality: number; costPer1K: number }[]) {
   const cs = points.map((p) => Math.log10(p.costPer1K));
   const minC = Math.min(...cs) - 0.15, maxC = Math.max(...cs) + 0.15;
@@ -112,71 +112,82 @@ export function TwoRoads() {
         <text x="404" y="30" fontSize="10" fill={FAINT} letterSpacing="0.14em">POTION · THE MEASURED FIELD</text>
         <line x1="380" y1="16" x2="380" y2={H - 16} stroke="#d9d5cb" strokeWidth="1" />
 
-        {/* ---- left lane: the single road ---- */}
-        <text x="24" y="126" fontSize="9" fill={FAINT} letterSpacing="0.1em">REQUEST</text>
-        <line x1="24" y1="132" x2="252" y2="132" stroke={INK} strokeWidth="1" />
-        <circle cx="292" cy="132" r="26" fill="none" stroke={INK} strokeWidth="1" />
-        <text x="292" y="129" textAnchor="middle" fontSize="9" fill={INK}>the one</text>
-        <text x="292" y="140" textAnchor="middle" fontSize="9" fill={INK}>model</text>
-        <text x="292" y="176" textAnchor="middle" fontSize="9" fill={FAINT} letterSpacing="0.08em">EVERY TIME · {usd(cur.premium)} / 1k</text>
+        {/* ---- left lane: every kind of work, flattened onto one road ---- */}
+        {/* the six kinds converge into the single line — the flattening IS
+            the gateway's story; the current kind reads in ink. */}
+        {Object.entries(WORK).map(([cid, label], i) => {
+          const ly = 58 + i * 15;
+          const active = cid === cur.cluster;
+          return (
+            <g key={cid}>
+              <text x="24" y={ly + 3} fontSize="8.5" fill={active ? INK : FAINT} opacity={active ? 1 : 0.65}>{label}</text>
+              <path d={`M 132 ${ly} C 168 ${ly}, 186 150, 210 150`} fill="none" stroke={active ? INK : RULE} strokeWidth={active ? 1 : 0.75} opacity={active ? 0.9 : 0.45} />
+            </g>
+          );
+        })}
+        <line x1="210" y1="150" x2="266" y2="150" stroke={INK} strokeWidth="1.25" />
+        <circle cx="288" cy="150" r="20" fill={INK} />
+        <text x="288" y="147" textAnchor="middle" fontSize="8.5" fill={PAPER}>the one</text>
+        <text x="288" y="157" textAnchor="middle" fontSize="8.5" fill={PAPER}>model</text>
+        <text x="288" y="188" textAnchor="middle" fontSize="9" fill={FAINT} letterSpacing="0.08em">EVERY TIME · {usd(cur.premium)} / 1k</text>
         {/* the travelling request */}
         <g key={`g${n}`} className="roads-travel-left">
-          <circle cx="24" cy="132" r="4" fill={INK} />
+          <circle cx="24" cy="150" r="4" fill={INK} />
         </g>
         {/* faint trail of the previous requests: all on the same line */}
         {served.slice(0, -1).map((_, k) => (
-          <circle key={k} cx={60 + k * 30} cy="132" r="2.5" fill={INK} opacity="0.25" />
+          <circle key={k} cx={220 + k * 9} cy="150" r="2" fill={INK} opacity="0.25" />
         ))}
 
         {/* ---- right lane: the field ---- */}
-        <text x="404" y="126" fontSize="9" fill={FAINT} letterSpacing="0.1em">REQUEST</text>
-        <line x1="404" y1="132" x2="452" y2="132" stroke={INK} strokeWidth="1" />
-        <text x="404" y="150" fontSize="9" fill={ACCENT}>{WORK[cur.cluster] ?? cur.cluster}</text>
+        <text x="404" y="145" fontSize="9" fill={FAINT} letterSpacing="0.1em">REQUEST</text>
+        <line x1="404" y1="150" x2="436" y2="150" stroke={INK} strokeWidth="1" />
+        <text x="404" y="166" fontSize="9.5" fill={ACCENT}>{WORK[cur.cluster] ?? cur.cluster}</text>
         {/* plane */}
         <line x1={FX0} y1={FY1} x2={FX1} y2={FY1} stroke="#d9d5cb" strokeWidth="1" />
         <line x1={FX0} y1={FY0} x2={FX0} y2={FY1} stroke="#d9d5cb" strokeWidth="1" />
-        <text x={FX1} y={FY1 + 12} textAnchor="end" fontSize="8" fill={FAINT} letterSpacing="0.08em">COST →</text>
-        <text x={FX0 - 4} y={FY0 + 4} textAnchor="end" fontSize="8" fill={FAINT} letterSpacing="0.08em">Q ↑</text>
+        <text x={FX1} y={FY1 + 12} textAnchor="end" fontSize="8.5" fill={FAINT} letterSpacing="0.08em">COST →</text>
+        <text x={FX0 - 4} y={FY0 + 4} textAnchor="end" fontSize="8.5" fill={FAINT} letterSpacing="0.08em">Q ↑</text>
         <line x1={FX0} y1={y(FLOOR)} x2={FX1} y2={y(FLOOR)} stroke={ACCENT} strokeWidth="1" strokeDasharray="3 4" />
-        <text x={FX1} y={y(FLOOR) - 4} textAnchor="end" fontSize="8" fill={ACCENT}>floor {FLOOR.toFixed(2)}</text>
+        <text x={FX1} y={y(FLOOR) - 4} textAnchor="end" fontSize="8.5" fill={ACCENT}>floor {FLOOR.toFixed(2)}</text>
         {/* the route: entry → floor height → the pick */}
-        <path key={`r${n}`} d={`M 452 132 L 458 132 L 458 ${py.toFixed(1)} L ${px.toFixed(1)} ${py.toFixed(1)}`} fill="none" stroke={ACCENT} strokeWidth="1.5" className="roads-route" />
+        <path key={`r${n}`} d={`M 436 150 L 444 150 L 444 ${py.toFixed(1)} L ${px.toFixed(1)} ${py.toFixed(1)}`} fill="none" stroke={ACCENT} strokeWidth="1.5" className="roads-route" />
         {points.map((p) => {
           const sel = p.hash8 === cur.pick.hash8;
           const cx = x(p.costPer1K), cy = y(p.quality);
           return sel ? (
             <g key={`${n}-${p.hash8}`}>
-              <circle cx={cx} cy={cy} r="7" fill="none" stroke={ACCENT} strokeWidth="1" className="roads-ring" />
-              <circle cx={cx} cy={cy} r="3.5" fill={ACCENT} />
+              <circle cx={cx} cy={cy} r="8" fill="none" stroke={ACCENT} strokeWidth="1" className="roads-ring" />
+              <circle cx={cx} cy={cy} r="4" fill={ACCENT} />
             </g>
           ) : p.quality >= FLOOR ? (
-            <circle key={`${n}-${p.hash8}`} cx={cx} cy={cy} r="3" fill={INK} />
+            <circle key={`${n}-${p.hash8}`} cx={cx} cy={cy} r="3.5" fill={INK} />
           ) : (
-            <circle key={`${n}-${p.hash8}`} cx={cx} cy={cy} r="3" fill={PAPER} stroke={INK} strokeWidth="1" />
+            <circle key={`${n}-${p.hash8}`} cx={cx} cy={cy} r="3.5" fill={PAPER} stroke={INK} strokeWidth="1" />
           );
         })}
         <g key={`t${n}`} className="roads-travel-right">
-          <circle cx="404" cy="132" r="4" fill={ACCENT} />
+          <circle cx="404" cy="150" r="4" fill={ACCENT} />
         </g>
         {/* the receipt line */}
-        <text key={`rc${n}`} x="404" y="228" fontSize="9.5" fill={INK} className="roads-fade">
+        <text key={`rc${n}`} x="404" y="234" fontSize="9.5" fill={INK} className="roads-fade">
           → {cur.pick.label.replace('████████████', '██████')} · {usd(cur.pick.costPer1K)} / 1k · scores {cur.pick.quality.toFixed(2)}
         </text>
-        <text x="404" y="242" fontSize="8.5" fill={FAINT}>
+        <text x="404" y="247" fontSize="8.5" fill={FAINT}>
           {cur.cleared ? `cheapest point above the floor · ${Math.max(0, Math.floor((1 - cur.pick.costPer1K / cur.premium) * 100))}% under the one model` : 'nothing cheaper is good enough: the strong model, on purpose'}
         </text>
 
-        {/* ---- tallies ---- */}
-        <line x1="24" y1="258" x2={W - 24} y2="258" stroke={RULE} strokeWidth="1" />
-        <text x="24" y="280" fontSize="9" fill={FAINT} letterSpacing="0.1em">COST / 1K</text>
-        <text x="96" y="281" fontSize="14" fill={INK}>{usd(gwCost)}</text>
-        <text x="196" y="280" fontSize="9" fill={FAINT} letterSpacing="0.1em">QUALITY</text>
-        <text x="256" y="281" fontSize="14" fill={INK}>{gwQ.toFixed(2)}</text>
-        <text x="404" y="280" fontSize="9" fill={FAINT} letterSpacing="0.1em">COST / 1K</text>
-        <text x="476" y="281" fontSize="14" fill={ACCENT}>{usd(poCost)}</text>
-        <text x="576" y="280" fontSize="9" fill={FAINT} letterSpacing="0.1em">QUALITY</text>
-        <text x="636" y="281" fontSize="14" fill={INK}>{poQ.toFixed(2)}</text>
-        <text x={W - 24} y="281" textAnchor="end" fontSize="11" fill={ACCENT}>−{saved}%</text>
+        {/* ---- tallies: one ledger row ---- */}
+        <line x1="24" y1="260" x2={W - 24} y2="260" stroke={RULE} strokeWidth="1" />
+        <text x="24" y="284" fontSize="9" fill={FAINT} letterSpacing="0.1em">COST / 1K</text>
+        <text x="98" y="285" fontSize="15" fill={INK}>{usd(gwCost)}</text>
+        <text x="200" y="284" fontSize="9" fill={FAINT} letterSpacing="0.1em">QUALITY</text>
+        <text x="260" y="285" fontSize="15" fill={INK}>{gwQ.toFixed(2)}</text>
+        <text x="404" y="284" fontSize="9" fill={FAINT} letterSpacing="0.1em">COST / 1K</text>
+        <text x="478" y="285" fontSize="15" fill={ACCENT}>{usd(poCost)}</text>
+        <text x="578" y="284" fontSize="9" fill={FAINT} letterSpacing="0.1em">QUALITY</text>
+        <text x="638" y="285" fontSize="15" fill={INK}>{poQ.toFixed(2)}</text>
+        <text x={W - 24} y="286" textAnchor="end" fontSize="13" fill={ACCENT} fontWeight="600">−{saved}%</text>
       </svg>
 
       <div className="flex h-9 items-center border-t border-[#d9d5cb] px-4 font-mono text-[11.5px] text-faint">
