@@ -282,19 +282,42 @@ export function FirstRunGate() {
                     <span className="text-ink">→ {a.label}{a.quality !== null ? ` · q ${a.quality.toFixed(2)}` : ''}</span>
                   </div>
                 ))}
+                {interp.assignments.some((a) => a.quality !== null) ? (
+                  <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
+                    q · measured quality for that kind of work, on Potion&rsquo;s live suites — the
+                    best score money can buy sets the bar, and your policy picks the point under it
+                  </p>
+                ) : null}
                 {interp.expected && (
                   <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4">
                     <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected quality</span><span className="text-ink">{(interp.expected.quality * 100).toFixed(1)}%</span></span>
                     <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected cost</span><span className="text-ink">${interp.expected.costPer1K.toFixed(2)}/1K</span></span>
                     <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">best-scorer baseline</span><span className="text-ink">${interp.expected.baselineCostPer1K.toFixed(2)}/1K</span></span>
-                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected savings</span><span className="font-semibold text-kept">{Math.round(interp.expected.savingsPct * 100)}%</span></span>
+                    <span><span className="block text-[11px] uppercase tracking-[0.1em] text-faint">expected savings</span><span className="font-semibold text-kept">{formatSavingsPct(interp.expected.savingsPct)}</span></span>
                   </div>
                 )}
               </div>
-              <p className="border-t border-[#d9d5cb] px-5 py-2.5 font-mono text-[11.5px] leading-relaxed text-faint">
-                expected at your described mix, from Potion&rsquo;s live platform measurements — your
-                real traffic corrects this over the first week or two
-              </p>
+              {/* The learning promise — the product's core loop, said plainly
+                  and prominently (operator, 2026-08-28: "this needs to be
+                  very clear"), and honestly per the consent choice. */}
+              <div className="border-t border-accent/40 px-5 py-3.5" data-testid="reveal-learning">
+                <div className="font-mono text-[12px] uppercase tracking-[0.12em] text-accent">
+                  this router gets better on its own — here&rsquo;s exactly how
+                </div>
+                {consent ? (
+                  <ol className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-soft">
+                    <li><span className="font-medium text-ink">Today · provisional.</span> Built from Potion&rsquo;s live platform measurements at your described mix — it works from the first request.</li>
+                    <li><span className="font-medium text-ink">This week · measured on YOUR work.</span> Potion samples your real prompts (small, redacted, capped) and scores quality per kind of work — on your traffic, not a benchmark.</li>
+                    <li><span className="font-medium text-ink">Then, always · personalized.</span> When the evidence shows a better point, an upgrade proposal appears — one click mints the next router version, with the change and the saving written on it. Never silently.</li>
+                  </ol>
+                ) : (
+                  <p className="mt-2 text-[13px] leading-relaxed text-soft">
+                    You turned workload measurement <b>off</b>, so this router stays on Potion&rsquo;s
+                    platform measurements — still live, still verified, but it won&rsquo;t personalize
+                    to your prompts. Flip it on anytime in Settings and the measuring starts.
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="mt-6 flex items-center gap-4">
@@ -445,3 +468,15 @@ export function FirstRunGate() {
     </div>
   );
 }
+
+/** Savings display that never lies upward: one decimal in the 99s, and
+ * never "100%" — a rounded 100 reads as fake precisely when the real
+ * number is most impressive (the operator's screenshot: $19.96 → $0.06 is
+ * 99.7%, not 100%). */
+function formatSavingsPct(frac: number): string {
+  const pct = frac * 100;
+  if (pct >= 99.95) return '99.9%';
+  if (pct >= 99) return `${pct.toFixed(1)}%`;
+  return `${Math.round(pct)}%`;
+}
+
