@@ -397,3 +397,33 @@ and launch moments are the operator's; (3) the gates stand before the
 finding is sequencing dust. Further pre-work auditing is theater — the
 remaining risk is retired by SHIPPING, not by planning. The next word that
 changes this document should be evidence from production.
+
+## The sharpened-bar pass (2026-08-28: "better than any product — OpenClaw, even Claude Code?")
+
+Verdict: NO as previously locked — this bar exposed two structural gaps the
+earlier passes could not see, plus one weapon underused. Build answers:
+
+- **X7 — the dev hands.** Against Claude Code on real dev work we lose on
+  physique: sixteen flat files vs a filesystem. Workspace v2 (directory
+  trees, repo-scale quotas); a SHELL inside the no-egress sandbox (a
+  terminal that provably cannot phone home — safe by construction);
+  toolchains in the sandbox image; a governed GIT superpower (clone in via
+  grant custody; commits/PRs out through the before-external-action gate).
+  Coding agents, served our way: tests actually run, changes receipted,
+  budget-capped, PR-gated — better on the OPERATED axis.
+- **X8 — the session shape.** The NOT-list's chat-shape ban was a scope
+  retreat wearing discipline's clothes. The check-in channel generalizes
+  into live steering of a running worker — same loop, laws, receipts.
+  NOT-list amended: not "never", sequenced after X7.
+- **Harness-of-harnesses, promoted to doctrine.** For needs where a rival
+  agent is peak, registerPotionGate is the answer we undersold: run
+  OpenClaw / Claude-Agent-SDK / anything UNDER Potion — routed inference,
+  gated actions, receipts. "That agent + Potion" beats that agent alone
+  for any org deployment. Named track: gate SDKs for the major runtimes.
+  The universal claim becomes airtight: for every need, natively best or
+  best-by-governing-the-best.
+
+Sequence: X7 after X6 (browser), X8 after X7; gate-SDK track parallels the
+Reach track. The claim this plan now truthfully supports: any agent or
+harness need, served better — natively or by governance — than anything
+on the market.
