@@ -276,3 +276,35 @@ agents — work that is done, provable, budgeted, and safe to leave running.
 Revised order: X3 (judge + verified-by-running) + notifications → BYO-MCP →
 OAuth sprint + gallery → X4 fan-out → X6 browser (after the judge, as
 planned).
+
+## The zero-gaps audit (2026-08-28, pre-X3 — operator: "have user doubts; zero gaps; a step change")
+
+Four skeptics were run against every surface. Six real gaps found; all now
+in the sequence. Doubts → answers:
+
+- Founder, "what does it cost monthly?" → **(a) the cost line**: worst-case
+  arithmetic on the hire card and worker page (cadence × cap), measured
+  actuals beside it once checks run.
+- Founder, "what happens when it fails?" → **(b) notification triggers are
+  ALL terminal states**: awaiting-human, deliverable filed, failed/killed —
+  a worker that failed in the night must be heard about.
+- Team lead, "which workers need me?" → **(c) the roster attention strip**:
+  awaiting-your-answer · failed-last-check · armable-but-paused, in the
+  bench-rail's readiness language.
+- Engineer, "prove the replay claim" → **(f) the verify-record button**: a
+  server-side replay of any run, zero-divergence result rendered. The
+  deepest law becomes a visible wow no competitor can imitate.
+- Standing-mission user, "week two it repeats itself" → **(d) P3 beat
+  memory re-slotted** to immediately after BYO-MCP (it had drifted out of
+  the near order; it is the hero use case's compounding utility).
+- Buyer, "artifact retention?" → **(e) hardening item**: stated retention
+  window + manual purge for run files (org-delete already cascades).
+
+**The step change, as five user-visible sentences** (each with a surface):
+measured decisions with receipts · autonomy earned, never toggled ·
+replayable runs you can verify with a button · compute that provably
+cannot reach the internet · costs capped by law and predicted up front.
+
+**Locked sequence:** X3 + notifications(all-terminal) + cost line +
+verify button → BYO-MCP → P3 beat memory + gallery + OAuth sprint →
+X4 fan-out → X6 browser.
