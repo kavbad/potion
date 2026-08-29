@@ -245,3 +245,34 @@ Relationship to OpenClaw-types, stated once: the X-ladder builds the
 GOVERNED member of that species (same capability class, every hand under
 custody law), while `registerPotionGate` harnesses the wild ones — keep
 your agent, gain receipts, permissions, and routed inference.
+
+## Course correction (2026-08-28, operator: "will this create the best on the market? if not, correct")
+
+Honest audit against the market across technology / capability / utility /
+UX: the X-ladder wins the technology axis (the governed-execution stack has
+no peer) and was LOSING the utility axis. Two corrections, effective now:
+
+**1. The Reach track (parallel to the X-ladder).** A worker's utility is
+bounded by what it can touch, and two live hands is not a market-winning
+answer while the catalog's other connectors sit fixture-authored. In order:
+  · **BYO-MCP moves up**: immediately after X3 (was X5). The genius door
+    opens the whole MCP world without Potion registering anything.
+  · **The OAuth sprint** (operator hands, ~1–2h total): register gmail,
+    github, slack OAuth apps; each connector then gets LIVE-PROVEN honestly,
+    one at a time — the tier stays earned, never typed.
+  · **The mission gallery**: ~10 hire-able templates, each obeying the
+    showcase law (promise only what the runtime enforces today).
+
+**2. The supervised loop must actually loop.** A check-in that waits on a
+page nobody has open makes born-supervised a polite fiction and blocks every
+armed mission on luck. CHECK-IN NOTIFICATIONS ship beside X3: an email the
+moment a run goes awaiting-human (answer deep-linked) or a deliverable
+lands. Small build, disproportionate honesty.
+
+**Segment claim, stated once:** raw-freedom hobbyists will always prefer an
+ungoverned terminal; the market this plan wins outright is DEPLOYABLE
+agents — work that is done, provable, budgeted, and safe to leave running.
+
+Revised order: X3 (judge + verified-by-running) + notifications → BYO-MCP →
+OAuth sprint + gallery → X4 fan-out → X6 browser (after the judge, as
+planned).
