@@ -1788,6 +1788,14 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   },
 });
 
+export const labDigests = pgTable('lab_digests', {
+  orgId: text('org_id')
+    .primaryKey()
+    .references(() => orgs.id, { onDelete: 'cascade' }),
+  lastWindowKey: text('last_window_key').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const labRunFiles = pgTable(
   'lab_run_files',
   {

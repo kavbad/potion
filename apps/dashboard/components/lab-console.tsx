@@ -504,6 +504,25 @@ export function LabConsole({
         </section>
       ) : null}
 
+      {/* ================= X1/H1: the files, materializing live ================= */}
+      {run?.files !== undefined && run.files.length > 0 ? (
+        <section className={`${CARD} mt-4 px-5 py-3`} data-testid="live-files">
+          <div className={EYEBROW}>files this run produced · {run.files.length}</div>
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12.5px]">
+            {run.files.map((f) => (
+              <a
+                key={f.name}
+                href={`/api/lab/runs/${runId}/files/${encodeURIComponent(f.name)}`}
+                download
+                className="text-accent underline"
+              >
+                {f.name} <span className="text-faint no-underline">({f.size.toLocaleString()} B)</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {/* ================= the work + the worker ================= */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* ---- the work feed ---- */}

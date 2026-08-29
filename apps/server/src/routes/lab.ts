@@ -61,6 +61,7 @@ import {
   setLabMemoryKey,
   upsertLabHarness,
   listLabRunFiles,
+  listRecentLabRuns,
   getLabRunFile,
   armLabMission,
   getLabMission,
@@ -887,6 +888,9 @@ export function registerLabRoutes(
       plan: planFromSteps(steps.map((x) => ({ kind: x.kind, payload: x.payload }))),
       // X3: the advisory judgment (null until judged; typed miss recorded).
       judge: run.judge ?? null,
+      // X3/H1: the workspace files, LIVE on the polling DTO — artifacts
+      // appear as the code produces them, not after a page refresh.
+      files: await listLabRunFiles(db, org.orgId, run.id),
       // P-1 (the routing dividend): what THIS run's model steps would have
       // cost on the best scorer of each step's own kind — computed from the
       // steps' recorded traces and the live frontiers, null when unpriceable.
@@ -959,6 +963,21 @@ export function registerLabRoutes(
   });
 
   // ---- GET /api/lab/runs/:id/report (viewer) — report v1 ----
+  // ---- X3 UX: recent worker activity — the home feed's lab source ----
+  app.get('/api/lab/recent', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const rows = await listRecentLabRuns(db, org.orgId, { limit: 8 });
+    return reply.send({
+      runs: rows.map((r) => ({
+        runId: r.id,
+        harnessName: r.harnessName,
+        state: r.state,
+        at: r.createdAt,
+        judgeOverall: (r.judge as { overall?: number } | null)?.overall ?? null,
+      })),
+    });
+  });
+
   // ---- X3: verify the record — the replay theorem as a button ----
   // Wording law (the panel): replay proves the record is SELF-CONSISTENT
   // AND DERIVABLE — never that a model would answer the same. The endpoint

@@ -11,7 +11,7 @@
 // forever, and a zombie winner must not corrupt the run it lost).
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
-import {
+import { labDigests,
   labHarnessMemory,
   labRuns,
   labRunSteps,
@@ -486,4 +486,49 @@ export async function setLabRunJudge(
     .update(labRuns)
     .set({ judge })
     .where(and(eq(labRuns.id, runId), eq(labRuns.orgId, orgId)));
+}
+
+/** P-4: the weekly digest's dedup — read/advance one org's last window. */
+export async function getLabDigestKey(db: PotionDb, orgId: string): Promise<string | null> {
+  const rows = await db.select().from(labDigests).where(eq(labDigests.orgId, orgId)).limit(1);
+  return rows[0]?.lastWindowKey ?? null;
+}
+
+export async function setLabDigestKey(db: PotionDb, orgId: string, key: string): Promise<void> {
+  await db
+    .insert(labDigests)
+    .values({ orgId, lastWindowKey: key })
+    .onConflictDoUpdate({ target: [labDigests.orgId], set: { lastWindowKey: key, updatedAt: sql`now()` } });
+}
+
+/** Digest + feed reads: an org's recent runs, newest first, capped. */
+export async function listRecentLabRuns(
+  db: PotionDb,
+  orgId: string,
+  opts: { since?: Date; limit?: number } = {},
+): Promise<Array<{ id: string; harnessHash: string; harnessName: string; state: string; createdAt: Date; judge: unknown }>> {
+  const conds = [eq(labRuns.orgId, orgId)];
+  if (opts.since !== undefined) conds.push(gte(labRuns.createdAt, opts.since));
+  return db
+    .select({
+      id: labRuns.id,
+      harnessHash: labRuns.harnessHash,
+      harnessName: labRuns.harnessName,
+      state: labRuns.state,
+      createdAt: labRuns.createdAt,
+      judge: labRuns.judge,
+    })
+    .from(labRuns)
+    .where(and(...conds))
+    .orderBy(desc(labRuns.createdAt))
+    .limit(opts.limit ?? 50);
+}
+
+/** P-4: orgs with any lab run since the window opened — the digest roster. */
+export async function listOrgIdsWithLabRunsSince(db: PotionDb, since: Date): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ orgId: labRuns.orgId })
+    .from(labRuns)
+    .where(gte(labRuns.createdAt, since));
+  return rows.map((r) => r.orgId);
 }

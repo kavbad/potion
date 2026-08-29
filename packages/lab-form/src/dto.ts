@@ -110,6 +110,8 @@ export interface RunDto {
   superpowers: Array<{ id: string; status: 'not-connected' | 'connected' | 'expired' | 'revoked' }>;
   steps: RunStepDto[];
   cost: { meteredUsd: number; estPendingUsd: number };
+  /** X3/H1: the run's workspace files — live on the polling DTO. */
+  files?: Array<{ name: string; mime: string; size: number; sha256: string }>;
   /** P-1: what this run's model steps would have cost on the best scorer
    * of each step's own kind — the routing dividend's counterfactual. */
   premiumUsd?: number | null;

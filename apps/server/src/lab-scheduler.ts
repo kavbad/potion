@@ -19,6 +19,7 @@ import {
   type DbHandle,
 } from '@potion/db';
 import { parseHarnessSpecText } from '@potion/lab-spec';
+import { digestTick } from './lab-digest.js';
 import type { PotionQueue } from '@potion/queue';
 
 /** The supported cadence windows (UTC). Returns the CURRENT window's key
@@ -127,6 +128,10 @@ export function startLabScheduler(opts: LabSchedulerOptions): { stop: () => void
   if (process.env.POTION_LAB_SCHEDULER === '0') return null;
   const interval = setInterval(() => {
     void schedulerTick(opts).catch(() => {});
+    // P-4: the weekly digest rides the same clock (its own window dedup
+    // makes tick frequency irrelevant; its own try/catch keeps it from
+    // ever touching the mission tick).
+    void digestTick({ db: opts.db, log: (m) => console.warn(m) }).catch(() => {});
   }, opts.intervalMs ?? 60_000);
   interval.unref();
   return { stop: () => clearInterval(interval) };

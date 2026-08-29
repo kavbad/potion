@@ -59,6 +59,7 @@ export function TodayPulse() {
   const [budget, setBudget] = useState<BudgetState | null>(null);
   const [feedOpen, setFeedOpen] = useState(false);
   const [router, setRouter] = useState<{ name: string; version: number; mintedAt: string; document: { changes: string[] } } | null>(null);
+  const [labRecent, setLabRecent] = useState<Array<{ runId: string; harnessName: string; state: string; at: string; judgeOverall: number | null }> | null>(null);
 
   useEffect(() => {
     const j = (u: string) => fetch(u, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -68,6 +69,7 @@ export function TodayPulse() {
     void j('/api/learning').then((b) => b && setLearning(b as LearningState));
     void j('/api/budgets').then((b) => b && setBudget(b as BudgetState));
     void j('/api/router').then((b) => b && setRouter(b as { name: string; version: number; mintedAt: string; document: { changes: string[] } }));
+    void j('/api/lab/recent').then((b) => b && setLabRecent(((b as { runs?: Array<{ runId: string; harnessName: string; state: string; at: string; judgeOverall: number | null }> }).runs ?? [])));
     const t = setInterval(loadFast, POLL_MS);
     const onFocus = () => loadFast();
     window.addEventListener('focus', onFocus);
@@ -117,6 +119,17 @@ export function TodayPulse() {
 
   interface FeedItem { key: string; when: string; head: string; rest: React.ReactNode; href: string; link: string }
   const feedItems: FeedItem[] = [];
+  // X3 UX: worker deliverables land in the SAME feed as router news — the
+  // product's two halves finally meet on one surface.
+  for (const r of (labRecent ?? []).filter((x) => x.state === 'completed').slice(0, 2)) {
+    feedItems.push({
+      key: `lab-${r.runId}`,
+      when: new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      head: `${r.harnessName} filed its check`,
+      rest: <>{r.judgeOverall !== null ? <>{' — '}scored {r.judgeOverall}/10 against your bar (advisory)</> : <>{' — '}receipts on every step</>}</>,
+      href: `/lab/run/${r.runId}`, link: 'read it →',
+    });
+  }
   if (routerFresh !== null) {
     feedItems.push({
       key: 'router',
