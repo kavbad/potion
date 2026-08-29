@@ -377,6 +377,39 @@ export function LabConsole({
         </div>
       ) : null}
 
+      {/* ================= the task ledger (X2) ================= */}
+      {run?.plan != null && run.plan.length > 0 ? (
+        <section className={`${CARD} mt-4 px-5 py-4`} data-testid="task-ledger">
+          <div className={EYEBROW}>
+            the plan · the worker&rsquo;s durable task ledger ·{' '}
+            {run.plan.filter((t) => t.status === 'done').length}/{run.plan.length} done
+          </div>
+          <ul className="mt-2 grid gap-1 font-mono text-[13px]">
+            {run.plan.map((t) => (
+              <li key={t.id} className="flex items-baseline gap-2">
+                <span
+                  className={
+                    t.status === 'done'
+                      ? 'text-kept'
+                      : t.status === 'blocked'
+                        ? 'text-refuse'
+                        : t.status === 'doing'
+                          ? 'text-accent'
+                          : 'text-faint'
+                  }
+                >
+                  {t.status === 'done' ? '☑' : t.status === 'blocked' ? '⚠' : t.status === 'doing' ? '◐' : '☐'}
+                </span>
+                <span className={t.status === 'done' ? 'text-soft line-through decoration-[#c4bfb2]' : 'text-ink'}>
+                  {t.title}
+                </span>
+                {t.note !== undefined ? <span className="text-faint">— {t.note}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* ================= the work + the worker ================= */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* ---- the work feed ---- */}

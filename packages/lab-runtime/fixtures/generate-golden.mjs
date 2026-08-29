@@ -122,7 +122,12 @@ async function record(name, spec, legs, { runId, tools = [], preMemoryRun = null
 }
 
 await record('task-simple', baseSpec(), [
-  { results: [ok({ text: 'The weekly report says all is well.' })] },
+  { results: [
+      ok({ text: 'The weekly report says all is well.' }),
+      // X2: update_plan rides EVERY run, so every task run is tool-bearing
+      // and ends with the deliberate tool-free wrap-up (uniform law).
+      ok({ text: 'Wrap-up: reported the weekly status; done-definition met.' }),
+  ] },
 ], { runId: 'golden-task-simple' });
 
 await record('task-tools', baseSpec({ name: 'golden tools harness' }), [

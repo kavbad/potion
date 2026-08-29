@@ -342,3 +342,76 @@ describe('Step 8 review pins — answer scope and wrap-up fuel', () => {
     await h.close();
   }, 60_000);
 });
+
+describe('X2 — the durable task ledger across legs', () => {
+  it('a plan filed in leg 1 is re-injected at the leg-2 boundary, stamped, and replay-derivable', async () => {
+    const { createDb, migrate, createOrg, createLabRun, listLabSteps, getLabRun } = await import('@potion/db');
+    const { harnessSpecHash } = await import('@potion/lab-spec');
+    const { replayRun } = await import('./replay.js');
+    const h = await createDb();
+    await migrate(h.db);
+    await createOrg(h.db, { id: 'org_x2', name: 'X2 Org' });
+    const spec = {
+      specVersion: 1 as const,
+      name: 'ledger harness',
+      brain: { policy: { type: 'min_cost' as const, qualityFloor: 0 } },
+      mission: { kind: 'standing' as const, goal: 'work the long job' },
+      superpowers: [],
+      memory: { enabled: true },
+      rules: [],
+      fuel: { maxUsdPerRun: 1, hardStop: true as const },
+      checkIns: [],
+    };
+    const hash = harnessSpecHash(spec);
+    await createLabRun(h.db, { id: 'run-x2', orgId: 'org_x2', harnessHash: hash, harnessName: spec.name, spec });
+    const planArgs = JSON.stringify({ tasks: [
+      { id: '1', title: 'gather', status: 'done' },
+      { id: '2', title: 'compute', status: 'doing' },
+    ] });
+    const script = [
+      // leg 1: file the plan, then hit the leg cap via 'length'
+      ok({ text: 'planning', finishReason: 'tool_calls', toolCalls: [{ id: 'c1', type: 'function', function: { name: 'update_plan', arguments: planArgs } }] }),
+      ok({ text: 'still working', finishReason: 'length' }),
+      // leg 2: finish the check
+      ok({ text: 'check complete' }),
+    ];
+    const queue = [...script];
+    const client = {
+      complete: async (req: { messages: Array<{ role: string; content: string }> }) => {
+        (client as unknown as { requests: unknown[] }).requests.push(req.messages.map((m) => m.content));
+        return queue.shift()!;
+      },
+      emitSpans: async () => true,
+      requests: [] as unknown[],
+    };
+    const leg1 = await runLeg({
+      db: h.db, client: client as never, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash, maxStepsPerLeg: 2,
+    });
+    expect(leg1.status).toBe('leg-cap');
+    const leg2 = await runLeg({
+      db: h.db, client: client as never, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash,
+    });
+    expect(leg2.status).toBe('completed');
+
+    // The leg-2 request carries the re-injected ledger…
+    const leg2Messages = (client.requests.at(-1) as string[]).join('\n---\n');
+    expect(leg2Messages).toContain('Your task ledger');
+    expect(leg2Messages).toContain('[x] 1 · gather');
+    expect(leg2Messages).toContain('[~] 2 · compute');
+
+    // …the leg-2 first step is STAMPED with what was injected…
+    const steps = await listLabSteps(h.db, 'run-x2', 'org_x2');
+    const stamped = steps.find((s) => (s.payload as { planLedger?: string }).planLedger !== undefined);
+    expect(stamped, 'expected a planLedger leg stamp').toBeDefined();
+
+    // …and the whole record replays with zero divergence (the mirror).
+    const run = await getLabRun(h.db, 'run-x2', 'org_x2');
+    const replay = replayRun(
+      spec,
+      steps.map((s) => ({ seq: s.seq, kind: s.kind as never, payload: s.payload as never })),
+      { state: run!.state, reason: run!.stateReason },
+    );
+    expect(replay.ok, JSON.stringify(replay)).toBe(true);
+    await h.close();
+  }, 30_000);
+});

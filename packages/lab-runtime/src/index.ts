@@ -34,3 +34,4 @@ export * from './graduation.js';
 export * from './evidence.js';
 export * from './apply-graduation.js';
 export { buildCodeLabTools, redactKeyShapes, CODE_LIMITS, type CodeToolDeps, type CodeWorkspace } from './code-tools.js';
+export { buildPlanTool, planFromSteps, renderPlanLedger, validatePlan, planLedgerMessage, PLAN_TOOL_NAME, PLAN_LIMITS, type PlanTask, type PlanStatus } from './plan.js';

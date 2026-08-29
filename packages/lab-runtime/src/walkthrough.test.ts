@@ -123,8 +123,11 @@ describe('DoD leg 1: headless run from a file, fully metered', () => {
     // DoD leg 5: span emission — llm.call spans ingested through the real
     // route, one per model step, idempotent (startRun already emitted).
     const spans = await h.db.select().from(traceSpans).where(eq(traceSpans.traceId, runId));
-    expect(spans).toHaveLength(modelSteps.length);
-    expect(spans.every((sp) => sp.orgId === ORG && sp.name === 'llm.call')).toBe(true);
+    // X2: tool steps (e.g. the ledger's update_plan) emit tool.* spans —
+    // the llm.call count still matches model steps exactly.
+    const llmSpans = spans.filter((sp) => sp.name === 'llm.call');
+    expect(llmSpans).toHaveLength(modelSteps.length);
+    expect(spans.every((sp) => sp.orgId === ORG)).toBe(true);
   }, 120_000);
 });
 
@@ -206,8 +209,12 @@ describe('DoD leg 2: hard stops kill runs, through the real route', () => {
     // The kill was MID-RUN: step 1's checkpoint exists, durable, with its
     // real completionId — and survives into a fresh read.
     const steps = await listLabSteps(h.db, runId, ORG);
-    expect(steps).toHaveLength(1);
-    expect((steps[0]!.payload as StepPayload).completionId).toMatch(/^chatcmpl-/);
+    // X2: the mock may spend its first response on update_plan (a model
+    // step + a tool step) before the fuel law bites — the invariant is a
+    // durable, metered checkpoint, not an exact count.
+    const killModelSteps = steps.filter((x) => x.kind === 'model');
+    expect(killModelSteps.length).toBeGreaterThanOrEqual(1);
+    expect((killModelSteps[0]!.payload as StepPayload).completionId).toMatch(/^chatcmpl-/);
 
     const resumed = await resumeRun({
       db: h.db, client, orgId: ORG, specText: JSON.stringify(s), runId,

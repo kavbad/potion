@@ -50,10 +50,62 @@
         "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
         "requestPayload": {
           "model": "potion-auto",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "update_plan",
+                "parameters": {
+                  "type": "object",
+                  "required": [
+                    "tasks"
+                  ],
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "status"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "Short stable id, e.g. \"1\" or \"fetch\"."
+                          },
+                          "note": {
+                            "type": "string",
+                            "description": "Optional short note (e.g. why blocked)."
+                          },
+                          "title": {
+                            "type": "string",
+                            "description": "What this task is, in one line."
+                          },
+                          "status": {
+                            "enum": [
+                              "pending",
+                              "doing",
+                              "done",
+                              "blocked"
+                            ],
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "description": "The complete plan, replacing the previous version."
+                    }
+                  }
+                },
+                "description": "Maintain your durable task ledger. Pass the FULL plan every time (it replaces the previous one): tasks: [{id, title, status: pending|doing|done|blocked, note?}]. File a plan before multi-step work; update statuses as you go. The ledger survives interruptions and is re-shown to you when work resumes."
+              }
+            }
+          ],
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden standing harness'.\nMission (standing): watch the queue\nRules:\n- be terse\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden standing harness'.\nMission (standing): watch the queue\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",

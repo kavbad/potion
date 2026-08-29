@@ -104,7 +104,7 @@ import {
   type FeltPositionRequest,
 } from '@potion/lab-dial';
 import { parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
-import { ServingClient, buildRunReport, type StepPayload } from '@potion/lab-runtime';
+import { ServingClient, buildRunReport, planFromSteps, type StepPayload } from '@potion/lab-runtime';
 import {
   getLabGrant,
   grantConnectionStatus,
@@ -848,6 +848,9 @@ export function registerLabRoutes(
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
       superpowers: await superpowerPosture(org.orgId, run.spec as HarnessSpec),
+      // X2: the durable task ledger, derived from the record (last valid
+      // update_plan wins) — the same truth the loop re-injects each leg.
+      plan: planFromSteps(steps.map((x) => ({ kind: x.kind, payload: x.payload }))),
       steps: stepDtos,
       cost: {
         meteredUsd: meteredTotal,

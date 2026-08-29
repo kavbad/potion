@@ -110,6 +110,9 @@ export interface RunDto {
   superpowers: Array<{ id: string; status: 'not-connected' | 'connected' | 'expired' | 'revoked' }>;
   steps: RunStepDto[];
   cost: { meteredUsd: number; estPendingUsd: number };
+  /** X2: the durable task ledger (derived server-side from the record —
+   * last valid update_plan wins; the loop re-injects the same truth). */
+  plan?: Array<{ id: string; title: string; status: 'pending' | 'doing' | 'done' | 'blocked'; note?: string }> | null;
   /** P1 (the mouth): the filed brief, derived from the record by the same
    * parser the completion law used. null/absent = no deliverable (honest). */
   deliverable?: { brief: Brief; atSeq: number } | null;

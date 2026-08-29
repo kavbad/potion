@@ -33,6 +33,9 @@ export interface StepPayload {
   /** Fresh-run leg start only: the memory snapshot AS SEEN when the system
    * prompt was built — what makes the record self-contained (Step 4). */
   memoryReads?: Record<string, unknown>;
+  /** X2: the RENDERED task ledger this leg start re-injected (resume legs
+   * only) — stamped so replay derives the identical conversation. */
+  planLedger?: string;
   /**
    * Step 12 finding L8: the AUTHORED capability guidance that went into the
    * system prompt for this leg. Without it the record is not self-contained

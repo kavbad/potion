@@ -36,6 +36,10 @@ const CONSTITUTION: Array<{ law: string; where: string }> = [
     where: 'replay',
   },
   {
+    law: 'The task ledger (update_plan) rides every run: the current plan is derived from the recorded steps and re-shown at every leg boundary — a long mission cannot lose its thread.',
+    where: 'ledger law',
+  },
+  {
     law: 'Key-shaped content anywhere in this file is a typed rejection. Credentials live in grant custody, never in a spec.',
     where: 'custody gate',
   },

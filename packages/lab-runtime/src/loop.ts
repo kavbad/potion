@@ -16,7 +16,8 @@
 //   sleep  — injected; tests make it instant. The retry test asserts on the
 //            REQUESTED delays, not wall-clock (a fake sleep proves ordering,
 //            never duration).
-import { seedFromString, sha256, type ChatMessage, type Tool } from '@potion/core';
+import { canonicalJson, seedFromString, sha256, type ChatMessage, type Tool } from '@potion/core';
+import { buildPlanTool, planFromSteps, planLedgerMessage, renderPlanLedger, PLAN_TOOL_NAME } from './plan.js';
 import {
   consumeLabRunAnswer,
   appendLabStep,
@@ -39,6 +40,11 @@ export interface LabTool {
   /** Whether invoking it acts on the world outside the platform — gates the
    * before-external-action check-in. */
   external: boolean;
+  /** X2: CORE loop tools (the task ledger) ride every run and never flip
+   * the policy slot — a call whose only tools are core still serves under
+   * brain.policy (planning is thinking; the A2 partition is about real
+   * tool serving). */
+  core?: boolean;
   run(input: unknown): Promise<unknown>;
 }
 
@@ -66,7 +72,13 @@ export function checkInAnswerMessage(answer: string): ChatMessage {
 
 /** The exact message shape a tool result becomes (same reasoning). */
 export function toolResultMessage(toolName: string, output: unknown): ChatMessage {
-  return { role: 'user', content: `[tool ${toolName} result] ${JSON.stringify(output)}` };
+  // canonicalJson, NOT JSON.stringify (X2 landmine, found by the ledger's
+  // replay test): jsonb round-trips reorder object keys, so a message built
+  // from the LIVE output and the same message rebuilt from the RECORDED
+  // output could differ in embedded key order — a replay divergence for any
+  // tool whose output keys are not jsonb-order-stable. Canonical bytes at
+  // both ends kill the class.
+  return { role: 'user', content: `[tool ${toolName} result] ${canonicalJson(output ?? null)}` };
 }
 
 export interface RunLegOptions {
@@ -179,7 +191,7 @@ export function systemPrompt(
   // P1 contract (the mouth): contract-bearing specs get the deliverable
   // instructions; contract-less prompts stay byte-identical (A2 discipline).
   const contract = spec.contract !== undefined ? `\n${BRIEF_CONTRACT_PROMPT}` : '';
-  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${contract}\nWhen the mission is complete, answer normally with no tool calls.`;
+  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${contract}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
 }
 
 /** P1 contract law — the repair prompt. A pure function of the parse issues
@@ -227,7 +239,10 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
   const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const leaseMs = opts.leaseMs ?? 120_000;
   const maxSteps = opts.maxStepsPerLeg ?? 25;
-  const tools = opts.tools ?? [];
+  // X2: the task ledger's update_plan is a CORE tool on EVERY run — no
+  // grant (planning is thinking). Consequence, deliberate: every task run
+  // is now tool-bearing, so every task run ends with the wrap-up call.
+  const tools = [...(opts.tools ?? []), buildPlanTool()];
   const rng = mulberry32(seedFromString(opts.runId) % 2 ** 31);
 
   const claim: LabClaim = await claimLabRun(opts.db, {
@@ -262,6 +277,16 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       ];
     } else {
       messages = conversationFromSteps(priorSteps);
+      // X2: the durable ledger, re-shown at every leg boundary — this is
+      // what kills leg amnesia. Derived from the record, injected as ONE
+      // recorded message, stamped on the leg's first step (the check-in
+      // answer precedent) so replay derives the identical conversation.
+      // Order is LEDGER then ANSWER: the human's answer stays the most
+      // immediate context.
+      const ledgerTasks = planFromSteps(priorSteps);
+      if (ledgerTasks !== null && ledgerTasks.length > 0) {
+        messages.push(planLedgerMessage(renderPlanLedger(ledgerTasks)));
+      }
       if (claim.pendingAnswer !== null) {
         messages.push(checkInAnswerMessage(claim.pendingAnswer));
       }
@@ -322,11 +347,25 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // makes a record NON-self-contained (replay cannot re-derive the system
     // prompt or the answer injection). The first step a leg appends now
     // carries them.
+    // X2: the leg stamp records EVERYTHING this leg start injected — the
+    // ledger text and/or the check-in answer — so the record stays
+    // self-contained and replay derives the same messages in the same
+    // order (ledger, then answer).
+    const injectedLedger =
+      priorSteps.length === 0
+        ? null
+        : (() => {
+            const t = planFromSteps(priorSteps);
+            return t !== null && t.length > 0 ? renderPlanLedger(t) : null;
+          })();
     let legStamp: Partial<StepPayload> | null =
       priorSteps.length === 0
         ? { memoryReads: memory, toolGuidance: [...(opts.toolGuidance ?? [])] }
-        : claim.pendingAnswer !== null
-          ? { checkInAnswer: claim.pendingAnswer }
+        : injectedLedger !== null || claim.pendingAnswer !== null
+          ? {
+              ...(injectedLedger !== null ? { planLedger: injectedLedger } : {}),
+              ...(claim.pendingAnswer !== null ? { checkInAnswer: claim.pendingAnswer } : {}),
+            }
           : null;
     const takeLegStamp = (): Partial<StepPayload> => {
       const stamp = legStamp ?? {};
@@ -428,8 +467,12 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       }
 
       // ---- model step (with bounded rate-limit retry) ----
-      const slot: 'brain' | 'tools' = toolDefs ? 'tools' : 'brain';
-      const slotRef = toolDefs
+      // X2: core tools never flip the slot — a call whose only tools are
+      // the ledger still serves under brain.policy (the A2 partition is
+      // about REAL tool serving).
+      const hasExternalTools = tools.some((t) => t.core !== true);
+      const slot: 'brain' | 'tools' = toolDefs && hasExternalTools ? 'tools' : 'brain';
+      const slotRef = slot === 'tools'
         ? (opts.policyRefs?.tools ?? opts.policyRefs?.brain)
         : opts.policyRefs?.brain;
       const requestPayload = { model: 'potion-auto', messages: [...messages], ...(toolDefs ? { tools: toolDefs } : {}) };

@@ -121,7 +121,7 @@ async function expectAllKeysDead(runId: string, count: number): Promise<void> {
 describe('lab:run key custody — death at every exit', () => {
   it('completed: one key minted, used by the client, revoked after', async () => {
     await seedRun('run-c1', spec());
-    const { factory, seen } = scriptedFactory([ok()]);
+    const { factory, seen } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-c1' }, ctx());
     expect(res.state).toBe('completed');
     expect((await getLabRun(db.db, 'run-c1', ORG))!.state).toBe('completed');
@@ -184,7 +184,7 @@ describe('lab:run key custody — death at every exit', () => {
   it('missing POTION_SERVING_URL: fail-closed BEFORE any key is minted', async () => {
     await seedRun('run-env1', spec());
     delete process.env.POTION_SERVING_URL;
-    const { factory } = scriptedFactory([ok()]);
+    const { factory } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     await expect(
       createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-env1' }, ctx()),
     ).rejects.toThrow('POTION_SERVING_URL');
@@ -222,7 +222,7 @@ describe('lab:run fence/reclaim — the zombie-key sweep', () => {
     await plantZombie('run-z1', hash, s, 'zombie1');
     const siblingId = await plantZombie('run-z2', hash, s, 'alive1');
 
-    const { factory } = scriptedFactory([ok()]);
+    const { factory } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z1' }, ctx());
     expect(res.state).toBe('completed');
 
@@ -241,7 +241,7 @@ describe('lab:run fence/reclaim — the zombie-key sweep', () => {
     await killLabRun(db.db, 'run-z3', ORG); // state: killed-operator (terminal)
     await plantZombie('run-z3', hash, s, 'orphan1');
 
-    const { factory, seen } = scriptedFactory([ok()]);
+    const { factory, seen } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z3' }, ctx());
     expect(res).toEqual({ state: 'killed-operator', noop: true });
     expect(seen.requests).toHaveLength(0); // no serving traffic on a no-op
@@ -254,7 +254,7 @@ describe('lab:run fence/reclaim — the zombie-key sweep', () => {
     // Same run-id naming, different org — tenancy boundary must hold.
     const foreignId = await plantZombie('run-z4', hash, s, 'foreign1', ORG_B);
 
-    const { factory } = scriptedFactory([ok()]);
+    const { factory } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z4' }, ctx());
 
     const foreign = await db.db
@@ -288,7 +288,7 @@ describe('lab:run fence/reclaim — the sweep never kills a LIVE invocation', ()
 
     // The duplicate invocation: must NOT sweep (claim is live); its own
     // resume attempt bounces off the held claim.
-    const { factory } = scriptedFactory([ok()]);
+    const { factory } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-live1' }, ctx()).catch(() => {
       /* claim-held surfaces however resumeRun surfaces it — custody is the assertion */
     });
@@ -375,7 +375,7 @@ describe('X1 — the code superpower against a REAL sandbox (integration)', () =
       id: 'grant-code-nosb', orgId: ORG, connectorId: 'code', superpowerId: 'code',
       scopesGranted: ['exec:python'], tokenEnvelope: 'builtin:no-credential', grantedBy: 'test',
     });
-    const { factory } = scriptedFactory([ok({ text: 'the thing is done' })]);
+    const { factory } = scriptedFactory([ok({ text: 'the thing is done' }), ok({ text: 'Wrap-up: done-definition met.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
     expect(res.state).toBe('completed');
     const steps = await listLabSteps(db.db, runId, ORG);

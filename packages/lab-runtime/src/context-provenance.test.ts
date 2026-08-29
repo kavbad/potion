@@ -311,7 +311,7 @@ describe('failure paths carry NO server text (Step 11 review findings)', () => {
 
     // and it stays out of the durable record + the model's conversation
     await runLeg({
-      db: a.h.db, client: scripted([ok({ text: 'brain only.' })]),
+      db: a.h.db, client: scripted([ok({ text: 'brain only.' }), ok({ text: 'wrap.' })]),
       runId: 'run-errnote', orgId: ORG_A, spec: a.s, harnessHash: a.hash,
       tools: leg.tools, legNotes: leg.legNotes,
     });

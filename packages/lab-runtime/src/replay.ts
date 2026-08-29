@@ -20,6 +20,7 @@ import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
 import { checkInAnswerMessage, contractRepairMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
+import { planLedgerMessage } from './plan.js';
 
 export type ReplayDivergenceCode =
   | 'request-drift'
@@ -108,6 +109,11 @@ export function replayRun(
   for (const step of ordered) {
     const p = step.payload;
 
+    // X2: a leg-start LEDGER stamp injects the plan message first, then the
+    // answer — the exact order the loop does it in (ledger, then answer).
+    if (p.planLedger !== undefined && messages !== null) {
+      messages.push(planLedgerMessage(p.planLedger));
+    }
     // A leg-start answer stamp injects the answer message BEFORE this step's
     // derivation — the same order the loop does it in.
     if (p.checkInAnswer !== undefined && messages !== null) {
