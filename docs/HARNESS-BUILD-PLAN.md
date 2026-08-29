@@ -308,3 +308,31 @@ cannot reach the internet · costs capped by law and predicted up front.
 **Locked sequence:** X3 + notifications(all-terminal) + cost line +
 verify button → BYO-MCP → P3 beat memory + gallery + OAuth sprint →
 X4 fan-out → X6 browser.
+
+## The panel + UX passes (2026-08-28, final pre-X3)
+
+**Panel (distributed systems · security · ML/eval · enterprise · economics).**
+No rotten beams. Three GATES bound the "every company" claim, named with
+triggers: the SCALE gate (shared rate-limiter store, scheduler leader
+election, distributed attempt limiters — before a second replica); the
+MULTI-TENANT SANDBOX gate (microVM-class isolation — before hostile-neighbor
+tenancy); the ENTERPRISE gate (SAML, residency, SOC2 path, audit export).
+Adopted NOW: judge-validity acceptance criteria for X3 (judge ≠ worker's
+point where possible; rationale stored; human-agreement sampling before the
+judge gates); verify-button wording (replay proves the record is
+self-consistent and derivable — never "the model would answer the same");
+per-call kind hints from the loop (wrap-up=summarization, judge=evaluation,
+plan=reasoning — real routing gain, pennies); timezone-aware cadence (Reach);
+per-org armed cap + web-injection threat-model doc (hardening).
+
+**UX (feel · use · maximum value).** Five adopted into the X3 bundle:
+worker page leads with the LATEST DELIVERABLE; terminal summary banner on
+runs (outcome · cost · duration); deliverables land in the home feed; the
+notification answer flow is verified at phone width as an acceptance
+criterion; a rename affordance on the specimen header (lawful respec of
+the name field).
+
+**X3 bundle, final scope:** judge (rubric-compiled, advisory-until-
+calibrated, validity criteria above) + execution-verified contracts +
+all-terminal notifications (mobile-verified) + cost line + verify-record
+button + the five UX adoptions + per-call kind hints.
