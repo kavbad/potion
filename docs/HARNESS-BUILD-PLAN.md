@@ -354,10 +354,17 @@ organs added; none bends a law:
   "produced by a Potion worker · $0.04 · record verified ✓" with a
   hire-this-worker link — every forwarded brief is a landing page. The
   verify-proof page shares the same way for engineers.
-- **H3 — the hero wedge.** One legendary use case leads everything:
-  "the analyst you hire for $2 a month" — recurring reports, computed not
-  vibed, with receipts. Landing leads with the hero; the gallery supports;
-  "any need" is the second sentence.
+- **H3 — the breadth proof (operator override, 2026-08-28, standing):**
+  "Any agent for any need" IS the positioning — "we are not a specific
+  type of agent builder; we are agnostic — and the best at every possible
+  agent/harness need." No hero-wedge narrowing, ever. The claim gets hot
+  by being PROVEN, not asserted: the gallery is a wall of genuinely
+  different agent species — analyst, watchdog, researcher, pipeline,
+  reviewer — every one hire-able, every one real under the showcase law
+  (breadth is EARNED: entries appear as capabilities land, never ahead of
+  them). The landing leads with the universal claim; the escaping
+  artifacts (H2) are deliberately DIVERSE so what spreads is
+  "it built THAT too?".
 
 Sequence impact: H1 lands WITH the X3 bundle (the judge score and verify
 badge are part of the choreography); H2+H3 land with the gallery in the
