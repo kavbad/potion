@@ -66,6 +66,7 @@ import {
   armLabMission,
   getLabMission,
   findArmedMissionByHookHash,
+  insertShareToken,
   pauseLabMission,
   type LabMissionRow,
   answerLabRun,
@@ -81,7 +82,7 @@ import {
   type InterviewAnswers,
   type TaxonomyCluster,
 } from '@potion/lab-gen';
-import { harnessSpecHash } from '@potion/lab-spec';
+import { scanRawValue, harnessSpecHash } from '@potion/lab-spec';
 import {
   acceptGraduation,
   getActionGrant,
@@ -140,6 +141,7 @@ import type { PotionQueue } from '@potion/queue';
 import { openAiError, parseCookies, roleAtLeast } from '../auth.js';
 import { publicBaseUrl } from '../public-url.js';
 import { CUSTOM_SLUG_RE, probeMcpEndpoint, type ProbeDeps } from '../custom-mcp.js';
+import { SHARE_TOKEN_PREFIX } from './share.js';
 import { actorOf } from './keys.js';
 import { missionWindow, startEventCheck } from '../lab-scheduler.js';
 import type { PotionContext } from '../context.js';
@@ -1070,6 +1072,83 @@ export function registerLabRoutes(
             sample: result.divergences.slice(0, 3).map((d) => ({ code: d.code, seq: d.seq, field: d.field ?? null })),
           },
     );
+  });
+
+  // ---- H2 (2026-08-28): the artifact that escapes — share a deliverable ----
+  // Opt-in, admin-minted, revocable (the M4 share rail: sha256 at rest, raw
+  // token shown once, uniform 404). The payload is FROZEN AT MINT:
+  //   · the brief re-extracted from the record;
+  //   · custody scan — key-shaped content anywhere in it REFUSES the mint;
+  //   · `verified` computed by the replay theorem right now, stored, and
+  //     never asserted beyond what the record proved;
+  //   · costs stored labeled (metered vs est.) — no blended figure ships.
+  app.post('/api/lab/runs/:id/share', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) {
+      return reply.code(403).send(forbidden(org.role, 'share deliverables'));
+    }
+    const run = await ownRun(req);
+    if (run === null) return reply.code(404).send(notFound);
+    if (run.state !== 'completed') {
+      return reply.code(409).send({ ok: false, reason: 'only a completed run has a deliverable to share' });
+    }
+    const spec = run.spec as HarnessSpec;
+    const steps = await listLabSteps(db, run.id, org.orgId);
+    const found = extractDeliverable(
+      spec,
+      steps.map((x) => ({ seq: x.seq, kind: x.kind, payload: x.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } })),
+    );
+    if (found === null) {
+      return reply.code(409).send({ ok: false, reason: 'this run produced no contract deliverable — nothing to share' });
+    }
+    // Custody at the escape hatch: a deliverable carrying key-shaped
+    // content does not leave, full stop.
+    const secretHits = scanRawValue(found.brief).filter((i) => i.code === 'secret-material');
+    if (secretHits.length > 0) {
+      return reply.code(422).send({ ok: false, reason: 'the deliverable contains key-shaped content — refused (nothing was shared)' });
+    }
+    const replayed = replayRun(
+      spec,
+      steps.map((x) => ({ seq: x.seq, kind: x.kind as 'model' | 'tool' | 'check-in', payload: x.payload as never })),
+      { state: run.state, reason: run.stateReason },
+    );
+    // Labeled costs, the run-page derivation: metered truth where the
+    // completion resolved, the flat estimate elsewhere — never blended.
+    const costLookup = requestLogCostLookup(db);
+    let meteredUsd = 0;
+    let estUsd = 0;
+    for (const st of steps) {
+      const p = st.payload as StepPayload;
+      if (st.kind !== 'model') continue;
+      const m = p.completionId !== undefined ? await costLookup(p.completionId) : null;
+      if (m !== null) meteredUsd += m;
+      else estUsd += p.estCostUsd ?? 0;
+    }
+    const judgeOverall = (run.judge as { overall?: number } | null)?.overall ?? null;
+    const rawToken = `${SHARE_TOKEN_PREFIX}${randomUUID().replace(/-/g, '')}${randomUUID().replace(/-/g, '')}`;
+    const row = await insertShareToken(db, {
+      orgId: org.orgId,
+      kind: 'brief',
+      tokenHash: sha256(rawToken),
+      redactNames: true,
+      payload: {
+        kind: 'brief',
+        harnessName: run.harnessName,
+        brief: found.brief,
+        verified: replayed.ok,
+        judgeOverall,
+        meteredUsd: Math.round(meteredUsd * 10_000) / 10_000,
+        estUsd: Math.round(estUsd * 10_000) / 10_000,
+        sharedAt: new Date().toISOString(),
+      },
+    });
+    return reply.code(201).send({
+      ok: true,
+      shareId: row.id,
+      url: `${publicBaseUrl(req)}/share/b/${rawToken}`,
+      note: 'the link is shown once — revoke it any time from the share list',
+      verified: replayed.ok,
+    });
   });
 
   // ---- X1: the run's file workspace — artifacts, listed + downloadable ----

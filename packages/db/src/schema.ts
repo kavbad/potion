@@ -683,8 +683,8 @@ export const incidents = pgTable(
  * org-identifying fields from the public payload (default true). revoked_at
  * kills the link (404, no existence oracle). Org-scoped tenant data.
  */
-export type ShareTokenKind = 'frontier' | 'report';
-export const SHARE_TOKEN_KINDS: readonly ShareTokenKind[] = ['frontier', 'report'];
+export type ShareTokenKind = 'frontier' | 'report' | 'brief';
+export const SHARE_TOKEN_KINDS: readonly ShareTokenKind[] = ['frontier', 'report', 'brief'];
 
 export const shareTokens = pgTable(
   'share_tokens',
@@ -702,7 +702,7 @@ export const shareTokens = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
-  (_t) => [check('share_tokens_kind_check', sql`kind IN ('frontier', 'report')`)],
+  (_t) => [check('share_tokens_kind_check', sql`kind IN ('frontier', 'report', 'brief')`)],
 );
 
 /**

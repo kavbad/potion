@@ -47,13 +47,13 @@ import { loadReport, type SavingsReport } from './reports.js';
 export const SHARE_TOKEN_PREFIX = 'st_';
 
 /** Dashboard-relative public URL for a token (the dashboard serves /share/*). */
-export function shareUrlPath(kind: 'frontier' | 'report', token: string): string {
-  return kind === 'frontier' ? `/share/f/${token}` : `/share/r/${token}`;
+export function shareUrlPath(kind: 'frontier' | 'report' | 'brief', token: string): string {
+  return kind === 'frontier' ? `/share/f/${token}` : kind === 'brief' ? `/share/b/${token}` : `/share/r/${token}`;
 }
 
 export interface ShareTokenDto {
   id: string;
-  kind: 'frontier' | 'report';
+  kind: 'frontier' | 'report' | 'brief';
   payload: Record<string, unknown>;
   redactNames: boolean;
   /** Identification-only prefix of the sha256 hash — the raw token is never
@@ -106,7 +106,7 @@ async function resolvePublicToken(
   ctx: PotionContext,
   reply: { code: (n: number) => { send: (b: unknown) => unknown } },
   rawToken: string,
-  kind: 'frontier' | 'report',
+  kind: 'frontier' | 'report' | 'brief',
 ): Promise<ShareTokenRow | null> {
   const row = rawToken.startsWith(SHARE_TOKEN_PREFIX)
     ? await findShareTokenByHash(ctx.db.db, sha256(rawToken))
@@ -278,6 +278,18 @@ export function registerShareRoutes(app: FastifyInstance, ctx: PotionContext): v
       sharedAt: row.createdAt.toISOString(),
       ...orgBlock,
     });
+  });
+
+  // ---- GET /api/public/share/:token/brief — PUBLIC (no session) ----
+  // H2 (2026-08-28): the artifact that escapes. The payload is a SNAPSHOT
+  // frozen at mint time (brief, verified flag, labeled costs, judge score)
+  // — custody-scanned then, revocable now; the run itself is never read on
+  // this path, so nothing can drift or leak post-mint.
+  app.get('/api/public/share/:token/brief', async (req, reply) => {
+    const { token } = req.params as { token: string };
+    const row = await resolvePublicToken(ctx, reply, token, 'brief');
+    if (!row) return reply;
+    return reply.send(row.payload);
   });
 
   // ---- GET /api/public/share/:token/report — PUBLIC (no session) ----

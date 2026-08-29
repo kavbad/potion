@@ -468,6 +468,10 @@ export function LabConsole({
       {run?.deliverable != null ? (
         <div className="mt-4">
           <BriefView brief={run.deliverable.brief} />
+          {/* H2: the artifact that escapes — opt-in, admin, revocable */}
+          {role === 'admin' && run.state === 'completed' && runId !== null ? (
+            <ShareDeliverable runId={runId} />
+          ) : null}
         </div>
       ) : null}
 
@@ -662,6 +666,49 @@ export function LabConsole({
           ))}
         </div>
       </details>
+    </div>
+  );
+}
+
+// H2 — share the deliverable as a public page. The URL is shown ONCE (the
+// raw token is never stored); the badge states only what the mint proved.
+function ShareDeliverable({ runId }: { runId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [minted, setMinted] = useState<{ url: string; verified: boolean } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  if (minted !== null) {
+    return (
+      <div className="mt-2 border border-dashed border-[#c4bfb2] bg-white/60 px-3.5 py-2.5" data-testid="share-minted">
+        <div className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-accent">public page minted — the link is shown once</div>
+        <code className="mt-1 block break-all font-mono text-[12px] text-ink">{minted.url}</code>
+        <p className="mt-1 text-[12px] text-soft">
+          Frozen at this moment, custody-scanned{minted.verified ? ', record verified ✓' : ' (record not replay-verifiable — the page says so honestly)'} — revoke it any time from the share list.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setErr(null);
+          void fetch(`/api/lab/runs/${runId}/share`, { method: 'POST' })
+            .then(async (r) => {
+              const b = (await r.json().catch(() => null)) as { ok?: boolean; url?: string; verified?: boolean; reason?: string } | null;
+              if (r.ok && b?.url !== undefined) setMinted({ url: b.url, verified: b.verified === true });
+              else setErr(b?.reason ?? `share failed (${r.status})`);
+            })
+            .finally(() => setBusy(false));
+        }}
+        className="font-mono text-[12px] uppercase tracking-[0.13em] text-faint hover:text-accent disabled:opacity-40"
+        data-testid="share-deliverable"
+      >
+        {busy ? 'minting…' : '↗ share this deliverable as a public page'}
+      </button>
+      {err !== null ? <p className="mt-1 text-[12.5px] text-refuse">{err}</p> : null}
     </div>
   );
 }

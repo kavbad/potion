@@ -352,6 +352,35 @@ export function InterviewForm() {
     setExampleOpen(true);
   }, []);
 
+  // The gallery's "start from this" — one event, every field set, nothing
+  // submitted (a starting point the user edits; the fillExample law).
+  useEffect(() => {
+    const onPrefill = (e: Event) => {
+      const d = (e as CustomEvent).detail as {
+        goal: string; kind: 'task' | 'standing'; done?: string; accounts: string; worth: string;
+        qualityBar: string; produces: string; never: string; example?: string;
+        whenUnsure: 'ask-first' | 'press-on'; cadence?: 'hourly' | 'daily' | 'weekly';
+        shape?: 'watchdog'; watchUrl?: string;
+      };
+      setGoal(d.goal);
+      setKind(d.kind);
+      setDone(d.done ?? '');
+      setAccounts(d.accounts);
+      setWorth(d.worth);
+      setQualityBar(d.qualityBar);
+      setProduces(d.produces);
+      setNever(d.never);
+      setExample(d.example ?? '');
+      setExampleOpen(d.example !== undefined);
+      setWhenUnsure(d.whenUnsure);
+      setCadence(d.cadence ?? '');
+      setShape(d.shape ?? 'reporter');
+      setWatchUrl(d.watchUrl ?? '');
+    };
+    window.addEventListener('potion:hire-prefill', onPrefill);
+    return () => window.removeEventListener('potion:hire-prefill', onPrefill);
+  }, []);
+
   if (born !== null) return <BirthSequence body={born} />;
 
   const cap = fuelPreview(Number(worth));

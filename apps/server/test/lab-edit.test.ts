@@ -445,3 +445,73 @@ describe('P5 — event triggers: the webhook inlet + the feed watcher', () => {
     expect(enqueued).toHaveLength(0);
   });
 });
+
+describe('H2 — the artifact that escapes (share a deliverable)', () => {
+  const BRIEF = JSON.stringify({
+    headline: [{ claim: 'Northwind cut Pro 20%', sourceUrl: 'https://example.com/pricing' }],
+    byEntity: [],
+    quiet: ['Fabrikam'],
+    coverage: { checked: 2 },
+  });
+
+  async function seedCompletedRun(runId: string, briefText: string): Promise<string> {
+    const s = spec({
+      name: `share harness ${runId}`,
+      mission: { kind: 'standing', goal: 'watch the market' },
+      contract: { type: 'brief' },
+    });
+    const hash = await seedCatalog(s);
+    await createLabRun(h.db, { id: runId, orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+    const { labRunSteps, labRuns } = await import('@potion/db');
+    const { eq } = await import('drizzle-orm');
+    await h.db.insert(labRunSteps).values({
+      runId, orgId: ORG, seq: 1, kind: 'model',
+      payload: { kind: 'model', responseText: briefText, finishReason: 'stop', clockMs: 0, rngSample: 0 },
+    });
+    await h.db.update(labRuns).set({ state: 'completed' }).where(eq(labRuns.id, runId));
+    return hash;
+  }
+
+  it('mints a frozen snapshot; the public page serves it; revocation kills it', async () => {
+    await seedCompletedRun('run-share-1', BRIEF);
+    const res = await post('/api/lab/runs/run-share-1/share', {});
+    expect(res.statusCode).toBe(201);
+    const body = res.json() as { ok: boolean; url: string; shareId: string; verified: boolean };
+    expect(body.url).toMatch(/\/share\/b\/st_[0-9a-f]{64}$/);
+    // A hand-seeded record cannot replay-verify — the badge must be HONEST.
+    expect(body.verified).toBe(false);
+    const token = body.url.split('/share/b/')[1]!;
+
+    const pub = await app.inject({ method: 'GET', url: `/api/public/share/${token}/brief` });
+    expect(pub.statusCode).toBe(200);
+    const payload = pub.json() as { harnessName: string; brief: { headline: unknown[] }; verified: boolean; meteredUsd: number; estUsd: number };
+    expect(payload.brief.headline).toHaveLength(1);
+    expect(payload.verified).toBe(false);
+    expect(typeof payload.meteredUsd).toBe('number');
+    // No org identity in the escaped payload.
+    expect(pub.body).not.toContain(ORG);
+
+    // Revoke through the M4 rail — the page 404s uniformly after.
+    const revoke = await post(`/api/share/${body.shareId}/revoke`, {});
+    expect(revoke.statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: `/api/public/share/${token}/brief` })).statusCode).toBe(404);
+  });
+
+  it('key-shaped content in the deliverable REFUSES the mint — nothing escapes', async () => {
+    const leaky = JSON.stringify({
+      headline: [{ claim: 'use sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA to fetch it', sourceUrl: 'https://example.com/x' }],
+      byEntity: [], quiet: [], coverage: { checked: 1 },
+    });
+    await seedCompletedRun('run-share-leak', leaky);
+    const res = await post('/api/lab/runs/run-share-leak/share', {});
+    expect(res.statusCode).toBe(422);
+    expect((res.json() as { reason: string }).reason).toContain('key-shaped');
+  });
+
+  it('a run without a deliverable or not completed refuses typed', async () => {
+    const s = spec({ name: 'share harness bare', mission: { kind: 'standing', goal: 'g' }, contract: { type: 'brief' } });
+    const hash = await seedCatalog(s);
+    await createLabRun(h.db, { id: 'run-share-bare', orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+    expect((await post('/api/lab/runs/run-share-bare/share', {})).statusCode).toBe(409); // pending
+  });
+});

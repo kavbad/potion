@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
 import { InterviewForm } from '@/components/lab-actions';
+import { MissionGallery } from '@/components/lab-gallery';
 import { BenchLabel, CARD, LabStage, SpecimenMark, TrustLine } from '@/components/lab-bench';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,8 @@ export default async function LabPage() {
       </section>
 
       {/* ---- the roster ---- */}
+      <MissionGallery />
+
       <section className="mt-12">
         <BenchLabel right={harnesses.length > 0 ? `${harnesses.length} on the roster` : undefined}>
           The roster
