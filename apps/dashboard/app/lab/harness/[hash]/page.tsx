@@ -10,6 +10,7 @@ import { fetchOrRecover } from '@/lib/recover';
 import { LabConsole } from '@/components/lab-console';
 import { ConnectorPanel } from '@/components/lab-actions';
 import { LabMachinery } from '@/components/lab-machinery';
+import { LabBenchRail } from '@/components/lab-bench-rail';
 import { MissionControl } from '@/components/lab-mission';
 import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import { BenchLabel, CARD, LabStage, SpecimenMark } from '@/components/lab-bench';
@@ -38,10 +39,9 @@ function WhatHappensNow({ spec }: { spec: NonNullable<HarnessDto['spec']> }) {
           title: `Connect what it touches (${powers.join(', ')})`,
           body: (
             <>
-              Connections live in the{' '}
-              <a href="#connections" className="text-accent underline">connections section below</a>.
-              Until an account is live-connected, trials run <b>brain-only</b>: the worker reasons
-              and drafts, but touches nothing real.
+              Its switches are in the <b>toolbar at the top of this page</b> — anything unmet is
+              lit there and turns on in place. Until an account is enabled, trials run{' '}
+              <b>brain-only</b>: the worker reasons and drafts, but touches nothing real.
             </>
           ),
         }]
@@ -160,7 +160,11 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
         </p>
       ) : (
         <>
-          {/* ---- the clock: arm/pause a standing mission ---- */}
+          {/* ---- THE BENCH RAIL: every make-it-work control, at the top,
+               sticky — unmet things light up and fix in place ---- */}
+          <LabBenchRail harness={harness} role={me.role} />
+
+          {/* ---- the clock: arm/pause a standing mission (detail) ---- */}
           <MissionControl harness={harness} role={me.role} />
 
           {/* ---- the newborn guide: a next step before any instrument ---- */}
