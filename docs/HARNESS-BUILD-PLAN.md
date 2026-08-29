@@ -487,3 +487,26 @@ contract work; C-1 lands with the gallery and iterates forever. VERDICT
 AFTER: YES. The series has now covered machine → perception → OUTPUT;
 the audit ladder is complete end to end, and the reviewer that remains is
 a customer holding a deliverable they'd have paid for on its own merits.
+
+## The risk register and the close (2026-08-28, the absolute final pass)
+
+Every remaining adversarial position, sorted honestly. Already answered:
+toy / unseen / generic / narrow / unspread / unscalable — eight passes
+converged; not re-litigated. UNANSWERABLE BY ANY PLAN, held as risks with
+tripwires, never claimed solved:
+1. First-contact output variance on arbitrary missions (tripwire: judge
+   trend per species; playbooks must move it within weeks).
+2. The labs shipping native builders (defense = neutrality + accumulated
+   per-org evidence — BOTH time-based; the counter is shipping speed).
+3. One security incident vs a governance brand (residual named: the
+   deliverable channel can persuade even when actions are gated — true of
+   every agent product; our source-binding detects, cannot prevent).
+4. Trust-call overhead vs the price story (answerable only by production
+   receipts).
+5. Solo-operator bandwidth (staffing reality, not engineering).
+
+And the position that is now simply TRUE: "you're still talking." The
+findings curve ran tracks → gaps → surfaces → a bug → dust. This document
+is closed to further pre-production audits: each one now burns the
+time-based moats that are the actual defense in risks 1–4. The next
+change to this file cites a production run id.
