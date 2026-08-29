@@ -191,7 +191,13 @@ export function systemPrompt(
   // P1 contract (the mouth): contract-bearing specs get the deliverable
   // instructions; contract-less prompts stay byte-identical (A2 discipline).
   const contract = spec.contract !== undefined ? `\n${BRIEF_CONTRACT_PROMPT}` : '';
-  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${contract}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
+  // C-3: the operator's exemplar — the standard to hit, in the worker's
+  // context on every call (exemplar-less prompts stay byte-identical).
+  const exemplar =
+    spec.exemplar !== undefined
+      ? `\nA great result looks like (the standard to hit):\n${spec.exemplar}`
+      : '';
+  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${contract}${exemplar}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
 }
 
 /** P1 contract law — the repair prompt. A pure function of the parse issues

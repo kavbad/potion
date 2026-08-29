@@ -88,6 +88,9 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
     superpowers,
     memory: { enabled: answers.kind === 'standing' },
     rules,
+    ...(answers.exampleResult !== undefined && sanitizeVerbatim(answers.exampleResult).length > 0
+      ? { exemplar: sanitizeVerbatim(answers.exampleResult).slice(0, SPEC_LIMITS.MAX_EXEMPLAR_CHARS) }
+      : {}),
     fuel: { maxUsdPerRun: fuelFromWorth(answers.worthUsd), hardStop: true },
     // Step 8: a STANDING mission checks in at half fuel — "a standing
     // mission has no natural run in the user's head; a check does" (Step 6

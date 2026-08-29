@@ -384,3 +384,88 @@ describe('X1 — the code superpower against a REAL sandbox (integration)', () =
     expect(JSON.stringify(note!.payload)).toContain('POTION_SANDBOX_URL');
   });
 });
+
+describe('X3 — the judge and the notifications', () => {
+  beforeEach(async () => {
+    const { createUser, createMembership } = await import('@potion/db');
+    await createUser(db.db, { id: 'usr-x3-admin', email: 'x3-admin@org.dev', name: 'x3' });
+    await createMembership(db.db, { orgId: ORG, userId: 'usr-x3-admin', role: 'admin' });
+  });
+
+  const BRIEF = JSON.stringify({
+    headline: [{ claim: 'Northwind cut Pro 20%', sourceUrl: 'https://example.com/pricing' }],
+    byEntity: [{ entity: 'Northwind', items: [{ note: 'Pro $49 to $39', sourceUrl: 'https://example.com/pricing' }] }],
+    quiet: ['Fabrikam'],
+    coverage: { checked: 2 },
+  });
+  const JUDGMENT = JSON.stringify({
+    overall: 8,
+    criteria: [{ name: 'sourced', score: 9, note: 'every claim carries a URL' }],
+    rationale: 'tight and sourced',
+  });
+
+  function standingContractSpec(): HarnessSpec {
+    return spec({
+      name: 'judged harness',
+      mission: { kind: 'standing', goal: 'watch the market' },
+      rules: ['Done well means: sourced, no filler'],
+      contract: { type: 'brief' },
+      exemplar: 'ACT NOW · Northwind cut Pro 20% (pricing page)',
+    });
+  }
+
+  it('a completed contract check is judged (stored, advisory) and admins are notified', async () => {
+    const runId = 'run-judged';
+    await seedRun(runId, standingContractSpec());
+    const { factory } = scriptedFactory([
+      ok({ text: BRIEF }),      // the check's deliverable
+      ok({ text: JUDGMENT }),   // the judge's verdict
+    ]);
+    const sent: Array<{ to: string; subject: string }> = [];
+    const res = await createLabRunHandler({
+      clientFactory: factory,
+      sendNotify: async (m) => { sent.push({ to: m.to, subject: m.subject }); },
+    })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+
+    const run = await getLabRun(db.db, runId, ORG);
+    const judge = run!.judge as { overall: number; criteria: Array<{ score: number }>; rationale: string; calibrated: boolean };
+    expect(judge.overall).toBe(8);
+    expect(judge.criteria[0]!.score).toBe(9);
+    expect(judge.calibrated).toBe(false);
+
+    expect(sent.length).toBeGreaterThanOrEqual(1);
+    expect(sent[0]!.subject).toContain('filed its check');
+  });
+
+  it('an unparseable judgment is a TYPED miss, and the run still completes', async () => {
+    const runId = 'run-judge-miss';
+    await seedRun(runId, standingContractSpec());
+    const { factory } = scriptedFactory([
+      ok({ text: BRIEF }),
+      ok({ text: 'I think it is pretty good!' }), // not JSON — a miss
+    ]);
+    const res = await createLabRunHandler({ clientFactory: factory, sendNotify: async () => {} })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    const run = await getLabRun(db.db, runId, ORG);
+    expect((run!.judge as { error: string }).error).toContain('unparseable');
+  });
+
+  it('a failed run notifies with the reason', async () => {
+    const runId = 'run-notify-fail';
+    // standing, no contract: two identical no-tool responses on 'length' → stalled
+    const s = spec({ name: 'stall harness', mission: { kind: 'standing', goal: 'loop forever' } });
+    await seedRun(runId, s);
+    const { factory } = scriptedFactory([
+      ok({ text: 'same thing', finishReason: 'length' }),
+      ok({ text: 'same thing', finishReason: 'length' }),
+    ]);
+    const sent: Array<{ subject: string }> = [];
+    const res = await createLabRunHandler({
+      clientFactory: factory,
+      sendNotify: async (m) => { sent.push({ subject: m.subject }); },
+    })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('failed');
+    expect(sent[0]!.subject).toContain('needs attention');
+  });
+});

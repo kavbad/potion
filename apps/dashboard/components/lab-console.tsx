@@ -240,6 +240,18 @@ export function LabConsole({
   }, [harness.harnessHash]);
 
   const [answerError, setAnswerError] = useState<string | null>(null);
+  // X3 surfaces: the verify-record proof and the one-time first-run recap.
+  const [verify, setVerify] = useState<{ busy: boolean; result: string | null }>({ busy: false, result: null });
+  const [showRecap, setShowRecap] = useState(false);
+  useEffect(() => {
+    if (run === null || run.state !== 'completed') return;
+    try {
+      if (localStorage.getItem('potion:first-run-recap') === null) {
+        localStorage.setItem('potion:first-run-recap', '1');
+        setShowRecap(true);
+      }
+    } catch { /* private mode */ }
+  }, [run]);
   const sendAnswer = useCallback(async () => {
     if (runId === null) return;
     const res = await fetch(`/api/lab/runs/${runId}/answer`, {
@@ -367,6 +379,88 @@ export function LabConsole({
           </form>
           <p className="mt-2 font-mono text-[12px] text-faint">every answer lands on the permission record as evidence</p>
           {answerError && <p className="mt-1 text-[12.5px] text-refuse" data-testid="answer-error">{answerError}</p>}
+        </div>
+      ) : null}
+
+      {/* ================= X3: the finish, felt ================= */}
+      {run !== null && TERMINAL.has(run.state) ? (
+        <div
+          className={`mt-4 border px-6 py-4 ${run.state === 'completed' ? 'border-accent/60 bg-[#fbfaf7]' : 'border-warn bg-[#fbfaf7]'}`}
+          data-testid="terminal-banner"
+        >
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-[13px]">
+            <span className={run.state === 'completed' ? 'font-semibold text-accent' : 'font-semibold text-warn'}>
+              {run.state === 'completed'
+                ? run.deliverable != null ? 'check complete · deliverable filed' : 'run complete'
+                : run.state === 'killed-budget' ? 'stopped at the spending cap — the hard stop did its job'
+                : run.state === 'failed' ? `failed — ${run.stateReason ?? 'see the record'}`
+                : 'stopped by the operator'}
+            </span>
+            <span className="text-soft">${run.cost.meteredUsd.toFixed(4)} metered</span>
+            {typeof run.premiumUsd === 'number' && run.premiumUsd > run.cost.meteredUsd ? (
+              <span className="text-kept" data-testid="routing-dividend">
+                the best scorer on every step would have cost ${run.premiumUsd.toFixed(2)}
+              </span>
+            ) : null}
+            {run.judge != null && 'overall' in run.judge ? (
+              <span className="text-ink" data-testid="judge-chip">
+                scored {run.judge.overall}/10 against your bar
+                <span className="text-faint"> · advisory{run.judge.calibrated ? '' : ' (uncalibrated)'}</span>
+              </span>
+            ) : null}
+            <button
+              type="button"
+              disabled={verify.busy}
+              onClick={() => {
+                setVerify({ busy: true, result: null });
+                void fetch(`/api/lab/runs/${runId}/verify`, { method: 'POST' })
+                  .then((r) => r.json())
+                  .then((b: { ok?: boolean; steps?: number; divergences?: number }) =>
+                    setVerify({
+                      busy: false,
+                      result: b.ok
+                        ? `record verified: all ${b.steps} steps derive cleanly from the record — self-consistent and replayable`
+                        : `record shows ${b.divergences} divergence(s) — this run's record does not fully derive`,
+                    }),
+                  )
+                  .catch(() => setVerify({ busy: false, result: 'verification unavailable' }));
+              }}
+              className="border border-[#c4bfb2] px-2.5 py-1 text-[12px] text-soft hover:border-accent hover:text-accent disabled:opacity-40"
+              data-testid="verify-record"
+            >
+              {verify.busy ? 'replaying…' : 'verify this record'}
+            </button>
+          </div>
+          {verify.result !== null ? (
+            <p className="mt-1.5 font-mono text-[12px] text-soft" data-testid="verify-result">{verify.result}</p>
+          ) : null}
+          {run.judge != null && 'overall' in run.judge ? (
+            <div className="mt-2 grid gap-0.5 font-mono text-[12px] text-faint" data-testid="judge-criteria">
+              {run.judge.criteria.map((c) => (
+                <span key={c.name}>{c.score}/10 · {c.name}{c.note !== '' ? ` — ${c.note}` : ''}</span>
+              ))}
+              {run.judge.rationale !== '' ? <span className="text-soft">{run.judge.rationale}</span> : null}
+            </div>
+          ) : null}
+          {run.judge != null && 'error' in run.judge ? (
+            <p className="mt-1.5 font-mono text-[12px] text-warn">judge: {run.judge.error}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ================= P-3: the first-run recap (once, ever) ================= */}
+      {showRecap && run !== null && run.state === 'completed' ? (
+        <div className="mt-4 border border-accent/50 bg-white px-6 py-4" data-testid="first-run-recap">
+          <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-accent">what you just saw</div>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-soft">
+            {run.steps.length} recorded steps · each model call routed by its kind of work ·{' '}
+            <b className="text-ink">${run.cost.meteredUsd.toFixed(4)}</b> spent, capped by law ·
+            the record is replayable — press &ldquo;verify this record&rdquo; above to prove it ·
+            autonomy: <b className="text-ink">zero</b> — earned from evidence, never given.
+          </p>
+          <button type="button" onClick={() => setShowRecap(false)} className="mt-2 text-[12px] text-faint underline hover:text-soft">
+            got it
+          </button>
         </div>
       ) : null}
 

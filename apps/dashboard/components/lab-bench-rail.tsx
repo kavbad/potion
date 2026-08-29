@@ -206,6 +206,33 @@ export function LabBenchRail({
         </button>
 
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-faint">
+          {canAct && harness.specText !== undefined ? (
+            <button
+              type="button"
+              onClick={() => {
+                const next = window.prompt('Rename this worker (a lawful edit — mints a new version):', spec.name);
+                if (next === null || next.trim() === '' || next.trim() === spec.name) return;
+                try {
+                  const obj = JSON.parse(harness.specText!) as Record<string, unknown>;
+                  delete obj['hash'];
+                  obj['name'] = next.trim().slice(0, 120);
+                  void fetch(`/api/lab/harnesses/${harness.harnessHash}/spec`, {
+                    method: 'PUT',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ specText: JSON.stringify(obj) }),
+                  })
+                    .then((r) => r.json())
+                    .then((b: { ok?: boolean; harnessHash?: string }) => {
+                      if (b.ok && b.harnessHash) window.location.assign(`/lab/harness/${b.harnessHash}`);
+                    });
+                } catch { /* unparsable spec text — machinery shows why */ }
+              }}
+              className="hover:text-accent"
+              data-testid="rail-rename"
+            >
+              rename
+            </button>
+          ) : null}
           <a href="#connections" className="hover:text-accent">connections</a>
           <a href="#machinery" className="hover:text-accent">machinery</a>
         </span>

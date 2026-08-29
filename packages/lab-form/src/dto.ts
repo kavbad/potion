@@ -110,6 +110,16 @@ export interface RunDto {
   superpowers: Array<{ id: string; status: 'not-connected' | 'connected' | 'expired' | 'revoked' }>;
   steps: RunStepDto[];
   cost: { meteredUsd: number; estPendingUsd: number };
+  /** P-1: what this run's model steps would have cost on the best scorer
+   * of each step's own kind — the routing dividend's counterfactual. */
+  premiumUsd?: number | null;
+  /** X3: the advisory judgment — overall/criteria/rationale, or a typed
+   * miss {error}; calibrated stays false until the calibration discipline
+   * marks it (the UI must say "advisory" while false). */
+  judge?:
+    | { overall: number; criteria: Array<{ name: string; score: number; note: string }>; rationale: string; judgeTrace: string | null; estCostUsd: number; calibrated: boolean }
+    | { error: string }
+    | null;
   /** X2: the durable task ledger (derived server-side from the record —
    * last valid update_plan wins; the loop re-injects the same truth). */
   plan?: Array<{ id: string; title: string; status: 'pending' | 'doing' | 'done' | 'blocked'; note?: string }> | null;

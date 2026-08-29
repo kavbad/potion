@@ -479,7 +479,12 @@ export function InterviewForm() {
           />
           <p className="mt-1 font-mono text-[12px] text-faint">
             {cap !== null
-              ? <>→ hard spending cap ≈ ${cap.toFixed(2)} per {kind === 'task' ? 'run' : 'check'}</>
+              ? <>
+                  → hard spending cap ≈ ${cap.toFixed(2)} per {kind === 'task' ? 'run' : 'check'}
+                  {kind === 'standing' && cadence !== '' ? (
+                    <> · worst case ≈ ${(cap * ({ hourly: 730.5, daily: 30.44, weekly: 4.35 } as const)[cadence]).toFixed(2)}/month at this cadence</>
+                  ) : null}
+                </>
               : 'enter a positive dollar amount'}
           </p>
         </div>

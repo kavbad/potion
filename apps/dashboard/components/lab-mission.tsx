@@ -43,6 +43,13 @@ export function MissionControl({
   if (spec === null || spec.mission.kind !== 'standing') return null;
   const cron = spec.checkIns.find((c) => c.trigger === 'cron');
   const armed = mission?.state === 'armed';
+  // The cost question a buyer actually asks (zero-gaps audit, gap a):
+  // cadence × cap = the worst-case month, stated plainly.
+  const checksPerMonth: Record<string, number> = { '0 * * * *': 730.5, '0 9 * * *': 30.44, '0 9 * * 1': 4.35 };
+  const cronSchedule = cron !== undefined && 'schedule' in cron ? cron.schedule : null;
+  const worstCase = cronSchedule !== null && checksPerMonth[cronSchedule] !== undefined
+    ? spec.fuel.maxUsdPerRun * checksPerMonth[cronSchedule]!
+    : null;
 
   return (
     <section
@@ -80,6 +87,11 @@ export function MissionControl({
           </button>
         ) : null}
       </div>
+      {worstCase !== null ? (
+        <p className="mt-2 font-mono text-[12px] text-faint" data-testid="mission-cost-line">
+          cost, worst case: ≈ ${worstCase.toFixed(2)}/month (the ${spec.fuel.maxUsdPerRun.toFixed(2)} hard cap × every scheduled check) — actuals on the Usage page are usually far below it
+        </p>
+      ) : null}
       {mission?.lastNote ? (
         <p className="mt-2 font-mono text-[12px] text-faint" data-testid="mission-note">
           scheduler: {mission.lastNote}

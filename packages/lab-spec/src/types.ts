@@ -89,6 +89,8 @@ export interface HarnessSpec {
    * completion law requires the final answer of a standing check to BE the
    * deliverable — parsed and schema-checked before the run may complete. */
   contract?: { type: 'brief' } | undefined;
+  /** C-3: the operator's exemplar — the standard the deliverable must hit. */
+  exemplar?: string | undefined;
 }
 
 export type SpecIssueCode =

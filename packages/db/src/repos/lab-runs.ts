@@ -473,3 +473,17 @@ export async function listLabRunsForHarness(
     .orderBy(desc(labRuns.createdAt))
     .limit(limit);
 }
+
+/** X3: attach the advisory judgment to a run (post-terminal, idempotent —
+ * last write wins; the judge never blocks a run). */
+export async function setLabRunJudge(
+  db: PotionDb,
+  runId: string,
+  orgId: string,
+  judge: unknown,
+): Promise<void> {
+  await db
+    .update(labRuns)
+    .set({ judge })
+    .where(and(eq(labRuns.id, runId), eq(labRuns.orgId, orgId)));
+}

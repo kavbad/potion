@@ -8,13 +8,14 @@
 import Link from 'next/link';
 import { fetchOrRecover } from '@/lib/recover';
 import { LabConsole } from '@/components/lab-console';
+import { BriefView as LatestBrief } from '@/components/lab-brief';
 import { ConnectorPanel } from '@/components/lab-actions';
 import { LabMachinery } from '@/components/lab-machinery';
 import { LabBenchRail } from '@/components/lab-bench-rail';
 import { MissionControl } from '@/components/lab-mission';
 import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import { BenchLabel, CARD, LabStage, SpecimenMark } from '@/components/lab-bench';
-import type { HarnessDto, MemoryDto } from '@potion/lab-form';
+import type { HarnessDto, MemoryDto, RunDto } from '@potion/lab-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,6 +110,13 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
     fetchOrRecover<MeResponse>('/auth/me'),
   ]);
   const latest = runs.runs[0] ?? null;
+  // X3 UX: the owner of a standing worker cares about the freshest
+  // deliverable more than the run list — fetch the latest completed run's
+  // detail and lead with its brief when one exists.
+  const latestCompleted = runs.runs.find((r) => r.state === 'completed') ?? null;
+  const latestDetail = latestCompleted !== null
+    ? await fetchOrRecover<RunDto>(`/api/lab/runs/${latestCompleted.runId}`).catch(() => null)
+    : null;
   const born = (harness as { createdAt?: string }).createdAt;
   const openClawSnippet = [
     `import { registerPotionGate } from '@potion/lab-openclaw';`,
@@ -166,6 +174,18 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
 
           {/* ---- the clock: arm/pause a standing mission (detail) ---- */}
           <MissionControl harness={harness} role={me.role} />
+
+          {/* ---- X3 UX: the freshest deliverable leads the page ---- */}
+          {latestDetail?.deliverable != null ? (
+            <section className="mt-8" data-testid="latest-deliverable">
+              <BenchLabel right={<Link href={`/lab/run/${latestDetail.runId}`} className="text-accent hover:underline">the run behind it →</Link>}>
+                The latest deliverable
+              </BenchLabel>
+              <div className="mt-3">
+                <LatestBrief brief={latestDetail.deliverable.brief} />
+              </div>
+            </section>
+          ) : null}
 
           {/* ---- the newborn guide: a next step before any instrument ---- */}
           {latest === null ? <WhatHappensNow spec={harness.spec} /> : null}

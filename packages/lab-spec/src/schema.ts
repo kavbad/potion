@@ -25,6 +25,7 @@ import {
   MAX_QUESTION_CHARS,
   MAX_RULES,
   MAX_RULE_CHARS,
+  MAX_EXEMPLAR_CHARS,
   MAX_SCOPES_PER_SUPERPOWER,
   MAX_SCOPE_CHARS,
   MAX_SUPERPOWERS,
@@ -140,5 +141,10 @@ export const HarnessSpecSchema = z
     // only contract type; the deliverable schema lives in contract.ts and
     // is enforced by the runtime's completion law, not here.
     contract: z.object({ type: z.literal('brief') }).strict().optional(),
+    // C-3 (2026-08-28): the operator's pasted "a great result looks like" —
+    // THE standard to hit, carried on the spec and injected into every
+    // run's context (it was extraction-context-only before: the most
+    // potent quality signal never reached the worker doing the work).
+    exemplar: z.string().min(1).max(MAX_EXEMPLAR_CHARS).optional(),
   })
   .strict();

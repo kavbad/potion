@@ -136,6 +136,8 @@ import {
   getOrgTraceRetentionDays,
   grantConnectionStatus,
   listLabGrants,
+  setLabRunJudge,
+  listLabSteps as listLabStepsRepo,
   listLabRunFiles,
   getLabRunFile,
   upsertLabRunFile,
@@ -155,9 +157,10 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildCodeLabTools, buildMcpLabTools, buildWebLabTools, resumeRun, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
+import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildWebLabTools, compileRubric, extractDeliverable, parseJudgment, resumeRun, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
+import { notifyRunEvent, type SendNotify } from './notify.js';
 import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
@@ -4386,6 +4389,8 @@ export interface LabRunHandlerDeps {
   webToolDeps?: WebToolDeps;
   /** X1: injected sandbox/fetch for the builtin code tools (tests). */
   codeToolDeps?: Partial<CodeToolDeps> & { sandboxUrl?: string };
+  /** X3: injected notification sender (tests). */
+  sendNotify?: SendNotify;
 }
 
 export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run'> {
@@ -4595,6 +4600,63 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           await leg.close();
         }
       }
+      // ── X3: the judge (advisory, post-terminal, never blocks) ──────────
+      // Runs while the ephemeral key is still alive: the judge call is
+      // METERED through the org's serving path like everything else, with a
+      // reasoning-kind hint so it rides a point suited to evaluation.
+      let judgedDeliverable = false;
+      if (outcome.status === 'completed' && spec.contract !== undefined) {
+        try {
+          const stepsForJudge = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
+          const found = extractDeliverable(
+            spec,
+            stepsForJudge.map((x) => ({ seq: x.seq, kind: x.kind, payload: x.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } })),
+          );
+          if (found !== null) {
+            judgedDeliverable = true;
+            const deliverableStep = stepsForJudge.find((x) => x.seq === found.atSeq);
+            const deliverableText = (deliverableStep?.payload as { responseText?: string })?.responseText ?? JSON.stringify(found.brief);
+            const judgeClient = clientFactory({ baseUrl: servingUrl, apiKey: rawKey, clusterHint: 'multi-step-reasoning' });
+            const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText) });
+            if (res.kind === 'ok') {
+              const est = (res.usage.totalTokens / 1000) * 0.01;
+              const parsed = parseJudgment(res.text, compileRubric(spec));
+              await setLabRunJudge(ctx.db, payload.runId, payload.orgId, parsed.ok
+                ? { overall: parsed.overall, criteria: parsed.criteria, rationale: parsed.rationale, judgeTrace: res.frontierTrace ?? null, judgeCompletionId: res.completionId ?? null, estCostUsd: est, calibrated: false }
+                : { error: `judgment unparseable: ${parsed.error}`, judgeTrace: res.frontierTrace ?? null, estCostUsd: est });
+            } else {
+              await setLabRunJudge(ctx.db, payload.runId, payload.orgId, { error: `judge call failed: ${res.kind}`, judgeTrace: null, estCostUsd: 0 });
+            }
+          }
+        } catch (e) {
+          // The judge NEVER fails the run — record the miss and move on.
+          await setLabRunJudge(ctx.db, payload.runId, payload.orgId, { error: `judge error: ${e instanceof Error ? e.message : String(e)}`, judgeTrace: null, estCostUsd: 0 }).catch(() => {});
+        }
+      }
+
+      // ── X3: notifications — the supervised loop actually loops ─────────
+      if (
+        outcome.status === 'completed' ||
+        outcome.status === 'failed' ||
+        outcome.status === 'killed-budget' ||
+        outcome.status === 'awaiting-human'
+      ) {
+        try {
+          await notifyRunEvent(ctx.db, {
+            orgId: payload.orgId,
+            runId: payload.runId,
+            harnessName: run.harnessName,
+            state: outcome.status,
+            ...(outcome.status === 'awaiting-human' ? { question: outcome.question } : {}),
+            ...(outcome.status === 'failed' ? { reason: outcome.reason } : {}),
+            ...(outcome.status === 'killed-budget' ? { reason: outcome.reason } : {}),
+            hasDeliverable: judgedDeliverable,
+          }, deps.sendNotify);
+        } catch (e) {
+          console.warn(`[potion notify] run event failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
       return { state: outcome.status };
     } finally {
       // Key death at EVERY exit — terminal, awaiting-human, refusal, throw.

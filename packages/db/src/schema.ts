@@ -1610,6 +1610,8 @@ export const labRuns = pgTable('lab_runs', {
     >()
     .notNull(),
   stateReason: text('state_reason'),
+  /** X3: advisory judgment {overall, criteria[], rationale, judgeTrace, estCostUsd, calibrated:false} or a typed miss. */
+  judge: jsonb('judge'),
   /** Last checkpointed step — steps <= cursor are never re-executed (F10 at
    * the run level: a resume must not re-buy step N's tokens). */
   cursorSeq: integer('cursor_seq').notNull().default(0),

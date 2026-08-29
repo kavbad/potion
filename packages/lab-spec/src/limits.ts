@@ -25,6 +25,7 @@ export const MAX_SUPERPOWER_ID_CHARS = 200;
 export const MAX_CHECKINS = 25;
 export const MAX_QUESTION_CHARS = 1_000;
 export const MAX_CRON_CHARS = 100;
+export const MAX_EXEMPLAR_CHARS = 2_000;
 
 /** Object/array nesting. The deepest legitimate path in v1 is 4 levels;
  * 12 leaves headroom for policy sub-objects while making depth bombs a

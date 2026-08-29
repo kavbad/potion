@@ -104,7 +104,7 @@ import {
   type FeltPositionRequest,
 } from '@potion/lab-dial';
 import { parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
-import { ServingClient, buildRunReport, planFromSteps, type StepPayload } from '@potion/lab-runtime';
+import { ServingClient, buildRunReport, planFromSteps, replayRun, type StepPayload } from '@potion/lab-runtime';
 import {
   getLabGrant,
   grantConnectionStatus,
@@ -217,6 +217,40 @@ function traceProvenance(trace: string | undefined): string {
 /** Superpower connection status union — the four typed places a filament
  * can be (Step 9's structural severance + Step 10's healed/hollow/cut). */
 export type SuperpowerStatus = 'not-connected' | 'connected' | 'expired' | 'revoked';
+
+/** P-1: sum over model steps of the best-scorer per-request price for the
+ * step's own recorded cluster. Cached per cluster within the call. Honest
+ * nulls: steps without a parsable cluster or a live frontier contribute
+ * nothing, and if NOTHING was priceable the whole figure is null. */
+async function premiumCounterfactualUsd(
+  db: PotionContext['db']['db'],
+  orgId: string,
+  steps: Array<{ kind: string; payload: unknown }>,
+): Promise<number | null> {
+  const bestByCluster = new Map<string, number | null>();
+  let total = 0;
+  let priced = 0;
+  for (const s of steps) {
+    if (s.kind !== 'model') continue;
+    const trace = (s.payload as { frontierTrace?: string }).frontierTrace ?? '';
+    const m = /(?:^|;)cluster=([^;]*)/.exec(trace);
+    const clusterId = m?.[1];
+    if (clusterId === undefined || clusterId === '') continue;
+    if (!bestByCluster.has(clusterId)) {
+      const fr = await loadCurrentFrontier(db, clusterId, orgId).catch(() => null);
+      const bestPoint = fr?.points.reduce<{ q: number; c: number } | null>(
+        (acc, p) => (acc === null || p.quality > acc.q ? { q: p.quality, c: p.costPer1K } : acc),
+        null,
+      ) ?? null;
+      bestByCluster.set(clusterId, bestPoint === null ? null : bestPoint.c);
+    }
+    const per1K = bestByCluster.get(clusterId) ?? null;
+    if (per1K === null) continue;
+    total += per1K / 1000;
+    priced += 1;
+  }
+  return priced > 0 ? total : null;
+}
 
 export function registerLabRoutes(
   app: FastifyInstance,
@@ -851,6 +885,12 @@ export function registerLabRoutes(
       // X2: the durable task ledger, derived from the record (last valid
       // update_plan wins) — the same truth the loop re-injects each leg.
       plan: planFromSteps(steps.map((x) => ({ kind: x.kind, payload: x.payload }))),
+      // X3: the advisory judgment (null until judged; typed miss recorded).
+      judge: run.judge ?? null,
+      // P-1 (the routing dividend): what THIS run's model steps would have
+      // cost on the best scorer of each step's own kind — computed from the
+      // steps' recorded traces and the live frontiers, null when unpriceable.
+      premiumUsd: await premiumCounterfactualUsd(db, org.orgId, steps),
       steps: stepDtos,
       cost: {
         meteredUsd: meteredTotal,
@@ -919,6 +959,33 @@ export function registerLabRoutes(
   });
 
   // ---- GET /api/lab/runs/:id/report (viewer) — report v1 ----
+  // ---- X3: verify the record — the replay theorem as a button ----
+  // Wording law (the panel): replay proves the record is SELF-CONSISTENT
+  // AND DERIVABLE — never that a model would answer the same. The endpoint
+  // is pure read + pure computation: zero provider calls, zero writes.
+  app.post('/api/lab/runs/:id/verify', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const { id } = req.params as { id: string };
+    if (!RUN_ID_RE.test(id)) return reply.code(404).send(notFound);
+    const run = await getLabRun(db, id, org.orgId);
+    if (run === null) return reply.code(404).send(notFound);
+    const steps = await listLabSteps(db, id, org.orgId);
+    const result = replayRun(
+      run.spec as HarnessSpec,
+      steps.map((x) => ({ seq: x.seq, kind: x.kind as 'model' | 'tool' | 'check-in', payload: x.payload as never })),
+      { state: run.state, reason: run.stateReason },
+    );
+    return reply.send(
+      result.ok
+        ? { ok: true, steps: result.steps, modelSteps: result.modelSteps }
+        : {
+            ok: false,
+            divergences: result.divergences.length,
+            sample: result.divergences.slice(0, 3).map((d) => ({ code: d.code, seq: d.seq, field: d.field ?? null })),
+          },
+    );
+  });
+
   // ---- X1: the run's file workspace — artifacts, listed + downloadable ----
   app.get('/api/lab/runs/:id/files', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;

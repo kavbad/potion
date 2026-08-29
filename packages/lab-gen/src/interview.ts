@@ -35,8 +35,9 @@ export interface InterviewAnswers {
   qualityBar?: string;
   /** "It should produce…" — the deliverable's shape. Lands as a rule. */
   produces?: string;
-  /** "A great result looks like…" — a pasted example. Extraction context
-   * ONLY: it teaches the normalizer, it is never stored in the spec. */
+  /** "A great result looks like…" — a pasted example. C-3 (2026-08-28):
+   * stored ON the spec as `exemplar` and injected into every run's context
+   * as the standard to hit (it also still teaches the extraction). */
   exampleResult?: string;
   /** "When unsure…" — 'ask-first' adds a half-budget check-in to task
    * missions too (standing already has one by law); 'press-on' keeps the
