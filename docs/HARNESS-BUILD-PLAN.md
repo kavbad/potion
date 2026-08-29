@@ -336,3 +336,30 @@ the name field).
 calibrated, validity criteria above) + execution-verified contracts +
 all-terminal notifications (mobile-verified) + cost line + verify-record
 button + the five UX adoptions + per-call kind hints.
+
+## The Heat track (2026-08-28, the final pass — operator: "generational, hottest thing on the market? if no, course correct")
+
+Verdict on the plan as it stood: it builds the most TRUSTWORTHY creator,
+not yet the hottest — heat is a different property from excellence. Three
+organs added; none bends a law:
+
+- **H1 — the two-minute miracle.** The first check is CHOREOGRAPHED: hire
+  from the gallery and the run page becomes a stage — the plan checklist
+  ticks live, artifacts materialize, the deliverable unfurls, the cost
+  counter stops, the verify badge lands. Real work, beautifully watched;
+  nothing faked, everything staged. (Choreography of already-shipped
+  mechanisms — the love-at-first-run moment.)
+- **H2 — the artifact that escapes.** Opt-in SHAREABLE deliverable pages
+  (typeset, custody-scanned, revocable, off by default) footed
+  "produced by a Potion worker · $0.04 · record verified ✓" with a
+  hire-this-worker link — every forwarded brief is a landing page. The
+  verify-proof page shares the same way for engineers.
+- **H3 — the hero wedge.** One legendary use case leads everything:
+  "the analyst you hire for $2 a month" — recurring reports, computed not
+  vibed, with receipts. Landing leads with the hero; the gallery supports;
+  "any need" is the second sentence.
+
+Sequence impact: H1 lands WITH the X3 bundle (the judge score and verify
+badge are part of the choreography); H2+H3 land with the gallery in the
+Reach phase. Boundary, stated once: product supplies the combustible
+material — launch moments and distribution are the operator's.
