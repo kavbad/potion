@@ -458,3 +458,32 @@ spread→share pages+digest. VERDICT AFTER: YES — and this closes the
 question class itself: capability, trust, heat, universality, and now
 perception each have named, testable surfaces. The audit series is
 complete; production evidence is the only remaining reviewer.
+
+## The Craft layer (2026-08-28, the outputs pass — "not what makes Potion unique: actual outputs, extremely valuable")
+
+Verdict before it: NO — seven passes engineered the MACHINE; none directly
+engineered THE OUTPUT. The judge detects quality's absence; it does not
+create quality. Five mechanisms:
+
+- **C-1 species playbooks:** authored, versioned craft per gallery species
+  (procedure, standards, exemplars, format) injected as guidance; iterated
+  against judge data — the craft flywheel, a second compounding moat.
+- **C-2 craft-bearing contracts:** deliverable schemas with standards
+  ENFORCED where checkable (reports: evidence per claim; spreadsheets:
+  labeled columns, units, README sheet; charts: titles/axes — validated by
+  a sandbox pass). Malformed deliverables do not ship.
+- **C-3 the exemplar rides the run (BUG FOUND):** the user's pasted "great
+  result" is extraction-context only today — the most potent quality
+  signal never reaches the worker. Fixed: stored on the spec (capped,
+  custody-scanned), injected into run context as the standard to hit.
+- **C-4 spend where the output is born:** the deliverable-producing call
+  rides the strongest point fuel allows; intermediate steps ride the
+  efficient point (one law on top of the per-call kind hints).
+- **C-5 per-criterion judging:** scores land per playbook criterion, so
+  escalation knows WHAT failed and playbook iteration knows WHAT to fix.
+
+Slotting: C-3/C-4 into the X3 bundle (C-3 is bug-class); C-2/C-5 with X3's
+contract work; C-1 lands with the gallery and iterates forever. VERDICT
+AFTER: YES. The series has now covered machine → perception → OUTPUT;
+the audit ladder is complete end to end, and the reviewer that remains is
+a customer holding a deliverable they'd have paid for on its own merits.
