@@ -427,3 +427,34 @@ Sequence: X7 after X6 (browser), X8 after X7; gate-SDK track parallels the
 Reach track. The claim this plan now truthfully supports: any agent or
 harness need, served better — natively or by governance — than anything
 on the market.
+
+## The Perception layer (2026-08-28, the see/tell/feel pass)
+
+Verdict before it: NO — several of the deepest advantages act SILENTLY.
+Superiority the user cannot perceive does not exist in the market's mind.
+Five mechanisms, all theater-ban-bound (render ONLY when the mechanism
+truly fired / the receipts truly joined):
+
+- **P-1 the routing dividend (SEE):** every run summary computes, from its
+  own receipts, "this run: $0.04 · the premium path would have been $1.87";
+  step rows name the kind of work they rode. The router moat becomes
+  visible inside every agent run.
+- **P-2 law moments (FEEL):** when a law fires — hard stop, redaction,
+  sandbox egress refusal, stall kill — a quiet feed line says so in house
+  language. Safety watched, not believed.
+- **P-3 the first-run recap (AWARE):** after the user's first-ever
+  completed run, one card teaches the five step-change sentences using the
+  run they just watched. Shown once, never nagging.
+- **P-4 the weekly portfolio digest (TELL):** what your workers did,
+  delivered, scored, cost, saved — forwardable (H2's loop, scheduled).
+- **P-5 gallery value lines (TELL):** each species names its counterfactual
+  plainly.
+
+Slotting: P-1/P-2/P-3 join the X3 bundle (they are surfaces over X3's own
+data); P-4/P-5 join the Reach phase. With this layer, every superiority has
+a perception surface: economics→dividend · laws→moments · craft→judge
+scores · proof→verify button · breadth→gallery · speed→choreography ·
+spread→share pages+digest. VERDICT AFTER: YES — and this closes the
+question class itself: capability, trust, heat, universality, and now
+perception each have named, testable surfaces. The audit series is
+complete; production evidence is the only remaining reviewer.
