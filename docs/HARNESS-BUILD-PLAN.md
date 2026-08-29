@@ -85,6 +85,9 @@ Idiot: "your worker scored 8.4 against your bar." Genius: the rubric text,
 the judge trace, the calibration status — all inspectable.
 
 ### P3 — "It remembers its beat."
+**SHIPPED 2026-08-28, commit 291cf60, deployed** (the `remember` core
+tool; dedup answered in the recorded trace; beat ledger in prompt +
+console; goldens byte-identical for pre-P3 specs).
 Structured working set replaces blob memory for standing missions: entities
 (first seen, last seen, history of claims about them), per-source stats
 (yield, staleness, failures), dedup keys that ENFORCE "no repeats across
@@ -114,6 +117,11 @@ snapshot.
 ships without the claim and the trace shows the verify kill.
 
 ### P5 — "A second shape that isn't a researcher." (the axes become real)
+**SHIPPED 2026-08-28, commit 291cf60, deployed** (mission.shape
+'watchdog' + quiet-check law + precision rubric + quiet-never-emails;
+webhook inlet minted at arm, 202/429/404 laws proven live on prod;
+feed-change watcher with normalization + SSRF guard + rate limits;
+migration 0069).
 The **watchdog**: mostly silent, fires only on a true condition. Different
 law, not different adjectives — its judge measures precision and
 false-alarm rate; "nothing worth your attention — 14 sources checked" is a
