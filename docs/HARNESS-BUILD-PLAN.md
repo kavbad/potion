@@ -281,6 +281,15 @@ answer while the catalog's other connectors sit fixture-authored. In order:
     one at a time — the tier stays earned, never typed.
   · **The mission gallery**: ~10 hire-able templates, each obeying the
     showcase law (promise only what the runtime enforces today).
+    **SHIPPED 2026-08-28, commit 20e9426, deployed**: ten species on the
+    /lab wall (analyst, watchdog, spreadsheet analyst, tracker-with-
+    memory, release scout, webhook triager, code reviewer, researcher,
+    ops sentinel, typesetter), P-5 value lines naming counterfactual +
+    cap, C-1 craft v1 riding the load-bearing fields, one-event prefill
+    into the recipe card. H2 shipped same commit: /share/b/[token]
+    escape pages on the M4 rail (0070 'brief' kind) — frozen at mint,
+    custody-scanned, replay-verified badge only when TRUE, labeled
+    costs, revocable, hire link in the footer.
 
 **2. The supervised loop must actually loop.** A check-in that waits on a
 page nobody has open makes born-supervised a polite fiction and blocks every
