@@ -967,6 +967,14 @@ interface ConnectorDto {
   grant: { scopesGranted: string[]; grantedBy: string; revokedAt: string | null } | null;
 }
 
+interface CustomConnectorDto {
+  connectorId: string;
+  displayName: string;
+  tools: Array<{ name: string; action: 'read' | 'act' }>;
+  status: 'not-connected' | 'connected' | 'expired' | 'revoked';
+  custom: { endpointUrl: string; serverName: string; createdBy: string };
+}
+
 const TIER_LABEL: Record<ConnectorDto['tier'], string> = {
   'fixture-authored': 'fixture-authored',
   'fixture-recorded': 'fixture-recorded',
@@ -1059,14 +1067,162 @@ function ConnectorRow({
   );
 }
 
-export function ConnectorPanel({ declared = [] }: { declared?: string[] }) {
+// BYO-MCP (2026-08-28, the genius door): an admin brings their own MCP
+// endpoint. The flow is two-step ON PURPOSE — probe first, so the admin
+// REVIEWS the pinned tool surface before registering it (their confirmation
+// is what makes them the author of that text; the provenance rule holds).
+function ByoEndpointForm({ onRegistered }: { onRegistered: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [bearer, setBearer] = useState('');
+  const [slug, setSlug] = useState('');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [surface, setSurface] = useState<{ serverName: string; tools: Array<{ name: string; description: string }> } | null>(null);
+
+  const probe = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    setSurface(null);
+    try {
+      const res = await fetch('/api/lab/connectors/custom/probe', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: url.trim(), ...(bearer.trim() !== '' ? { bearerToken: bearer.trim() } : {}) }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { ok?: boolean; reason?: string; surface?: { serverName: string; tools: Array<{ name: string; description: string }> }; error?: { message?: string }; message?: string }
+        | null;
+      if (res.ok && body?.ok && body.surface) {
+        setSurface(body.surface);
+        if (name === '') setName(body.surface.serverName.slice(0, 80));
+        if (slug === '') setSlug(body.surface.serverName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30));
+      } else {
+        setErr(body?.reason ?? body?.error?.message ?? body?.message ?? `probe failed (${res.status})`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [url, bearer, name, slug]);
+
+  const register = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch('/api/lab/connectors/custom', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          url: url.trim(),
+          ...(bearer.trim() !== '' ? { bearerToken: bearer.trim() } : {}),
+          slug: slug.trim(),
+          displayName: name.trim(),
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { ok?: boolean; reason?: string; error?: { message?: string }; message?: string }
+        | null;
+      if (res.ok && body?.ok) {
+        setOpen(false);
+        setUrl(''); setBearer(''); setSlug(''); setName(''); setSurface(null);
+        onRegistered();
+      } else {
+        setErr(body?.reason ?? body?.error?.message ?? body?.message ?? `registration failed (${res.status})`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [url, bearer, slug, name, onRegistered]);
+
+  const field = 'w-full border border-[#d9d5cb] bg-white px-2.5 py-1.5 font-mono text-[12.5px] text-ink placeholder:text-faint focus:border-accent focus:outline-none';
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 font-mono text-[12px] uppercase tracking-[0.13em] text-faint hover:text-accent"
+        data-testid="byo-open"
+      >
+        + add your own (mcp endpoint)
+      </button>
+    );
+  }
+  return (
+    <div className="mt-3 border border-dashed border-[#c4bfb2] bg-white/60 px-4 py-3.5" data-testid="byo-form">
+      <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-soft">bring your own endpoint</div>
+      <p className="mt-1 text-[12.5px] leading-snug text-soft">
+        Any MCP server you run. Potion opens one session, pins the declared tool surface for your
+        review, and freezes it — the live server never writes into a worker&apos;s context again. Every
+        tool starts supervised.
+      </p>
+      <div className="mt-2.5 grid gap-2">
+        <input className={field} placeholder="https://mcp.yourcompany.com/mcp" value={url} onChange={(e) => { setUrl(e.target.value); setSurface(null); }} data-testid="byo-url" />
+        <input className={field} type="password" placeholder="bearer token (optional — sealed, never shown again)" value={bearer} onChange={(e) => { setBearer(e.target.value); setSurface(null); }} data-testid="byo-bearer" />
+      </div>
+      {surface === null ? (
+        <button
+          type="button"
+          onClick={() => void probe()}
+          disabled={busy || url.trim() === ''}
+          className="mt-2.5 bg-ink px-3.5 py-1.5 text-[12.5px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+          data-testid="byo-probe"
+        >
+          {busy ? 'probing…' : 'Probe the endpoint'}
+        </button>
+      ) : (
+        <div className="mt-2.5" data-testid="byo-surface">
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-accent">
+            pinned surface · {surface.serverName} · {surface.tools.length} tool{surface.tools.length === 1 ? '' : 's'}
+          </div>
+          <ul className="mt-1 max-h-40 overflow-y-auto border border-[#e4e1d8] bg-white px-3 py-2">
+            {surface.tools.map((t) => (
+              <li key={t.name} className="py-0.5 text-[12.5px] leading-snug">
+                <span className="font-mono text-ink">{t.name}</span>
+                <span className="text-soft"> — {t.description === '' ? '(no description)' : t.description}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[12px] leading-snug text-soft">
+            Registering pins exactly this text as the tools your workers see — you are its author now.
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input className={field} placeholder="slug (e.g. our-crm)" value={slug} onChange={(e) => setSlug(e.target.value)} data-testid="byo-slug" />
+            <input className={field} placeholder="display name" value={name} onChange={(e) => setName(e.target.value)} data-testid="byo-name" />
+          </div>
+          <button
+            type="button"
+            onClick={() => void register()}
+            disabled={busy || slug.trim() === '' || name.trim() === ''}
+            className="mt-2.5 bg-ink px-3.5 py-1.5 text-[12.5px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+            data-testid="byo-register"
+          >
+            {busy ? 'registering…' : 'Register this surface'}
+          </button>
+        </div>
+      )}
+      {err ? <p className="mt-2 text-[12.5px] text-refuse" data-testid="byo-error">{err}</p> : null}
+      <button type="button" onClick={() => { setOpen(false); setErr(null); setSurface(null); }} className="ml-3 mt-2 font-mono text-[12px] text-faint hover:text-accent">
+        cancel
+      </button>
+    </div>
+  );
+}
+
+export function ConnectorPanel({ declared = [], role }: { declared?: string[]; role?: 'admin' | 'member' | 'viewer' }) {
   const [connectors, setConnectors] = useState<ConnectorDto[] | null>(null);
+  const [custom, setCustom] = useState<CustomConnectorDto[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch('/api/lab/connectors');
-    if (res.ok) setConnectors(((await res.json()) as { connectors: ConnectorDto[] }).connectors);
+    if (res.ok) {
+      const body = (await res.json()) as { connectors: ConnectorDto[]; custom?: CustomConnectorDto[] };
+      setConnectors(body.connectors);
+      setCustom(body.custom ?? []);
+    }
   }, []);
   useEffect(() => {
     void load();
@@ -1110,7 +1266,9 @@ export function ConnectorPanel({ declared = [] }: { declared?: string[] }) {
   if (connectors === null) return null;
   const declaredSet = new Set(declared);
   const declaredRows = connectors.filter((c) => declaredSet.has(c.connectorId));
-  const missingDeclared = declared.filter((id) => !connectors.some((c) => c.connectorId === id));
+  const missingDeclared = declared.filter(
+    (id) => !connectors.some((c) => c.connectorId === id) && !custom.some((c) => c.connectorId === id),
+  );
   const catalogRows = connectors.filter((c) => !declaredSet.has(c.connectorId));
 
   return (
@@ -1135,6 +1293,43 @@ export function ConnectorPanel({ declared = [] }: { declared?: string[] }) {
           </ul>
         </>
       ) : null}
+      {custom.length > 0 ? (
+        <div className="mt-3" data-testid="byo-list">
+          <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-soft">your endpoints</div>
+          <ul className="mt-1">
+            {custom.map((c) => (
+              <li key={c.connectorId} className="border-b border-dashed border-[#d9d5cb] py-2.5 last:border-0" data-testid={`connector-${c.connectorId}`} data-status={c.status}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[14px] font-medium text-ink">{c.displayName}</span>
+                  <span className="font-mono text-[11.5px] text-faint">{c.custom.endpointUrl}</span>
+                  <span className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-warn">byo</span>
+                  {role === 'admin' ? (
+                    <button
+                      type="button"
+                      className="ml-auto font-mono text-[12px] text-refuse hover:underline disabled:opacity-40"
+                      disabled={busy}
+                      onClick={() => {
+                        if (!window.confirm(`Remove ${c.displayName}? Its credential is revoked and workers lose these tools immediately.`)) return;
+                        setBusy(true);
+                        void fetch(`/api/lab/connectors/custom/${c.connectorId}`, { method: 'DELETE' })
+                          .then(() => load())
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      remove
+                    </button>
+                  ) : null}
+                </div>
+                <p className="mt-0.5 text-[12.5px] leading-snug text-soft">
+                  {c.tools.length} tool{c.tools.length === 1 ? '' : 's'}, surface pinned at registration — every call
+                  asks first until it earns autonomy. ({c.tools.map((t) => t.name).slice(0, 6).join(', ')}{c.tools.length > 6 ? ', …' : ''})
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {role === 'admin' ? <ByoEndpointForm onRegistered={() => void load()} /> : null}
       {catalogRows.length > 0 ? (
         <details className={declared.length > 0 ? 'mt-3' : ''}>
           <summary className="cursor-pointer font-mono text-[12px] uppercase tracking-[0.13em] text-faint hover:text-accent">

@@ -1788,6 +1788,25 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   },
 });
 
+export const labCustomConnectors = pgTable(
+  'lab_custom_connectors',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    connectorId: text('connector_id').notNull(),
+    displayName: text('display_name').notNull(),
+    endpointUrl: text('endpoint_url').notNull(),
+    serverName: text('server_name').notNull().default('unknown'),
+    /** Pinned at registration: [{name, description, inputSchema}] — capped,
+     * custody-scanned, admin-approved. The runtime serves THIS surface. */
+    tools: jsonb('tools').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.connectorId] })],
+);
+
 export const labDigests = pgTable('lab_digests', {
   orgId: text('org_id')
     .primaryKey()

@@ -272,7 +272,9 @@ export async function buildMcpLabTools(opts: McpLegSetupOptions): Promise<McpLeg
     try {
       const transport = new StreamableHttpTransport({
         baseUrl: connector.baseUrl,
-        accessToken,
+        // '' is a real opened envelope holding NO credential (a BYO endpoint
+        // registered without a bearer) — send no header rather than 'Bearer '.
+        accessToken: accessToken === '' ? undefined : accessToken,
         timeoutMs: opts.timeoutMs,
         fetchImpl: opts.fetchImpl,
       });

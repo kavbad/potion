@@ -112,6 +112,10 @@ import {
   listLabGrants,
   markLabGrantStatus,
   upsertLabGrant,
+  listLabCustomConnectors,
+  upsertLabCustomConnector,
+  deleteLabCustomConnector,
+  getLabCustomConnector,
 } from '@potion/db';
 import { withEndpointOverrides, type ConnectorDef } from '@potion/lab-mcp';
 import {
@@ -134,12 +138,15 @@ import {
 import type { PotionQueue } from '@potion/queue';
 import { openAiError, parseCookies, roleAtLeast } from '../auth.js';
 import { publicBaseUrl } from '../public-url.js';
+import { CUSTOM_SLUG_RE, probeMcpEndpoint, type ProbeDeps } from '../custom-mcp.js';
 import { actorOf } from './keys.js';
 import { missionWindow } from '../lab-scheduler.js';
 import type { PotionContext } from '../context.js';
 
 export interface LabRoutesOptions {
   queue: PotionQueue;
+  /** BYO-MCP probe deps (tests inject a scripted server + DNS). */
+  probeDeps?: ProbeDeps;
 }
 
 const notFound = openAiError('not found', 'invalid_request_error', 'lab_not_found');
@@ -1284,7 +1291,38 @@ export function registerLabRoutes(
   app.get('/api/lab/connectors', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     const grants = await listLabGrants(db, org.orgId);
+    // BYO-MCP: the org's own registered endpoints ride the same list, tier
+    // 'byo' — honestly labeled as operator-pinned rather than
+    // Potion-authored, every tool an act.
+    const customRows = await listLabCustomConnectors(db, org.orgId);
+    const custom = customRows.map((row) => {
+      const grant = grants.find((g) => g.connectorId === row.connectorId) ?? null;
+      return {
+        connectorId: row.connectorId,
+        displayName: row.displayName,
+        category: 'your endpoints',
+        version: 'byo',
+        contentHash: null,
+        tier: 'byo' as const,
+        connectStatus: 'ready' as const,
+        connectNote: null,
+        fixtureAgeDays: null,
+        scopesOffered: [],
+        defaultScopes: [],
+        toolCount: { read: 0, act: row.tools.length },
+        tools: row.tools.map((t) => ({ name: t.name, action: 'act' as const })).sort((a, b) => (a.name < b.name ? -1 : 1)),
+        contextTokens: 0,
+        configured: true,
+        status: grantConnectionStatus(grant),
+        custom: { endpointUrl: row.endpointUrl, serverName: row.serverName, createdBy: row.createdBy },
+        grant:
+          grant === null
+            ? null
+            : { scopesGranted: grant.scopesGranted, tokenExpiresAt: grant.tokenExpiresAt, grantedBy: grant.grantedBy, createdAt: grant.createdAt, revokedAt: grant.revokedAt },
+      };
+    });
     return reply.send({
+      custom,
       connectors: CATALOG.map((pkg) => {
         const grant = grants.find((g) => g.connectorId === pkg.id) ?? null;
         const def = toConnectorDef(pkg);
@@ -1329,6 +1367,82 @@ export function registerLabRoutes(
   // ---- POST /api/lab/connectors/:id/oauth/start (admin) ----
   // Granting a third-party credential is an admin act. PKCE S256 + an
   // ORG-BOUND signed state cookie (the tenancy anchor for the callback).
+  // ---- BYO-MCP (the genius door, 2026-08-28) ----
+  // Probe: open ONE MCP session against the admin's endpoint, pin the
+  // declared surface under caps + custody scans, return it for review.
+  // Nothing is stored; the bearer is used for the session and dropped.
+  const CustomBodySchema = z
+    .object({
+      url: z.string().url().max(500),
+      bearerToken: z.string().max(4096).optional(),
+      slug: z.string().regex(CUSTOM_SLUG_RE).optional(),
+      displayName: z.string().min(1).max(80).optional(),
+    })
+    .strict();
+
+  app.post('/api/lab/connectors/custom/probe', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) return reply.code(403).send(forbidden(org.role, 'register endpoints'));
+    const body = CustomBodySchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: 'invalid_body', message: body.error.issues.map((i) => i.message).join('; ') });
+    const probed = await probeMcpEndpoint(body.data.url, body.data.bearerToken, opts.probeDeps ?? {});
+    if (!probed.ok) return reply.code(422).send({ ok: false, reason: probed.reason });
+    return reply.send({ ok: true, surface: probed.surface });
+  });
+
+  // Register: RE-probe server-side (the pin is what Potion saw, never a
+  // client echo), store the row, seal the bearer into the grants table —
+  // the same envelope custody every OAuth token gets. The registering
+  // admin is the AUTHOR of the pinned surface (provenance rule).
+  app.post('/api/lab/connectors/custom', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) return reply.code(403).send(forbidden(org.role, 'register endpoints'));
+    const body = CustomBodySchema.safeParse(req.body ?? {});
+    if (!body.success || body.data.slug === undefined || body.data.displayName === undefined) {
+      return reply.code(400).send({ error: 'invalid_body', message: 'url, slug and displayName are required' });
+    }
+    if (getPackage(body.data.slug) !== null || body.data.slug === 'web' || body.data.slug === 'code') {
+      return reply.code(409).send({ error: 'slug_taken', message: `'${body.data.slug}' is a catalog id — pick another slug` });
+    }
+    const probed = await probeMcpEndpoint(body.data.url, body.data.bearerToken, opts.probeDeps ?? {});
+    if (!probed.ok) return reply.code(422).send({ ok: false, reason: probed.reason });
+    const stored = await upsertLabCustomConnector(db, {
+      orgId: org.orgId,
+      connectorId: body.data.slug,
+      displayName: body.data.displayName,
+      endpointUrl: body.data.url,
+      serverName: probed.surface.serverName,
+      tools: probed.surface.tools,
+      createdBy: actorOf(req),
+    });
+    if (!stored.ok) return reply.code(422).send({ ok: false, reason: stored.reason });
+    await upsertLabGrant(db, {
+      id: `grant-${body.data.slug}-${randomUUID().slice(0, 8)}`,
+      orgId: org.orgId,
+      connectorId: body.data.slug,
+      superpowerId: body.data.slug,
+      scopesGranted: ['mcp:pinned'],
+      // ALWAYS a real envelope — the run leg OPENS this one (unlike web/code,
+      // which never reach openGrantToken), so the builtin sentinel would
+      // throw CustodyDecryptError mid-leg. '' = no credential, honestly.
+      tokenEnvelope: await ctx.custody.encryptKey(body.data.bearerToken ?? ''),
+      grantedBy: actorOf(req),
+    });
+    return reply.code(201).send({ ok: true, connectorId: body.data.slug, tools: probed.surface.tools.length });
+  });
+
+  app.delete('/api/lab/connectors/custom/:id', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'admin')) return reply.code(403).send(forbidden(org.role, 'remove endpoints'));
+    const { id } = req.params as { id: string };
+    if (!CUSTOM_SLUG_RE.test(id)) return reply.code(404).send(notFound);
+    const row = await getLabCustomConnector(db, org.orgId, id);
+    if (row === null) return reply.code(404).send(notFound);
+    await markLabGrantStatus(db, org.orgId, id, 'revoked').catch(() => {});
+    await deleteLabCustomConnector(db, org.orgId, id);
+    return reply.send({ ok: true });
+  });
+
   app.post('/api/lab/connectors/:id/oauth/start', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     if (!roleAtLeast(org.role, 'admin')) {

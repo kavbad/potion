@@ -40,8 +40,9 @@ export function LabBenchRail({
     fetch('/api/lab/connectors', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
-        const list = (b as { connectors?: CatalogLite[] } | null)?.connectors;
-        if (list) setCatalog(new Map(list.map((c) => [c.connectorId, c])));
+        const body = b as { connectors?: CatalogLite[]; custom?: CatalogLite[] } | null;
+        const list = [...(body?.connectors ?? []), ...(body?.custom ?? [])];
+        if (list.length > 0) setCatalog(new Map(list.map((c) => [c.connectorId, c])));
       })
       .catch(() => null);
   }, []);

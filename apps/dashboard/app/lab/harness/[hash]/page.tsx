@@ -207,12 +207,13 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
           {/* ---- the permission ledger ---- */}
           <LabPermissionLedger harnessHash={harness.harnessHash} role={me.role} />
 
-          {/* ---- connections: the worker's declared accounts, honestly ---- */}
-          {harness.spec.superpowers.length > 0 ? (
+          {/* ---- connections: the worker's declared accounts, honestly —
+               and (admin) the BYO-MCP door, even with nothing declared ---- */}
+          {harness.spec.superpowers.length > 0 || me.role === 'admin' ? (
             <section className="mt-8" id="connections">
               <BenchLabel right="you approve every grant by hand · revoke cuts immediately">Connections</BenchLabel>
               <div className="mt-3">
-                <ConnectorPanel declared={harness.spec.superpowers.map((s) => s.id)} />
+                <ConnectorPanel declared={harness.spec.superpowers.map((s) => s.id)} role={me.role} />
               </div>
             </section>
           ) : null}

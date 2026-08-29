@@ -138,6 +138,7 @@ import {
   listLabGrants,
   setLabRunJudge,
   listLabSteps as listLabStepsRepo,
+  listLabCustomConnectors,
   listLabRunFiles,
   getLabRunFile,
   upsertLabRunFile,
@@ -162,6 +163,7 @@ import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from 
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
 import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
+import { customConnectorDef } from '@potion/lab-mcp';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -4567,7 +4569,12 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 // Step 11: the CATALOG is the connector source. Only packages
                 // that are `ready` (endpoint + OAuth authored) compile to a
                 // ConnectorDef, so an unverified package cannot be reached.
-                connectors: deps.connectors ?? connectableConnectors(),
+                // BYO-MCP: the org's own registered endpoints join the list —
+                // surface pinned at registration, every tool an act.
+                connectors: [
+                  ...(deps.connectors ?? connectableConnectors()),
+                  ...(await listLabCustomConnectors(ctx.db, payload.orgId)).map(customConnectorDef),
+                ],
                 ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
               });
         return {

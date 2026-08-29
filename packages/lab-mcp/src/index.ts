@@ -9,3 +9,4 @@ export * from './session.js';
 export * from './registry.js';
 export * from './caps.js';
 export * from './redactor.js';
+export * from './custom.js';

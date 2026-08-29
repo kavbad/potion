@@ -160,7 +160,9 @@ describe('GET /api/lab/connectors — the catalog', () => {
   });
 
   it('an unconnectable package REFUSES the OAuth start (structural, not advisory)', async () => {
-    const unverified = CATALOG.find((p) => p.connect.status !== 'ready')!;
+    // 'builtin' joined the catalog with X1 and IS connectable (a one-click
+    // grant) — unconnectable means neither ready nor builtin.
+    const unverified = CATALOG.find((p) => p.connect.status !== 'ready' && p.connect.status !== 'builtin')!;
     const res = await app.inject({
       method: 'POST',
       url: `/api/lab/connectors/${unverified.id}/oauth/start`,

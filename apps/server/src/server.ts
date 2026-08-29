@@ -116,6 +116,8 @@ export interface BuildServerOptions extends ContextOptions {
   /** M3 #28: injected artifact store (tests). Default: ARTIFACT_STORE env
    * ('local'|'s3'); unset → no artifacts are written (M2 behavior). */
   artifacts?: ArtifactStore;
+  /** BYO-MCP probe deps (tests inject a scripted server + DNS). */
+  labProbeDeps?: import('./custom-mcp.js').ProbeDeps;
 }
 
 export async function buildServer(opts: BuildServerOptions = {}): Promise<FastifyInstance> {
@@ -395,7 +397,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   registerCertificationRoutes(app, ctx, { queue });
   // Lab Step 8: the novice loop surface (/api/lab/*) — interview → catalog →
   // dial/felt → trial runs → report/memory. Every row in ROUTE_INVENTORY.
-  registerLabRoutes(app, ctx, { queue });
+  registerLabRoutes(app, ctx, { queue, ...(opts.labProbeDeps !== undefined ? { probeDeps: opts.labProbeDeps } : {}) });
   // G2.7: operator surface (create/list/delete orgs + jobs mirror) —
   // fail-closed POTION_OPERATOR_TOKEN bearer, outside the /api auth hook.
   registerOperatorRoutes(app, ctx, { queue });

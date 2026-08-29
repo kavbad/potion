@@ -469,3 +469,97 @@ describe('X3 — the judge and the notifications', () => {
     expect(sent[0]!.subject).toContain('needs attention');
   });
 });
+
+describe('BYO-MCP — a registered endpoint is a real superpower (integration)', () => {
+  const MASTER_BYO = Buffer.from('a'.repeat(64), 'hex');
+  const provider = { getMasterKey: async () => MASTER_BYO, describe: () => 'test-fixed' };
+
+  async function seedByo(mcpUrl: string, bearer: string | null) {
+    const { upsertLabCustomConnector, upsertLabGrant } = await import('@potion/db');
+    const { sealEnvelope } = await import('@potion/custody');
+    await upsertLabCustomConnector(db.db, {
+      orgId: ORG, connectorId: 'our-crm', displayName: 'Our CRM', endpointUrl: mcpUrl,
+      serverName: 'mock-mcp',
+      tools: [{ name: 'crm_update', description: 'Update a customer record.', inputSchema: { type: 'object' } }],
+      createdBy: 'test',
+    });
+    await upsertLabGrant(db.db, {
+      id: 'grant-byo-run', orgId: ORG, connectorId: 'our-crm', superpowerId: 'our-crm',
+      scopesGranted: ['mcp:pinned'],
+      // The register route ALWAYS seals a real envelope ('' = no credential).
+      tokenEnvelope: sealEnvelope(MASTER_BYO, bearer ?? ''), grantedBy: 'test',
+    });
+  }
+
+  it('the pinned tool loads through the sealed bearer and fires the pore (act, fail-closed)', async () => {
+    const { MockMcpServer } = await import('@potion/lab-mcp/mock-server');
+    const mock = await MockMcpServer.start({
+      tools: [{ name: 'crm_update', description: 'server text (never forwarded)', handler: () => 'updated' }],
+      requireBearer: 'byo-bearer-1234567890',
+    });
+    try {
+      await seedByo(mock.mcpUrl, 'byo-bearer-1234567890');
+      const s = spec({
+        name: 'byo harness',
+        superpowers: [{ id: 'our-crm', scopes: [] }],
+        checkIns: [{ trigger: 'before-external-action' }],
+      });
+      const runId = 'run-byo-pore';
+      await seedRun(runId, s);
+      const toolCall = {
+        id: 'call-byo', type: 'function' as const,
+        function: { name: 'our-crm.crm_update', arguments: JSON.stringify({ email: 'x@y.dev' }) },
+      };
+      const { factory } = scriptedFactory([ok({ text: 'updating', toolCalls: [toolCall], finishReason: 'tool_calls' })]);
+      const res = await createLabRunHandler({ clientFactory: factory, masterKeyProvider: provider })(
+        { orgId: ORG, runId }, ctx(),
+      );
+      // The act gates at the pore — the FIRST external call of a BYO tool
+      // asks a human, exactly like a catalog connector's act.
+      expect(res.state).toBe('awaiting-human');
+      const { listLabSteps } = await import('@potion/db');
+      const steps = await listLabSteps(db.db, runId, ORG);
+      const pore = steps.find((st) => JSON.stringify(st.payload).includes('before-external-action'));
+      expect(pore, 'expected the before-external-action check-in').toBeDefined();
+      expect(JSON.stringify(pore!.payload)).toContain('our-crm.crm_update');
+    } finally {
+      await mock.close();
+    }
+  }, 30_000);
+
+  it('a tokenless registration (sealed empty bearer) opens with NO auth header and the tool runs', async () => {
+    const { MockMcpServer } = await import('@potion/lab-mcp/mock-server');
+    const mock = await MockMcpServer.start({
+      tools: [{ name: 'crm_update', description: 'server text', handler: () => ({ updated: true }) }],
+    });
+    try {
+      await seedByo(mock.mcpUrl, null);
+      const s = spec({ name: 'byo open harness', superpowers: [{ id: 'our-crm', scopes: [] }], checkIns: [] });
+      const runId = 'run-byo-open';
+      await seedRun(runId, s);
+      const toolCall = {
+        id: 'call-byo2', type: 'function' as const,
+        function: { name: 'our-crm.crm_update', arguments: '{}' },
+      };
+      const { factory } = scriptedFactory([
+        ok({ text: 'updating', toolCalls: [toolCall], finishReason: 'tool_calls' }),
+        ok({ text: 'the thing is done' }),
+        ok({ text: 'Wrap-up: done-definition met.' }),
+      ]);
+      const res = await createLabRunHandler({ clientFactory: factory, masterKeyProvider: provider })(
+        { orgId: ORG, runId }, ctx(),
+      );
+      expect(res.state).toBe('completed');
+      // '' means no credential — the wire must carry NO Authorization header,
+      // never 'Bearer ' (the empty-token seam this feature fixed).
+      expect(mock.requests.length).toBeGreaterThan(0);
+      expect(mock.requests.every((r) => r.authorization === null)).toBe(true);
+      const { listLabSteps } = await import('@potion/db');
+      const steps = await listLabSteps(db.db, runId, ORG);
+      const toolStep = steps.find((st) => JSON.stringify(st.payload).includes('"toolName":"our-crm.crm_update"'));
+      expect(toolStep, 'expected the executed tool step').toBeDefined();
+    } finally {
+      await mock.close();
+    }
+  }, 30_000);
+});
