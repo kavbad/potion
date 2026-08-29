@@ -18,6 +18,7 @@
 //            never duration).
 import { canonicalJson, seedFromString, sha256, type ChatMessage, type Tool } from '@potion/core';
 import { buildPlanTool, planFromSteps, planLedgerMessage, renderPlanLedger, PLAN_TOOL_NAME } from './plan.js';
+import { beatFromMemory, buildBeatTool, emptyBeat, renderBeatLedger, BEAT_PROMPT } from './beat.js';
 import {
   consumeLabRunAnswer,
   appendLabStep,
@@ -182,9 +183,22 @@ export function systemPrompt(
       ? `Mission (task): ${spec.mission.goal}\nDone when: ${spec.mission.doneDefinition}`
       : `Mission (standing): ${spec.mission.goal}`;
   const rules = spec.rules.length > 0 ? `\nRules:\n${spec.rules.map((r) => `- ${r}`).join('\n')}` : '';
+  // P3: a beat-bearing spec renders its working set READABLY (entities with
+  // history, source stats, dedup count, the worker's own notes) and any
+  // non-beat keys as the classic blob; non-beat specs stay byte-identical.
+  const beatOn = spec.memory.beat === true;
+  const plainKeys = beatOn ? Object.keys(memory).filter((k) => !k.startsWith('beat:')).sort() : Object.keys(memory).sort();
+  const plain = Object.fromEntries(plainKeys.map((k) => [k, memory[k]]));
+  const beatLedger = beatOn ? renderBeatLedger(memory) : '';
   const mem =
-    Object.keys(memory).length > 0
-      ? `\nMemory:\n${JSON.stringify(memory, Object.keys(memory).sort())}`
+    (beatLedger !== '' ? `\nYour working set (durable across checks):\n${beatLedger}` : '') +
+    (plainKeys.length > 0 ? `\nMemory:\n${JSON.stringify(plain, plainKeys)}` : '');
+  const beatLaw = beatOn && spec.mission.kind === 'standing' ? `\n${BEAT_PROMPT}` : '';
+  // P5: the watchdog law — gated on the NEW shape field, so reporter and
+  // pre-P5 prompts stay byte-identical and old records replay clean.
+  const shapeLaw =
+    spec.mission.kind === 'standing' && spec.mission.shape === 'watchdog'
+      ? `\nYou are a WATCHDOG: most checks should end quietly. Fire only when the condition truly holds, and every alert must carry its evidence (the diff, the line, the number, with its source). When nothing warrants attention, the quiet report IS the deliverable: say nothing needs them, state how many sources you checked and what you verified. A false alarm is a failure; a missed true change is a worse one.`
       : '';
   const guidance =
     toolGuidance.length > 0 ? `\nYour connected superpowers:\n${toolGuidance.map((g) => `- ${g}`).join('\n')}` : '';
@@ -197,7 +211,7 @@ export function systemPrompt(
     spec.exemplar !== undefined
       ? `\nA great result looks like (the standard to hit):\n${spec.exemplar}`
       : '';
-  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${contract}${exemplar}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
+  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${beatLaw}${shapeLaw}${contract}${exemplar}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
 }
 
 /** P1 contract law — the repair prompt. A pure function of the parse issues
@@ -248,7 +262,18 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
   // X2: the task ledger's update_plan is a CORE tool on EVERY run — no
   // grant (planning is thinking). Consequence, deliberate: every task run
   // is now tool-bearing, so every task run ends with the wrap-up call.
-  const tools = [...(opts.tools ?? []), buildPlanTool()];
+  // P3: beat-bearing standing specs also carry `remember` (core — memory
+  // is thinking too). Its state ref is seeded from this leg's memory read
+  // below; within-leg calls accumulate through the ref.
+  const beatOn = opts.spec.memory.enabled && opts.spec.memory.beat === true && opts.spec.mission.kind === 'standing';
+  const beatRef = { current: emptyBeat() };
+  const tools = [
+    ...(opts.tools ?? []),
+    buildPlanTool(),
+    ...(beatOn
+      ? [buildBeatTool({ state: beatRef, today: () => new Date(clock.now()).toISOString().slice(0, 10) })]
+      : []),
+  ];
   const rng = mulberry32(seedFromString(opts.runId) % 2 ** 31);
 
   const claim: LabClaim = await claimLabRun(opts.db, {
@@ -275,6 +300,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
   try {
     const priorSteps = await listLabSteps(opts.db, opts.runId, opts.orgId);
     const memory = await getLabMemory(opts.db, opts.orgId, opts.harnessHash);
+    if (beatOn) beatRef.current = beatFromMemory(memory);
     let messages: ChatMessage[];
     if (priorSteps.length === 0) {
       messages = [

@@ -334,3 +334,114 @@ describe('P1 — arm/pause + the scheduler window math', () => {
     expect(enqueued).toHaveLength(2);
   });
 });
+
+describe('P5 — event triggers: the webhook inlet + the feed watcher', () => {
+  it('arming a webhook-carrying mission mints the inlet URL ONCE; the token wakes it; bursts and bad tokens refuse', async () => {
+    const s = spec({
+      name: 'inlet harness',
+      mission: { kind: 'standing', goal: 'act when poked', shape: 'watchdog' },
+      contract: { type: 'brief' },
+      checkIns: [{ trigger: 'webhook' }],
+    });
+    const hash = await seedCatalog(s);
+    const armed = await post(`/api/lab/harnesses/${hash}/arm`, {});
+    expect(armed.statusCode).toBe(200);
+    const body = armed.json() as { mission: { state: string; cadenceCron: string; hasHook: boolean }; hook?: { url: string } };
+    expect(body.mission.state).toBe('armed');
+    expect(body.mission.cadenceCron).toBe('event'); // armable with NO schedule
+    expect(body.mission.hasHook).toBe(true);
+    expect(body.hook?.url).toMatch(/\/hooks\/lab\/whk_[0-9a-f]{48}$/);
+    const token = body.hook!.url.split('/hooks/lab/')[1]!;
+
+    // The token starts a check.
+    const fired = await app.inject({ method: 'POST', url: `/hooks/lab/${token}` });
+    expect(fired.statusCode).toBe(202);
+    const { runId } = fired.json() as { runId: string };
+    expect(runId.startsWith(`hk-${hash.slice(0, 8)}-`)).toBe(true);
+    const { getLabRun } = await import('@potion/db');
+    expect((await getLabRun(h.db, runId, ORG))!.state).toBe('pending');
+
+    // Same minute again: the per-minute id refuses the burst, typed.
+    const burst = await app.inject({ method: 'POST', url: `/hooks/lab/${token}` });
+    expect(burst.statusCode).toBe(429);
+
+    // A wrong token and a malformed one are the uniform 404 — no oracle.
+    expect((await app.inject({ method: 'POST', url: `/hooks/lab/whk_${'f'.repeat(48)}` })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/hooks/lab/not-a-token' })).statusCode).toBe(404);
+
+    // Pausing closes the inlet: the same token now 404s uniformly.
+    await post(`/api/lab/harnesses/${hash}/pause`, {});
+    expect((await app.inject({ method: 'POST', url: `/hooks/lab/${token}` })).statusCode).toBe(404);
+  });
+
+  it('the feed watcher primes silently, fires on a REAL change, and ignores script/nonce churn', async () => {
+    const { feedTick } = await import('../src/lab-scheduler.js');
+    const { armLabMission, getLabMission } = await import('@potion/db');
+    const s = spec({
+      name: 'feed harness',
+      mission: { kind: 'standing', goal: 'watch the pricing page', shape: 'watchdog' },
+      contract: { type: 'brief' },
+      checkIns: [{ trigger: 'feed-change', url: 'https://watched.example/pricing' }],
+    });
+    const hash = await seedCatalog(s);
+    await armLabMission(h.db, { orgId: ORG, harnessHash: hash, cadenceCron: 'event', armedBy: 'test' });
+
+    let page = '<html><script>nonce=1</script><body>Pro plan: $49</body></html>';
+    const feedFetch: typeof fetch = async () => new Response(page, { status: 200 });
+    const feedLookup = async () => ({ address: '203.0.113.9' });
+    const enqueued: string[] = [];
+    const queue = { enqueue: async (_k: string, p: { runId: string }) => { enqueued.push(p.runId); return 'job-f'; } };
+    const opts = { db: h, queue: queue as never, feedFetch, feedLookup };
+
+    // First sight primes — no run.
+    await feedTick(opts, new Date('2026-08-28T10:00:00Z'));
+    expect(enqueued).toHaveLength(0);
+
+    // Nonce churn only — normalized away, no fire.
+    page = '<html><script>nonce=999</script><body>Pro plan: $49</body></html>';
+    await feedTick(opts, new Date('2026-08-28T10:06:00Z'));
+    expect(enqueued).toHaveLength(0);
+
+    // A REAL change fires within one cycle.
+    page = '<html><script>nonce=2</script><body>Pro plan: $59</body></html>';
+    await feedTick(opts, new Date('2026-08-28T10:12:00Z'));
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.startsWith(`fc-${hash.slice(0, 8)}-`)).toBe(true);
+
+    // Another change inside the fire window: rate-limited (hash updates,
+    // no second check).
+    page = '<html><body>Pro plan: $69</body></html>';
+    await feedTick(opts, new Date('2026-08-28T10:20:00Z'));
+    expect(enqueued).toHaveLength(1);
+
+    // Past the window, the next change fires again.
+    page = '<html><body>Pro plan: $79</body></html>';
+    await feedTick(opts, new Date('2026-08-28T10:55:00Z'));
+    expect(enqueued).toHaveLength(2);
+
+    const m = await getLabMission(h.db, ORG, hash);
+    const state = m!.feedState as Record<string, { hash: string; firedAt?: string }>;
+    expect(state['https://watched.example/pricing']!.firedAt).toBeDefined();
+  });
+
+  it('an SSRF-refused feed url is typed silence — never fetched, never a fire', async () => {
+    const { feedTick } = await import('../src/lab-scheduler.js');
+    const { armLabMission } = await import('@potion/db');
+    const s = spec({
+      name: 'ssrf feed harness',
+      mission: { kind: 'standing', goal: 'watch' },
+      contract: { type: 'brief' },
+      checkIns: [{ trigger: 'feed-change', url: 'https://internal.example/admin' }],
+    });
+    const hash = await seedCatalog(s);
+    await armLabMission(h.db, { orgId: ORG, harnessHash: hash, cadenceCron: 'event', armedBy: 'test' });
+    let fetched = 0;
+    const feedFetch: typeof fetch = async () => { fetched += 1; return new Response('x'); };
+    const feedLookup = async () => ({ address: '10.0.0.7' }); // resolves private
+    const enqueued: string[] = [];
+    const queue = { enqueue: async (_k: string, p: { runId: string }) => { enqueued.push(p.runId); return 'job-s'; } };
+    await feedTick({ db: h, queue: queue as never, feedFetch, feedLookup }, new Date('2026-08-28T11:00:00Z'));
+    expect(fetched).toBe(0);
+    expect(enqueued).toHaveLength(0);
+  });
+});

@@ -68,6 +68,13 @@ const MissionSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('standing'),
       goal: z.string().min(1).max(MAX_GOAL_CHARS),
+      /** P5 (2026-08-28): the SHAPE — the first standing shape that is not
+       * a reporter. A watchdog is mostly silent: it fires only on a true
+       * condition, a quiet check is a valid judged deliverable, and its
+       * judge weighs precision/false alarms. OPTIONAL AND ADDITIVE: absent
+       * = the reporter behavior, byte-identical prompts, old records
+       * replay clean. */
+      shape: z.literal('watchdog').optional(),
     })
     .strict(),
 ]);
@@ -86,6 +93,12 @@ const MemorySchema = z
   .object({
     enabled: z.boolean(),
     retentionDays: z.number().int().positive().optional(),
+    /** P3 (2026-08-28): the beat working set — a standing worker keeps
+     * structured memory (entities, dedup keys, source stats, reflections)
+     * through the `remember` core tool, and its prompt renders the beat
+     * ledger + law. OPTIONAL AND ADDITIVE: absent = the pre-P3 blob
+     * behavior, byte-identical prompts, old records replay clean. */
+    beat: z.boolean().optional(),
   })
   .strict();
 
@@ -115,6 +128,21 @@ const CheckInSchema = z.discriminatedUnion('trigger', [
       trigger: z.literal('cron'),
       schedule: z.string().min(1).max(MAX_CRON_CHARS),
       question: z.string().min(1).max(MAX_QUESTION_CHARS),
+    })
+    .strict(),
+  // P5 event triggers — anything can poke a worker awake:
+  //   · webhook: the arm mints a secret inlet URL; a POST to it starts a
+  //     check (rate-limited; the token hash lives on the mission row);
+  //   · feed-change: the scheduler polls the page on its tick, hashes the
+  //     body, and starts a check within one cycle of a real change.
+  z.object({ trigger: z.literal('webhook') }).strict(),
+  z
+    .object({
+      trigger: z.literal('feed-change'),
+      url: z
+        .string()
+        .max(500)
+        .refine((u) => /^https:\/\//.test(u), 'feed-change url must be https'),
     })
     .strict(),
 ]);

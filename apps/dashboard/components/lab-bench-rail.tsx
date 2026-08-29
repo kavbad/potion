@@ -54,7 +54,8 @@ export function LabBenchRail({
   const declared = spec.superpowers.map((s) => s.id);
   const unmetPowers = declared.filter((id) => posture.get(id) !== 'connected');
   const standing = spec.mission.kind === 'standing';
-  const hasCron = spec.checkIns.some((c) => c.trigger === 'cron');
+  // P5: event triggers (webhook, feed-change) make a mission armable too.
+  const hasCron = spec.checkIns.some((c) => c.trigger === 'cron' || c.trigger === 'webhook' || c.trigger === 'feed-change');
   const armed = harness.mission?.state === 'armed';
   const needsArm = standing && hasCron && !armed;
   const stepsLeft = unmetPowers.length + (needsArm ? 1 : 0);

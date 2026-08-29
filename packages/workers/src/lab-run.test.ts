@@ -563,3 +563,75 @@ describe('BYO-MCP — a registered endpoint is a real superpower (integration)',
     }
   }, 30_000);
 });
+
+describe('P5 — the watchdog: quiet checks never email, fired ones do', () => {
+  beforeEach(async () => {
+    const { createUser, createMembership } = await import('@potion/db');
+    await createUser(db.db, { id: 'usr-p5-admin', email: 'p5-admin@org.dev', name: 'p5' });
+    await createMembership(db.db, { orgId: ORG, userId: 'usr-p5-admin', role: 'admin' });
+  });
+
+  const QUIET_BRIEF = JSON.stringify({
+    headline: [],
+    byEntity: [],
+    quiet: ['pricing page', 'changelog'],
+    coverage: { checked: 2, note: 'both stable since yesterday' },
+  });
+  const FIRED_BRIEF = JSON.stringify({
+    headline: [{ claim: 'Pro plan price changed $49 → $59', sourceUrl: 'https://example.com/pricing' }],
+    byEntity: [],
+    quiet: [],
+    coverage: { checked: 2 },
+  });
+  const JUDGMENT = JSON.stringify({ overall: 9, criteria: [{ name: 'precision', score: 9, note: 'evidence carried' }], rationale: 'clean' });
+
+  function watchdogSpec(): HarnessSpec {
+    return spec({
+      name: 'watchdog harness',
+      mission: { kind: 'standing', goal: 'watch the pricing page', shape: 'watchdog' } as HarnessSpec['mission'],
+      contract: { type: 'brief' },
+    });
+  }
+
+  it('a QUIET check completes, is judged, and sends NOTHING', async () => {
+    const runId = 'run-wd-quiet';
+    await seedRun(runId, watchdogSpec());
+    const { factory } = scriptedFactory([ok({ text: QUIET_BRIEF }), ok({ text: JUDGMENT })]);
+    const sent: string[] = [];
+    const res = await createLabRunHandler({
+      clientFactory: factory,
+      sendNotify: async (m) => { sent.push(m.subject); },
+    })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    expect(sent).toHaveLength(0); // silence is the watchdog's normal deliverable
+    const run = await getLabRun(db.db, runId, ORG);
+    expect((run!.judge as { overall: number }).overall).toBe(9); // still judged
+  });
+
+  it('a FIRED check notifies like any completion', async () => {
+    const runId = 'run-wd-fired';
+    await seedRun(runId, watchdogSpec());
+    const { factory } = scriptedFactory([ok({ text: FIRED_BRIEF }), ok({ text: JUDGMENT })]);
+    const sent: string[] = [];
+    const res = await createLabRunHandler({
+      clientFactory: factory,
+      sendNotify: async (m) => { sent.push(m.subject); },
+    })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    expect(sent.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a watchdog that FAILS still notifies — silence-by-crash is not quiet', async () => {
+    const runId = 'run-wd-fail';
+    const s = spec({ name: 'wd stall', mission: { kind: 'standing', goal: 'watch', shape: 'watchdog' } as HarnessSpec['mission'] });
+    await seedRun(runId, s);
+    const { factory } = scriptedFactory([ok({ text: 'same', finishReason: 'length' }), ok({ text: 'same', finishReason: 'length' })]);
+    const sent: string[] = [];
+    const res = await createLabRunHandler({
+      clientFactory: factory,
+      sendNotify: async (m) => { sent.push(m.subject); },
+    })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('failed');
+    expect(sent.length).toBeGreaterThanOrEqual(1);
+  });
+});

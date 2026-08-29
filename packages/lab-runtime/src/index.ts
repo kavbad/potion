@@ -30,6 +30,7 @@ export {
   type SuperpowerUnavailable,
   type ToolCallError,
 } from './mcp-tools.js';
+export * from './beat.js';
 export * from './graduation.js';
 export * from './evidence.js';
 export * from './apply-graduation.js';

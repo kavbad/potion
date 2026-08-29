@@ -84,9 +84,18 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
             doneDefinition: extraction.doneDefinition!,
             worthPerRunUsd: answers.worthUsd,
           }
-        : { kind: 'standing', goal: extraction.normalizedGoal },
+        : {
+            kind: 'standing',
+            goal: extraction.normalizedGoal,
+            // P5: the shape rides the mission — the runtime's watchdog law
+            // (quiet checks are valid deliverables) keys on it.
+            ...(answers.shape === 'watchdog' ? { shape: 'watchdog' as const } : {}),
+          },
     superpowers,
-    memory: { enabled: answers.kind === 'standing' },
+    // P3: every standing hire keeps the BEAT working set — entities with
+    // history, dedup keys, source stats, reflections — via the `remember`
+    // core tool. Task hires stay memory-off (nothing to carry between runs).
+    memory: answers.kind === 'standing' ? { enabled: true, beat: true } : { enabled: false },
     rules,
     ...(answers.exampleResult !== undefined && sanitizeVerbatim(answers.exampleResult).length > 0
       ? { exemplar: sanitizeVerbatim(answers.exampleResult).slice(0, SPEC_LIMITS.MAX_EXEMPLAR_CHARS) }
@@ -118,6 +127,11 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
             schedule: CADENCE_CRON[answers.cadence],
             question: 'Scheduled check-in: anything meaningful since the last check? Anything the operator should decide?',
           }]
+        : []),
+      // P5: a watched page derives the feed-change trigger — the scheduler
+      // hashes it every cycle and starts a check on a REAL change.
+      ...(answers.kind === 'standing' && answers.watchUrl !== undefined
+        ? [{ trigger: 'feed-change' as const, url: answers.watchUrl }]
         : []),
     ],
   };

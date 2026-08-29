@@ -12,6 +12,7 @@ const CADENCE_WORDS: Record<string, string> = {
   '0 * * * *': 'hourly',
   '0 9 * * *': 'daily at 09:00 UTC',
   '0 9 * * 1': 'weekly, Monday 09:00 UTC',
+  event: 'on its event triggers (no fixed schedule)',
 };
 
 export function MissionControl({
@@ -27,14 +28,21 @@ export function MissionControl({
   const mission = harness.mission ?? null;
   const spec = harness.spec;
 
+  const [hookUrl, setHookUrl] = useState<string | null>(null);
   const flip = useCallback(async (to: 'arm' | 'pause') => {
     setBusy(true);
     setNote(null);
     try {
       const res = await fetch(`/api/lab/harnesses/${harness.harnessHash}/${to}`, { method: 'POST' });
-      const body = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+      const body = (await res.json()) as { ok?: boolean; error?: string; message?: string; hook?: { url: string } };
       if (!res.ok) setNote(body.message ?? `${to} failed (${res.status})`);
-      else router.refresh();
+      else {
+        // P5: the webhook inlet's secret URL — shown ONCE (only its hash is
+        // stored). It survives on screen until navigation, deliberately.
+        if (to === 'arm' && body.hook?.url !== undefined) setHookUrl(body.hook.url);
+        if (to === 'pause') setHookUrl(null);
+        router.refresh();
+      }
     } finally {
       setBusy(false);
     }
@@ -42,6 +50,10 @@ export function MissionControl({
 
   if (spec === null || spec.mission.kind !== 'standing') return null;
   const cron = spec.checkIns.find((c) => c.trigger === 'cron');
+  // P5: event triggers make a mission armable without a cadence.
+  const hasWebhook = spec.checkIns.some((c) => c.trigger === 'webhook');
+  const feedUrls = spec.checkIns.filter((c): c is { trigger: 'feed-change'; url: string } => c.trigger === 'feed-change').map((c) => c.url);
+  const armable = (cron !== undefined && 'schedule' in cron) || hasWebhook || feedUrls.length > 0;
   const armed = mission?.state === 'armed';
   // The cost question a buyer actually asks (zero-gaps audit, gap a):
   // cadence × cap = the worst-case month, stated plainly.
@@ -69,11 +81,13 @@ export function MissionControl({
             </>
           ) : cron !== undefined && 'schedule' in cron ? (
             <>armed, it would run {CADENCE_WORDS[cron.schedule] ?? cron.schedule} — until then, nothing starts by itself</>
+          ) : armable ? (
+            <>armed, its event triggers would start checks — until then, nothing starts by itself</>
           ) : (
-            <>give it a schedule (the &ldquo;how often it checks&rdquo; field) to make it armable</>
+            <>give it a schedule or an event trigger (the &ldquo;how often it checks&rdquo; field, or a page to watch) to make it armable</>
           )}
         </span>
-        {role === 'admin' && cron !== undefined ? (
+        {role === 'admin' && armable ? (
           <button
             type="button"
             onClick={() => void flip(armed ? 'pause' : 'arm')}
@@ -90,6 +104,23 @@ export function MissionControl({
       {worstCase !== null ? (
         <p className="mt-2 font-mono text-[12px] text-faint" data-testid="mission-cost-line">
           cost, worst case: ≈ ${worstCase.toFixed(2)}/month (the ${spec.fuel.maxUsdPerRun.toFixed(2)} hard cap × every scheduled check) — actuals on the Usage page are usually far below it
+        </p>
+      ) : null}
+      {hookUrl !== null ? (
+        <div className="mt-2 border border-warn bg-white px-3 py-2" data-testid="mission-hook-url">
+          <div className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-warn">its webhook inlet — copy it now, shown once</div>
+          <code className="mt-1 block break-all font-mono text-[12px] text-ink">{hookUrl}</code>
+          <p className="mt-1 text-[12px] text-soft">POST to it and this worker starts a check (rate-limited, day budget honored). Re-arming rotates it; pausing closes it.</p>
+        </div>
+      ) : null}
+      {armed && mission?.hasHook === true && hookUrl === null ? (
+        <p className="mt-2 font-mono text-[12px] text-faint" data-testid="mission-hook-armed">
+          webhook inlet: armed (the URL was shown at arm time — re-arm to rotate it)
+        </p>
+      ) : null}
+      {feedUrls.length > 0 ? (
+        <p className="mt-2 font-mono text-[12px] text-faint" data-testid="mission-feeds">
+          watching: {feedUrls.join(' · ')}{armed ? ' — a real change starts a check within one cycle' : ' (once armed)'}
         </p>
       ) : null}
       {mission?.lastNote ? (

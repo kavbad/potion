@@ -1845,6 +1845,10 @@ export const labMissions = pgTable(
     armedAt: timestamp('armed_at', { withTimezone: true }).notNull().defaultNow(),
     lastWindowKey: text('last_window_key'),
     lastNote: text('last_note'),
+    /** P5: sha256 of the webhook inlet secret (plaintext shown once at arm). */
+    hookTokenHash: text('hook_token_hash'),
+    /** P5: per-url feed hashes + stamps: {url: {hash, checkedAt, firedAt}}. */
+    feedState: jsonb('feed_state').notNull().default({}),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.harnessHash] })],

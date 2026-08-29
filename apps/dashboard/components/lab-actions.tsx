@@ -270,6 +270,9 @@ export function InterviewForm() {
   const [never, setNever] = useState('');
   const [whenUnsure, setWhenUnsure] = useState<'ask-first' | 'press-on'>('ask-first');
   const [cadence, setCadence] = useState<'' | 'hourly' | 'daily' | 'weekly'>('');
+  // P5: the first real SHAPE choice + a page to watch (feed-change trigger).
+  const [shape, setShape] = useState<'reporter' | 'watchdog'>('reporter');
+  const [watchUrl, setWatchUrl] = useState('');
   const [exampleOpen, setExampleOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -312,6 +315,8 @@ export function InterviewForm() {
               : {}),
             whenUnsure,
             ...(kind === 'standing' && cadence !== '' ? { cadence } : {}),
+            ...(kind === 'standing' && shape === 'watchdog' ? { shape: 'watchdog' } : {}),
+            ...(kind === 'standing' && watchUrl.trim() !== '' ? { watchUrl: watchUrl.trim() } : {}),
           },
         }),
       });
@@ -325,7 +330,7 @@ export function InterviewForm() {
     } finally {
       setBusy(false);
     }
-  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, router]);
+  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, shape, watchUrl, router]);
 
   // "Show me a great one" (operator, 2026-08-28): one click fills every
   // field with a coherent example worker, so the card teaches by a worked
@@ -532,6 +537,42 @@ export function InterviewForm() {
               <option value="daily">daily, 9:00</option>
               <option value="weekly">weekly, Monday 9:00</option>
             </select>
+            <div className={`${LABEL_ROW} mt-3`}>
+              <label htmlFor="lab-q-shape">what kind of standing worker</label>
+              <InfoDot label="the shape">
+                A <b>reporter</b> files a brief every check — its job is the report. A{' '}
+                <b>watchdog</b> is mostly silent: it fires only when its condition truly holds, with
+                the evidence in the alert, and &ldquo;nothing worth your attention — 14 sources
+                checked&rdquo; is a good result, not a lazy one. Its judge scores precision, and a
+                quiet check never emails you.
+              </InfoDot>
+            </div>
+            <select
+              id="lab-q-shape"
+              value={shape}
+              onChange={(e) => setShape(e.target.value as 'reporter' | 'watchdog')}
+              className={`${FIELD_CLS} mt-1.5`}
+              data-testid="q-shape"
+            >
+              <option value="reporter">reporter — files a brief every check</option>
+              <option value="watchdog">watchdog — silent until something real changes</option>
+            </select>
+            <div className={`${LABEL_ROW} mt-3`}>
+              <label htmlFor="lab-q-watch">a page it watches · optional</label>
+              <InfoDot label="page watching">
+                Paste an https URL and the scheduler watches it for you: it hashes the page every few
+                minutes and starts a check <b>within one cycle of a real change</b> (script and
+                timestamp churn is filtered out). Works with or without a schedule.
+              </InfoDot>
+            </div>
+            <input
+              id="lab-q-watch"
+              value={watchUrl}
+              onChange={(e) => setWatchUrl(e.target.value)}
+              placeholder="https://example.com/pricing"
+              className={`${FIELD_CLS} mt-1.5`}
+              data-testid="q-watch"
+            />
           </div>
         )}
         <div>

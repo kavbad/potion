@@ -46,6 +46,12 @@ export interface InterviewAnswers {
   /** Standing missions only: a scheduled check-in cadence, mapped to a
    * fixed cron by code (never a raw cron from the user). */
   cadence?: 'hourly' | 'daily' | 'weekly';
+  /** P5 (standing only): the SHAPE — absent = reporter (files a brief every
+   * check); 'watchdog' = mostly silent, fires only on a true condition. */
+  shape?: 'watchdog';
+  /** P5 (standing only): a page to watch — derives a feed-change trigger;
+   * the scheduler starts a check within one cycle of a real change. */
+  watchUrl?: string;
   /**
    * The operator's answer to a cluster-uncertain draft: when the lexical
    * signal and the model hint could not agree, the generator ASKED — this

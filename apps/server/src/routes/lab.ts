@@ -40,7 +40,7 @@
 // route-scoped serve key: raw held only inside the request, hash stored via
 // the existing key machinery, revoked in finally. Same custody story as the
 // lab:run worker's run-scoped keys.
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireRole } from '../auth.js';
@@ -65,6 +65,7 @@ import {
   getLabRunFile,
   armLabMission,
   getLabMission,
+  findArmedMissionByHookHash,
   pauseLabMission,
   type LabMissionRow,
   answerLabRun,
@@ -140,7 +141,7 @@ import { openAiError, parseCookies, roleAtLeast } from '../auth.js';
 import { publicBaseUrl } from '../public-url.js';
 import { CUSTOM_SLUG_RE, probeMcpEndpoint, type ProbeDeps } from '../custom-mcp.js';
 import { actorOf } from './keys.js';
-import { missionWindow } from '../lab-scheduler.js';
+import { missionWindow, startEventCheck } from '../lab-scheduler.js';
 import type { PotionContext } from '../context.js';
 
 export interface LabRoutesOptions {
@@ -158,6 +159,8 @@ function missionDto(m: LabMissionRow | null): {
   lastWindowKey: string | null;
   lastNote: string | null;
   nextDueAt: string | null;
+  hasHook: boolean;
+  feeds: Array<{ url: string; lastCheckedAt: string | null; lastFiredAt: string | null }>;
 } | null {
   if (m === null) return null;
   const w = missionWindow(m.cadenceCron, new Date());
@@ -168,7 +171,13 @@ function missionDto(m: LabMissionRow | null): {
     const period = m.cadenceCron === '0 * * * *' ? 3_600_000 : m.cadenceCron === '0 9 * * *' ? 86_400_000 : 7 * 86_400_000;
     nextDueAt = (w.dueAt > new Date() ? w.dueAt : new Date(w.dueAt.getTime() + period)).toISOString();
   }
-  return { state: m.state, cadenceCron: m.cadenceCron, lastWindowKey: m.lastWindowKey, lastNote: m.lastNote, nextDueAt };
+  // P5: the event-trigger posture — hook armed (never the token; that was
+  // shown once) and each watched feed's observation stamps.
+  const feedState = (m.feedState ?? {}) as Record<string, { checkedAt?: string; firedAt?: string }>;
+  const feeds = Object.entries(feedState)
+    .map(([url, st]) => ({ url, lastCheckedAt: st.checkedAt ?? null, lastFiredAt: st.firedAt ?? null }))
+    .sort((a, b) => (a.url < b.url ? -1 : 1));
+  return { state: m.state, cadenceCron: m.cadenceCron, lastWindowKey: m.lastWindowKey, lastNote: m.lastNote, nextDueAt, hasHook: m.hookTokenHash !== null, feeds };
 }
 
 function forbidden(role: string, action: string) {
@@ -213,6 +222,13 @@ const ANSWERS_SCHEMA = z
     exampleResult: z.string().min(1).max(2000).optional(),
     whenUnsure: z.enum(['ask-first', 'press-on']).optional(),
     cadence: z.enum(['hourly', 'daily', 'weekly']).optional(),
+    /** P5: the standing shape + a page to watch (feed-change trigger). */
+    shape: z.enum(['watchdog']).optional(),
+    watchUrl: z
+      .string()
+      .max(500)
+      .refine((u) => /^https:\/\//.test(u), 'watchUrl must be https')
+      .optional(),
   })
   .strict();
 
@@ -597,15 +613,59 @@ export function registerLabRoutes(
       return reply.code(400).send({ error: 'invalid_body', message: 'only a standing mission can be armed — a task runs once and finishes' });
     }
     const cron = parsed.spec.checkIns.find((c) => c.trigger === 'cron');
-    if (cron === undefined || !('schedule' in cron)) {
-      return reply.code(400).send({ error: 'invalid_body', message: 'give this mission a schedule first (the "how often it checks" field, or a cron check-in in the spec)' });
+    // P5: event triggers make a mission armable WITHOUT a cadence — the
+    // webhook inlet and the feed watcher start its checks instead.
+    const hasWebhook = parsed.spec.checkIns.some((c) => c.trigger === 'webhook');
+    const hasFeed = parsed.spec.checkIns.some((c) => c.trigger === 'feed-change');
+    if ((cron === undefined || !('schedule' in cron)) && !hasWebhook && !hasFeed) {
+      return reply.code(400).send({ error: 'invalid_body', message: 'give this mission a schedule or an event trigger first (the "how often it checks" field, a webhook, or a page to watch)' });
     }
-    if (missionWindow(cron.schedule, new Date()) === null) {
+    if (cron !== undefined && 'schedule' in cron && missionWindow(cron.schedule, new Date()) === null) {
       return reply.code(400).send({ error: 'invalid_body', message: `the scheduler supports hourly ('0 * * * *'), daily 09:00 UTC ('0 9 * * *') and weekly Monday 09:00 UTC ('0 9 * * 1') — got '${cron.schedule}'` });
     }
-    await armLabMission(db, { orgId: org.orgId, harnessHash: row.harnessHash, cadenceCron: cron.schedule, armedBy: actorOf(req) });
+    // The webhook inlet's secret is minted AT ARM, shown ONCE in this
+    // response, and stored only as a hash (api-key custody). Re-arming
+    // rotates it — the old inlet URL stops working, deliberately.
+    const hookToken = hasWebhook ? `whk_${randomBytes(24).toString('hex')}` : null;
+    await armLabMission(db, {
+      orgId: org.orgId,
+      harnessHash: row.harnessHash,
+      cadenceCron: cron !== undefined && 'schedule' in cron ? cron.schedule : 'event',
+      armedBy: actorOf(req),
+      hookTokenHash: hookToken !== null ? sha256(hookToken) : null,
+    });
     const mission = await getLabMission(db, org.orgId, row.harnessHash);
-    return reply.send({ ok: true, mission: missionDto(mission) });
+    return reply.send({
+      ok: true,
+      mission: missionDto(mission),
+      ...(hookToken !== null
+        ? {
+            hook: {
+              url: `${publicBaseUrl(req)}/hooks/lab/${hookToken}`,
+              note: 'shown once — POST to it and this worker starts a check. Re-arming rotates it.',
+            },
+          }
+        : {}),
+    });
+  });
+
+  // ---- P5: the webhook inlet — anything can poke a worker awake ----
+  // PUBLIC route addressed by the secret token alone (its sha256 finds the
+  // armed mission; unknown or paused = the uniform 404, no oracle). The
+  // starter enforces the day budget and refuses bursts (per-minute id).
+  app.post('/hooks/lab/:token', async (req: FastifyRequest, reply) => {
+    const { token } = req.params as { token: string };
+    if (!/^whk_[0-9a-f]{48}$/.test(token)) return reply.code(404).send(notFound);
+    const mission = await findArmedMissionByHookHash(db, sha256(token));
+    if (mission === null) return reply.code(404).send(notFound);
+    const started = await startEventCheck({ db: ctx.db, queue: opts.queue }, {
+      orgId: mission.orgId,
+      harnessHash: mission.harnessHash,
+      kind: 'hook',
+      note: 'webhook inlet fired',
+    });
+    if (!started.ok) return reply.code(429).send({ ok: false, reason: started.reason });
+    return reply.code(202).send({ ok: true, runId: started.runId });
   });
 
   app.post('/api/lab/harnesses/:hash/pause', async (req: FastifyRequest, reply) => {

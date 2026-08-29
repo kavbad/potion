@@ -29,6 +29,9 @@ export type HarnessMission =
        * governed by rules and check-ins, not a done-verifier. */
       kind: 'standing';
       goal: string;
+      /** P5: the standing SHAPE. Absent = reporter; 'watchdog' = mostly
+       * silent, fires only on a true condition (see schema). */
+      shape?: 'watchdog' | undefined;
     };
 
 export interface HarnessSuperpower {
@@ -51,6 +54,8 @@ export interface HarnessMemory {
   enabled: boolean;
   /** Per-harness scope only in v1 (the store itself is Step 3). */
   retentionDays?: number | undefined;
+  /** P3: structured beat working set for standing workers (see schema). */
+  beat?: boolean | undefined;
 }
 
 export interface HarnessFuel {
@@ -67,7 +72,11 @@ export interface HarnessFuel {
 export type HarnessCheckIn =
   | { trigger: 'before-external-action' }
   | { trigger: 'on-budget-fraction'; fraction: number }
-  | { trigger: 'cron'; schedule: string; question: string };
+  | { trigger: 'cron'; schedule: string; question: string }
+  /** P5 event triggers: a secret webhook inlet, and scheduler-polled
+   * feed-change wakeups (see schema for the laws). */
+  | { trigger: 'webhook' }
+  | { trigger: 'feed-change'; url: string };
 
 export interface HarnessSpec {
   /** Format version, literal. Unknown versions are a typed rejection —

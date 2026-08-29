@@ -8,7 +8,7 @@ import type { PotionDb } from '../db.js';
 
 export async function armLabMission(
   db: PotionDb,
-  input: { orgId: string; harnessHash: string; cadenceCron: string; armedBy: string },
+  input: { orgId: string; harnessHash: string; cadenceCron: string; armedBy: string; hookTokenHash?: string | null },
 ): Promise<void> {
   await db
     .insert(labMissions)
@@ -20,6 +20,7 @@ export async function armLabMission(
       armedBy: input.armedBy,
       armedAt: new Date(),
       updatedAt: new Date(),
+      ...(input.hookTokenHash !== undefined ? { hookTokenHash: input.hookTokenHash } : {}),
     })
     .onConflictDoUpdate({
       target: [labMissions.orgId, labMissions.harnessHash],
@@ -29,8 +30,37 @@ export async function armLabMission(
         armedBy: input.armedBy,
         armedAt: new Date(),
         updatedAt: new Date(),
+        ...(input.hookTokenHash !== undefined ? { hookTokenHash: input.hookTokenHash } : {}),
       },
     });
+}
+
+/** P5: the webhook inlet's lookup — token hash → the ARMED mission it
+ * wakes. Hash-addressed (the plaintext never lands anywhere); a paused
+ * mission is deliberately unfindable, so pausing also closes the inlet. */
+export async function findArmedMissionByHookHash(
+  db: PotionDb,
+  hookTokenHash: string,
+): Promise<LabMissionRow | null> {
+  const rows = await db
+    .select()
+    .from(labMissions)
+    .where(and(eq(labMissions.hookTokenHash, hookTokenHash), eq(labMissions.state, 'armed')))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** P5: persist the scheduler's per-url feed observation stamps. */
+export async function setMissionFeedState(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+  feedState: Record<string, { hash: string; checkedAt: string; firedAt?: string }>,
+): Promise<void> {
+  await db
+    .update(labMissions)
+    .set({ feedState, updatedAt: new Date() })
+    .where(and(eq(labMissions.orgId, orgId), eq(labMissions.harnessHash, harnessHash)));
 }
 
 export async function pauseLabMission(

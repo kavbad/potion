@@ -61,6 +61,13 @@ export function compileRubric(spec: HarnessSpec): string[] {
     criteria.push('coverage is honest — gaps named, nothing padded');
   }
   if (spec.exemplar !== undefined) criteria.push('meets the standard of the operator’s exemplar');
+  // P5: a watchdog is judged on a DIFFERENT law — precision over volume.
+  // "Nothing worth your attention — N sources checked" is a valid, judged
+  // deliverable; firing without evidence is the failure mode.
+  if (spec.mission.kind === 'standing' && spec.mission.shape === 'watchdog') {
+    criteria.push('fires ONLY on a true condition — every alert carries its evidence (the diff, the line, the number)');
+    criteria.push('no false alarms — a quiet check that states its coverage is a GOOD result, not a lazy one');
+  }
   if (criteria.length === 0) criteria.push('the mission’s goal is served accurately and usefully');
   return criteria.slice(0, JUDGE_LIMITS.MAX_CRITERIA);
 }

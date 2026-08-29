@@ -18,7 +18,10 @@ import {
   sumLabRunEstSince,
   type DbHandle,
 } from '@potion/db';
-import { parseHarnessSpecText } from '@potion/lab-spec';
+import { parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
+import { checkUrl } from '@potion/lab-runtime';
+import { createHash } from 'node:crypto';
+import { setMissionFeedState } from '@potion/db';
 import { digestTick } from './lab-digest.js';
 import type { PotionQueue } from '@potion/queue';
 
@@ -61,6 +64,9 @@ export interface LabSchedulerOptions {
   queue: PotionQueue;
   intervalMs?: number;
   log?: (msg: string) => void;
+  /** P5 feed watcher (tests inject a scripted page + DNS). */
+  feedFetch?: typeof fetch;
+  feedLookup?: (host: string) => Promise<{ address: string; family?: number }>;
 }
 
 /** One pass over every armed mission. Exported for tests; the interval
@@ -70,6 +76,9 @@ export async function schedulerTick(opts: LabSchedulerOptions, now = new Date())
   const missions = await listArmedMissions(opts.db.db);
   for (const m of missions) {
     try {
+      // P5: event-only missions have no cadence — their checks start from
+      // the webhook inlet or the feed watcher, never from this clock.
+      if (m.cadenceCron === 'event') continue;
       const w = missionWindow(m.cadenceCron, now);
       if (w === null) {
         await recordMissionWindow(opts.db.db, m.orgId, m.harnessHash, m.lastWindowKey ?? '', `unsupported cadence '${m.cadenceCron}' — mission idle`);
@@ -122,12 +131,167 @@ export async function schedulerTick(opts: LabSchedulerOptions, now = new Date())
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P5 — EVENT TRIGGERS. Two inlets, one starter:
+//   · the FEED WATCHER polls each armed mission's feed-change urls on the
+//     tick (rate-limited per url), hashes a normalized body, and starts a
+//     check within one cycle of a REAL change — first sight primes
+//     silently, and script/comment/whitespace churn is normalized away so
+//     a rotating nonce is not "a change";
+//   · the WEBHOOK INLET (the /hooks/lab/:token route) calls the same
+//     starter when a valid token arrives.
+// The starter enforces the same laws as the clock: day budget honored,
+// per-minute deterministic run ids so neither inlet can burst.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const FEED_LIMITS = {
+  POLL_MS: 5 * 60_000,
+  MIN_FIRE_MS: 30 * 60_000,
+  MAX_FEEDS_PER_MISSION: 3,
+  MAX_BYTES: 262_144,
+  TIMEOUT_MS: 8_000,
+} as const;
+
+/** Normalize a page body before hashing: scripts, styles, comments and
+ * whitespace runs carry the nonce churn that makes raw hashes cry wolf. */
+export function normalizeFeedBody(body: string): string {
+  return body
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, FEED_LIMITS.MAX_BYTES);
+}
+
+export function feedHash(body: string): string {
+  return createHash('sha256').update(normalizeFeedBody(body)).digest('hex');
+}
+
+export type EventCheckStart = { ok: true; runId: string } | { ok: false; reason: string };
+
+/** Start one event-triggered check — the webhook and the feed watcher both
+ * come through here. Same refusal basis as the clock: day budget, and a
+ * deterministic per-minute run id (a duplicate id = a refused burst). */
+export async function startEventCheck(
+  opts: LabSchedulerOptions,
+  input: { orgId: string; harnessHash: string; kind: 'hook' | 'feed'; note: string },
+  now = new Date(),
+): Promise<EventCheckStart> {
+  const row = await getLabHarness(opts.db.db, input.orgId, input.harnessHash);
+  if (row === null) return { ok: false, reason: 'harness row missing' };
+  const parsed = parseHarnessSpecText(row.specText);
+  if (!parsed.ok || parsed.spec.mission.kind !== 'standing') {
+    return { ok: false, reason: 'spec invalid or not standing' };
+  }
+  if (parsed.spec.fuel.maxUsdPerDay !== undefined) {
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const spent = await sumLabRunEstSince(opts.db.db, input.orgId, input.harnessHash, dayStart);
+    if (spent >= parsed.spec.fuel.maxUsdPerDay) {
+      return { ok: false, reason: `day budget reached (est $${spent.toFixed(2)})` };
+    }
+  }
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`;
+  const runId = `${input.kind === 'hook' ? 'hk' : 'fc'}-${input.harnessHash.slice(0, 8)}-${stamp}`;
+  try {
+    await createLabRun(opts.db.db, {
+      id: runId,
+      orgId: input.orgId,
+      harnessHash: input.harnessHash,
+      harnessName: parsed.spec.name,
+      spec: parsed.spec,
+    });
+  } catch {
+    return { ok: false, reason: 'a check already started this minute — burst refused' };
+  }
+  await opts.queue.enqueue('lab:run', { orgId: input.orgId, runId });
+  await recordMissionWindow(opts.db.db, input.orgId, input.harnessHash, `evt-${stamp}`, input.note).catch(() => {});
+  return { ok: true, runId };
+}
+
+interface FeedStamp {
+  hash: string;
+  checkedAt: string;
+  firedAt?: string;
+}
+
+/** One pass of the feed watcher over every armed mission. Exported for
+ * tests; the interval calls it beside the cadence tick. */
+export async function feedTick(opts: LabSchedulerOptions, now = new Date()): Promise<void> {
+  const log = opts.log ?? (() => {});
+  const fetchImpl = opts.feedFetch ?? fetch;
+  const missions = await listArmedMissions(opts.db.db);
+  for (const m of missions) {
+    try {
+      const row = await getLabHarness(opts.db.db, m.orgId, m.harnessHash);
+      if (row === null) continue;
+      const parsed = parseHarnessSpecText(row.specText);
+      if (!parsed.ok || parsed.spec.mission.kind !== 'standing') continue;
+      const feeds = (parsed.spec as HarnessSpec).checkIns
+        .filter((c): c is { trigger: 'feed-change'; url: string } => c.trigger === 'feed-change')
+        .slice(0, FEED_LIMITS.MAX_FEEDS_PER_MISSION);
+      if (feeds.length === 0) continue;
+      const state = { ...((m.feedState ?? {}) as Record<string, FeedStamp>) };
+      let dirty = false;
+      for (const f of feeds) {
+        const prior = state[f.url];
+        if (prior !== undefined && now.getTime() - Date.parse(prior.checkedAt) < FEED_LIMITS.POLL_MS) continue;
+        const verdict = await checkUrl(f.url, opts.feedLookup !== undefined ? { lookupImpl: opts.feedLookup } : {});
+        if (!verdict.ok) continue; // SSRF-refused url: typed silence, never a fetch
+        let body: string;
+        try {
+          const res = await fetchImpl(f.url, { signal: AbortSignal.timeout(FEED_LIMITS.TIMEOUT_MS), redirect: 'follow' });
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          body = (await res.text()).slice(0, FEED_LIMITS.MAX_BYTES * 4);
+        } catch {
+          state[f.url] = { ...(prior ?? { hash: '' }), checkedAt: now.toISOString() };
+          dirty = true;
+          continue; // an unreachable feed is not a change
+        }
+        const h = feedHash(body);
+        if (prior === undefined || prior.hash === '') {
+          state[f.url] = { hash: h, checkedAt: now.toISOString() }; // first sight primes silently
+          dirty = true;
+          continue;
+        }
+        if (prior.hash === h) {
+          state[f.url] = { ...prior, checkedAt: now.toISOString() };
+          dirty = true;
+          continue;
+        }
+        // A REAL change. Rate-limit fires per url.
+        const lastFired = prior.firedAt !== undefined ? Date.parse(prior.firedAt) : 0;
+        if (now.getTime() - lastFired < FEED_LIMITS.MIN_FIRE_MS) {
+          state[f.url] = { hash: h, checkedAt: now.toISOString(), firedAt: prior.firedAt! };
+          dirty = true;
+          continue;
+        }
+        const started = await startEventCheck(opts, {
+          orgId: m.orgId,
+          harnessHash: m.harnessHash,
+          kind: 'feed',
+          note: `feed changed: ${f.url}`,
+        }, now);
+        state[f.url] = { hash: h, checkedAt: now.toISOString(), ...(started.ok ? { firedAt: now.toISOString() } : prior.firedAt !== undefined ? { firedAt: prior.firedAt } : {}) };
+        dirty = true;
+        if (started.ok) log(`[lab-feed] ${m.orgId} ${m.harnessHash.slice(0, 8)} change on ${f.url} → ${started.runId}`);
+      }
+      if (dirty) await setMissionFeedState(opts.db.db, m.orgId, m.harnessHash, state);
+    } catch (e) {
+      log(`[lab-feed] ${m.orgId} ${m.harnessHash.slice(0, 8)} error: ${(e as Error).message.slice(0, 160)}`);
+    }
+  }
+}
+
 /** Start the interval. Gated by POTION_LAB_SCHEDULER (default ON; '0'
  * disables). unref'd so it never holds a shutdown hostage. */
 export function startLabScheduler(opts: LabSchedulerOptions): { stop: () => void } | null {
   if (process.env.POTION_LAB_SCHEDULER === '0') return null;
   const interval = setInterval(() => {
     void schedulerTick(opts).catch(() => {});
+    // P5: the feed watcher rides the same clock (own rate limits per url).
+    void feedTick(opts).catch(() => {});
     // P-4: the weekly digest rides the same clock (its own window dedup
     // makes tick frequency irrelevant; its own try/catch keeps it from
     // ever touching the mission tick).

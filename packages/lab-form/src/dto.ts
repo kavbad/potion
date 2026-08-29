@@ -63,6 +63,9 @@ export interface HarnessDto {
     lastWindowKey: string | null;
     lastNote: string | null;
     nextDueAt: string | null;
+    /** P5: event-trigger posture — hook armed (never the token) + feed stamps. */
+    hasHook?: boolean;
+    feeds?: Array<{ url: string; lastCheckedAt: string | null; lastFiredAt: string | null }>;
   } | null;
   dial: {
     brain: { ok: boolean; frontierId?: string; views?: DialViewDto[]; gap?: unknown };

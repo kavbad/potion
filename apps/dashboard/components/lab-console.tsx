@@ -618,6 +618,10 @@ export function LabConsole({
 
           <section className={`${CARD} px-5 py-4`} data-testid="memory-panel">
             <div className={EYEBROW}>memory {state.core.memoryEnabled ? '' : '· off for one-off tasks'}</div>
+            {/* P3: the beat — a standing worker's structured working set,
+                rendered as the ledger it is. Raw rows (including beat rows)
+                stay below under the existing edit/delete laws. */}
+            <BeatLedger entries={memory.entries} />
             {memory.entries.length === 0 ? (
               <p className="mt-1.5 font-mono text-[12px] text-faint">nothing remembered yet</p>
             ) : (
@@ -658,6 +662,77 @@ export function LabConsole({
           ))}
         </div>
       </details>
+    </div>
+  );
+}
+
+// P3 — the beat, readable. Derived client-side from the same memory rows
+// the raw list shows; a mangled row degrades to nothing (never a crash).
+function BeatLedger({ entries }: { entries: Array<{ key: string; value: unknown }> }) {
+  const get = (k: string) => entries.find((e) => e.key === k)?.value;
+  const entRaw = get('beat:entities');
+  const entities: Array<[string, { first?: string; last?: string; claims?: Array<{ on: string; text: string }> }]> =
+    entRaw !== null && typeof entRaw === 'object' && !Array.isArray(entRaw)
+      ? Object.entries(entRaw as Record<string, { first?: string; last?: string; claims?: Array<{ on: string; text: string }> }>)
+      : [];
+  const srcRaw = get('beat:sources');
+  const sources: Array<[string, { checks?: number; items?: number; lastOn?: string; dryStreak?: number; failures?: number }]> =
+    srcRaw !== null && typeof srcRaw === 'object' && !Array.isArray(srcRaw)
+      ? Object.entries(srcRaw as Record<string, { checks?: number; items?: number; lastOn?: string; dryStreak?: number; failures?: number }>)
+      : [];
+  const seenRaw = get('beat:seen');
+  const seenCount = seenRaw !== null && typeof seenRaw === 'object' && !Array.isArray(seenRaw) ? Object.keys(seenRaw as object).length : 0;
+  const reflRaw = get('beat:reflections');
+  const reflections = Array.isArray(reflRaw)
+    ? (reflRaw as Array<{ on?: unknown; note?: unknown }>).filter((r) => typeof r?.on === 'string' && typeof r?.note === 'string')
+    : [];
+  if (entities.length === 0 && sources.length === 0 && seenCount === 0 && reflections.length === 0) return null;
+  const recent = [...entities]
+    .sort((a, b) => ((a[1].last ?? '') > (b[1].last ?? '') ? -1 : 1))
+    .slice(0, 8);
+  return (
+    <div className="mt-1.5 border border-dashed border-[#c4bfb2] bg-white/60 px-3.5 py-3" data-testid="beat-ledger">
+      <div className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-accent">its beat — what it knows, across checks</div>
+      {recent.length > 0 ? (
+        <div className="mt-1.5">
+          {recent.map(([name, e]) => (
+            <div key={name} className="border-t border-dashed border-[#e4e1d8] py-1 text-[12.5px] first:border-0">
+              <span className="font-medium text-ink">{name}</span>
+              <span className="font-mono text-[11px] text-faint"> · first {e.first ?? '?'} · last {e.last ?? '?'}</span>
+              {Array.isArray(e.claims) && e.claims.length > 0 ? (
+                <span className="block text-soft">{e.claims[e.claims.length - 1]!.text} <span className="font-mono text-[11px] text-faint">({e.claims.length} claim{e.claims.length === 1 ? '' : 's'} on file)</span></span>
+              ) : null}
+            </div>
+          ))}
+          {entities.length > recent.length ? (
+            <div className="pt-1 font-mono text-[11.5px] text-faint">+ {entities.length - recent.length} more entities on file</div>
+          ) : null}
+        </div>
+      ) : null}
+      {sources.length > 0 ? (
+        <div className="mt-1.5 font-mono text-[12px] text-soft">
+          {sources.map(([name, s2]) => (
+            <div key={name}>
+              {name}: {s2.items ?? 0} items / {s2.checks ?? 0} checks
+              {(s2.dryStreak ?? 0) > 0 ? ` · dry ×${s2.dryStreak}` : ''}
+              {(s2.failures ?? 0) > 0 ? ` · ${s2.failures} failed` : ''}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {seenCount > 0 ? (
+        <div className="mt-1.5 font-mono text-[12px] text-faint">{seenCount} reported item{seenCount === 1 ? '' : 's'} on file — it never reports the same one twice</div>
+      ) : null}
+      {reflections.length > 0 ? (
+        <div className="mt-1.5 text-[12.5px] text-soft">
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-faint">its own notes</span>
+          {reflections.slice(-3).map((r, i) => (
+            <div key={i}>
+              <span className="font-mono text-[11px] text-faint">[{String(r.on)}]</span> {String(r.note)}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

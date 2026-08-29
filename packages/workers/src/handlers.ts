@@ -4612,6 +4612,10 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // METERED through the org's serving path like everything else, with a
       // reasoning-kind hint so it rides a point suited to evaluation.
       let judgedDeliverable = false;
+      // P5: a watchdog FIRES when its brief carries headline items; a quiet
+      // check (headline empty, coverage stated) completes without an email —
+      // the digest still counts it. null = not a watchdog or no brief.
+      let watchdogFired: boolean | null = null;
       if (outcome.status === 'completed' && spec.contract !== undefined) {
         try {
           const stepsForJudge = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
@@ -4621,6 +4625,9 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           );
           if (found !== null) {
             judgedDeliverable = true;
+            if (spec.mission.kind === 'standing' && spec.mission.shape === 'watchdog') {
+              watchdogFired = found.brief.headline.length > 0;
+            }
             const deliverableStep = stepsForJudge.find((x) => x.seq === found.atSeq);
             const deliverableText = (deliverableStep?.payload as { responseText?: string })?.responseText ?? JSON.stringify(found.brief);
             const judgeClient = clientFactory({ baseUrl: servingUrl, apiKey: rawKey, clusterHint: 'multi-step-reasoning' });
@@ -4642,11 +4649,15 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       }
 
       // ── X3: notifications — the supervised loop actually loops ─────────
+      // P5: a QUIET watchdog check never emails (silence is its normal
+      // deliverable; the weekly digest still counts it). A FIRED one does.
+      const quietWatchdog = outcome.status === 'completed' && watchdogFired === false;
       if (
-        outcome.status === 'completed' ||
+        !quietWatchdog &&
+        (outcome.status === 'completed' ||
         outcome.status === 'failed' ||
         outcome.status === 'killed-budget' ||
-        outcome.status === 'awaiting-human'
+        outcome.status === 'awaiting-human')
       ) {
         try {
           await notifyRunEvent(ctx.db, {
