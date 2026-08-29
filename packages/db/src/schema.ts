@@ -1,7 +1,7 @@
 // Drizzle pg-schema for the 12 Potion tables (SPEC §7), columns aligned with
 // @potion/core types. One schema drives both drivers: PGlite (tests/dev) and
 // node-postgres (local/prod via docker-compose).
-import {
+import { customType,
   bigint,
   bigserial,
   boolean,
@@ -1775,6 +1775,34 @@ export type RouterInterpretationRow = typeof routerInterpretations.$inferSelect;
 /** P1 (the clock): armed/paused state of a standing mission, bound to one
  * content-addressed harness version. The scheduler's dedup is
  * last_window_key: at most one check per cadence window, ever. */
+// X1 (2026-08-28): the per-run file workspace — code-produced files persist
+// across steps/legs and become the run's downloadable artifacts. Content is
+// inline bytea (sizes capped far below object-storage territory); base64 in
+// TS (drizzle customType below) so no driver-specific buffer handling leaks
+// upward.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
+export const labRunFiles = pgTable(
+  'lab_run_files',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    runId: text('run_id').notNull(),
+    name: text('name').notNull(),
+    mime: text('mime').notNull().default('application/octet-stream'),
+    size: integer('size').notNull(),
+    sha256: text('sha256').notNull(),
+    content: bytea('content').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.runId, t.name] })],
+);
+
 export const labMissions = pgTable(
   'lab_missions',
   {

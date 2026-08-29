@@ -60,6 +60,8 @@ import {
   revokeApiKey,
   setLabMemoryKey,
   upsertLabHarness,
+  listLabRunFiles,
+  getLabRunFile,
   armLabMission,
   getLabMission,
   pauseLabMission,
@@ -914,6 +916,31 @@ export function registerLabRoutes(
   });
 
   // ---- GET /api/lab/runs/:id/report (viewer) — report v1 ----
+  // ---- X1: the run's file workspace — artifacts, listed + downloadable ----
+  app.get('/api/lab/runs/:id/files', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const { id } = req.params as { id: string };
+    if (!RUN_ID_RE.test(id)) return reply.code(404).send(notFound);
+    const run = await getLabRun(db, id, org.orgId);
+    if (run === null) return reply.code(404).send(notFound);
+    return reply.send({ runId: id, files: await listLabRunFiles(db, org.orgId, id) });
+  });
+
+  app.get('/api/lab/runs/:id/files/:name', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const { id, name } = req.params as { id: string; name: string };
+    if (!RUN_ID_RE.test(id)) return reply.code(404).send(notFound);
+    const run = await getLabRun(db, id, org.orgId);
+    if (run === null) return reply.code(404).send(notFound);
+    const file = await getLabRunFile(db, org.orgId, id, name);
+    if (file === null) return reply.code(404).send(notFound);
+    return reply
+      .header('content-type', file.meta.mime)
+      .header('content-disposition', `attachment; filename="${file.meta.name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"`)
+      .header('x-content-sha256', file.meta.sha256)
+      .send(file.content);
+  });
+
   app.get('/api/lab/runs/:id/report', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     const run = await ownRun(req);

@@ -212,6 +212,7 @@ const LABEL_ROW = 'flex items-center gap-1.5 font-mono text-[12px] uppercase tra
  * fires when the target id actually exists in the org's catalog — the
  * suggestion never invents a connector. */
 const ACCOUNT_ALIASES: Record<string, string[]> = {
+  code: ['analyze', 'analyse', 'compute', 'calculate', 'spreadsheet', 'xlsx', 'chart', 'plot', 'csv', 'dataset', 'script', 'python'],
   gmail: ['email', 'emails', 'inbox', 'mail', 'mailbox'],
   github: ['repo', 'repos', 'repository', 'pull request', 'pull requests', 'commit'],
   slack: ['channel', 'dm'],
@@ -219,7 +220,7 @@ const ACCOUNT_ALIASES: Record<string, string[]> = {
   'google-calendar': ['calendar', 'meeting', 'meetings'],
   'google-sheets': ['spreadsheet', 'spreadsheets', 'sheet', 'sheets'],
   'google-drive': ['drive', 'files', 'documents'],
-  web: ['website', 'websites', 'web', 'feeds', 'rss', 'blog', 'blogs', 'changelog', 'changelogs', 'pricing page', 'pricing pages', 'news'],
+  web: ['website', 'websites', 'web', 'feeds', 'rss', 'blog', 'blogs', 'changelog', 'changelogs', 'pricing page', 'pricing pages', 'news', 'url', 'download', 'link'],
 };
 
 /** Deterministic account detection from the job text: direct catalog-name
@@ -249,8 +250,8 @@ const STANDING_HINT = /\b(daily|weekly|hourly|every|each|monitor|monitors|watch|
  * stale authored answer on an edited mission would silently misclassify —
  * the exact failure the never-silent rule exists to prevent). */
 const EXAMPLE_GOAL =
-  'Every weekday morning, read the Hacker News front page (https://news.ycombinator.com) and the TechCrunch feed (https://techcrunch.com/feed/), pull out anything that moves the AI infrastructure market \u2014 launches, pricing changes, funding rounds \u2014 and draft me a five-minute brief with the two things I should act on first';
-const EXAMPLE_CLUSTER = 'summarization';
+  'Every Monday morning, download the CSV at https://raw.githubusercontent.com/plotly/datasets/master/tips.csv, analyze revenue and tipping by day of the week, and deliver a labeled chart plus a spreadsheet of the numbers with a three-line summary';
+const EXAMPLE_CLUSTER = 'agentic-tool-use';
 
 export function InterviewForm() {
   const router = useRouter();
@@ -333,18 +334,15 @@ export function InterviewForm() {
   const fillExample = useCallback(() => {
     setGoal(EXAMPLE_GOAL);
     setKind('standing');
-    setCadence('daily');
-    setAccounts('web');
+    setCadence('weekly');
+    setAccounts('web, code');
     setWorth('3');
     setWhenUnsure('ask-first');
-    // 'no duplicates across days' comes BACK when P3's beat memory makes
-    // it enforceable — an example must never promise what the runtime
-    // cannot yet keep (the theater ban applies to sample text too).
-    setQualityBar('nothing important missed, every claim linked to its source, no filler');
-    setProduces('one brief: two act-now items up top, then a scannable list grouped by company');
-    setNever('never email or reply to anyone\nnever act on anything — drafts only');
+    setQualityBar('every number computed from the actual file, never estimated; the chart labeled and readable');
+    setProduces('an xlsx of the by-day numbers, a png chart, and a three-line summary');
+    setNever('never fabricate a number — if the download fails, say so and stop');
     setExample(
-      'ACT NOW · Northwind cut their Pro tier 20% (pricing page, changed overnight) — undercuts our renewal pitch for the Meridian account.\nACT NOW · Contoso launched bulk import (their changelog) — closes the gap our sales deck leans on.\n\nBY COMPANY\nNorthwind — Pro tier $49→$39 · pricing page\nContoso — bulk CSV import shipped · changelog\nFabrikam — quiet: no changes since the Series B note (Aug 12)',
+      'Revenue peaks Saturday ($1,778.40 across 87 checks); Friday is the weakest full day.\nTipping runs 15.9% overall — dinner tips better than lunch (16.1% vs 15.6%).\nFiles: tips-by-day.xlsx · revenue-by-day.png',
     );
     setExampleOpen(true);
   }, []);

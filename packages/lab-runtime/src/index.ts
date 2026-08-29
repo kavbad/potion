@@ -33,3 +33,4 @@ export {
 export * from './graduation.js';
 export * from './evidence.js';
 export * from './apply-graduation.js';
+export { buildCodeLabTools, redactKeyShapes, CODE_LIMITS, type CodeToolDeps, type CodeWorkspace } from './code-tools.js';

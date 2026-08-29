@@ -136,6 +136,9 @@ import {
   getOrgTraceRetentionDays,
   grantConnectionStatus,
   listLabGrants,
+  listLabRunFiles,
+  getLabRunFile,
+  upsertLabRunFile,
   listOrgIdsWithSpans,
   listTracesForClustering,
   redactSpanAttrs,
@@ -152,7 +155,7 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildMcpLabTools, buildWebLabTools, resumeRun, ServingClient, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
+import { buildCodeLabTools, buildMcpLabTools, buildWebLabTools, resumeRun, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
@@ -4381,6 +4384,8 @@ export interface LabRunHandlerDeps {
   /** P1: injected fetch/lookup for the builtin web tools (tests + local
    * walkthroughs); production uses the defaults. */
   webToolDeps?: WebToolDeps;
+  /** X1: injected sandbox/fetch for the builtin code tools (tests). */
+  codeToolDeps?: Partial<CodeToolDeps> & { sandboxUrl?: string };
 }
 
 export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run'> {
@@ -4484,7 +4489,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // (a builtin id must never resolve against a connector endpoint), and
       // builtin tools mount once per run through the SAME grant ledger: no
       // active grant, no tools, and a typed leg note says so.
-      const BUILTIN_IDS = new Set(['web']);
+      const BUILTIN_IDS = new Set(['web', 'code']);
       const builtinDeclared = spec.superpowers.filter((s) => BUILTIN_IDS.has(s.id));
       const externalSpec: HarnessSpec = {
         ...spec,
@@ -4503,6 +4508,34 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
               tools.push(...buildWebLabTools(deps.webToolDeps ?? {}));
               const pkgWeb = getPackage('web');
               if (pkgWeb !== null) guidance.push(pkgWeb.usage.preamble);
+            }
+            if (s.id === 'code') {
+              // X1: the sandbox is configuration, not law — absent, the
+              // superpower degrades to a TYPED leg note, never a crash.
+              const sandboxUrl = deps.codeToolDeps?.sandboxUrl ?? process.env.POTION_SANDBOX_URL;
+              if (sandboxUrl === undefined || sandboxUrl === '') {
+                legNotes.push({
+                  toolName: 'code',
+                  note: { superpowerUnavailable: { connectorId: 'code', status: 'unreachable', detail: 'the code sandbox is not configured on this deployment (POTION_SANDBOX_URL)' } },
+                });
+              } else {
+                tools.push(
+                  ...buildCodeLabTools({
+                    sandboxUrl,
+                    workspace: {
+                      list: async () => (await listLabRunFiles(ctx.db, payload.orgId, payload.runId)).map((f) => ({ name: f.name, size: f.size })),
+                      read: async (name) => (await getLabRunFile(ctx.db, payload.orgId, payload.runId, name))?.content ?? null,
+                      write: async (name, content) => {
+                        const r = await upsertLabRunFile(ctx.db, { orgId: payload.orgId, runId: payload.runId, name, content });
+                        return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+                      },
+                    },
+                    ...(deps.codeToolDeps?.fetchImpl !== undefined ? { fetchImpl: deps.codeToolDeps.fetchImpl } : {}),
+                  }),
+                );
+                const pkgCode = getPackage('code');
+                if (pkgCode !== null) guidance.push(pkgCode.usage.preamble);
+              }
             }
             continue;
           }

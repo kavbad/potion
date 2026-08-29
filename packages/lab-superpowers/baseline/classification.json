@@ -39,6 +39,13 @@
       "list_tasks": "read"
     }
   },
+  "code": {
+    "version": "1.0.0",
+    "contentHash": "bea5fdf03228f784e74821b75db2ac281075f95c70fe02115d83464b706b33ec",
+    "actions": {
+      "run_python": "read"
+    }
+  },
   "confluence": {
     "version": "1.0.0",
     "contentHash": "8f4e3fe729d6ea32f7779e04423bc8fecd0d1d2b34ed72731ebf86be451e7e84",

@@ -1,0 +1,133 @@
+// X1 (2026-08-28) — the `code` builtin superpower: run Python in the Potion
+// sandbox with a DURABLE per-run file workspace. The sandbox is stateless
+// per exec; persistence lives on the run (packages/db lab_run_files), so a
+// file written in step 3 is there in step 7 and is a downloadable artifact
+// at the end. Isolation is layered and stated honestly: the sandbox
+// container sits on an internal-only network with no egress, runs non-root,
+// and caps CPU/memory/time per exec — container isolation, not VM-grade
+// multi-tenancy. `external: false` is truthful BECAUSE of the no-egress
+// law: executing code that cannot reach the world is thinking, not acting.
+import type { LabTool } from './loop.js';
+
+export interface CodeWorkspace {
+  list(): Promise<Array<{ name: string; size: number }>>;
+  read(name: string): Promise<Buffer | null>;
+  write(name: string, content: Buffer): Promise<{ ok: true } | { ok: false; reason: string }>;
+}
+
+export interface CodeToolDeps {
+  sandboxUrl: string;
+  workspace: CodeWorkspace;
+  /** Injected for tests; defaults to global fetch. */
+  fetchImpl?: typeof fetch;
+}
+
+export const CODE_LIMITS = {
+  EXEC_TIMEOUT_MS: 150_000, // client-side backstop over the sandbox's own wall clock
+  MAX_STREAM_CHARS: 20_000, // what enters model context, further clipped from the sandbox's cap
+} as const;
+
+/** Key-shaped content is REDACTED from streams before they enter model
+ * context (custody at the tool boundary). Redaction, not refusal: code that
+ * prints entropy is common; code that prints a live credential must not
+ * teach it to the model or the transcript. Conservative patterns only. */
+export function redactKeyShapes(text: string): string {
+  return text
+    .replace(/\b(?:sk|pk|ghp|gho|ghs|glpat|xox[abps])[-_][A-Za-z0-9_-]{16,}\b/g, '••redacted-key-shape••')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '••redacted-key-shape••')
+    .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, '••redacted-key-shape••')
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '••redacted-private-key••');
+}
+
+function clip(text: string): string {
+  return text.length > CODE_LIMITS.MAX_STREAM_CHARS
+    ? `${text.slice(0, CODE_LIMITS.MAX_STREAM_CHARS)}\n…[truncated for context at ${CODE_LIMITS.MAX_STREAM_CHARS} chars]`
+    : text;
+}
+
+interface SandboxResult {
+  exitCode?: number;
+  timedOut?: boolean;
+  stdout?: string;
+  stderr?: string;
+  files?: Array<{ name: string; size: number; contentBase64: string }>;
+  error?: string;
+}
+
+export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
+  const fetchFn = deps.fetchImpl ?? fetch;
+  return [
+    {
+      name: 'run_python',
+      description:
+        'Run Python 3.12 in the Potion sandbox (pandas, numpy, openpyxl, matplotlib preinstalled; no network). ' +
+        'The run has ONE persistent file workspace: files already in it are placed in the working directory before ' +
+        'your code runs, and files your code writes to the working directory are kept for later steps and delivered ' +
+        'as the run’s artifacts. Print what you need to see; write files you want to keep.',
+      parameters: {
+        type: 'object',
+        properties: {
+          code: { type: 'string', description: 'The Python source to execute.' },
+          timeoutSeconds: { type: 'number', description: 'Wall-clock limit, 1–120 (default 30).' },
+        },
+        required: ['code'],
+      },
+      external: false,
+      run: async (input: unknown): Promise<unknown> => {
+        const args = (input ?? {}) as { code?: unknown; timeoutSeconds?: unknown };
+        if (typeof args.code !== 'string' || args.code.trim() === '') {
+          return { error: 'code (a non-empty string) is required' };
+        }
+        const existing = await deps.workspace.list();
+        const files: Array<{ name: string; contentBase64: string }> = [];
+        for (const f of existing) {
+          const content = await deps.workspace.read(f.name);
+          if (content !== null) files.push({ name: f.name, contentBase64: content.toString('base64') });
+        }
+        let res: Response;
+        try {
+          const ac = new AbortController();
+          const t = setTimeout(() => ac.abort(), CODE_LIMITS.EXEC_TIMEOUT_MS);
+          try {
+            res = await fetchFn(`${deps.sandboxUrl}/exec`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                code: args.code,
+                ...(typeof args.timeoutSeconds === 'number' ? { timeoutSeconds: args.timeoutSeconds } : {}),
+                files,
+              }),
+              signal: ac.signal,
+            });
+          } finally {
+            clearTimeout(t);
+          }
+        } catch (e) {
+          return { error: `sandbox unreachable: ${e instanceof Error ? e.message : String(e)}` };
+        }
+        const body = (await res.json().catch(() => null)) as SandboxResult | null;
+        if (body === null) return { error: `sandbox returned unparseable output (HTTP ${res.status})` };
+        if (body.error !== undefined) return { error: body.error };
+
+        const kept: Array<{ name: string; size: number }> = [];
+        const notes: string[] = [];
+        for (const f of body.files ?? []) {
+          const content = Buffer.from(f.contentBase64, 'base64');
+          const wrote = await deps.workspace.write(f.name, content);
+          if (wrote.ok) kept.push({ name: f.name, size: content.length });
+          else notes.push(`'${f.name}' not kept: ${wrote.reason}`);
+        }
+        const workspaceNow = await deps.workspace.list();
+        return {
+          exitCode: body.exitCode ?? -1,
+          timedOut: body.timedOut === true,
+          stdout: clip(redactKeyShapes(body.stdout ?? '')),
+          stderr: clip(redactKeyShapes(body.stderr ?? '')),
+          filesWritten: kept,
+          workspace: workspaceNow.map((w) => `${w.name} (${w.size} bytes)`),
+          ...(notes.length > 0 ? { notes } : {}),
+        };
+      },
+    },
+  ];
+}

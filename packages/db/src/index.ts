@@ -9,6 +9,7 @@ export * from './repos/frontier-pins.js';
 export * from './repos/billing.js';
 export * from './repos/platform-baseline.js';
 export * from './repos/eval-results.js';
+export * from './repos/lab-run-files.js';
 export * from './repos/demand.js';
 export * from './repos/learning-runs.js';
 export * from './repos/org-incumbents.js';

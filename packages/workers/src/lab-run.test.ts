@@ -300,3 +300,87 @@ describe('lab:run fence/reclaim — the sweep never kills a LIVE invocation', ()
     expect(live[0]!.revokedAt, 'the LIVE invocation key must survive a duplicate job').toBeNull();
   });
 });
+
+describe('X1 — the code superpower against a REAL sandbox (integration)', () => {
+  it('a granted code worker executes python; produced files persist in the run workspace', async () => {
+    const { spawn, execSync } = await import('node:child_process');
+    let python = '';
+    try { python = execSync('command -v python3').toString().trim(); } catch { /* absent */ }
+    if (python === '') return; // no python on this machine — the unit layer covers the tool
+    const { fileURLToPath } = await import('node:url');
+    const serverPath = fileURLToPath(new URL('../../../deploy/sandbox/sandbox_server.py', import.meta.url));
+    const port = 18790 + Math.floor(Math.random() * 200);
+    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: 'ignore' });
+    try {
+      // wait for the sandbox to listen
+      let up = false;
+      for (let i = 0; i < 40 && !up; i++) {
+        await new Promise((r) => setTimeout(r, 150));
+        up = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok).catch(() => false);
+      }
+      expect(up, 'sandbox failed to start').toBe(true);
+
+      const s = spec({
+        name: 'analyst harness',
+        superpowers: [{ id: 'code', scopes: ['exec:python'] }],
+        checkIns: [],
+      });
+      const runId = 'run-code-x1';
+      await seedRun(runId, s);
+      // The grant: enabling a builtin is a permission grant, nothing more.
+      const { upsertLabGrant } = await import('@potion/db');
+      await upsertLabGrant(db.db, {
+        id: 'grant-code-x1', orgId: ORG, connectorId: 'code', superpowerId: 'code',
+        scopesGranted: ['exec:python'], tokenEnvelope: 'builtin:no-credential', grantedBy: 'test',
+      });
+      // Script: one tool call producing a file, then a clean stop.
+      const toolCall = {
+        id: 'call-1',
+        type: 'function' as const,
+        function: {
+          name: 'run_python',
+          arguments: JSON.stringify({ code: "with open('answer.csv','w') as f: f.write('day,revenue\\nSat,1778\\n')\nprint('computed')" }),
+        },
+      };
+      const { factory } = scriptedFactory([
+        ok({ text: 'computing', toolCalls: [toolCall], finishReason: 'tool_calls' }),
+        ok({ text: 'the thing is done' }),
+        // the tool-bearing task's deliberate tool-free WRAP-UP call
+        ok({ text: 'the thing is done' }),
+      ]);
+      const res = await createLabRunHandler({
+        clientFactory: factory,
+        codeToolDeps: { sandboxUrl: `http://127.0.0.1:${port}` },
+      })({ orgId: ORG, runId }, ctx());
+      expect(res.state).toBe('completed');
+
+      const { listLabRunFiles, getLabRunFile } = await import('@potion/db');
+      const files = await listLabRunFiles(db.db, ORG, runId);
+      expect(files.map((f) => f.name)).toEqual(['answer.csv']);
+      const file = await getLabRunFile(db.db, ORG, runId, 'answer.csv');
+      expect(file!.content.toString()).toContain('Sat,1778');
+      expect(file!.meta.mime).toBe('text/csv');
+    } finally {
+      proc.kill();
+    }
+  }, 60_000);
+
+  it('an unconfigured sandbox degrades to a typed leg note, never a crash', async () => {
+    delete process.env.POTION_SANDBOX_URL;
+    const s = spec({ name: 'no sandbox harness', superpowers: [{ id: 'code', scopes: ['exec:python'] }] });
+    const runId = 'run-code-nosb';
+    await seedRun(runId, s);
+    const { upsertLabGrant, listLabSteps } = await import('@potion/db');
+    await upsertLabGrant(db.db, {
+      id: 'grant-code-nosb', orgId: ORG, connectorId: 'code', superpowerId: 'code',
+      scopesGranted: ['exec:python'], tokenEnvelope: 'builtin:no-credential', grantedBy: 'test',
+    });
+    const { factory } = scriptedFactory([ok({ text: 'the thing is done' })]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    const steps = await listLabSteps(db.db, runId, ORG);
+    const note = steps.find((st) => JSON.stringify(st.payload).includes('superpowerUnavailable'));
+    expect(note, 'expected the typed sandbox-unconfigured leg note').toBeDefined();
+    expect(JSON.stringify(note!.payload)).toContain('POTION_SANDBOX_URL');
+  });
+});
