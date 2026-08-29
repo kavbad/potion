@@ -202,3 +202,46 @@ behind it and never ahead of it. Until then, the honest answer to "a chat
 app could do this" is: as output, yes — as an unattended, budgeted,
 contract-checked, receipted operation, no — and the gap becomes unfakeable
 phase by phase rather than argued.
+
+## The X-revision (2026-08-28, operator: "100x the capability — extremely useful, highly technically challenging things with ease")
+
+The capability cliff is EXECUTION: everything before X1 makes a worker that
+reads and writes prose; the X-ladder makes one that computes. The P-ladder
+items not renamed here (beat memory, watchdog, webhook triggers, feedback)
+stay and interleave; the X-sequence is the capability spine.
+
+- **X1 — "It computes."** A sandboxed `code` superpower (Python + the
+  analyst kit) as a dedicated service on an internal-only network with ZERO
+  egress, non-root, CPU/memory/time-capped, per-exec workspace; a durable
+  per-run FILE WORKSPACE so files persist across steps and become the
+  deliverables (size/count-capped, custody-scanned, rendered on the run
+  page, downloadable). Execution slots into the existing checkpoint/replay
+  laws as recorded tool steps. Honest posture stated in the machinery:
+  container isolation, not VM-grade multi-tenancy — truthful for the
+  single-box deploy, revisited before multi-tenant scale.
+  *Demo:* "every Monday, pull this public CSV, analyze revenue by segment,
+  deliver an xlsx and a chart" — armed, untouched, artifacts with receipts.
+- **X2 — "It sustains long missions."** The durable task ledger: the worker
+  files a plan through a tool, checks steps off as legs complete, resumes
+  exactly where the ledger says, under fuel. Kills the step ceiling
+  honestly. Full replay ceremony.
+- **X3 — "It proves its work."** The judge (P2) + execution-verified
+  contracts: numbers re-computed, generated code's tests actually run
+  before completion. "Verified" means RAN.
+- **X4 — "It multiplies."** Fan-out sub-runs, one fuel tree, one trace.
+- **X5 — "Any tool."** BYO-MCP through full custody.
+- **X6 — the honest gap, named: browser-driving.** OpenClaw-types can
+  operate a computer: click through web apps, fill forms, drive UIs. After
+  X5 our worker reads the web but doesn't drive it, and a fetch tool must
+  never be dressed up as a browser. The missing hand is addable as a
+  governed superpower — a controlled headless-browser service behind the
+  same permission engine, where "click submit on someone else's site" is an
+  external action that gates like any other — and it is sequenced as X6,
+  after X1–X3 prove out, DELIBERATELY after the judge exists: an agent that
+  acts on UIs without self-verification is exactly the kind of
+  toddler-with-a-hammer this plan exists to never ship.
+
+Relationship to OpenClaw-types, stated once: the X-ladder builds the
+GOVERNED member of that species (same capability class, every hand under
+custody law), while `registerPotionGate` harnesses the wild ones — keep
+your agent, gain receipts, permissions, and routed inference.
