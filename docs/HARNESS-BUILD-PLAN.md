@@ -130,6 +130,17 @@ within one cycle of a real change — with the diff as evidence.
   FULL custody path — scopes, secret refusal, before-external-action,
   per-tool caps, metering, grant/revoke. Closed catalog becomes open world;
   "valuable for any need" starts being literally true.
+  **SHIPPED 2026-08-28, commit f4f60e3, deployed** (readyz green; the
+  catalog serves `custom` on prod; probe/register/delete role-gated live).
+  Probe pins the surface (SSRF guard → one MCP session → caps →
+  secret-scan refusal); the admin's review makes them the author; every
+  pinned tool is an ACT gating at the pore; bearer sealed in the custody
+  envelope (tokenless seals '' and the wire carries no auth header —
+  the builtin sentinel would have thrown mid-leg, caught by ceremony).
+  13 new tests incl. two against a real in-process MCP server. Ceremony
+  also cleared three phases of route-inventory debt (11 routes
+  classified; apps/server 918/918 — pnpm's first-fail ordering had
+  masked the suite since X1).
 - **Contract `json`:** user-supplied output schema, validated.
 - **Delivery `webhook`:** deliverables pushed to the operator's systems
   (gated by the permission engine like any external action).
