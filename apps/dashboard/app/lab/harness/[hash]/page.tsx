@@ -60,11 +60,13 @@ function WhatHappensNow({ spec }: { spec: NonNullable<HarnessDto['spec']> }) {
       ),
     },
     {
-      title: 'Answer when it asks',
+      title: 'Answer when it asks — and steer it any time',
       body: (
         <>
-          Before any external action it checks in with you. Every approval, edit, or rejection you
-          give lands on its permission record as evidence.
+          Before any external action it checks in with you; every answer lands on its permission
+          record as evidence. And while it works, you can <b>steer it live</b> from the run page —
+          guidance lands at its next step, on the record. Steering guides; only your check-in
+          answers approve.
         </>
       ),
     },

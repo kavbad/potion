@@ -178,7 +178,16 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
           const state = await call(`/session/${sid}/state`);
           const found = (state.interactables ?? []).find((c) => c.ref === i.ref) as { label?: string } | undefined;
           const expected = deps.restore?.controls[i.ref];
-          if (expected !== undefined && found?.label !== expected) {
+          // FAIL-CLOSED both ways (final-pass review, 2026-08-30): a ref the
+          // recorded page never showed has no label to verify against — the
+          // human could not have seen what they were approving. Refuse it
+          // the same as drift; the model re-reads and the pore re-asks.
+          if (expected === undefined) {
+            return {
+              error: `control ${i.ref} was not on the page the approval was given for — read the page and act on what it says now.`,
+            };
+          }
+          if (found?.label !== expected) {
             return {
               error: `the page has changed since the approval — control ${i.ref} is ${found?.label !== undefined ? `now '${String(found.label).slice(0, 80)}'` : 'gone'}, was '${expected.slice(0, 80)}'. Read the page and act on what it says now.`,
             };

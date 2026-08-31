@@ -154,3 +154,29 @@ describe('the resume guard (X6: approved acts survive leg boundaries honestly)',
     expect(res.error).toContain('Delete board');
   });
 });
+
+describe('the resume guard fails closed on UNRECORDED refs (final-pass fix)', () => {
+  it('an approved ref the recorded page never showed refuses — the human could not have seen it', async () => {
+    let sessions = 0;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace('http://browser.test', '');
+      if (path === '/session' && init?.method === 'POST') {
+        sessions += 1;
+        return new Response(JSON.stringify({ sessionId: `bs-${sessions}` }), { status: 200 });
+      }
+      if (path.endsWith('/goto') || path.endsWith('/state')) {
+        return new Response(JSON.stringify({ url: 'https://app.example/x', title: 'X', text: 'x', interactables: [{ ref: 'p9', tag: 'button', label: 'Something' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ url: 'x', title: 'x', text: 'ACTED', interactables: [] }), { status: 200 });
+    }) as typeof fetch;
+    const setup = buildBrowserLabTools({
+      browserUrl: 'http://browser.test',
+      fetchImpl,
+      restore: { url: 'https://app.example/x', controls: { p1: 'Add card' } },
+    });
+    const act = setup.tools.find((t) => t.name === 'browser_act')!;
+    const res = (await act.run({ ref: 'p9', kind: 'click' })) as { error?: string; text?: string };
+    expect(res.error).toContain('was not on the page the approval was given for');
+    expect(res.text).toBeUndefined();
+  });
+});

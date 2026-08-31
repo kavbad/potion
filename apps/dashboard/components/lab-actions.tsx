@@ -365,7 +365,7 @@ export function InterviewForm() {
         goal: string; kind: 'task' | 'standing'; done?: string; accounts: string; worth: string;
         qualityBar: string; produces: string; never: string; example?: string;
         whenUnsure: 'ask-first' | 'press-on'; cadence?: 'hourly' | 'daily' | 'weekly';
-        shape?: 'watchdog'; watchUrl?: string;
+        shape?: 'watchdog'; watchUrl?: string; helpers?: 3 | 5;
       };
       setGoal(d.goal);
       setKind(d.kind);
@@ -381,6 +381,7 @@ export function InterviewForm() {
       setCadence(d.cadence ?? '');
       setShape(d.shape ?? 'reporter');
       setWatchUrl(d.watchUrl ?? '');
+      setHelpers(d.helpers !== undefined ? (String(d.helpers) as '3' | '5') : '');
     };
     window.addEventListener('potion:hire-prefill', onPrefill);
     return () => window.removeEventListener('potion:hire-prefill', onPrefill);

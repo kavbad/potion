@@ -544,23 +544,11 @@ export function LabConsole({
         </section>
       ) : null}
 
-      {/* ================= X1/H1: the files, materializing live ================= */}
+      {/* ================= X1/X7: the files, materializing live — tree-aware
+           (a fetched repo is hundreds of files; group by top directory,
+           lead with the run's own root artifacts, fold the deep trees) ==== */}
       {run?.files !== undefined && run.files.length > 0 ? (
-        <section className={`${CARD} mt-4 px-5 py-3`} data-testid="live-files">
-          <div className={EYEBROW}>files this run produced · {run.files.length}</div>
-          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12.5px]">
-            {run.files.map((f) => (
-              <a
-                key={f.name}
-                href={`/api/lab/runs/${runId}/files/${encodeURIComponent(f.name)}`}
-                download
-                className="text-accent underline"
-              >
-                {f.name} <span className="text-faint no-underline">({f.size.toLocaleString()} B)</span>
-              </a>
-            ))}
-          </div>
-        </section>
+        <FilesCard files={run.files} runId={runId!} />
       ) : null}
 
       {/* ================= the work + the worker ================= */}
@@ -703,6 +691,49 @@ export function LabConsole({
         </div>
       </details>
     </div>
+  );
+}
+
+// X7 — the workspace tree, readable at repo scale. Root artifacts render
+// flat (they are the deliverables); directories fold with counts.
+function FilesCard({ files, runId }: { files: Array<{ name: string; size: number }>; runId: string }) {
+  const roots = files.filter((f) => !f.name.includes('/'));
+  const byDir = new Map<string, Array<{ name: string; size: number }>>();
+  for (const f of files) {
+    if (!f.name.includes('/')) continue;
+    const dir = f.name.split('/')[0]!;
+    const list = byDir.get(dir) ?? [];
+    list.push(f);
+    byDir.set(dir, list);
+  }
+  const link = (f: { name: string; size: number }) => (
+    <a
+      key={f.name}
+      href={`/api/lab/runs/${runId}/files/${encodeURIComponent(f.name)}`}
+      download
+      className="text-accent underline"
+    >
+      {f.name} <span className="text-faint no-underline">({f.size.toLocaleString()} B)</span>
+    </a>
+  );
+  return (
+    <section className={`${CARD} mt-4 px-5 py-3`} data-testid="live-files">
+      <div className={EYEBROW}>files this run produced · {files.length}</div>
+      {roots.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12.5px]">{roots.map(link)}</div>
+      ) : null}
+      {[...byDir.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([dir, list]) => (
+        <details key={dir} className="mt-1.5" data-testid={`files-dir-${dir}`}>
+          <summary className="cursor-pointer font-mono text-[12px] text-soft hover:text-accent">
+            {dir}/ · {list.length} file{list.length === 1 ? '' : 's'} · {list.reduce((a, f) => a + f.size, 0).toLocaleString()} B
+          </summary>
+          <div className="mt-1 flex max-h-56 flex-wrap gap-x-4 gap-y-1 overflow-y-auto pl-3 font-mono text-[12px]">
+            {list.slice(0, 200).map(link)}
+            {list.length > 200 ? <span className="text-faint">+ {list.length - 200} more (all downloadable via the API)</span> : null}
+          </div>
+        </details>
+      ))}
+    </section>
   );
 }
 
