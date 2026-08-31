@@ -4821,15 +4821,30 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             const deliverableStep = stepsForJudge.find((x) => x.seq === found.atSeq);
             const deliverableText = (deliverableStep?.payload as { responseText?: string })?.responseText ?? ('report' in found && typeof found.report === 'string' ? found.report : JSON.stringify(found.brief));
             const judgeClient = clientFactory({ baseUrl: servingUrl, apiKey: rawKey, clusterHint: 'multi-step-reasoning' });
-            const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText) });
-            if (res.kind === 'ok') {
-              const est = (res.usage.totalTokens / 1000) * 0.01;
+            // One bounded retry (2026-08-31): the judge rides the cheap end
+            // of the frontier, and cheap routes occasionally truncate the
+            // JSON mid-string (seen live: ling-flash via Novita). A single
+            // paid retry usually lands clean; two misses record the error.
+            let judgeEst = 0;
+            let lastMiss: { error: string; judgeTrace: string | null } | null = null;
+            let wrote = false;
+            for (let attempt = 0; attempt < 2 && !wrote; attempt++) {
+              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText) });
+              if (res.kind !== 'ok') {
+                lastMiss = { error: `judge call failed: ${res.kind}`, judgeTrace: null };
+                continue;
+              }
+              judgeEst += (res.usage.totalTokens / 1000) * 0.01;
               const parsed = parseJudgment(res.text, compileRubric(spec));
-              await setLabRunJudge(ctx.db, payload.runId, payload.orgId, parsed.ok
-                ? { overall: parsed.overall, criteria: parsed.criteria, rationale: parsed.rationale, judgeTrace: res.frontierTrace ?? null, judgeCompletionId: res.completionId ?? null, estCostUsd: est, calibrated: false }
-                : { error: `judgment unparseable: ${parsed.error}`, judgeTrace: res.frontierTrace ?? null, estCostUsd: est });
-            } else {
-              await setLabRunJudge(ctx.db, payload.runId, payload.orgId, { error: `judge call failed: ${res.kind}`, judgeTrace: null, estCostUsd: 0 });
+              if (parsed.ok) {
+                await setLabRunJudge(ctx.db, payload.runId, payload.orgId, { overall: parsed.overall, criteria: parsed.criteria, rationale: parsed.rationale, judgeTrace: res.frontierTrace ?? null, judgeCompletionId: res.completionId ?? null, estCostUsd: judgeEst, calibrated: false });
+                wrote = true;
+              } else {
+                lastMiss = { error: `judgment unparseable: ${parsed.error}`, judgeTrace: res.frontierTrace ?? null };
+              }
+            }
+            if (!wrote && lastMiss !== null) {
+              await setLabRunJudge(ctx.db, payload.runId, payload.orgId, { ...lastMiss, estCostUsd: judgeEst });
             }
           }
         } catch (e) {

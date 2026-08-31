@@ -450,6 +450,7 @@ describe('X3 — the judge and the notifications', () => {
     const { factory } = scriptedFactory([
       ok({ text: BRIEF }),
       ok({ text: 'I think it is pretty good!' }), // not JSON — a miss
+      ok({ text: 'still not JSON, sorry' }), // the ONE bounded retry also misses
     ]);
     const res = await createLabRunHandler({ clientFactory: factory, sendNotify: async () => {} })({ orgId: ORG, runId }, ctx());
     expect(res.state).toBe('completed');
@@ -903,4 +904,45 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
       proc.kill();
     }
   }, 60_000);
+});
+
+describe('the judge retry (2026-08-31 — cheap routes truncate)', () => {
+  beforeEach(async () => {
+    const { createUser, createMembership } = await import('@potion/db');
+    await createUser(db.db, { id: 'usr-jr-admin', email: 'jr@org.dev', name: 'jr' });
+    await createMembership(db.db, { orgId: ORG, userId: 'usr-jr-admin', role: 'admin' });
+  });
+
+  it('a truncated first verdict is retried once and the clean second one lands', async () => {
+    const BRIEF = JSON.stringify({ headline: [{ claim: 'x', sourceUrl: 'https://e.com' }], byEntity: [], quiet: [], coverage: { checked: 1 } });
+    const GOOD = JSON.stringify({ overall: 8, criteria: [{ name: 'sourced', score: 8, note: 'ok' }], rationale: 'fine' });
+    const s = spec({ name: 'retry harness', mission: { kind: 'standing', goal: 'watch' }, contract: { type: 'brief' } });
+    const runId = 'run-judge-retry';
+    await seedRun(runId, s);
+    const { factory } = scriptedFactory([
+      ok({ text: BRIEF }),
+      ok({ text: '{"overall": 8, "criteria": [{"name": "sour' }), // truncated mid-string — the live failure
+      ok({ text: GOOD }),
+    ]);
+    const res = await createLabRunHandler({ clientFactory: factory, sendNotify: async () => {} })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    const run = await getLabRun(db.db, runId, ORG);
+    expect((run!.judge as { overall: number }).overall).toBe(8);
+  });
+
+  it('a completed TASK run (no contract) gets judged on its report', async () => {
+    const GOOD = JSON.stringify({ overall: 9, criteria: [{ name: 'goal', score: 9, note: 'done' }], rationale: 'solid' });
+    const s = spec({ name: 'task judge harness' }); // task, no contract
+    const runId = 'run-judge-task';
+    await seedRun(runId, s);
+    const { factory } = scriptedFactory([
+      ok({ text: 'The analysis is complete: totals computed, chart written, findings stated clearly and at length.' }),
+      ok({ text: 'Wrap-up: computed the totals, wrote the chart, stated the three findings — done-definition met.' }),
+      ok({ text: GOOD }), // the judge on the report
+    ]);
+    const res = await createLabRunHandler({ clientFactory: factory, sendNotify: async () => {} })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    const run = await getLabRun(db.db, runId, ORG);
+    expect((run!.judge as { overall: number }).overall).toBe(9);
+  });
 });

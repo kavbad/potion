@@ -84,7 +84,8 @@ export function buildJudgeMessages(
         `You are a strict quality judge. Score the DELIVERABLE against each criterion. ` +
         `Reply with STRICT JSON only — no prose, no fences: ` +
         `{"overall": 0-10 integer, "criteria": [{"name": string, "score": 0-10 integer, "note": string}], "rationale": string}. ` +
-        `One criteria entry per rubric line, in order. Judge what is present, never what is claimed.\n\n` +
+        `One criteria entry per rubric line, in order. Keep every note under 12 words and the rationale under 30 words — brevity is part of the format. ` +
+        `Judge what is present, never what is claimed.\n\n` +
         `Mission: ${spec.mission.goal}\n` +
         `Rubric:\n${rubric.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n` +
         (spec.exemplar !== undefined ? `\nThe operator's exemplar (the standard):\n${spec.exemplar}\n` : '') +
