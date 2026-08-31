@@ -35,10 +35,10 @@ describe('T8 audit exhibit — complete, both directions', () => {
     expect(auditKeys).toEqual(catalogKeys);
     expect(new Set(auditKeys).size).toBe(auditKeys.length); // no duplicate rows
     // 116 vendor-mapped tools at the T8 audit + 2 in-process web builtins
-    // (P1, 2026-08-28) + 1 code builtin (X1, same day) — builtin rows cite
-    // the runtime implementation, not a vendor endpoint, because there is
-    // none.
-    expect(catalogKeys.length).toBe(119);
+    // (P1, 2026-08-28) + 1 code builtin (X1, same day) + 3 browser builtins
+    // (X6, 2026-08-30) — builtin rows cite the runtime implementation, not
+    // a vendor endpoint, because there is none.
+    expect(catalogKeys.length).toBe(122);
   });
 
   it('every row cites a vendor operation — no blank verdicts padding the count', () => {

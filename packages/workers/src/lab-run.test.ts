@@ -735,3 +735,89 @@ describe('X4 — fan-out: one fuel tree, one trace (integration)', () => {
     expect(JSON.stringify((fanStep!.payload as { toolOutput: unknown }).toolOutput)).toContain('not enough budget');
   });
 });
+
+describe('X6 — the browser hand: reads free, every act at the pore', () => {
+  function scriptedBrowser(): typeof fetch {
+    let sessions = 0;
+    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^https?:\/\/[^/]+/, '');
+      if (path === '/session' && init?.method === 'POST') {
+        sessions += 1;
+        return new Response(JSON.stringify({ sessionId: `bs-${sessions}` }), { status: 200 });
+      }
+      if (path.endsWith('/goto')) {
+        return new Response(JSON.stringify({ url: 'https://app.example/board', title: 'Board', text: 'Sprint 12 · 4 cards', interactables: [{ ref: 'p1', tag: 'button', label: 'Add card' }] }), { status: 200 });
+      }
+      if (path.endsWith('/act')) {
+        return new Response(JSON.stringify({ url: 'https://app.example/board', title: 'Board', text: 'Sprint 12 · 5 cards — card added', interactables: [] }), { status: 200 });
+      }
+      if (path.endsWith('/state')) {
+        return new Response(JSON.stringify({ url: 'https://app.example/board', title: 'Board', text: 'Sprint 12 · 4 cards', interactables: [{ ref: 'p1', tag: 'button', label: 'Add card' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+  }
+
+  async function grantBrowser() {
+    const { upsertLabGrant } = await import('@potion/db');
+    await upsertLabGrant(db.db, {
+      id: 'grant-browser-x6', orgId: ORG, connectorId: 'browser', superpowerId: 'browser',
+      scopesGranted: ['browse'], tokenEnvelope: 'builtin:no-credential', grantedBy: 'test',
+    });
+  }
+
+  it('browser_open runs freely (a read); browser_act fires the pore; the approval executes exactly that act', async () => {
+    await grantBrowser();
+    const s = spec({
+      name: 'browser harness',
+      mission: { kind: 'task', goal: 'add a card to the board', doneDefinition: 'card added' },
+      superpowers: [{ id: 'browser', scopes: ['browse'] }],
+      checkIns: [{ trigger: 'before-external-action' }],
+    });
+    const runId = 'run-browser-pore';
+    await seedRun(runId, s);
+    const openCall = { id: 'b1', type: 'function' as const, function: { name: 'browser_open', arguments: JSON.stringify({ url: 'https://app.example/board' }) } };
+    const actCall = { id: 'b2', type: 'function' as const, function: { name: 'browser_act', arguments: JSON.stringify({ ref: 'p1', kind: 'click' }) } };
+    const { factory } = scriptedFactory([
+      ok({ text: '', finishReason: 'tool_calls', toolCalls: [openCall] }),
+      ok({ text: '', finishReason: 'tool_calls', toolCalls: [actCall] }),
+    ]);
+    const handler = createLabRunHandler({ clientFactory: factory, browserToolDeps: { browserUrl: 'http://browser.test', fetchImpl: scriptedBrowser() } });
+    const res = await handler({ orgId: ORG, runId }, ctx());
+    // The READ executed without a question; the ACT parked the run.
+    expect(res.state).toBe('awaiting-human');
+    const { listLabSteps, answerLabRun } = await import('@potion/db');
+    let steps = await listLabSteps(db.db, runId, ORG);
+    expect(steps.some((st) => (st.payload as { toolName?: string }).toolName === 'browser_open')).toBe(true);
+    const pore = steps.find((st) => st.kind === 'check-in' && JSON.stringify(st.payload).includes('browser_act'));
+    expect(pore, 'the pore must fire on the browser act').toBeDefined();
+
+    // Approve → the resumed leg replays EXACTLY the approved click, then completes.
+    await answerLabRun(db.db, runId, ORG, 'yes');
+    const { factory: f2 } = scriptedFactory([
+      ok({ text: 'card added' }),
+      ok({ text: 'Wrap-up: card added.' }),
+    ]);
+    const res2 = await createLabRunHandler({ clientFactory: f2, browserToolDeps: { browserUrl: 'http://browser.test', fetchImpl: scriptedBrowser() } })({ orgId: ORG, runId }, ctx());
+    expect(res2.state).toBe('completed');
+    steps = await listLabSteps(db.db, runId, ORG);
+    const actStep = steps.find((st) => (st.payload as { toolName?: string }).toolName === 'browser_act');
+    expect(actStep, 'the approved act executed and recorded').toBeDefined();
+    expect(JSON.stringify((actStep!.payload as { toolOutput: unknown }).toolOutput)).toContain('card added');
+  }, 60_000);
+
+  it('an unconfigured browser service degrades to a typed leg note, never a crash', async () => {
+    await grantBrowser();
+    delete process.env.POTION_BROWSER_URL;
+    const s = spec({ name: 'no browser harness', superpowers: [{ id: 'browser', scopes: ['browse'] }] });
+    const runId = 'run-browser-unconf';
+    await seedRun(runId, s);
+    const { factory } = scriptedFactory([ok({ text: 'the thing is done' }), ok({ text: 'Wrap-up: done.' })]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    const { listLabSteps } = await import('@potion/db');
+    const steps = await listLabSteps(db.db, runId, ORG);
+    const note = steps.find((st) => JSON.stringify(st.payload).includes('POTION_BROWSER_URL'));
+    expect(note, 'expected the typed browser-unconfigured leg note').toBeDefined();
+  });
+});

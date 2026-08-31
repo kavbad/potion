@@ -19,6 +19,15 @@
       "list_tasks": "read"
     }
   },
+  "browser": {
+    "version": "1.0.0",
+    "contentHash": "c862c85568eb6d163c78fb1cb1b7bbd4c183887a8c330aa2036fa74e23082426",
+    "actions": {
+      "browser_act": "act",
+      "browser_open": "read",
+      "browser_read": "read"
+    }
+  },
   "canva": {
     "version": "1.0.0",
     "contentHash": "a6524fadd762601a6c24b391436aca583e3923ac5d6cf075bbb29c43910942f2",

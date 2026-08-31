@@ -65,6 +65,7 @@ services:
       # X1: the code sandbox (internal-only network; unset disables the
       # superpower with a typed note, never a crash).
       POTION_SANDBOX_URL: http://sandbox:8790
+      POTION_BROWSER_URL: http://browser:8791
       # NODE_ENV=production flips OFF the dev-auth bypass — real sessions and
       # api keys are required. The Dockerfile runtime stage sets it; repeated
       # here so it is visible at the deployment boundary.
@@ -155,6 +156,23 @@ services:
       timeout: 5s
       retries: 6
       start_period: 40s
+
+  browser:
+    # X6 (2026-08-30): the browser hand — headless Chromium behind a minimal
+    # HTTP service. Needs EGRESS to browse (default network, unlike the
+    # sandbox); containment is the in-process per-request SSRF guard
+    # (browser_server.mjs aborts private/loopback/metadata addresses on
+    # every request the page makes) plus the caps below. Only the server
+    # reaches it; every act it performs was pore-gated upstream.
+    build:
+      context: ./browser
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 512
+    shm_size: 512m
+    tmpfs:
+      - /tmp:size=512m
 
   sandbox:
     # X1 (2026-08-28): the code-execution sandbox. INTERNAL-ONLY network —

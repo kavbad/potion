@@ -166,7 +166,7 @@ import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
 import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
 import { customConnectorDef } from '@potion/lab-mcp';
-import { buildFanOutTool, deriveSubSpec, fanOutSpentFromSteps, runLeg } from '@potion/lab-runtime';
+import { buildBrowserLabTools, buildFanOutTool, deriveSubSpec, fanOutSpentFromSteps, runLeg } from '@potion/lab-runtime';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -4389,6 +4389,8 @@ export interface LabRunHandlerDeps {
   masterKeyProvider?: MasterKeyProvider;
   connectors?: readonly ConnectorDef[];
   mcpFetch?: typeof fetch;
+  /** X6: the browser hand (tests inject a scripted service). */
+  browserToolDeps?: { browserUrl?: string; fetchImpl?: typeof fetch };
   /** P1: injected fetch/lookup for the builtin web tools (tests + local
    * walkthroughs); production uses the defaults. */
   webToolDeps?: WebToolDeps;
@@ -4499,18 +4501,21 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // (a builtin id must never resolve against a connector endpoint), and
       // builtin tools mount once per run through the SAME grant ledger: no
       // active grant, no tools, and a typed leg note says so.
-      const BUILTIN_IDS = new Set(['web', 'code']);
+      const BUILTIN_IDS = new Set(['web', 'code', 'browser']);
       const builtinDeclared = spec.superpowers.filter((s) => BUILTIN_IDS.has(s.id));
       const externalSpec: HarnessSpec = {
         ...spec,
         superpowers: spec.superpowers.filter((s) => !BUILTIN_IDS.has(s.id)),
       };
-      const builtinLeg = async (): Promise<Pick<McpLegSetup, 'tools' | 'guidance' | 'legNotes'>> => {
-        if (builtinDeclared.length === 0) return { tools: [], guidance: [], legNotes: [] };
+      const builtinLeg = async (): Promise<Pick<McpLegSetup, 'tools' | 'guidance' | 'legNotes'> & { close: () => Promise<void> }> => {
+        if (builtinDeclared.length === 0) return { tools: [], guidance: [], legNotes: [], close: async () => {} };
         const grants = await listLabGrants(ctx.db, payload.orgId);
         const tools: McpLegSetup['tools'] = [];
         const guidance: string[] = [];
         const legNotes: McpLegSetup['legNotes'] = [];
+        // X6: the browser session is LEG-SCOPED (runs are durable,
+        // connections are not) — its close rides the leg close below.
+        let browserClose: () => Promise<void> = async () => {};
         for (const s of builtinDeclared) {
           const status = grantConnectionStatus(grants.find((g) => g.connectorId === s.id) ?? null);
           if (status === 'connected') {
@@ -4547,6 +4552,47 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 if (pkgCode !== null) guidance.push(pkgCode.usage.preamble);
               }
             }
+            // X6: the browser hand — the service is configuration, not law
+            // (the sandbox precedent): absent, a TYPED leg note, never a
+            // crash. The session close rides the leg close.
+            if (s.id === 'browser') {
+              const browserUrl = deps.browserToolDeps?.browserUrl ?? process.env.POTION_BROWSER_URL;
+              if (browserUrl === undefined || browserUrl === '') {
+                legNotes.push({
+                  toolName: 'browser',
+                  note: { superpowerUnavailable: { connectorId: 'browser', status: 'unreachable', detail: 'the browser service is not configured on this deployment (POTION_BROWSER_URL)' } },
+                });
+              } else {
+                // X6 resume law: derive the last recorded page (url +
+                // control labels) from the run's own steps, so an approved
+                // act can re-establish its page — label-guarded in the tool.
+                const priorForBrowser = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
+                let restore: { url: string; controls: Record<string, string> } | undefined;
+                for (let bi = priorForBrowser.length - 1; bi >= 0; bi--) {
+                  const st = priorForBrowser[bi]!;
+                  if (st.kind !== 'tool') continue;
+                  const bp = st.payload as { toolName?: string; toolOutput?: { url?: string; interactables?: Array<{ ref?: string; label?: string }> } };
+                  if (bp.toolName === undefined || !bp.toolName.startsWith('browser_')) continue;
+                  if (typeof bp.toolOutput?.url === 'string') {
+                    const controls: Record<string, string> = {};
+                    for (const c of bp.toolOutput.interactables ?? []) {
+                      if (typeof c.ref === 'string' && typeof c.label === 'string') controls[c.ref] = c.label;
+                    }
+                    restore = { url: bp.toolOutput.url, controls };
+                    break;
+                  }
+                }
+                const setup = buildBrowserLabTools({
+                  browserUrl,
+                  ...(deps.browserToolDeps?.fetchImpl !== undefined ? { fetchImpl: deps.browserToolDeps.fetchImpl } : {}),
+                  ...(restore !== undefined ? { restore } : {}),
+                });
+                tools.push(...setup.tools);
+                browserClose = setup.close;
+                const pkgBrowser = getPackage('browser');
+                if (pkgBrowser !== null) guidance.push(pkgBrowser.usage.preamble);
+              }
+            }
             continue;
           }
           legNotes.push({
@@ -4554,7 +4600,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             note: { superpowerUnavailable: { connectorId: s.id, status, detail: 'enable it on the worker page — one click, no account needed' } },
           });
         }
-        return { tools, guidance, legNotes };
+        return { tools, guidance, legNotes, close: async () => browserClose() };
       };
       const masterKey =
         externalSpec.superpowers.length > 0 ? await masterKeyProvider.getMasterKey() : null;
@@ -4679,7 +4725,10 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           tools: [...builtins.tools, ...mcp.tools, ...(fanTool !== null ? [fanTool] : [])],
           guidance: [...builtins.guidance, ...mcp.guidance],
           legNotes: [...builtins.legNotes, ...mcp.legNotes],
-          close: mcp.close,
+          close: async () => {
+            await builtins.close().catch(() => {});
+            await mcp.close();
+          },
         };
       };
 

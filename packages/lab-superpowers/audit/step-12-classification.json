@@ -1,845 +1,866 @@
 {
-  "audit": "Step 12 (T8) — action classification audited against vendor API semantics",
-  "method": "Four independent model-driven reviewers, each given a disjoint slice of the catalog, each asked to name the vendor operation a tool maps to and to rate its own confidence. No vendor API was called: every package in the catalog is fixture-authored, so these verdicts rate the vendor OPERATION, never the name-to-operation binding at a live server. That binding is unproven for every package except the one the live leg touches.",
-  "confidenceVocabulary": {
-    "verified": "certain of the vendor endpoint’s behaviour from specific knowledge of that endpoint",
-    "documented": "the vendor documents an operation of this shape and its read-vs-write nature is unambiguous",
-    "unverifiable": "the real semantics could not be determined — ambiguous name, no such documented endpoint, or the mapping is a guess"
+ "audit": "Step 12 (T8) — action classification audited against vendor API semantics",
+ "method": "Four independent model-driven reviewers, each given a disjoint slice of the catalog, each asked to name the vendor operation a tool maps to and to rate its own confidence. No vendor API was called: every package in the catalog is fixture-authored, so these verdicts rate the vendor OPERATION, never the name-to-operation binding at a live server. That binding is unproven for every package except the one the live leg touches.",
+ "confidenceVocabulary": {
+  "verified": "certain of the vendor endpoint’s behaviour from specific knowledge of that endpoint",
+  "documented": "the vendor documents an operation of this shape and its read-vs-write nature is unambiguous",
+  "unverifiable": "the real semantics could not be determined — ambiguous name, no such documented endpoint, or the mapping is a guess"
+ },
+ "failClosedRule": "Any tool rated unverifiable or questionable that LEANS act was reclassified to act rather than left as a read we merely hope about (spec §11).",
+ "rows": [
+  {
+   "pkg": "airtable",
+   "tool": "create_record",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v0/{base}/{table}"
   },
-  "failClosedRule": "Any tool rated unverifiable or questionable that LEANS act was reclassified to act rather than left as a read we merely hope about (spec §11).",
-  "rows": [
-    {
-      "pkg": "airtable",
-      "tool": "create_record",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v0/{base}/{table}"
-    },
-    {
-      "pkg": "airtable",
-      "tool": "get_record",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v0/{base}/{table}/{rec}"
-    },
-    {
-      "pkg": "airtable",
-      "tool": "list_bases",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v0/meta/bases"
-    },
-    {
-      "pkg": "airtable",
-      "tool": "list_records",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v0/{base}/{table}"
-    },
-    {
-      "pkg": "asana",
-      "tool": "add_comment",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /tasks/{gid}/stories — creates a story, notifies followers"
-    },
-    {
-      "pkg": "asana",
-      "tool": "get_task",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /tasks/{gid}"
-    },
-    {
-      "pkg": "asana",
-      "tool": "list_projects",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /projects"
-    },
-    {
-      "pkg": "asana",
-      "tool": "list_tasks",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /tasks?project={gid}"
-    },
-    {
-      "pkg": "canva",
-      "tool": "export_design",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "POST /v1/exports — async job, downloadable asset URL, export quota"
-    },
-    {
-      "pkg": "canva",
-      "tool": "get_design",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/designs/{id}"
-    },
-    {
-      "pkg": "canva",
-      "tool": "list_designs",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/designs"
-    },
-    {
-      "pkg": "canva",
-      "tool": "list_folders",
-      "verdict": "correct",
-      "confidence": "unverifiable",
-      "vendorOperation": "No flat list-folders operation exists in Canva Connect (real surface is GET /v1/folders/{id}/items) and the declared parameters are empty, so the tool is unfulfillable as shaped. Read-leaning: every folder retrieval is a GET, so it stays read and the mapping defect is recorded"
-    },
-    {
-      "pkg": "clickup",
-      "tool": "create_task",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /api/v2/list/{id}/task — notifies assignees/watchers"
-    },
-    {
-      "pkg": "clickup",
-      "tool": "get_task",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /api/v2/task/{id} — no read-receipt on the API path"
-    },
-    {
-      "pkg": "clickup",
-      "tool": "list_spaces",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /api/v2/team/{id}/space"
-    },
-    {
-      "pkg": "clickup",
-      "tool": "list_tasks",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /api/v2/list/{id}/task"
-    },
-    {
-      "pkg": "code",
-      "tool": "run_python",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "in-process dispatch to the Potion sandbox service (lab-runtime code-tools.ts → deploy/sandbox) — executes on an internal-only network with NO egress; classified read because it cannot act on the world outside the platform, and the workspace it mutates is the run’s own"
-    },
-    {
-      "pkg": "confluence",
-      "tool": "create_page",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /wiki/api/v2/pages — notifies space watchers"
-    },
-    {
-      "pkg": "confluence",
-      "tool": "get_page",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /wiki/api/v2/pages/{id}; REST reads do not increment the analytics view counter"
-    },
-    {
-      "pkg": "confluence",
-      "tool": "list_spaces",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /wiki/api/v2/spaces"
-    },
-    {
-      "pkg": "confluence",
-      "tool": "search_pages",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /wiki/rest/api/search (CQL)"
-    },
-    {
-      "pkg": "discord",
-      "tool": "list_channels",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /guilds/{id}/channels — note the OAuth guilds scope only authorizes GET /users/@me/guilds; this needs a bot token"
-    },
-    {
-      "pkg": "discord",
-      "tool": "read_messages",
-      "verdict": "reclassified",
-      "confidence": "documented",
-      "vendorOperation": "GET /channels/{id}/messages is a pure read, but messages.read is an RPC-local scope (not REST) so the workable credential is a write-capable bot token, and a user-session implementation acks the channel on the same path, mutating read state → act; messages.read also left the default grant"
-    },
-    {
-      "pkg": "discord",
-      "tool": "send_message",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /channels/{id}/messages — externally visible"
-    },
-    {
-      "pkg": "dropbox",
-      "tool": "create_shared_link",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /2/sharing/create_shared_link_with_settings — changes visibility"
-    },
-    {
-      "pkg": "dropbox",
-      "tool": "get_file",
-      "verdict": "reclassified",
-      "confidence": "documented",
-      "vendorOperation": "Ambiguous between POST /2/files/download (inert) and /2/files/get_temporary_link, which mints an unauthenticated multi-hour public URL. Act-leaning and unverifiable without a bound endpoint → act; files.content.read also left the default grant"
-    },
-    {
-      "pkg": "dropbox",
-      "tool": "list_folder",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /2/files/list_folder — the cursor is ephemeral server state, not user-visible"
-    },
-    {
-      "pkg": "dropbox",
-      "tool": "search_files",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /2/files/search_v2 — RPC-over-POST, non-mutating"
-    },
-    {
-      "pkg": "figma",
-      "tool": "get_file",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/files/{key}"
-    },
-    {
-      "pkg": "figma",
-      "tool": "get_node",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /v1/files/{key}/nodes?ids= — read. Contingent: if ever bound to GET /v1/images/{key} it renders server-side and returns an unauthenticated ~30-day URL, which would be an act"
-    },
-    {
-      "pkg": "figma",
-      "tool": "list_comments",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/files/{key}/comments — no mark-as-read endpoint on this resource"
-    },
-    {
-      "pkg": "figma",
-      "tool": "post_comment",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v1/files/{key}/comments — visible to collaborators, notifies them"
-    },
-    {
-      "pkg": "github",
-      "tool": "create_issue_comment",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /repos/{o}/{r}/issues/{n}/comments — public comment + notifications"
-    },
-    {
-      "pkg": "github",
-      "tool": "get_file_contents",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /repos/{o}/{r}/contents/{path}"
-    },
-    {
-      "pkg": "github",
-      "tool": "get_me",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /user — identity read, no state change"
-    },
-    {
-      "pkg": "github",
-      "tool": "list_issues",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /repos/{o}/{r}/issues"
-    },
-    {
-      "pkg": "github",
-      "tool": "search_code",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /search/code"
-    },
-    {
-      "pkg": "github",
-      "tool": "search_repositories",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /search/repositories"
-    },
-    {
-      "pkg": "gmail",
-      "tool": "get_message",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "users.messages.get — does NOT strip UNREAD"
-    },
-    {
-      "pkg": "gmail",
-      "tool": "list_labels",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "users.labels.list"
-    },
-    {
-      "pkg": "gmail",
-      "tool": "search_messages",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "users.messages.list?q= — mark-as-read requires messages.modify, unreachable under gmail.readonly"
-    },
-    {
-      "pkg": "gmail",
-      "tool": "send_message",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "users.messages.send — irreversible external send"
-    },
-    {
-      "pkg": "google-calendar",
-      "tool": "create_event",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "events.insert — sendUpdates emails attendees"
-    },
-    {
-      "pkg": "google-calendar",
-      "tool": "get_event",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "events.get — no view-tracking side effect"
-    },
-    {
-      "pkg": "google-calendar",
-      "tool": "list_calendars",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "calendarList.list"
-    },
-    {
-      "pkg": "google-calendar",
-      "tool": "list_events",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "events.list; singleEvents expansion is computed, not persisted"
-    },
-    {
-      "pkg": "google-drive",
-      "tool": "get_file",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "files.get / files.export (NOT files.download, which returns a long-running Operation)"
-    },
-    {
-      "pkg": "google-drive",
-      "tool": "list_folder",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "files.list with '{id}' in parents"
-    },
-    {
-      "pkg": "google-drive",
-      "tool": "search_files",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "files.list?q="
-    },
-    {
-      "pkg": "google-drive",
-      "tool": "share_file",
-      "verdict": "corrected",
-      "confidence": "verified",
-      "vendorOperation": "permissions.create — changes sharing. Scope corrected drive.file → drive: drive.file is per-file and cannot share a file discovered through search, so the declared scope could not perform the operation it describes"
-    },
-    {
-      "pkg": "hubspot",
-      "tool": "create_note",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /crm/v3/objects/notes + association — appears on the record timeline"
-    },
-    {
-      "pkg": "hubspot",
-      "tool": "get_deal",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /crm/v3/objects/deals/{id} — no timeline \"viewed\" event via API"
-    },
-    {
-      "pkg": "hubspot",
-      "tool": "list_companies",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /crm/v3/objects/companies"
-    },
-    {
-      "pkg": "hubspot",
-      "tool": "search_contacts",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /crm/v3/objects/contacts/search — read despite POST; burns portal API quota"
-    },
-    {
-      "pkg": "intercom",
-      "tool": "get_contact",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /contacts/{id}; last_seen_at is end-user activity, not written by an API read"
-    },
-    {
-      "pkg": "intercom",
-      "tool": "get_conversation",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /conversations/{id}; the read flag flips only via PUT"
-    },
-    {
-      "pkg": "intercom",
-      "tool": "reply_to_conversation",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /conversations/{id}/reply — delivers a message to a real customer"
-    },
-    {
-      "pkg": "intercom",
-      "tool": "search_conversations",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /conversations/search — read despite POST"
-    },
-    {
-      "pkg": "jira",
-      "tool": "get_issue",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /rest/api/3/issue/{id}; appends to recently-viewed history — a trace, not a mutation"
-    },
-    {
-      "pkg": "jira",
-      "tool": "list_sprints",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /rest/agile/1.0/board/{id}/sprint"
-    },
-    {
-      "pkg": "jira",
-      "tool": "search_issues",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /rest/api/3/search/jql — read despite POST"
-    },
-    {
-      "pkg": "jira",
-      "tool": "transition_issue",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /rest/api/3/issue/{id}/transitions — workflow state + webhooks"
-    },
-    {
-      "pkg": "linear",
-      "tool": "create_comment",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL commentCreate — visible, notifies subscribers"
-    },
-    {
-      "pkg": "linear",
-      "tool": "get_issue",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL issue(id:) — does not touch notification read state"
-    },
-    {
-      "pkg": "linear",
-      "tool": "list_issues",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL issues query (POST transport, read semantics)"
-    },
-    {
-      "pkg": "linear",
-      "tool": "list_projects",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL projects query"
-    },
-    {
-      "pkg": "monday",
-      "tool": "create_update",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL create_update — posts to the feed, notifies subscribers"
-    },
-    {
-      "pkg": "monday",
-      "tool": "get_items",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL items_page query"
-    },
-    {
-      "pkg": "monday",
-      "tool": "get_updates",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GraphQL updates query — reads the post feed; monday exposes no read-receipt mutation on updates"
-    },
-    {
-      "pkg": "monday",
-      "tool": "list_boards",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GraphQL boards query (POST transport)"
-    },
-    {
-      "pkg": "notion",
-      "tool": "append_block",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "PATCH /v1/blocks/{id}/children — mutates page content"
-    },
-    {
-      "pkg": "notion",
-      "tool": "get_page",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/pages/{id} (+ blocks children); no activity record for integrations"
-    },
-    {
-      "pkg": "notion",
-      "tool": "query_database",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "POST /v1/databases/{id}/query — read despite POST"
-    },
-    {
-      "pkg": "notion",
-      "tool": "search",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v1/search — read despite POST"
-    },
-    {
-      "pkg": "pagerduty",
-      "tool": "acknowledge_incident",
-      "verdict": "corrected",
-      "confidence": "verified",
-      "vendorOperation": "PUT /incidents/{id} {status:\"acknowledged\"} — halts escalation. The authored DESCRIPTION was inverted (\"Pages responders\"); under Step 11 that sentence is the model’s only account of the effect, so it was corrected"
-    },
-    {
-      "pkg": "pagerduty",
-      "tool": "get_oncall",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /oncalls?schedule_ids[] (the endpoint is a list; the singular tool name is a misnomer)"
-    },
-    {
-      "pkg": "pagerduty",
-      "tool": "list_incidents",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /incidents — PagerDuty writes require a From header; this does not send one"
-    },
-    {
-      "pkg": "pagerduty",
-      "tool": "list_services",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /services"
-    },
-    {
-      "pkg": "paypal",
-      "tool": "get_invoice",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v2/invoicing/invoices/{id} — a pure read, but see scopeLimits: PayPal publishes no read-only invoicing scope"
-    },
-    {
-      "pkg": "paypal",
-      "tool": "list_transactions",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/reporting/transactions; the reporting scope is genuinely read-only"
-    },
-    {
-      "pkg": "paypal",
-      "tool": "send_invoice",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v2/invoicing/invoices/{id}/send — emails the recipient, creates a payable obligation"
-    },
-    {
-      "pkg": "salesforce",
-      "tool": "get_record",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /sobjects/{Object}/{id}"
-    },
-    {
-      "pkg": "salesforce",
-      "tool": "list_opportunities",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "wrapper over a SOQL SELECT or listviews results — both GETs"
-    },
-    {
-      "pkg": "salesforce",
-      "tool": "soql_query",
-      "verdict": "reclassified",
-      "confidence": "documented",
-      "vendorOperation": "/services/data/vXX/query?q= — SELECT-only, but SOQL FOR VIEW / FOR REFERENCE write LastViewedDate / LastReferencedDate and populate Recently Viewed. A vendor-side write driven by free-form model text on an ungated tool → act"
-    },
-    {
-      "pkg": "salesforce",
-      "tool": "update_record",
-      "verdict": "corrected",
-      "confidence": "verified",
-      "vendorOperation": "PATCH /sobjects/{Object}/{id}. Scope corrected api_write → api: api_write is not a Salesforce scope, so the least-privilege test had been passing on a fiction"
-    },
-    {
-      "pkg": "sentry",
-      "tool": "get_issue",
-      "verdict": "reclassified",
-      "confidence": "unverifiable",
-      "vendorOperation": "GET /api/0/issues/{id}/ — the group-details handler writes a GroupSeen row (the \"Seen by\" avatars). Unconfirmable from public docs and act-leaning → act, fail-closed"
-    },
-    {
-      "pkg": "sentry",
-      "tool": "list_issues",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /api/0/projects/{org}/{proj}/issues/"
-    },
-    {
-      "pkg": "sentry",
-      "tool": "list_releases",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /api/0/organizations/{org}/releases/"
-    },
-    {
-      "pkg": "sentry",
-      "tool": "resolve_issue",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "PUT /api/0/issues/{id}/ {\"status\":\"resolved\"}"
-    },
-    {
-      "pkg": "shopify",
-      "tool": "get_customer",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /customers/{id}.json — PII egress is a privacy concern, not a mutation"
-    },
-    {
-      "pkg": "shopify",
-      "tool": "list_orders",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /admin/api/{v}/orders.json — protected customer data, but no write"
-    },
-    {
-      "pkg": "shopify",
-      "tool": "list_products",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /admin/api/{v}/products.json"
-    },
-    {
-      "pkg": "shopify",
-      "tool": "update_inventory",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "inventoryAdjustQuantities — storefront-visible stock change"
-    },
-    {
-      "pkg": "slack",
-      "tool": "list_channels",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "conversations.list"
-    },
-    {
-      "pkg": "slack",
-      "tool": "post_message",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "chat.postMessage — externally visible, notifies members"
-    },
-    {
-      "pkg": "slack",
-      "tool": "read_messages",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "conversations.history — does NOT advance the read cursor (that is conversations.mark)"
-    },
-    {
-      "pkg": "slack",
-      "tool": "search_messages",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "search.messages — user-token only, an operational constraint not a class defect"
-    },
-    {
-      "pkg": "square",
-      "tool": "list_catalog",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v2/catalog/list"
-    },
-    {
-      "pkg": "square",
-      "tool": "list_orders",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v2/orders/search (SearchOrders) — Square has no GET list-orders; read despite POST"
-    },
-    {
-      "pkg": "square",
-      "tool": "list_payments",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v2/payments"
-    },
-    {
-      "pkg": "square",
-      "tool": "refund_payment",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v2/refunds — moves money, irreversible"
-    },
-    {
-      "pkg": "stripe",
-      "tool": "create_refund",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v1/refunds — moves money, irreversible"
-    },
-    {
-      "pkg": "stripe",
-      "tool": "get_invoice",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/invoices/{id} — distinct from finalize/send/void/pay"
-    },
-    {
-      "pkg": "stripe",
-      "tool": "list_customers",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/customers"
-    },
-    {
-      "pkg": "stripe",
-      "tool": "list_payment_intents",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v1/payment_intents"
-    },
-    {
-      "pkg": "web",
-      "tool": "web_feed",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "in-process HTTP GET + RSS/Atom parse (lab-runtime web-tools.ts) — read-only by construction"
-    },
-    {
-      "pkg": "web",
-      "tool": "web_fetch",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "in-process HTTP GET (lab-runtime web-tools.ts) — read-only by construction; no write verb exists in the implementation"
-    },
-    {
-      "pkg": "webflow",
-      "tool": "get_collection_items",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v2/collections/{id}/items — no publish side effect"
-    },
-    {
-      "pkg": "webflow",
-      "tool": "list_collections",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v2/sites/{id}/collections"
-    },
-    {
-      "pkg": "webflow",
-      "tool": "list_sites",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /v2/sites"
-    },
-    {
-      "pkg": "webflow",
-      "tool": "publish_site",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /v2/sites/{id}/publish — irreversible, world-visible"
-    },
-    {
-      "pkg": "zendesk",
-      "tool": "add_ticket_comment",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "PUT /api/v2/tickets/{id}.json with a comment — emails the requester, fires triggers"
-    },
-    {
-      "pkg": "zendesk",
-      "tool": "get_ticket",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /api/v2/tickets/{id}.json; agent \"viewing\" is a UI websocket feature, not an API effect"
-    },
-    {
-      "pkg": "zendesk",
-      "tool": "get_user",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /api/v2/users/{id}.json"
-    },
-    {
-      "pkg": "zendesk",
-      "tool": "search_tickets",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /api/v2/search.json?query="
-    },
-    {
-      "pkg": "zoom",
-      "tool": "get_transcript",
-      "verdict": "reclassified",
-      "confidence": "unverifiable",
-      "vendorOperation": "No Zoom operation of this name. The real path composes GET /meetings/{id}/recordings with a download_access_token, minting a bearer for an otherwise-private artifact and landing in the admin activity report → act"
-    },
-    {
-      "pkg": "zoom",
-      "tool": "list_meetings",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "GET /users/{id}/meetings"
-    },
-    {
-      "pkg": "zoom",
-      "tool": "list_recordings",
-      "verdict": "correct",
-      "confidence": "documented",
-      "vendorOperation": "GET /users/{id}/recordings — responses can carry download_url/download_access_token (same minting caveat, lower severity)"
-    },
-    {
-      "pkg": "zoom",
-      "tool": "schedule_meeting",
-      "verdict": "correct",
-      "confidence": "verified",
-      "vendorOperation": "POST /users/{id}/meetings — with registrants/calendar it emails invitees"
-    }
-  ]
+  {
+   "pkg": "airtable",
+   "tool": "get_record",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v0/{base}/{table}/{rec}"
+  },
+  {
+   "pkg": "airtable",
+   "tool": "list_bases",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v0/meta/bases"
+  },
+  {
+   "pkg": "airtable",
+   "tool": "list_records",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v0/{base}/{table}"
+  },
+  {
+   "pkg": "asana",
+   "tool": "add_comment",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /tasks/{gid}/stories — creates a story, notifies followers"
+  },
+  {
+   "pkg": "asana",
+   "tool": "get_task",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /tasks/{gid}"
+  },
+  {
+   "pkg": "asana",
+   "tool": "list_projects",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /projects"
+  },
+  {
+   "pkg": "asana",
+   "tool": "list_tasks",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /tasks?project={gid}"
+  },
+  {
+   "pkg": "browser",
+   "tool": "browser_act",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "HTTP dispatch to the Potion browser service — dispatches a real click/type/select/press into someone else's UI; classified ACT fail-closed with no safe-click carve-outs, because a click's side effects are unknowable from the client (the X6 doctrine: an act is an act)"
+  },
+  {
+   "pkg": "browser",
+   "tool": "browser_open",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "HTTP dispatch to the Potion browser service (lab-runtime browser-tools.ts → deploy/browser) — navigates a fresh cookie-less Chromium context and READS the resulting page; the load itself is the web_fetch class of observation, and the service's per-request SSRF interception bounds where it can look"
+  },
+  {
+   "pkg": "browser",
+   "tool": "browser_read",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "HTTP dispatch to the Potion browser service — re-extracts the open page's text and control refs; no page interaction occurs, read-only by construction"
+  },
+  {
+   "pkg": "canva",
+   "tool": "export_design",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "POST /v1/exports — async job, downloadable asset URL, export quota"
+  },
+  {
+   "pkg": "canva",
+   "tool": "get_design",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/designs/{id}"
+  },
+  {
+   "pkg": "canva",
+   "tool": "list_designs",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/designs"
+  },
+  {
+   "pkg": "canva",
+   "tool": "list_folders",
+   "verdict": "correct",
+   "confidence": "unverifiable",
+   "vendorOperation": "No flat list-folders operation exists in Canva Connect (real surface is GET /v1/folders/{id}/items) and the declared parameters are empty, so the tool is unfulfillable as shaped. Read-leaning: every folder retrieval is a GET, so it stays read and the mapping defect is recorded"
+  },
+  {
+   "pkg": "clickup",
+   "tool": "create_task",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /api/v2/list/{id}/task — notifies assignees/watchers"
+  },
+  {
+   "pkg": "clickup",
+   "tool": "get_task",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /api/v2/task/{id} — no read-receipt on the API path"
+  },
+  {
+   "pkg": "clickup",
+   "tool": "list_spaces",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /api/v2/team/{id}/space"
+  },
+  {
+   "pkg": "clickup",
+   "tool": "list_tasks",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /api/v2/list/{id}/task"
+  },
+  {
+   "pkg": "code",
+   "tool": "run_python",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "in-process dispatch to the Potion sandbox service (lab-runtime code-tools.ts → deploy/sandbox) — executes on an internal-only network with NO egress; classified read because it cannot act on the world outside the platform, and the workspace it mutates is the run’s own"
+  },
+  {
+   "pkg": "confluence",
+   "tool": "create_page",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /wiki/api/v2/pages — notifies space watchers"
+  },
+  {
+   "pkg": "confluence",
+   "tool": "get_page",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /wiki/api/v2/pages/{id}; REST reads do not increment the analytics view counter"
+  },
+  {
+   "pkg": "confluence",
+   "tool": "list_spaces",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /wiki/api/v2/spaces"
+  },
+  {
+   "pkg": "confluence",
+   "tool": "search_pages",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /wiki/rest/api/search (CQL)"
+  },
+  {
+   "pkg": "discord",
+   "tool": "list_channels",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /guilds/{id}/channels — note the OAuth guilds scope only authorizes GET /users/@me/guilds; this needs a bot token"
+  },
+  {
+   "pkg": "discord",
+   "tool": "read_messages",
+   "verdict": "reclassified",
+   "confidence": "documented",
+   "vendorOperation": "GET /channels/{id}/messages is a pure read, but messages.read is an RPC-local scope (not REST) so the workable credential is a write-capable bot token, and a user-session implementation acks the channel on the same path, mutating read state → act; messages.read also left the default grant"
+  },
+  {
+   "pkg": "discord",
+   "tool": "send_message",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /channels/{id}/messages — externally visible"
+  },
+  {
+   "pkg": "dropbox",
+   "tool": "create_shared_link",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /2/sharing/create_shared_link_with_settings — changes visibility"
+  },
+  {
+   "pkg": "dropbox",
+   "tool": "get_file",
+   "verdict": "reclassified",
+   "confidence": "documented",
+   "vendorOperation": "Ambiguous between POST /2/files/download (inert) and /2/files/get_temporary_link, which mints an unauthenticated multi-hour public URL. Act-leaning and unverifiable without a bound endpoint → act; files.content.read also left the default grant"
+  },
+  {
+   "pkg": "dropbox",
+   "tool": "list_folder",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /2/files/list_folder — the cursor is ephemeral server state, not user-visible"
+  },
+  {
+   "pkg": "dropbox",
+   "tool": "search_files",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /2/files/search_v2 — RPC-over-POST, non-mutating"
+  },
+  {
+   "pkg": "figma",
+   "tool": "get_file",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/files/{key}"
+  },
+  {
+   "pkg": "figma",
+   "tool": "get_node",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /v1/files/{key}/nodes?ids= — read. Contingent: if ever bound to GET /v1/images/{key} it renders server-side and returns an unauthenticated ~30-day URL, which would be an act"
+  },
+  {
+   "pkg": "figma",
+   "tool": "list_comments",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/files/{key}/comments — no mark-as-read endpoint on this resource"
+  },
+  {
+   "pkg": "figma",
+   "tool": "post_comment",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v1/files/{key}/comments — visible to collaborators, notifies them"
+  },
+  {
+   "pkg": "github",
+   "tool": "create_issue_comment",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /repos/{o}/{r}/issues/{n}/comments — public comment + notifications"
+  },
+  {
+   "pkg": "github",
+   "tool": "get_file_contents",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /repos/{o}/{r}/contents/{path}"
+  },
+  {
+   "pkg": "github",
+   "tool": "get_me",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /user — identity read, no state change"
+  },
+  {
+   "pkg": "github",
+   "tool": "list_issues",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /repos/{o}/{r}/issues"
+  },
+  {
+   "pkg": "github",
+   "tool": "search_code",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /search/code"
+  },
+  {
+   "pkg": "github",
+   "tool": "search_repositories",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /search/repositories"
+  },
+  {
+   "pkg": "gmail",
+   "tool": "get_message",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "users.messages.get — does NOT strip UNREAD"
+  },
+  {
+   "pkg": "gmail",
+   "tool": "list_labels",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "users.labels.list"
+  },
+  {
+   "pkg": "gmail",
+   "tool": "search_messages",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "users.messages.list?q= — mark-as-read requires messages.modify, unreachable under gmail.readonly"
+  },
+  {
+   "pkg": "gmail",
+   "tool": "send_message",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "users.messages.send — irreversible external send"
+  },
+  {
+   "pkg": "google-calendar",
+   "tool": "create_event",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "events.insert — sendUpdates emails attendees"
+  },
+  {
+   "pkg": "google-calendar",
+   "tool": "get_event",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "events.get — no view-tracking side effect"
+  },
+  {
+   "pkg": "google-calendar",
+   "tool": "list_calendars",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "calendarList.list"
+  },
+  {
+   "pkg": "google-calendar",
+   "tool": "list_events",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "events.list; singleEvents expansion is computed, not persisted"
+  },
+  {
+   "pkg": "google-drive",
+   "tool": "get_file",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "files.get / files.export (NOT files.download, which returns a long-running Operation)"
+  },
+  {
+   "pkg": "google-drive",
+   "tool": "list_folder",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "files.list with '{id}' in parents"
+  },
+  {
+   "pkg": "google-drive",
+   "tool": "search_files",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "files.list?q="
+  },
+  {
+   "pkg": "google-drive",
+   "tool": "share_file",
+   "verdict": "corrected",
+   "confidence": "verified",
+   "vendorOperation": "permissions.create — changes sharing. Scope corrected drive.file → drive: drive.file is per-file and cannot share a file discovered through search, so the declared scope could not perform the operation it describes"
+  },
+  {
+   "pkg": "hubspot",
+   "tool": "create_note",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /crm/v3/objects/notes + association — appears on the record timeline"
+  },
+  {
+   "pkg": "hubspot",
+   "tool": "get_deal",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /crm/v3/objects/deals/{id} — no timeline \"viewed\" event via API"
+  },
+  {
+   "pkg": "hubspot",
+   "tool": "list_companies",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /crm/v3/objects/companies"
+  },
+  {
+   "pkg": "hubspot",
+   "tool": "search_contacts",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /crm/v3/objects/contacts/search — read despite POST; burns portal API quota"
+  },
+  {
+   "pkg": "intercom",
+   "tool": "get_contact",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /contacts/{id}; last_seen_at is end-user activity, not written by an API read"
+  },
+  {
+   "pkg": "intercom",
+   "tool": "get_conversation",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /conversations/{id}; the read flag flips only via PUT"
+  },
+  {
+   "pkg": "intercom",
+   "tool": "reply_to_conversation",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /conversations/{id}/reply — delivers a message to a real customer"
+  },
+  {
+   "pkg": "intercom",
+   "tool": "search_conversations",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /conversations/search — read despite POST"
+  },
+  {
+   "pkg": "jira",
+   "tool": "get_issue",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /rest/api/3/issue/{id}; appends to recently-viewed history — a trace, not a mutation"
+  },
+  {
+   "pkg": "jira",
+   "tool": "list_sprints",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /rest/agile/1.0/board/{id}/sprint"
+  },
+  {
+   "pkg": "jira",
+   "tool": "search_issues",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /rest/api/3/search/jql — read despite POST"
+  },
+  {
+   "pkg": "jira",
+   "tool": "transition_issue",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /rest/api/3/issue/{id}/transitions — workflow state + webhooks"
+  },
+  {
+   "pkg": "linear",
+   "tool": "create_comment",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL commentCreate — visible, notifies subscribers"
+  },
+  {
+   "pkg": "linear",
+   "tool": "get_issue",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL issue(id:) — does not touch notification read state"
+  },
+  {
+   "pkg": "linear",
+   "tool": "list_issues",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL issues query (POST transport, read semantics)"
+  },
+  {
+   "pkg": "linear",
+   "tool": "list_projects",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL projects query"
+  },
+  {
+   "pkg": "monday",
+   "tool": "create_update",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL create_update — posts to the feed, notifies subscribers"
+  },
+  {
+   "pkg": "monday",
+   "tool": "get_items",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL items_page query"
+  },
+  {
+   "pkg": "monday",
+   "tool": "get_updates",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GraphQL updates query — reads the post feed; monday exposes no read-receipt mutation on updates"
+  },
+  {
+   "pkg": "monday",
+   "tool": "list_boards",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GraphQL boards query (POST transport)"
+  },
+  {
+   "pkg": "notion",
+   "tool": "append_block",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "PATCH /v1/blocks/{id}/children — mutates page content"
+  },
+  {
+   "pkg": "notion",
+   "tool": "get_page",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/pages/{id} (+ blocks children); no activity record for integrations"
+  },
+  {
+   "pkg": "notion",
+   "tool": "query_database",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "POST /v1/databases/{id}/query — read despite POST"
+  },
+  {
+   "pkg": "notion",
+   "tool": "search",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v1/search — read despite POST"
+  },
+  {
+   "pkg": "pagerduty",
+   "tool": "acknowledge_incident",
+   "verdict": "corrected",
+   "confidence": "verified",
+   "vendorOperation": "PUT /incidents/{id} {status:\"acknowledged\"} — halts escalation. The authored DESCRIPTION was inverted (\"Pages responders\"); under Step 11 that sentence is the model’s only account of the effect, so it was corrected"
+  },
+  {
+   "pkg": "pagerduty",
+   "tool": "get_oncall",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /oncalls?schedule_ids[] (the endpoint is a list; the singular tool name is a misnomer)"
+  },
+  {
+   "pkg": "pagerduty",
+   "tool": "list_incidents",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /incidents — PagerDuty writes require a From header; this does not send one"
+  },
+  {
+   "pkg": "pagerduty",
+   "tool": "list_services",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /services"
+  },
+  {
+   "pkg": "paypal",
+   "tool": "get_invoice",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v2/invoicing/invoices/{id} — a pure read, but see scopeLimits: PayPal publishes no read-only invoicing scope"
+  },
+  {
+   "pkg": "paypal",
+   "tool": "list_transactions",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/reporting/transactions; the reporting scope is genuinely read-only"
+  },
+  {
+   "pkg": "paypal",
+   "tool": "send_invoice",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v2/invoicing/invoices/{id}/send — emails the recipient, creates a payable obligation"
+  },
+  {
+   "pkg": "salesforce",
+   "tool": "get_record",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /sobjects/{Object}/{id}"
+  },
+  {
+   "pkg": "salesforce",
+   "tool": "list_opportunities",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "wrapper over a SOQL SELECT or listviews results — both GETs"
+  },
+  {
+   "pkg": "salesforce",
+   "tool": "soql_query",
+   "verdict": "reclassified",
+   "confidence": "documented",
+   "vendorOperation": "/services/data/vXX/query?q= — SELECT-only, but SOQL FOR VIEW / FOR REFERENCE write LastViewedDate / LastReferencedDate and populate Recently Viewed. A vendor-side write driven by free-form model text on an ungated tool → act"
+  },
+  {
+   "pkg": "salesforce",
+   "tool": "update_record",
+   "verdict": "corrected",
+   "confidence": "verified",
+   "vendorOperation": "PATCH /sobjects/{Object}/{id}. Scope corrected api_write → api: api_write is not a Salesforce scope, so the least-privilege test had been passing on a fiction"
+  },
+  {
+   "pkg": "sentry",
+   "tool": "get_issue",
+   "verdict": "reclassified",
+   "confidence": "unverifiable",
+   "vendorOperation": "GET /api/0/issues/{id}/ — the group-details handler writes a GroupSeen row (the \"Seen by\" avatars). Unconfirmable from public docs and act-leaning → act, fail-closed"
+  },
+  {
+   "pkg": "sentry",
+   "tool": "list_issues",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /api/0/projects/{org}/{proj}/issues/"
+  },
+  {
+   "pkg": "sentry",
+   "tool": "list_releases",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /api/0/organizations/{org}/releases/"
+  },
+  {
+   "pkg": "sentry",
+   "tool": "resolve_issue",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "PUT /api/0/issues/{id}/ {\"status\":\"resolved\"}"
+  },
+  {
+   "pkg": "shopify",
+   "tool": "get_customer",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /customers/{id}.json — PII egress is a privacy concern, not a mutation"
+  },
+  {
+   "pkg": "shopify",
+   "tool": "list_orders",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /admin/api/{v}/orders.json — protected customer data, but no write"
+  },
+  {
+   "pkg": "shopify",
+   "tool": "list_products",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /admin/api/{v}/products.json"
+  },
+  {
+   "pkg": "shopify",
+   "tool": "update_inventory",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "inventoryAdjustQuantities — storefront-visible stock change"
+  },
+  {
+   "pkg": "slack",
+   "tool": "list_channels",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "conversations.list"
+  },
+  {
+   "pkg": "slack",
+   "tool": "post_message",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "chat.postMessage — externally visible, notifies members"
+  },
+  {
+   "pkg": "slack",
+   "tool": "read_messages",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "conversations.history — does NOT advance the read cursor (that is conversations.mark)"
+  },
+  {
+   "pkg": "slack",
+   "tool": "search_messages",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "search.messages — user-token only, an operational constraint not a class defect"
+  },
+  {
+   "pkg": "square",
+   "tool": "list_catalog",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v2/catalog/list"
+  },
+  {
+   "pkg": "square",
+   "tool": "list_orders",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v2/orders/search (SearchOrders) — Square has no GET list-orders; read despite POST"
+  },
+  {
+   "pkg": "square",
+   "tool": "list_payments",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v2/payments"
+  },
+  {
+   "pkg": "square",
+   "tool": "refund_payment",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v2/refunds — moves money, irreversible"
+  },
+  {
+   "pkg": "stripe",
+   "tool": "create_refund",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v1/refunds — moves money, irreversible"
+  },
+  {
+   "pkg": "stripe",
+   "tool": "get_invoice",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/invoices/{id} — distinct from finalize/send/void/pay"
+  },
+  {
+   "pkg": "stripe",
+   "tool": "list_customers",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/customers"
+  },
+  {
+   "pkg": "stripe",
+   "tool": "list_payment_intents",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v1/payment_intents"
+  },
+  {
+   "pkg": "web",
+   "tool": "web_feed",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "in-process HTTP GET + RSS/Atom parse (lab-runtime web-tools.ts) — read-only by construction"
+  },
+  {
+   "pkg": "web",
+   "tool": "web_fetch",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "in-process HTTP GET (lab-runtime web-tools.ts) — read-only by construction; no write verb exists in the implementation"
+  },
+  {
+   "pkg": "webflow",
+   "tool": "get_collection_items",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v2/collections/{id}/items — no publish side effect"
+  },
+  {
+   "pkg": "webflow",
+   "tool": "list_collections",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v2/sites/{id}/collections"
+  },
+  {
+   "pkg": "webflow",
+   "tool": "list_sites",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /v2/sites"
+  },
+  {
+   "pkg": "webflow",
+   "tool": "publish_site",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /v2/sites/{id}/publish — irreversible, world-visible"
+  },
+  {
+   "pkg": "zendesk",
+   "tool": "add_ticket_comment",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "PUT /api/v2/tickets/{id}.json with a comment — emails the requester, fires triggers"
+  },
+  {
+   "pkg": "zendesk",
+   "tool": "get_ticket",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /api/v2/tickets/{id}.json; agent \"viewing\" is a UI websocket feature, not an API effect"
+  },
+  {
+   "pkg": "zendesk",
+   "tool": "get_user",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /api/v2/users/{id}.json"
+  },
+  {
+   "pkg": "zendesk",
+   "tool": "search_tickets",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /api/v2/search.json?query="
+  },
+  {
+   "pkg": "zoom",
+   "tool": "get_transcript",
+   "verdict": "reclassified",
+   "confidence": "unverifiable",
+   "vendorOperation": "No Zoom operation of this name. The real path composes GET /meetings/{id}/recordings with a download_access_token, minting a bearer for an otherwise-private artifact and landing in the admin activity report → act"
+  },
+  {
+   "pkg": "zoom",
+   "tool": "list_meetings",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GET /users/{id}/meetings"
+  },
+  {
+   "pkg": "zoom",
+   "tool": "list_recordings",
+   "verdict": "correct",
+   "confidence": "documented",
+   "vendorOperation": "GET /users/{id}/recordings — responses can carry download_url/download_access_token (same minting caveat, lower severity)"
+  },
+  {
+   "pkg": "zoom",
+   "tool": "schedule_meeting",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "POST /users/{id}/meetings — with registrants/calendar it emails invitees"
+  }
+ ]
 }

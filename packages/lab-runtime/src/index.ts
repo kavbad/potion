@@ -32,6 +32,7 @@ export {
 } from './mcp-tools.js';
 export * from './beat.js';
 export * from './fanout.js';
+export * from './browser-tools.js';
 export * from './graduation.js';
 export * from './evidence.js';
 export * from './apply-graduation.js';
