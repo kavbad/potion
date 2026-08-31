@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, contractRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
 import { planLedgerMessage } from './plan.js';
 
@@ -97,6 +97,7 @@ export function replayRun(
   let estSpent = 0;
   let modelSteps = 0;
   let derivedTerminal: { state: string; atSeq: number } | null = null;
+  let askedAlready = false;
   // Step 8: a TOOL-BEARING task run ends with the loop's deliberate
   // tool-free wrap-up call — after a done-shaped step, expect exactly one
   // more model step derived as messages + wrapUpMessage().
@@ -178,13 +179,18 @@ export function replayRun(
       // Adopt the RECORD to keep later comparisons local.
       messages = [...((p.requestPayload?.messages as ChatMessage[] | undefined) ?? messages)];
       messages.push({ role: 'assistant', content: p.responseText ?? '' });
-      // ask_operator (2026-08-31, mirrored same commit): the loop PARKS on an
-      // ask call — no tool step ever answers it, so it never becomes pending.
-      pendingToolCalls = calls
-        .filter((c) => c.function.name !== 'ask_operator')
-        .map((c) => ({ name: c.function.name, args: c.function.arguments }));
+      // ask_operator (2026-08-31, mirrored same commit): calls stay pending —
+      // a PARKED ask is cleared by its worker-question check-in below, and a
+      // helper's refused ask is consumed by its recorded tool step like any
+      // call. The record itself says which happened.
+      pendingToolCalls = calls.map((c) => ({ name: c.function.name, args: c.function.arguments }));
 
-      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task') {
+      // THE UNFILLED-SLOT LAW (mirrored same commit): a task goal still
+      // carrying an authored input slot cannot complete on its first no-tool
+      // stop — the loop parked it as a worker-question; the check-in step
+      // that follows derives the awaiting-human.
+      const slotParked = spec.mission.kind === 'task' && !askedAlready && hasUnfilledSlot(spec.mission.goal);
+      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked) {
         if (runHadTools && !expectWrapUp) {
           // The wrap-up follows; terminal completes AFTER it.
           expectWrapUp = true;
@@ -271,6 +277,7 @@ export function replayRun(
     // the ask in the same response — the loop dropped them, so does replay.
     if ((p as { checkInTrigger?: string }).checkInTrigger === 'worker-question') {
       pendingToolCalls = [];
+      askedAlready = true;
     }
     if (derivedTerminal === null) {
       derivedTerminal = { state: 'awaiting-human', atSeq: step.seq };

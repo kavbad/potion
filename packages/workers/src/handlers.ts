@@ -4710,7 +4710,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             subOut = await runLeg({
               db: ctx.db, client, runId: subId, orgId: payload.orgId,
               spec: subSpec, harnessHash: run.harnessHash,
-              tools: t.tools, legNotes: t.legNotes, toolGuidance: t.guidance, policyRefs,
+              tools: t.tools, legNotes: t.legNotes, toolGuidance: t.guidance, policyRefs, askChannel: 'none',
             });
           } while (subOut.status === 'leg-cap');
           const subSteps = await listLabStepsRepo(ctx.db, subId, payload.orgId);
@@ -4756,7 +4756,10 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
               });
         return {
           tools: [...builtins.tools, ...mcp.tools, ...(fanTool !== null ? [fanTool] : [])],
-          guidance: [...builtins.guidance, ...mcp.guidance],
+          guidance: [
+            'ask_operator — your question channel to the operator: when the mission is missing information you need (an unfilled [LIKE THIS] slot, a URL, a file, a concrete choice), call ask_operator with ONE specific question as your FIRST move; the run pauses and the answer arrives as your next message. Never end the run by asking in plain text — a final message is filed as your RESULT, and a result that asks a question is a failed mission.',
+            ...builtins.guidance, ...mcp.guidance,
+          ],
           legNotes: [...builtins.legNotes, ...mcp.legNotes],
           close: async () => {
             await builtins.close().catch(() => {});

@@ -100,6 +100,10 @@ export interface RunLegOptions {
   /** Step 11 §7: authored per-package usage preambles for the connectors
    * whose tools loaded this leg (see systemPrompt). */
   toolGuidance?: readonly string[];
+  /** 'operator' (default): ask_operator parks the run for the operator's
+   * answer, and the unfilled-slot law applies. 'none' (helpers): nobody
+   * can answer — the ask tool refuses typed and stops complete normally. */
+  askChannel?: 'operator' | 'none';
   /** Step 8 per-slot policy pins (the dial's materialized rows): tool-capable
    * calls ride tools ?? brain; tool-free calls (incl. the wrap-up) ride brain. */
   policyRefs?: { brain?: string; tools?: string };
@@ -190,6 +194,15 @@ export function steerMessage(text: string): { role: 'user'; content: string } {
  * the before-external-action trigger, and this one carries no action. */
 export const ASK_TOOL_NAME = 'ask_operator';
 
+/** An authored input slot the operator never filled — [PASTE THE APP URL
+ * HERE] and kin (two+ ALL-CAPS words in brackets). A mission still carrying
+ * one is not yet specified: the unfilled-slot law refuses to let a no-tool
+ * stop complete it and converts that stop into the ask the model should
+ * have made. */
+export function hasUnfilledSlot(goal: string): boolean {
+  return /\[[A-Z][A-Z0-9./-]* [A-Z0-9 ./-]{2,56}\]/.test(goal);
+}
+
 export function buildAskTool(): LabTool {
   return {
     name: ASK_TOOL_NAME,
@@ -204,8 +217,11 @@ export function buildAskTool(): LabTool {
     },
     external: false,
     core: true,
-    // Intercepted by the loop before execution — this body never runs.
-    run: async (): Promise<unknown> => ({ error: 'ask_operator is handled by the loop' }),
+    // Intercepted by the loop when an operator channel exists; a helper
+    // (askChannel 'none') reaches this body and gets the honest refusal.
+    run: async (): Promise<unknown> => ({
+      error: 'you have no operator channel — you are a delegated helper. Finish with your best result and name plainly what information was missing.',
+    }),
   };
 }
 
@@ -352,6 +368,12 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
 
   try {
     const priorSteps = await listLabSteps(opts.db, opts.runId, opts.orgId);
+    // One honest ask per run for unfilled-slot missions (the spec is frozen,
+    // so the slot never leaves the goal — without this guard the answered
+    // run could never complete).
+    const askedBefore = priorSteps.some(
+      (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
+    );
     const memory = await getLabMemory(opts.db, opts.orgId, opts.harnessHash);
     if (beatOn) beatRef.current = beatFromMemory(memory);
     let messages: ChatMessage[];
@@ -651,7 +673,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           // answer resumes the leg like any check-in answer. Calls after
           // the ask in the same response are dropped (the park wins) —
           // replay mirrors by clearing its pending set at this step.
-          if (call.function.name === ASK_TOOL_NAME) {
+          if (call.function.name === ASK_TOOL_NAME && (opts.askChannel ?? 'operator') === 'operator') {
             let q = 'The worker needs more information to continue.';
             try {
               const i = JSON.parse(call.function.arguments || '{}') as { question?: unknown };
@@ -786,6 +808,26 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
 
       // No tool calls + natural stop → a TASK mission is complete.
       if (opts.spec.mission.kind === 'task' && result.finishReason === 'stop') {
+        // THE UNFILLED-SLOT LAW (2026-08-31, from the operator's second
+        // failed trial): a goal still carrying an authored input slot is
+        // not yet a mission — a no-tool stop on it is almost always the
+        // model asking for the inputs in prose, and prose filed as a
+        // result is the hollow completion this whole day was about. The
+        // stop BECOMES the ask: its text parks the run as the question.
+        // Once per run (askedBefore), operator channel only. Mirrored in
+        // replay same commit.
+        if ((opts.askChannel ?? 'operator') === 'operator' && !askedBefore && hasUnfilledSlot(opts.spec.mission.goal)) {
+          const q = (result.text ?? '').trim().slice(0, 600)
+            || 'The mission has unfilled input slots — what should they be?';
+          seq += 1;
+          await appendLabStep(opts.db, {
+            runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
+            payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'worker-question', checkInQuestion: q, clockMs: clock.now(), rngSample: rng() }),
+            harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
+          });
+          await fenced.transition('awaiting-human', undefined, q);
+          return { status: 'awaiting-human', question: q, steps: stepsThisLeg };
+        }
         // Step 8: TOOL-BEARING runs end with ONE deliberate tool-free call
         // — the wrap-up — served under brain.policy and stamped 'brain'
         // (the toolPolicy activation; Step 7's exit criterion). Its text

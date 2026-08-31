@@ -174,6 +174,66 @@ describe('ask_operator parks the run and asks — never a hollow completion', ()
     await h.close();
   }, 60_000);
 
+  it('THE UNFILLED-SLOT LAW: a prose stop on a slotted goal parks as the question instead of completing; the answered run completes; replay agrees', async () => {
+    const s = spec({
+      mission: {
+        kind: 'task',
+        goal: 'Open [PASTE THE APP URL HERE] in the real browser and do this task: [DESCRIBE THE TASK HERE].',
+        doneDefinition: 'the task is done in the app',
+      },
+    });
+    const { h, hash } = await freshRun(s);
+    // The model answers in PROSE asking for the details — exactly the live
+    // failure. The loop must refuse the completion and park with this text.
+    const prose = 'I need the actual mission details: the URL to open and the task to perform. Could you provide them?';
+    const leg1 = await runLeg({
+      db: h.db, client: scripted([ok({ text: prose })]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    expect(leg1.status).toBe('awaiting-human');
+    if (leg1.status === 'awaiting-human') expect(leg1.question).toBe(prose);
+    expect((await getLabRun(h.db, 'run-ask', ORG))!.state).toBe('awaiting-human');
+
+    // The answer arrives; the goal STILL carries its slots (specs are
+    // frozen) — the one-ask-per-run guard lets the resumed run complete.
+    await answerLabRun(h.db, 'run-ask', ORG, 'https://board.example — file one card titled "hello"');
+    const leg2 = await runLeg({
+      db: h.db, client: scripted([
+        ok({ text: 'Filed the card titled "hello" on https://board.example; the board shows it at the top. done.' }),
+        ok({ text: 'Wrap-up: asked for the mission details, received them, filed the card; done.' }),
+      ]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    expect(leg2.status).toBe('completed');
+    const rec = await recordOf(h);
+    const res = replayRun(s, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it("a helper (askChannel 'none') gets the typed refusal, not a park — and its record replays clean", async () => {
+    const s = spec();
+    const { h, hash } = await freshRun(s);
+    const leg = await runLeg({
+      db: h.db, client: scripted([
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [askCall('Which board?')] }),
+        ok({ text: 'No operator channel exists; proceeding with my best result: the mission lacked a board name, so I report that gap plainly.' }),
+        ok({ text: 'Wrap-up: could not ask; reported the gap; done.' }),
+      ]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [], askChannel: 'none',
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-ask', ORG);
+    expect(steps.some((x) => x.kind === 'check-in')).toBe(false);
+    const askStep = steps.find((x) => x.kind === 'tool');
+    expect(askStep).toBeDefined();
+    expect(JSON.stringify(askStep!.payload)).toContain('no operator channel');
+    const rec = await recordOf(h);
+    const res = replayRun(s, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
   it('calls bundled after the ask are dropped — the park wins; replay agrees', async () => {
     const s = spec();
     const { h, hash } = await freshRun(s);
