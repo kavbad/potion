@@ -248,6 +248,16 @@ stay and interleave; the X-sequence is the capability spine.
   contracts: numbers re-computed, generated code's tests actually run
   before completion. "Verified" means RAN.
 - **X4 — "It multiplies."** Fan-out sub-runs, one fuel tree, one trace.
+  **SHIPPED 2026-08-30, commit 4420550, deployed** (migration 0071).
+  spec.fanOut → the `delegate` tool: helpers are full recorded runs
+  (parent_run_id) on the parent's own key, sequential, builtins-only,
+  no check-ins, depth 1, memory off — structurally unable to act, park,
+  or recurse. One fuel tree enforced in BOTH directions: slices from
+  remaining budget with a synthesis reserve, and the parent's fuel gate
+  counts recorded helper spend via one pure derivation shared with
+  replay (a delegated run replays divergence-free — tested). Helpers
+  excluded from feed/digest/run-list; family card + helper banner on
+  run pages; "may it split the work?" on the recipe card.
 - **X5 — "Any tool."** BYO-MCP through full custody.
 - **X6 — the honest gap, named: browser-driving.** OpenClaw-types can
   operate a computer: click through web apps, fill forms, drive UIs. After
