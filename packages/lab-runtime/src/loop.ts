@@ -181,6 +181,34 @@ export function steerMessage(text: string): { role: 'user'; content: string } {
   };
 }
 
+/** The worker→operator question channel (2026-08-31 — found live: a
+ * worker missing its inputs asked for them in a FINAL MESSAGE and then
+ * "completed"; the honest move is to PARK and ask). ask_operator rides the
+ * same awaiting-human machinery as every check-in: the run pauses, the
+ * operator is notified, their answer resumes the leg as the next message.
+ * It can never authorize an external action — the consumption law keys on
+ * the before-external-action trigger, and this one carries no action. */
+export const ASK_TOOL_NAME = 'ask_operator';
+
+export function buildAskTool(): LabTool {
+  return {
+    name: ASK_TOOL_NAME,
+    description:
+      'Ask the operator ONE clarifying question when the mission is missing information you genuinely need (a URL, a file, a concrete choice). ' +
+      'The run pauses until they answer; their answer arrives as your next message. Use this INSTEAD of guessing, inventing data, or finishing without doing the work. ' +
+      'Never use it to request approval for an external action — external actions ask automatically.',
+    parameters: {
+      type: 'object',
+      properties: { question: { type: 'string', description: 'The one question, self-contained and specific.' } },
+      required: ['question'],
+    },
+    external: false,
+    core: true,
+    // Intercepted by the loop before execution — this body never runs.
+    run: async (): Promise<unknown> => ({ error: 'ask_operator is handled by the loop' }),
+  };
+}
+
 export function actionFingerprint(
   toolName: string,
   rawArguments: string,
@@ -294,6 +322,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
   const tools = [
     ...(opts.tools ?? []),
     buildPlanTool(),
+    buildAskTool(),
     ...(beatOn
       ? [buildBeatTool({ state: beatRef, today: () => new Date(clock.now()).toISOString().slice(0, 10) })]
       : []),
@@ -616,6 +645,27 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
 
       if (result.toolCalls.length > 0) {
         for (const call of result.toolCalls) {
+          // ask_operator (2026-08-31): the worker parks and ASKS. Recorded
+          // as a check-in (trigger worker-question, no action — it can
+          // never arm the pore's consumption), then awaiting-human; the
+          // answer resumes the leg like any check-in answer. Calls after
+          // the ask in the same response are dropped (the park wins) —
+          // replay mirrors by clearing its pending set at this step.
+          if (call.function.name === ASK_TOOL_NAME) {
+            let q = 'The worker needs more information to continue.';
+            try {
+              const i = JSON.parse(call.function.arguments || '{}') as { question?: unknown };
+              if (typeof i.question === 'string' && i.question.trim() !== '') q = i.question.trim().slice(0, 600);
+            } catch { /* malformed args → the generic question */ }
+            seq += 1;
+            await appendLabStep(opts.db, {
+              runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
+              payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'worker-question', checkInQuestion: q, clockMs: clock.now(), rngSample: rng() }),
+              harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
+            });
+            await fenced.transition('awaiting-human', undefined, q);
+            return { status: 'awaiting-human', question: q, steps: stepsThisLeg };
+          }
           const tool = tools.find((t) => t.name === call.function.name);
           if (!tool) {
             await fenced.transition('failed', `model called unknown tool '${call.function.name}'`);

@@ -115,6 +115,25 @@
                 },
                 "description": "Maintain your durable task ledger. Pass the FULL plan every time (it replaces the previous one): tasks: [{id, title, status: pending|doing|done|blocked, note?}]. File a plan before multi-step work; update statuses as you go. The ledger survives interruptions and is re-shown to you when work resumes."
               }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "ask_operator",
+                "parameters": {
+                  "type": "object",
+                  "required": [
+                    "question"
+                  ],
+                  "properties": {
+                    "question": {
+                      "type": "string",
+                      "description": "The one question, self-contained and specific."
+                    }
+                  }
+                },
+                "description": "Ask the operator ONE clarifying question when the mission is missing information you genuinely need (a URL, a file, a concrete choice). The run pauses until they answer; their answer arrives as your next message. Use this INSTEAD of guessing, inventing data, or finishing without doing the work. Never use it to request approval for an external action — external actions ask automatically."
+              }
             }
           ],
           "messages": [

@@ -19,7 +19,7 @@ export interface DeliverableResult {
  * of a bare download list. Derived from the record; no second storage. */
 export function extractReport(
   spec: HarnessSpec,
-  steps: Array<{ seq: number; kind: string; payload: { responseText?: string; toolCalls?: unknown[]; finishReason?: string } }>,
+  steps: Array<{ seq: number; kind: string; payload: { responseText?: string; toolCalls?: unknown[]; finishReason?: string; requestPayload?: { messages?: Array<{ content?: string }> } } }>,
 ): { report: string; atSeq: number } | null {
   if (spec.contract !== undefined || spec.mission.kind !== 'task') return null;
   const ordered = [...steps].sort((a, b) => b.seq - a.seq);
@@ -27,6 +27,14 @@ export function extractReport(
     if (s.kind !== 'model') continue;
     const calls = s.payload.toolCalls ?? [];
     if (calls.length > 0 || s.payload.finishReason !== 'stop') continue;
+    // 2026-08-31 (found live, on the operator's own screen): the WRAP-UP is
+    // process narration ("Summary of this run: 1. I received…"), not the
+    // answer — the report is the done-shaped step the completion law
+    // accepted, which sits BEFORE the wrap-up. A step answering the wrap-up
+    // prompt is skipped.
+    const msgs = s.payload.requestPayload?.messages ?? [];
+    const last = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
+    if (typeof last?.content === 'string' && last.content.startsWith('Summarize what you did in this run')) continue;
     const text = (s.payload.responseText ?? '').trim();
     if (text.length < 40) continue; // a bare "done." is not a report
     return { report: text, atSeq: s.seq };

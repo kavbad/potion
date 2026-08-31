@@ -1,8 +1,8 @@
 {
-  "name": "task-tools",
+  "name": "ask-park-resume",
   "spec": {
     "specVersion": 1,
-    "name": "golden tools harness",
+    "name": "golden ask harness",
     "brain": {
       "policy": {
         "type": "min_cost",
@@ -33,21 +33,21 @@
       "kind": "model",
       "payload": {
         "kind": "model",
-        "slot": "tools",
+        "slot": "brain",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
           "completionTokens": 5
         },
         "clockMs": 1780000001000,
-        "rngSample": 0.6101794545538723,
+        "rngSample": 0.8422662299126387,
         "toolCalls": [
           {
-            "id": "t1",
+            "id": "ask1",
             "type": "function",
             "function": {
-              "name": "search",
-              "arguments": "{\"q\":\"weekly report\"}"
+              "name": "ask_operator",
+              "arguments": "{\"question\":\"What URL should I open?\"}"
             }
           }
         ],
@@ -64,16 +64,6 @@
             {
               "type": "function",
               "function": {
-                "name": "search",
-                "parameters": {
-                  "type": "object"
-                },
-                "description": "search the corpus"
-              }
-            },
-            {
-              "type": "function",
-              "function": {
                 "name": "update_plan",
                 "parameters": {
                   "type": "object",
@@ -144,7 +134,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden tools harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden ask harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",
@@ -156,25 +146,13 @@
     },
     {
       "seq": 2,
-      "kind": "tool",
+      "kind": "check-in",
       "payload": {
-        "kind": "tool",
+        "kind": "check-in",
         "clockMs": 1780000003000,
-        "toolName": "search",
-        "rngSample": 0.18226705002598464,
-        "toolInput": {
-          "q": "weekly report"
-        },
-        "toolOutput": {
-          "hits": [
-            "result for {\"q\":\"weekly report\"}"
-          ],
-          "_memoryWrites": {
-            "lastQuery": {
-              "q": "weekly report"
-            }
-          }
-        }
+        "rngSample": 0.14699250203557312,
+        "checkInTrigger": "worker-question",
+        "checkInQuestion": "What URL should I open?"
       }
     },
     {
@@ -182,33 +160,24 @@
       "kind": "model",
       "payload": {
         "kind": "model",
-        "slot": "tools",
+        "slot": "brain",
         "usage": {
           "totalTokens": 15,
           "promptTokens": 10,
           "completionTokens": 5
         },
-        "clockMs": 1780000005000,
-        "rngSample": 0.16984086064621806,
+        "clockMs": 1780000007000,
+        "rngSample": 0.8422662299126387,
         "toolCalls": [],
         "estCostUsd": 0.00015,
         "completionId": "chatcmpl-golden0002",
         "finishReason": "stop",
-        "responseText": "Summary based on the search: all is well.",
+        "responseText": "Opened https://board.example/sprint-12 and finished the task; the form was submitted and confirmed.",
+        "checkInAnswer": "https://board.example/sprint-12",
         "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
         "requestPayload": {
           "model": "potion-auto",
           "tools": [
-            {
-              "type": "function",
-              "function": {
-                "name": "search",
-                "parameters": {
-                  "type": "object"
-                },
-                "description": "search the corpus"
-              }
-            },
             {
               "type": "function",
               "function": {
@@ -282,7 +251,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden tools harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden ask harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",
@@ -294,7 +263,7 @@
             },
             {
               "role": "user",
-              "content": "[tool search result] {\"_memoryWrites\":{\"lastQuery\":{\"q\":\"weekly report\"}},\"hits\":[\"result for {\\\"q\\\":\\\"weekly report\\\"}\"]}"
+              "content": "[check-in answer] https://board.example/sprint-12"
             }
           ]
         }
@@ -311,20 +280,20 @@
           "promptTokens": 10,
           "completionTokens": 5
         },
-        "clockMs": 1780000007000,
-        "rngSample": 0.48694825009442866,
+        "clockMs": 1780000009000,
+        "rngSample": 0.14699250203557312,
         "toolCalls": [],
         "estCostUsd": 0.00015,
         "completionId": "chatcmpl-golden0003",
         "finishReason": "stop",
-        "responseText": "Wrap-up: searched the corpus and summarized; done-definition met.",
+        "responseText": "Wrap-up: asked for the URL, received it, completed the task; done-definition met.",
         "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
         "requestPayload": {
           "model": "potion-auto",
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden tools harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden ask harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",
@@ -336,11 +305,11 @@
             },
             {
               "role": "user",
-              "content": "[tool search result] {\"_memoryWrites\":{\"lastQuery\":{\"q\":\"weekly report\"}},\"hits\":[\"result for {\\\"q\\\":\\\"weekly report\\\"}\"]}"
+              "content": "[check-in answer] https://board.example/sprint-12"
             },
             {
               "role": "assistant",
-              "content": "Summary based on the search: all is well."
+              "content": "Opened https://board.example/sprint-12 and finished the task; the form was submitted and confirmed."
             },
             {
               "role": "user",
@@ -356,6 +325,7 @@
     "reason": null
   },
   "outcomes": [
+    "awaiting-human",
     "completed"
   ]
 }

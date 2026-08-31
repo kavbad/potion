@@ -30,6 +30,7 @@ function loadGolden(name: string): GoldenFixture {
 const GOLDEN_NAMES = [
   'task-simple',
   'task-tools',
+  'ask-park-resume',
   'checkin-suspend-resume',
   'fuel-killed',
   'standing-legcap',

@@ -139,6 +139,19 @@ await record('task-tools', baseSpec({ name: 'golden tools harness' }), [
   ] },
 ], { runId: 'golden-task-tools', tools: [searchTool] });
 
+// ask_operator (2026-08-31): the worker parks and ASKS instead of hollow-
+// completing on missing inputs; the answer resumes the leg. Two legs, one
+// question, one honest finish.
+await record('ask-park-resume', baseSpec({ name: 'golden ask harness' }), [
+  { results: [
+      ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'ask1', type: 'function', function: { name: 'ask_operator', arguments: '{"question":"What URL should I open?"}' } }] }),
+  ] },
+  { answer: 'https://board.example/sprint-12', results: [
+      ok({ text: 'Opened https://board.example/sprint-12 and finished the task; the form was submitted and confirmed.' }),
+      ok({ text: 'Wrap-up: asked for the URL, received it, completed the task; done-definition met.' }),
+  ] },
+], { runId: 'golden-ask-park-resume' });
+
 await record('checkin-suspend-resume',
   baseSpec({ name: 'golden checkin harness', checkIns: [{ trigger: 'before-external-action' }] }),
   [

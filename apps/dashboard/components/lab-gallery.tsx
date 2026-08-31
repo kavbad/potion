@@ -19,6 +19,12 @@
 
 export interface GalleryPrefill {
   goal: string;
+  /** The species' authored answer to the kind-of-work question (2026-08-31,
+   * from a live failure: a gallery hire quizzed the operator on clusters).
+   * A species KNOWS what kind of work it is — the operator's specifics
+   * (a URL, a repo, a question) don't change that, so the choice survives
+   * goal edits and is dropped only on a task↔standing switch. */
+  clusterId: string;
   kind: 'task' | 'standing';
   done?: string;
   accounts: string;
@@ -52,6 +58,8 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Replaces the first hour of your morning scan — reads the feeds, files one sourced brief.',
     costLine: 'hard cap ≈ $0.50/check · daily',
     prefill: {
+      clusterId: 'agentic-tool-use',
+     
       goal: 'Each morning, read the major tech news feeds and file a brief of what actually matters for our space: launches, price moves, funding, security incidents. Every claim sourced.',
       kind: 'standing', cadence: 'daily', accounts: 'web', worth: '2', whenUnsure: 'ask-first',
       qualityBar: 'every headline claim carries its source URL; nothing older than 24h presented as new; no repeats across days',
@@ -66,6 +74,8 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Watches a competitor’s pricing page so nobody has to — silent for weeks, fires within one cycle of a real change, diff in hand.',
     costLine: 'hard cap ≈ $0.50/check · runs only on change',
     prefill: {
+      clusterId: 'agentic-tool-use',
+     
       goal: 'Watch the competitor pricing page I give you. When it truly changes, verify the change on the live page and file an alert naming exactly what moved, old vs new.',
       kind: 'standing', shape: 'watchdog', watchUrl: 'https://example.com/pricing', accounts: 'web', worth: '2', whenUnsure: 'press-on',
       qualityBar: 'fire only on a true change; the alert carries the exact old and new values with the source',
@@ -80,7 +90,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'An analyst pass on any data file: computes real numbers in a sandbox, hands back the spreadsheet and the chart.',
     costLine: 'hard cap ≈ $0.75/run',
     prefill: {
-      goal: 'Download the data file I link, analyze it (totals, by-day patterns, outliers), and produce an xlsx of the numbers plus a labeled chart and a three-line summary.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Download the data file at [PASTE THE FILE URL HERE], analyze it (totals, by-day patterns, outliers), and produce an xlsx of the numbers plus a labeled chart and a three-line summary.',
       kind: 'task', done: 'the xlsx and chart are in the run files and the summary states the three main findings',
       accounts: 'web, code', worth: '3', whenUnsure: 'ask-first',
       qualityBar: 'every number computed from the actual file, never estimated; the chart labeled and readable',
@@ -96,7 +108,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Keeps a memory of every rival move — each company gets a history, not a snapshot, and nothing is reported twice.',
     costLine: 'hard cap ≈ $0.50/check · daily',
     prefill: {
-      goal: 'Track the competitors I name. Each day, check their sites and public feeds for launches, pricing, hires, and claims. Build a running history per company; report only what is new.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Track these competitors: [NAME THE COMPETITORS HERE]. Each day, check their sites and public feeds for launches, pricing, hires, and claims. Build a running history per company; report only what is new.',
       kind: 'standing', cadence: 'daily', accounts: 'web', worth: '2', whenUnsure: 'press-on',
       qualityBar: 'per-company history maintained across days; a story reported once, ever; every claim dated and sourced',
       produces: 'a brief organized by company: what changed today, with each company’s running context',
@@ -110,7 +124,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Reads your dependencies’ release notes and changelogs weekly — surfaces breaking changes before they surface you.',
     costLine: 'hard cap ≈ $0.50/check · weekly',
     prefill: {
-      goal: 'Each week, check the changelogs and release feeds of the libraries I list. File a brief of new releases, ranked: breaking changes first, then security fixes, then features.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Each week, check the changelogs and release feeds of these libraries: [LIST THE LIBRARIES HERE]. File a brief of new releases, ranked: breaking changes first, then security fixes, then features.',
       kind: 'standing', cadence: 'weekly', accounts: 'web', worth: '2', whenUnsure: 'press-on',
       qualityBar: 'breaking changes never below the fold; every release links its changelog; version numbers exact',
       produces: 'a ranked brief: breaking / security / notable, each with version and changelog link',
@@ -124,6 +140,8 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Anything can wake it: POST to its inlet and get a triage brief back — severity, category, suggested owner.',
     costLine: 'hard cap ≈ $0.25/check · runs when poked',
     prefill: {
+      clusterId: 'classification',
+     
       goal: 'When woken by the webhook, read the mission context and any new information, triage what came in: classify severity, name the likely area, and propose the next action.',
       kind: 'standing', accounts: '', worth: '1', whenUnsure: 'press-on',
       qualityBar: 'every triage names severity, category, and a concrete next action; uncertainty stated, never hidden',
@@ -138,7 +156,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'A careful second reader for any diff you paste — findings with the failing scenario, never vibes.',
     costLine: 'hard cap ≈ $0.75/run',
     prefill: {
-      goal: 'Review the code I paste into the mission. Find correctness bugs, risky edge cases, and unclear contracts. For each finding, state the concrete scenario where it fails.',
+      clusterId: 'code-review',
+     
+      goal: 'Review the code below. Find correctness bugs, risky edge cases, and unclear contracts. For each finding, state the concrete scenario where it fails.\n\n[PASTE THE CODE HERE]',
       kind: 'task', done: 'every finding carries a failing scenario or it is not a finding; the review states what was NOT covered',
       accounts: '', worth: '3', whenUnsure: 'press-on',
       qualityBar: 'zero style nits; every finding has a concrete failure scenario; severity ranked',
@@ -153,7 +173,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Reads the links you never will and files the brief you wish you had — sourced, ranked, honest about gaps.',
     costLine: 'hard cap ≈ $0.75/run',
     prefill: {
-      goal: 'Read the pages I link and answer my question from them. Rank what matters, quote sparingly, and separate what the sources SAY from what they merely suggest.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Read these pages: [PASTE THE LINKS HERE]. Answer this question from them: [YOUR QUESTION HERE]. Rank what matters, quote sparingly, and separate what the sources SAY from what they merely suggest.',
       kind: 'task', done: 'the question is answered with sources, and unanswered parts are named as gaps',
       accounts: 'web', worth: '3', whenUnsure: 'ask-first',
       qualityBar: 'claims attributed to specific sources; disagreements between sources surfaced, not averaged away',
@@ -168,6 +190,8 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'POST it a failing signal and it verifies before it alarms — checks the live target, reports with evidence or stands down.',
     costLine: 'hard cap ≈ $0.50/check · runs when poked',
     prefill: {
+      clusterId: 'agentic-tool-use',
+     
       goal: 'When woken, verify the reported problem against the live endpoints I list: fetch them, compare against what healthy looks like, and file either a confirmed alert with evidence or a stand-down note.',
       kind: 'standing', shape: 'watchdog', accounts: 'web', worth: '2', whenUnsure: 'press-on',
       qualityBar: 'an alert only after live verification; the evidence (status, body excerpt, timing) rides the alert',
@@ -182,7 +206,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Turns raw notes into a typed report with computed tables — structure from chaos, files attached.',
     costLine: 'hard cap ≈ $0.75/run',
     prefill: {
-      goal: 'Take the raw notes I paste and produce a structured report: sections, a computed summary table (via the sandbox when numbers are involved), and an executive summary.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Turn the raw notes below into a structured report: sections, a computed summary table (via the sandbox when numbers are involved), and an executive summary.\n\n[PASTE THE NOTES HERE]',
       kind: 'task', done: 'the report file is in the run workspace and the summary states the three key points',
       accounts: 'code', worth: '3', whenUnsure: 'ask-first',
       qualityBar: 'numbers computed, not transcribed; sections follow the content, not a template for its own sake',
@@ -197,7 +223,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Fetches a repo, runs its tests in a sealed terminal, patches the tree — and proposes the fix as a PR you gate.',
     costLine: 'hard cap ≈ $1.25/run',
     prefill: {
-      goal: 'Fetch the GitHub repository I name, reproduce the failing test with run_shell, fix the code, prove the tests pass, and propose the change as a pull request through our GitHub connection.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Fetch the GitHub repository [OWNER/REPO HERE], reproduce the failing test with run_shell, fix the code, prove the tests pass, and propose the change as a pull request through our GitHub connection.',
       kind: 'task', done: 'the test suite passes in the sandbox and the PR proposal (or the ready diff, if GitHub is not yet connected) names every changed file',
       accounts: 'git, code', worth: '5', whenUnsure: 'ask-first',
       qualityBar: 'the fix is proven by the tests actually running in the sandbox — never by reading alone; the diff is minimal',
@@ -212,7 +240,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Drives a real browser through the web app you point it at — every click asks you first, and every step is on the record.',
     costLine: 'hard cap ≈ $0.75/run',
     prefill: {
-      goal: 'Open the web app I link in the real browser, work through the task I describe (navigate, fill the form, submit), and report exactly what happened with the page state as evidence.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'Open [PASTE THE APP URL HERE] in the real browser and do this task: [DESCRIBE THE TASK HERE]. Navigate, fill, submit as the task needs, and report exactly what happened with the page state as evidence.',
       kind: 'task', done: 'the task is done in the app (or the blocker is named with the page state that shows it)',
       accounts: 'browser', worth: '3', whenUnsure: 'ask-first',
       qualityBar: 'every act was approved through the check-in; the report cites what the page actually said, never what it should have said',
@@ -227,7 +257,9 @@ export const GALLERY: GallerySpecies[] = [
     valueLine: 'Splits a big question across three helpers — each a full worker under a slice of one budget — then synthesizes what returns.',
     costLine: 'hard cap ≈ $1.25/run · one fuel tree',
     prefill: {
-      goal: 'Take my question, split it into three distinct research angles, delegate each to a helper, and synthesize their findings into one brief that says where they agree, where they conflict, and what remains unknown.',
+      clusterId: 'agentic-tool-use',
+     
+      goal: 'My question: [YOUR QUESTION HERE]. Split it into three distinct research angles, delegate each to a helper, and synthesize their findings into one brief that says where they agree, where they conflict, and what remains unknown.',
       kind: 'task', done: 'the synthesis covers all three angles and names each helper’s contribution',
       accounts: 'web', worth: '5', whenUnsure: 'press-on', helpers: 3,
       qualityBar: 'conflicts between helpers surfaced, never averaged away; every claim keeps its source',

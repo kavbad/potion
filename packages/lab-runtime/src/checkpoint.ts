@@ -46,7 +46,7 @@ export interface StepPayload {
    */
   toolGuidance?: string[];
   // check-in steps
-  checkInTrigger?: 'before-external-action' | 'on-budget-fraction' | 'cron';
+  checkInTrigger?: 'before-external-action' | 'on-budget-fraction' | 'cron' | 'worker-question';
   checkInQuestion?: string;
   /**
    * Step 12 finding L2 (CRITICAL) — the IDENTITY of the action the human

@@ -178,7 +178,11 @@ export function replayRun(
       // Adopt the RECORD to keep later comparisons local.
       messages = [...((p.requestPayload?.messages as ChatMessage[] | undefined) ?? messages)];
       messages.push({ role: 'assistant', content: p.responseText ?? '' });
-      pendingToolCalls = calls.map((c) => ({ name: c.function.name, args: c.function.arguments }));
+      // ask_operator (2026-08-31, mirrored same commit): the loop PARKS on an
+      // ask call — no tool step ever answers it, so it never becomes pending.
+      pendingToolCalls = calls
+        .filter((c) => c.function.name !== 'ask_operator')
+        .map((c) => ({ name: c.function.name, args: c.function.arguments }));
 
       if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task') {
         if (runHadTools && !expectWrapUp) {
@@ -263,6 +267,11 @@ export function replayRun(
 
     // check-in step: it suspends the run; anything AFTER it belongs to a
     // resumed leg (whose first step carries checkInAnswer, handled above).
+    // A worker-question park (2026-08-31) abandons any calls that followed
+    // the ask in the same response — the loop dropped them, so does replay.
+    if ((p as { checkInTrigger?: string }).checkInTrigger === 'worker-question') {
+      pendingToolCalls = [];
+    }
     if (derivedTerminal === null) {
       derivedTerminal = { state: 'awaiting-human', atSeq: step.seq };
     }

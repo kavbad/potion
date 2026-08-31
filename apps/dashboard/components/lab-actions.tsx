@@ -277,6 +277,11 @@ export function InterviewForm() {
   const [watchUrl, setWatchUrl] = useState('');
   // X4: the fan-out knob — helpers under one fuel tree.
   const [helpers, setHelpers] = useState<'' | '3' | '5'>('');
+  // The species' authored cluster (2026-08-31): a gallery hire must never
+  // quiz the operator on kind-of-work — the species knows. Survives goal
+  // edits (a pasted URL doesn't change what kind of work this is); dropped
+  // on a task↔standing switch (that IS a different mission).
+  const [prefillCluster, setPrefillCluster] = useState<string | null>(null);
   const [exampleOpen, setExampleOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -308,9 +313,11 @@ export function InterviewForm() {
             worthUsd: Number(worth),
             ...(clusterChoice !== undefined
               ? { clusterChoice }
-              : goal === EXAMPLE_GOAL
-                ? { clusterChoice: EXAMPLE_CLUSTER }
-                : {}),
+              : prefillCluster !== null
+                ? { clusterChoice: prefillCluster }
+                : goal === EXAMPLE_GOAL
+                  ? { clusterChoice: EXAMPLE_CLUSTER }
+                  : {}),
             ...(qualityBar.trim() ? { qualityBar: qualityBar.trim() } : {}),
             ...(produces.trim() ? { produces: produces.trim() } : {}),
             ...(example.trim() ? { exampleResult: example.trim() } : {}),
@@ -335,7 +342,7 @@ export function InterviewForm() {
     } finally {
       setBusy(false);
     }
-  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, shape, watchUrl, helpers, router]);
+  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, shape, watchUrl, helpers, router, prefillCluster]);
 
   // "Show me a great one" (operator, 2026-08-28): one click fills every
   // field with a coherent example worker, so the card teaches by a worked
@@ -367,6 +374,7 @@ export function InterviewForm() {
         whenUnsure: 'ask-first' | 'press-on'; cadence?: 'hourly' | 'daily' | 'weekly';
         shape?: 'watchdog'; watchUrl?: string; helpers?: 3 | 5;
       };
+      setPrefillCluster((d as { clusterId?: string }).clusterId ?? null);
       setGoal(d.goal);
       setKind(d.kind);
       setDone(d.done ?? '');
@@ -446,7 +454,7 @@ export function InterviewForm() {
           <select
             id="lab-q-kind"
             value={kind}
-            onChange={(e) => setKind(e.target.value as 'task' | 'standing')}
+            onChange={(e) => { setKind(e.target.value as 'task' | 'standing'); setPrefillCluster(null); }}
             className={`${FIELD_CLS} mt-1.5`}
             data-testid="q-kind"
           >
@@ -456,7 +464,7 @@ export function InterviewForm() {
           {suggestStanding && (
             <button
               type="button"
-              onClick={() => setKind('standing')}
+              onClick={() => { setKind('standing'); setPrefillCluster(null); }}
               className="mt-1.5 border border-accent/50 px-2 py-0.5 font-mono text-[12px] text-accent hover:bg-accent hover:text-white"
               data-testid="suggest-standing"
             >
