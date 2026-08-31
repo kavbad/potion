@@ -130,3 +130,20 @@ describe('connectWithRetry (SPEC §12.8: transient-error retry on connect)', () 
     expect(calls).toBe(5);
   });
 });
+
+describe('attachPoolErrorHandler — a dropped idle connection is witnessed, never fatal', () => {
+  it('listens before anything can emit, logs each drop, and never throws', async () => {
+    const { attachPoolErrorHandler } = await import('./pool.js');
+    const { EventEmitter } = await import('node:events');
+    const fake = new EventEmitter();
+    const seen: string[] = [];
+    attachPoolErrorHandler(fake as never, (m) => seen.push(m));
+    // Without a listener this exact emit is what killed prod (42d72fdf):
+    // an unlistened 'error' event throws. With the handler it is a log line.
+    fake.emit('error', new Error('Connection terminated unexpectedly'));
+    fake.emit('error', new Error('Connection terminated unexpectedly'));
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toContain('recovered');
+    expect(seen[0]).toContain('Connection terminated unexpectedly');
+  });
+});

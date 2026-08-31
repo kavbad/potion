@@ -109,3 +109,22 @@ export async function connectWithRetry(
   }
   throw new DbConnectError(tried, lastErr);
 }
+
+/**
+ * Attach the pool-level error handler that keeps a dropped idle connection
+ * from killing the process (prod fatal 42d72fdf, 2026-08-31 21:08 UTC:
+ * "Connection terminated unexpectedly" as an UNCAUGHT exception — managed
+ * Postgres hung up on an idle pooled client, node-postgres emitted 'error'
+ * on the Pool, and an unlistened Node 'error' event is fatal by design).
+ * The pool already discards the broken client on its own; the next checkout
+ * dials fresh. Our only job is to WITNESS the event instead of dying of it.
+ * Takes any emitter shape so the handler is testable without a live pg.
+ */
+export function attachPoolErrorHandler(
+  pool: { on(event: 'error', cb: (err: Error) => void): unknown },
+  log: (msg: string) => void = (msg) => console.error(msg),
+): void {
+  pool.on('error', (err: Error) => {
+    log(`[pg-pool] idle connection dropped by the server (recovered — the pool redials on next use): ${err.message}`);
+  });
+}

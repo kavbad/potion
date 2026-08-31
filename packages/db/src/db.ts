@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 import { drizzle as drizzlePglite, type PgliteDatabase } from 'drizzle-orm/pglite';
 import { schema, type Schema } from './schema.js';
 // ---- M3 #27 HA (m3-ha): pg pool config + startup connect retry ----
-import { connectWithRetry, poolSettingsFromEnv } from './pool.js';
+import { attachPoolErrorHandler, connectWithRetry, poolSettingsFromEnv } from './pool.js';
 // ---- end M3 #27 HA imports ----
 
 /**
@@ -70,7 +70,12 @@ export async function createDb(url?: string): Promise<DbHandle> {
   // Env-tunable pool (PG_POOL_MAX / PG_IDLE_TIMEOUT_MS / PG_CONN_TIMEOUT_MS)
   // + bounded startup connect with backoff on transient errors (3 attempts,
   // typed DbConnectError on exhaustion). PGlite paths above are unchanged.
-  const pool = new Pool({ connectionString: effective, ...poolSettingsFromEnv() });
+  // keepAlive: managed Postgres (and the proxies in front of it) reap quiet
+  // TCP connections; keepalive probes keep the socket honest between bursts.
+  const pool = new Pool({ connectionString: effective, keepAlive: true, ...poolSettingsFromEnv() });
+  // The handler must exist BEFORE the first connection: an unlistened
+  // 'error' event on the pool is process-fatal (prod fatal 42d72fdf).
+  attachPoolErrorHandler(pool);
   await connectWithRetry(() => pool.query('SELECT 1'));
   // ---- end M3 #27 HA ----
   const db = drizzleNodePg(pool, { schema }) as unknown as PotionDb;
