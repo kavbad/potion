@@ -31,6 +31,10 @@ export interface ServingRequest {
    * for THIS call (the per-slot dial: tool steps ride toolPolicy's row,
    * the wrap-up rides brain's). */
   policyRef?: string | undefined;
+  /** 2026-08-31: explicit completion-token headroom (OpenAI-compat
+   * max_tokens). The judge needs it — cheap routes default too low and
+   * truncate structured verdicts mid-JSON. */
+  maxTokens?: number | undefined;
 }
 
 export type ServingResult =
@@ -74,6 +78,7 @@ export class ServingClient {
       messages: req.messages,
       ...(req.tools !== undefined ? { tools: req.tools } : {}),
       ...(req.toolChoice !== undefined ? { tool_choice: req.toolChoice } : {}),
+      ...(req.maxTokens !== undefined ? { max_tokens: req.maxTokens } : {}),
     };
     let res: Response;
     try {
