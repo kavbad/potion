@@ -1610,6 +1610,8 @@ export const labRuns = pgTable('lab_runs', {
     >()
     .notNull(),
   stateReason: text('state_reason'),
+  /** X4: the parent run when this row is a fan-out helper; NULL = root. */
+  parentRunId: text('parent_run_id'),
   /** X3: advisory judgment {overall, criteria[], rationale, judgeTrace, estCostUsd, calibrated:false} or a typed miss. */
   judge: jsonb('judge'),
   /** Last checkpointed step — steps <= cursor are never re-executed (F10 at

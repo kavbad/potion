@@ -139,6 +139,8 @@ import {
   setLabRunJudge,
   listLabSteps as listLabStepsRepo,
   listLabCustomConnectors,
+  listLabRunChildren,
+  createLabRun,
   listLabRunFiles,
   getLabRunFile,
   upsertLabRunFile,
@@ -164,6 +166,7 @@ import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
 import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
 import { customConnectorDef } from '@potion/lab-mcp';
+import { buildFanOutTool, deriveSubSpec, fanOutSpentFromSteps, runLeg } from '@potion/lab-runtime';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -4555,6 +4558,101 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       };
       const masterKey =
         externalSpec.superpowers.length > 0 ? await masterKeyProvider.getMasterKey() : null;
+      // ── X4: fan-out — the delegate tool + its executor ─────────────────
+      // The tool is loop-machinery (core, no grant, no pore — it spends
+      // only fuel the operator capped); THIS is the executor that actually
+      // runs helpers: each one a full lab_runs row (parent_run_id set),
+      // web/code builtins bound to ITS OWN run (its own file workspace, its
+      // own trace), the SAME serving key as the parent (one fuel tree, one
+      // key custody), sequentially to a terminal state. Helpers carry no
+      // check-ins and no act tools — they cannot park and cannot act.
+      const fanTool = spec.fanOut === undefined ? null : buildFanOutTool({
+        maxWorkers: spec.fanOut.maxWorkers,
+        capUsd: spec.fuel.maxUsdPerRun,
+        familySpentUsd: async () => {
+          const parentSteps = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
+          const own = parentSteps.reduce((a, x) => a + (((x.payload as { estCostUsd?: number }).estCostUsd) ?? 0), 0);
+          return own + fanOutSpentFromSteps(parentSteps.map((x) => ({ kind: x.kind, payload: x.payload })));
+        },
+        runSub: async (task, budgetUsd) => {
+          const existing = await listLabRunChildren(ctx.db, payload.orgId, payload.runId);
+          const subId = `sub-${payload.runId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 20)}-${existing.length + 1}`;
+          const subSpec = deriveSubSpec(
+            { name: spec.name, brain: spec.brain, superpowers: spec.superpowers, rules: spec.rules },
+            task, budgetUsd, existing.length,
+          ) as unknown as HarnessSpec;
+          await createLabRun(ctx.db, {
+            id: subId, orgId: payload.orgId, harnessHash: run.harnessHash,
+            harnessName: subSpec.name, spec: subSpec, parentRunId: payload.runId,
+          });
+          const subTools = async (): Promise<Pick<McpLegSetup, 'tools' | 'guidance' | 'legNotes'>> => {
+            const tools: McpLegSetup['tools'] = [];
+            const guidance: string[] = [];
+            const legNotes: McpLegSetup['legNotes'] = [];
+            const grants = await listLabGrants(ctx.db, payload.orgId);
+            for (const sp of subSpec.superpowers) {
+              const status = grantConnectionStatus(grants.find((g) => g.connectorId === sp.id) ?? null);
+              if (status !== 'connected') {
+                legNotes.push({ toolName: sp.id, note: { superpowerUnavailable: { connectorId: sp.id, status, detail: 'not enabled on the parent worker' } } });
+                continue;
+              }
+              if (sp.id === 'web') {
+                tools.push(...buildWebLabTools(deps.webToolDeps ?? {}));
+                const pkgWeb = getPackage('web');
+                if (pkgWeb !== null) guidance.push(pkgWeb.usage.preamble);
+              }
+              if (sp.id === 'code') {
+                const sandboxUrl = deps.codeToolDeps?.sandboxUrl ?? process.env.POTION_SANDBOX_URL;
+                if (sandboxUrl === undefined || sandboxUrl === '') {
+                  legNotes.push({ toolName: 'code', note: { superpowerUnavailable: { connectorId: 'code', status: 'unreachable', detail: 'sandbox not configured' } } });
+                } else {
+                  tools.push(...buildCodeLabTools({
+                    sandboxUrl,
+                    workspace: {
+                      list: async () => (await listLabRunFiles(ctx.db, payload.orgId, subId)).map((f) => ({ name: f.name, size: f.size })),
+                      read: async (name) => (await getLabRunFile(ctx.db, payload.orgId, subId, name))?.content ?? null,
+                      write: async (name, content) => {
+                        const r = await upsertLabRunFile(ctx.db, { orgId: payload.orgId, runId: subId, name, content });
+                        return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+                      },
+                    },
+                    ...(deps.codeToolDeps?.fetchImpl !== undefined ? { fetchImpl: deps.codeToolDeps.fetchImpl } : {}),
+                  }));
+                  const pkgCode = getPackage('code');
+                  if (pkgCode !== null) guidance.push(pkgCode.usage.preamble);
+                }
+              }
+            }
+            return { tools, guidance, legNotes };
+          };
+          let subOut: LegOutcome;
+          do {
+            const t = await subTools();
+            subOut = await runLeg({
+              db: ctx.db, client, runId: subId, orgId: payload.orgId,
+              spec: subSpec, harnessHash: run.harnessHash,
+              tools: t.tools, legNotes: t.legNotes, toolGuidance: t.guidance, policyRefs,
+            });
+          } while (subOut.status === 'leg-cap');
+          const subSteps = await listLabStepsRepo(ctx.db, subId, payload.orgId);
+          const estUsd = subSteps.reduce((a, x) => a + (((x.payload as { estCostUsd?: number }).estCostUsd) ?? 0), 0);
+          const lastModel = [...subSteps].reverse().find((x) => x.kind === 'model');
+          const answer = ((lastModel?.payload as { responseText?: string })?.responseText ?? '').trim();
+          const state: 'completed' | 'failed' | 'killed-budget' =
+            subOut.status === 'completed' ? 'completed'
+            : subOut.status === 'killed-budget' ? 'killed-budget'
+            : 'failed';
+          const reason = 'reason' in subOut && typeof subOut.reason === 'string' ? subOut.reason : subOut.status;
+          return {
+            runId: subId,
+            goal: task.goal,
+            state,
+            result: state === 'completed' && answer !== '' ? answer : `helper ${state}: ${reason}`,
+            estUsd,
+          };
+        },
+      });
+
       const mcpLeg = async (): Promise<McpLegSetup> => {
         const builtins = await builtinLeg();
         const mcp: McpLegSetup =
@@ -4578,7 +4676,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
               });
         return {
-          tools: [...builtins.tools, ...mcp.tools],
+          tools: [...builtins.tools, ...mcp.tools, ...(fanTool !== null ? [fanTool] : [])],
           guidance: [...builtins.guidance, ...mcp.guidance],
           legNotes: [...builtins.legNotes, ...mcp.legNotes],
           close: mcp.close,

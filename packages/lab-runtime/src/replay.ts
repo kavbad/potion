@@ -20,6 +20,7 @@ import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
 import { checkInAnswerMessage, contractRepairMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
+import { fanOutSpentFromSteps } from './fanout.js';
 import { planLedgerMessage } from './plan.js';
 
 export type ReplayDivergenceCode =
@@ -223,6 +224,10 @@ export function replayRun(
           divergences.push(div('request-drift', step.seq, expectedInput, p.toolInput, 'toolInput'));
         }
       }
+      // X4 (one fuel tree, mirrored): a delegate step's recorded helper
+      // spend counts against the family cap at exactly this point — the
+      // same pure derivation the loop uses.
+      estSpent += fanOutSpentFromSteps([{ kind: 'tool', payload: { toolName: p.toolName, toolOutput: p.toolOutput } }]);
       if (messages !== null) {
         messages.push(toolResultMessage(p.toolName ?? '?', p.toolOutput ?? null));
       }

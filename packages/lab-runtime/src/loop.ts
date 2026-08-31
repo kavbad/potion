@@ -19,6 +19,7 @@
 import { canonicalJson, seedFromString, sha256, type ChatMessage, type Tool } from '@potion/core';
 import { buildPlanTool, planFromSteps, planLedgerMessage, renderPlanLedger, PLAN_TOOL_NAME } from './plan.js';
 import { beatFromMemory, buildBeatTool, emptyBeat, renderBeatLedger, BEAT_PROMPT } from './beat.js';
+import { fanOutSpentFromSteps, FANOUT_TOOL_NAME } from './fanout.js';
 import {
   consumeLabRunAnswer,
   appendLabStep,
@@ -194,6 +195,11 @@ export function systemPrompt(
     (beatLedger !== '' ? `\nYour working set (durable across checks):\n${beatLedger}` : '') +
     (plainKeys.length > 0 ? `\nMemory:\n${JSON.stringify(plain, plainKeys)}` : '');
   const beatLaw = beatOn && spec.mission.kind === 'standing' ? `\n${BEAT_PROMPT}` : '';
+  // X4: the fan-out law — gated on the NEW fanOut field (replay law).
+  const fanOutLaw =
+    spec.fanOut !== undefined
+      ? `\nYou can split big work across up to ${spec.fanOut.maxWorkers} helpers with the delegate tool. Each helper is a full worker running under a slice of YOUR remaining budget (a reserve is kept for your synthesis) — helpers think, read the web, and run code when those powers are enabled, and cannot take external actions or delegate further. A failed or budget-killed helper is reported to you honestly: work with what returned and name the gaps.`
+      : '';
   // P5: the watchdog law — gated on the NEW shape field, so reporter and
   // pre-P5 prompts stay byte-identical and old records replay clean.
   const shapeLaw =
@@ -211,7 +217,7 @@ export function systemPrompt(
     spec.exemplar !== undefined
       ? `\nA great result looks like (the standard to hit):\n${spec.exemplar}`
       : '';
-  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${beatLaw}${shapeLaw}${contract}${exemplar}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
+  return `You are a harness named '${spec.name}'.\n${mission}${rules}${mem}${guidance}${beatLaw}${shapeLaw}${fanOutLaw}${contract}${exemplar}\nMaintain a task ledger with ${PLAN_TOOL_NAME}: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls.`;
 }
 
 /** P1 contract law — the repair prompt. A pure function of the parse issues
@@ -330,6 +336,9 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       (acc, s) => acc + ((s.payload as StepPayload).estCostUsd ?? 0),
       0,
     );
+    // X4 (one fuel tree): helper spend recorded in delegate outputs counts
+    // against THIS run's cap — derived from the record, mirrored in replay.
+    estSpentUsd += fanOutSpentFromSteps(priorSteps);
     // A recorded check-in answer AUTHORIZES the next external action, once —
     // but ONLY when the question it answered WAS the external-action gate
     // (review finding: a fuel check-in's "keep going" must never authorize
@@ -589,6 +598,12 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             ...(isMemoryCarrier(output) ? { memoryWrites: output._memoryWrites } : {}),
             leaseMs, now: new Date(clock.now()),
           });
+          // X4: a delegate call's helpers just spent recorded fuel — it
+          // counts against the family cap from this moment (mirror: replay
+          // adds the same recorded sum at this step).
+          if (tool.name === FANOUT_TOOL_NAME) {
+            estSpentUsd += fanOutSpentFromSteps([{ kind: 'tool', payload: { toolName: tool.name, toolOutput: output } }]);
+          }
           messages.push(toolResultMessage(tool.name, output));
         }
         continue;

@@ -56,6 +56,7 @@ import {
   listLabHarnesses,
   listLabMemoryEntries,
   listLabRunsForHarness,
+  listLabRunChildren,
   listLabSteps,
   revokeApiKey,
   setLabMemoryKey,
@@ -226,6 +227,8 @@ const ANSWERS_SCHEMA = z
     cadence: z.enum(['hourly', 'daily', 'weekly']).optional(),
     /** P5: the standing shape + a page to watch (feed-change trigger). */
     shape: z.enum(['watchdog']).optional(),
+    /** X4: may split big work across helpers (1-5), each under a budget slice. */
+    helpers: z.number().int().min(1).max(5).optional(),
     watchUrl: z
       .string()
       .max(500)
@@ -960,6 +963,16 @@ export function registerLabRoutes(
       // X3/H1: the workspace files, LIVE on the polling DTO — artifacts
       // appear as the code produces them, not after a page refresh.
       files: await listLabRunFiles(db, org.orgId, run.id),
+      // X4 (one trace): the family — helpers of this run, and the parent
+      // when this run IS a helper.
+      parentRunId: run.parentRunId ?? null,
+      children: (await listLabRunChildren(db, org.orgId, run.id)).map((c) => ({
+        runId: c.id,
+        state: c.state,
+        goal: ((c.spec as { mission?: { goal?: string } }).mission?.goal ?? '').slice(0, 200),
+        harnessName: c.harnessName,
+        at: c.createdAt,
+      })),
       // P-1 (the routing dividend): what THIS run's model steps would have
       // cost on the best scorer of each step's own kind — computed from the
       // steps' recorded traces and the live frontiers, null when unpriceable.

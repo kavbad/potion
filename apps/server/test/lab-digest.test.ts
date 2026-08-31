@@ -68,16 +68,16 @@ describe('digestTick — at most once per window', () => {
     await setLabRunJudge(h.db, 'run-dg-1', 'org_digest', { overall: 7, criteria: [], rationale: '', calibrated: false });
 
     const sent: Array<{ to: string; subject: string }> = [];
-    // "now" is mid-week; the run above was created NOW, which is inside
-    // [windowOpen - 7d, ∞) but AFTER windowOpen — so it belongs to the
-    // CURRENT week and the digest (which reports the week BEFORE the
-    // window) is quiet… so pin "now" to next Monday 09:00, when this run
-    // falls inside the reported week.
-    // Date-independent: the first Monday 09:00 UTC strictly after "now",
-    // so the just-created run always falls inside the reported week.
+    // Date-independent for real this time (the first version broke when the
+    // suite ran on a Monday between 00:00 and 08:59 UTC): tick at the first
+    // Monday 09:00 UTC whose WINDOW OPEN (that Monday 08:00) is strictly
+    // after "now" — then the just-created run always falls inside the
+    // reported week [windowOpen − 7d, windowOpen).
     const base = new Date();
-    const daysToMonday = ((8 - base.getUTCDay()) % 7) || 7;
-    const nextMonday = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + daysToMonday, 9, 0, 0));
+    let nextMonday = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 9, 0, 0));
+    while (nextMonday.getUTCDay() !== 1 || nextMonday.getTime() - 3_600_000 <= base.getTime()) {
+      nextMonday = new Date(nextMonday.getTime() + 86_400_000);
+    }
     const n1 = await digestTick({ db: h, sendEmail: async (m) => { sent.push({ to: m.to, subject: m.subject }); } }, nextMonday);
     expect(n1).toBe(1);
     expect(sent[0]!.to).toBe('digest@org.dev');

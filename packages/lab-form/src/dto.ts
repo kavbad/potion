@@ -118,6 +118,9 @@ export interface RunDto {
   /** P-1: what this run's model steps would have cost on the best scorer
    * of each step's own kind — the routing dividend's counterfactual. */
   premiumUsd?: number | null;
+  /** X4 (one trace): the family — set when this run delegated or IS a helper. */
+  parentRunId?: string | null;
+  children?: Array<{ runId: string; state: string; goal: string; harnessName: string; at: string }>;
   /** X3: the advisory judgment — overall/criteria/rationale, or a typed
    * miss {error}; calibrated stays false until the calibration discipline
    * marks it (the UI must say "advisory" while false). */

@@ -96,6 +96,11 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
     // history, dedup keys, source stats, reflections — via the `remember`
     // core tool. Task hires stay memory-off (nothing to carry between runs).
     memory: answers.kind === 'standing' ? { enabled: true, beat: true } : { enabled: false },
+    // X4: the fan-out knob — helpers under one fuel tree, chosen by the
+    // operator, never assumed.
+    ...(answers.helpers !== undefined && answers.helpers >= 1
+      ? { fanOut: { maxWorkers: Math.min(Math.max(Math.floor(answers.helpers), 1), 5) } }
+      : {}),
     rules,
     ...(answers.exampleResult !== undefined && sanitizeVerbatim(answers.exampleResult).length > 0
       ? { exemplar: sanitizeVerbatim(answers.exampleResult).slice(0, SPEC_LIMITS.MAX_EXEMPLAR_CHARS) }

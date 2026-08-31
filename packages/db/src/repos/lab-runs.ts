@@ -9,7 +9,7 @@
 // expires and someone reclaims, the old winner's late writes are REJECTED,
 // not merged (review addition 1 — a dead winner must not hold the claim
 // forever, and a zombie winner must not corrupt the run it lost).
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { isNull, and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { labDigests,
   labHarnessMemory,
@@ -26,6 +26,8 @@ export interface CreateLabRunInput {
   harnessHash: string;
   harnessName: string;
   spec: unknown;
+  /** X4: set when this run is a fan-out helper of another run. */
+  parentRunId?: string;
 }
 
 export async function createLabRun(db: PotionDb, input: CreateLabRunInput): Promise<void> {
@@ -36,7 +38,21 @@ export async function createLabRun(db: PotionDb, input: CreateLabRunInput): Prom
     harnessName: input.harnessName,
     spec: input.spec,
     state: 'pending',
+    ...(input.parentRunId !== undefined ? { parentRunId: input.parentRunId } : {}),
   });
+}
+
+/** X4: the family view — every helper of one parent, oldest first. */
+export async function listLabRunChildren(
+  db: PotionDb,
+  orgId: string,
+  parentRunId: string,
+): Promise<Array<{ id: string; state: string; harnessName: string; spec: unknown; createdAt: Date }>> {
+  return db
+    .select({ id: labRuns.id, state: labRuns.state, harnessName: labRuns.harnessName, spec: labRuns.spec, createdAt: labRuns.createdAt })
+    .from(labRuns)
+    .where(and(eq(labRuns.orgId, orgId), eq(labRuns.parentRunId, parentRunId)))
+    .orderBy(labRuns.createdAt, labRuns.id);
 }
 
 export type LabClaim =
@@ -469,7 +485,9 @@ export async function listLabRunsForHarness(
       updatedAt: labRuns.updatedAt,
     })
     .from(labRuns)
-    .where(and(eq(labRuns.orgId, orgId), eq(labRuns.harnessHash, harnessHash)))
+    // X4: helpers live under their parent's trace, not in the harness's
+    // run list — the family card on the parent page shows them.
+    .where(and(eq(labRuns.orgId, orgId), eq(labRuns.harnessHash, harnessHash), isNull(labRuns.parentRunId)))
     .orderBy(desc(labRuns.createdAt))
     .limit(limit);
 }
@@ -507,7 +525,9 @@ export async function listRecentLabRuns(
   orgId: string,
   opts: { since?: Date; limit?: number } = {},
 ): Promise<Array<{ id: string; harnessHash: string; harnessName: string; state: string; createdAt: Date; judge: unknown }>> {
-  const conds = [eq(labRuns.orgId, orgId)];
+  // X4: the feed and the digest count ROOT runs only — a fan-out is one
+  // check, not five.
+  const conds = [eq(labRuns.orgId, orgId), isNull(labRuns.parentRunId)];
   if (opts.since !== undefined) conds.push(gte(labRuns.createdAt, opts.since));
   return db
     .select({

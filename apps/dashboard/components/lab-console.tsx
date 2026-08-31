@@ -475,6 +475,28 @@ export function LabConsole({
         </div>
       ) : null}
 
+      {/* ================= the family (X4: one trace) ================= */}
+      {run?.parentRunId != null ? (
+        <p className="mt-4 font-mono text-[12px] text-faint" data-testid="helper-banner">
+          this is a HELPER run — part of{' '}
+          <a href={`/lab/run/${run.parentRunId}`} className="text-accent underline">its parent&rsquo;s trace</a>, under a slice of the parent&rsquo;s budget
+        </p>
+      ) : null}
+      {run?.children != null && run.children.length > 0 ? (
+        <section className={`${CARD} mt-4 px-5 py-4`} data-testid="family-card">
+          <div className={EYEBROW}>
+            the helpers · {run.children.length} sub-run{run.children.length === 1 ? '' : 's'} under this run&rsquo;s budget
+          </div>
+          {run.children.map((c) => (
+            <div key={c.runId} className="mt-1.5 flex flex-wrap items-baseline gap-x-2 border-t border-dashed border-[#d9d5cb] pt-1.5 text-[12.5px] first:border-0 first:pt-0">
+              <a href={`/lab/run/${c.runId}`} className="font-mono text-[12px] text-accent underline">{c.runId}</a>
+              <span className={`font-mono text-[11.5px] uppercase tracking-[0.08em] ${c.state === 'completed' ? 'text-accent' : c.state === 'running' || c.state === 'pending' ? 'text-soft' : 'text-refuse'}`}>{c.state}</span>
+              <span className="text-soft">{c.goal}</span>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
       {/* ================= the task ledger (X2) ================= */}
       {run?.plan != null && run.plan.length > 0 ? (
         <section className={`${CARD} mt-4 px-5 py-4`} data-testid="task-ledger">

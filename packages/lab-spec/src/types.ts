@@ -100,6 +100,8 @@ export interface HarnessSpec {
   contract?: { type: 'brief' } | undefined;
   /** C-3: the operator's exemplar — the standard the deliverable must hit. */
   exemplar?: string | undefined;
+  /** X4: fan-out — helper sub-runs under one fuel tree (see schema). */
+  fanOut?: { maxWorkers: number } | undefined;
 }
 
 export type SpecIssueCode =

@@ -169,6 +169,18 @@ export const HarnessSpecSchema = z
     // only contract type; the deliverable schema lives in contract.ts and
     // is enforced by the runtime's completion law, not here.
     contract: z.object({ type: z.literal('brief') }).strict().optional(),
+    // X4 (2026-08-28): FAN-OUT — the worker may split big work across
+    // helper sub-runs. One fuel tree (every helper's cap is a slice of
+    // THIS spec's remaining budget — the family can never outspend the cap
+    // the operator set), one trace (each helper is a full recorded run,
+    // linked to its parent). Helpers think, read the web, and run code
+    // when those powers are enabled — they never take external actions
+    // and never delegate further (depth 1). OPTIONAL AND ADDITIVE: absent
+    // = no delegate tool, byte-identical prompts, old records replay clean.
+    fanOut: z
+      .object({ maxWorkers: z.number().int().min(1).max(5) })
+      .strict()
+      .optional(),
     // C-3 (2026-08-28): the operator's pasted "a great result looks like" —
     // THE standard to hit, carried on the spec and injected into every
     // run's context (it was extraction-context-only before: the most

@@ -52,6 +52,9 @@ export interface InterviewAnswers {
   /** P5 (standing only): a page to watch — derives a feed-change trigger;
    * the scheduler starts a check within one cycle of a real change. */
   watchUrl?: string;
+  /** X4: the worker may split big work across this many helpers (1-5),
+   * each a full run under a slice of the same budget. */
+  helpers?: number;
   /**
    * The operator's answer to a cluster-uncertain draft: when the lexical
    * signal and the model hint could not agree, the generator ASKED — this

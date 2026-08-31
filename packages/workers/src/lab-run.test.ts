@@ -635,3 +635,103 @@ describe('P5 — the watchdog: quiet checks never email, fired ones do', () => {
     expect(sent.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('X4 — fan-out: one fuel tree, one trace (integration)', () => {
+  it('the parent delegates two helpers; each is a full recorded run under its slice; the parent record replays clean', async () => {
+    const s = spec({
+      name: 'fanout harness',
+      mission: { kind: 'task', goal: 'research two angles and synthesize', doneDefinition: 'the synthesis is filed' },
+      fuel: { maxUsdPerRun: 1, hardStop: true },
+      fanOut: { maxWorkers: 3 },
+    } as Partial<HarnessSpec>);
+    const runId = 'run-fanout';
+    await seedRun(runId, s);
+    const delegateCall = {
+      id: 'call-fan', type: 'function' as const,
+      function: {
+        name: 'delegate',
+        arguments: JSON.stringify({ tasks: [
+          { goal: 'read angle one', doneDefinition: 'angle one summarized' },
+          { goal: 'read angle two', doneDefinition: 'angle two summarized' },
+        ] }),
+      },
+    };
+    // ONE shared scripted queue; helpers run SEQUENTIALLY so the order is
+    // deterministic: parent delegate → sub1 (answer + wrap-up) → sub2
+    // (answer + wrap-up) → parent synthesis → parent wrap-up.
+    const { factory } = scriptedFactory([
+      ok({ text: '', finishReason: 'tool_calls', toolCalls: [delegateCall] }),
+      ok({ text: 'angle one: the finding.' }),
+      ok({ text: 'Wrap-up: angle one summarized.' }),
+      ok({ text: 'angle two: the finding.' }),
+      ok({ text: 'Wrap-up: angle two summarized.' }),
+      ok({ text: 'the synthesis is filed: both angles combined.' }),
+      ok({ text: 'Wrap-up: synthesis filed.' }),
+    ]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+
+    // ONE TRACE: two helper rows, linked, each a full completed run.
+    const { listLabRunChildren, listLabSteps } = await import('@potion/db');
+    const children = await listLabRunChildren(db.db, ORG, runId);
+    expect(children).toHaveLength(2);
+    expect(children.map((c) => c.state)).toEqual(['completed', 'completed']);
+    const subSpec = children[0]!.spec as HarnessSpec;
+    expect(subSpec.fanOut).toBeUndefined(); // depth 1
+    expect(subSpec.checkIns).toEqual([]); // helpers cannot park
+    const subSteps = await listLabSteps(db.db, children[0]!.id, ORG);
+    expect(subSteps.length).toBeGreaterThan(0); // its own recorded trace
+
+    // The parent recorded ONE delegate step carrying both verdicts.
+    const parentSteps = await listLabSteps(db.db, runId, ORG);
+    const fanStep = parentSteps.find((st) => (st.payload as { toolName?: string }).toolName === 'delegate');
+    const helpers = (fanStep!.payload as { toolOutput: { helpers: Array<{ runId: string; state: string; result: string; estUsd: number }> } }).toolOutput.helpers;
+    expect(helpers).toHaveLength(2);
+    expect(helpers[0]!.result).toContain('angle one');
+    expect(helpers.every((x) => typeof x.estUsd === 'number')).toBe(true);
+
+    // ONE FUEL TREE: the family total is bounded by the parent cap.
+    let family = parentSteps.reduce((a, x) => a + (((x.payload as { estCostUsd?: number }).estCostUsd) ?? 0), 0);
+    for (const c of children) {
+      const stepsC = await listLabSteps(db.db, c.id, ORG);
+      family += stepsC.reduce((a, x) => a + (((x.payload as { estCostUsd?: number }).estCostUsd) ?? 0), 0);
+    }
+    expect(family).toBeLessThanOrEqual(1);
+
+    // THE MIRROR: the parent record (with its delegate step) replays clean.
+    const { replayRun } = await import('@potion/lab-runtime');
+    const verdict = replayRun(
+      s,
+      parentSteps.map((x) => ({ seq: x.seq, kind: x.kind as 'model' | 'tool' | 'check-in', payload: x.payload as never })),
+      { state: 'completed', reason: null },
+    );
+    expect(verdict.ok).toBe(true);
+  }, 60_000);
+
+  it('a starved budget refuses the fan-out with a reason — no helpers spawned', async () => {
+    const s = spec({
+      name: 'starved fanout harness',
+      mission: { kind: 'task', goal: 'try to delegate', doneDefinition: 'done' },
+      fuel: { maxUsdPerRun: 0.05, hardStop: true },
+      fanOut: { maxWorkers: 5 },
+    } as Partial<HarnessSpec>);
+    const runId = 'run-fanout-starved';
+    await seedRun(runId, s);
+    const call = {
+      id: 'call-starve', type: 'function' as const,
+      function: { name: 'delegate', arguments: JSON.stringify({ tasks: Array.from({ length: 5 }, (_, i) => ({ goal: `t${i}`, doneDefinition: 'd' })) }) },
+    };
+    const { factory } = scriptedFactory([
+      ok({ text: '', finishReason: 'tool_calls', toolCalls: [call] }),
+      ok({ text: 'done without helpers.' }),
+      ok({ text: 'Wrap-up: done.' }),
+    ]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
+    expect(res.state).toBe('completed');
+    const { listLabRunChildren, listLabSteps } = await import('@potion/db');
+    expect(await listLabRunChildren(db.db, ORG, runId)).toHaveLength(0);
+    const steps = await listLabSteps(db.db, runId, ORG);
+    const fanStep = steps.find((st) => (st.payload as { toolName?: string }).toolName === 'delegate');
+    expect(JSON.stringify((fanStep!.payload as { toolOutput: unknown }).toolOutput)).toContain('not enough budget');
+  });
+});

@@ -273,6 +273,8 @@ export function InterviewForm() {
   // P5: the first real SHAPE choice + a page to watch (feed-change trigger).
   const [shape, setShape] = useState<'reporter' | 'watchdog'>('reporter');
   const [watchUrl, setWatchUrl] = useState('');
+  // X4: the fan-out knob — helpers under one fuel tree.
+  const [helpers, setHelpers] = useState<'' | '3' | '5'>('');
   const [exampleOpen, setExampleOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -317,6 +319,7 @@ export function InterviewForm() {
             ...(kind === 'standing' && cadence !== '' ? { cadence } : {}),
             ...(kind === 'standing' && shape === 'watchdog' ? { shape: 'watchdog' } : {}),
             ...(kind === 'standing' && watchUrl.trim() !== '' ? { watchUrl: watchUrl.trim() } : {}),
+            ...(helpers !== '' ? { helpers: Number(helpers) } : {}),
           },
         }),
       });
@@ -330,7 +333,7 @@ export function InterviewForm() {
     } finally {
       setBusy(false);
     }
-  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, shape, watchUrl, router]);
+  }, [goal, kind, done, accounts, worth, qualityBar, produces, example, never, whenUnsure, cadence, shape, watchUrl, helpers, router]);
 
   // "Show me a great one" (operator, 2026-08-28): one click fills every
   // field with a coherent example worker, so the card teaches by a worked
@@ -623,6 +626,27 @@ export function InterviewForm() {
           >
             <option value="ask-first">ask first — check in at half budget</option>
             <option value="press-on">press on — report at the end</option>
+          </select>
+          <div className={`${LABEL_ROW} mt-3`}>
+            <label htmlFor="lab-q-helpers">may it split the work?</label>
+            <InfoDot label="helpers">
+              With helpers, the worker can <b>delegate</b>: split big work into subtasks, each run by
+              a full helper worker under a <b>slice of this same budget</b> (a reserve is kept for
+              the final synthesis — the family can never outspend the cap). Every helper is its own
+              recorded run, linked on the parent&rsquo;s page. Helpers think, read the web, and run
+              code when enabled; they never take external actions.
+            </InfoDot>
+          </div>
+          <select
+            id="lab-q-helpers"
+            value={helpers}
+            onChange={(e) => setHelpers(e.target.value as typeof helpers)}
+            className={`${FIELD_CLS} mt-1.5`}
+            data-testid="q-helpers"
+          >
+            <option value="">no — it works alone</option>
+            <option value="3">up to 3 helpers</option>
+            <option value="5">up to 5 helpers</option>
           </select>
         </div>
       </div>
