@@ -487,6 +487,17 @@ export function LabConsole({
             <ShareDeliverable runId={runId} />
           ) : null}
         </div>
+      ) : run?.report != null ? (
+        <div className="mt-4">
+          {/* 2026-08-31: a task run's REPORT — the final answer that met the
+              done-definition, rendered first-class (never just downloads). */}
+          <div className="border border-accent/40 bg-[#fbfaf7] px-6 py-5" data-testid="report-view">
+            <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-accent">
+              the result — this run&rsquo;s deliverable
+            </div>
+            <p className="mt-3 whitespace-pre-wrap text-[14.5px] leading-relaxed text-ink">{run.report.report}</p>
+          </div>
+        </div>
       ) : null}
 
       {/* ================= the family (X4: one trace) ================= */}

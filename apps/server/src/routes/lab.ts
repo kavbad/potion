@@ -92,7 +92,7 @@ import {
   listActionGrants,
   listLabStepsForHarness,
 } from '@potion/db';
-import { extractDeliverable, extractPoreEvidence, runGraduationPass } from '@potion/lab-runtime';
+import { extractDeliverable, extractPoreEvidence, extractReport, runGraduationPass } from '@potion/lab-runtime';
 import {
   applyDialPosition,
   dialViews,
@@ -994,6 +994,15 @@ export function registerLabRoutes(
         run.spec as HarnessSpec,
         steps.map((s) => ({ seq: s.seq, kind: s.kind, payload: s.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } })),
       ),
+      // 2026-08-31 (the generational pass): a completed TASK run's report —
+      // the final answer that met the done-definition, rendered and judged
+      // like any deliverable instead of leaving the user a download list.
+      report: run.state === 'completed'
+        ? extractReport(
+            run.spec as HarnessSpec,
+            steps.map((s) => ({ seq: s.seq, kind: s.kind, payload: s.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } })),
+          )
+        : null,
     });
   });
 

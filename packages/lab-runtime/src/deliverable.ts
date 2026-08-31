@@ -12,6 +12,28 @@ export interface DeliverableResult {
   atSeq: number;
 }
 
+/** The TASK-run twin (2026-08-31, the generational pass): a completed task
+ * has no schema contract, but it HAS a deliverable — the final answer that
+ * met the done-definition (or the wrap-up that recapped it). Extracting it
+ * here makes every completed run end in a rendered, judged RESULT instead
+ * of a bare download list. Derived from the record; no second storage. */
+export function extractReport(
+  spec: HarnessSpec,
+  steps: Array<{ seq: number; kind: string; payload: { responseText?: string; toolCalls?: unknown[]; finishReason?: string } }>,
+): { report: string; atSeq: number } | null {
+  if (spec.contract !== undefined || spec.mission.kind !== 'task') return null;
+  const ordered = [...steps].sort((a, b) => b.seq - a.seq);
+  for (const s of ordered) {
+    if (s.kind !== 'model') continue;
+    const calls = s.payload.toolCalls ?? [];
+    if (calls.length > 0 || s.payload.finishReason !== 'stop') continue;
+    const text = (s.payload.responseText ?? '').trim();
+    if (text.length < 40) continue; // a bare "done." is not a report
+    return { report: text, atSeq: s.seq };
+  }
+  return null;
+}
+
 export function extractDeliverable(
   spec: HarnessSpec,
   steps: Array<{ seq: number; kind: string; payload: { responseText?: string; toolCalls?: unknown[]; finishReason?: string } }>,

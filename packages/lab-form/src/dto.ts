@@ -136,4 +136,7 @@ export interface RunDto {
   /** P1 (the mouth): the filed brief, derived from the record by the same
    * parser the completion law used. null/absent = no deliverable (honest). */
   deliverable?: { brief: Brief; atSeq: number } | null;
+  /** 2026-08-31: a completed TASK run's report — the final answer that met
+   * the done-definition, rendered + judged like any deliverable. */
+  report?: { report: string; atSeq: number } | null;
 }

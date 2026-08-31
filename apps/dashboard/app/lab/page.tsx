@@ -7,6 +7,7 @@ import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
 import { InterviewForm } from '@/components/lab-actions';
 import { MissionGallery } from '@/components/lab-gallery';
+import { RunTheater } from '@/components/lab-theater';
 import { BenchLabel, CARD, LabStage, SpecimenMark, TrustLine } from '@/components/lab-bench';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,11 @@ export default async function LabPage() {
       )}
 
       {/* ---- the hire card: the hero, always first ---- */}
+      {/* H1 (2026-08-31): the machine, visibly working, before any form —
+           a real recorded run replayed. The first feeling is the product
+           doing real work, not a config page. */}
+      <RunTheater />
+
       <section className={`mt-10 ${CARD} px-7 py-6 shadow-paper`}>
         <BenchLabel right="born supervised · budgeted · revocable">Hire a worker</BenchLabel>
         <InterviewForm />

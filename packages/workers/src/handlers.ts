@@ -162,7 +162,7 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildWebLabTools, compileRubric, extractDeliverable, parseJudgment, resumeRun, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
+import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildWebLabTools, compileRubric, extractDeliverable, extractReport, parseJudgment, resumeRun, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
@@ -4802,20 +4802,24 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // check (headline empty, coverage stated) completes without an email —
       // the digest still counts it. null = not a watchdog or no brief.
       let watchdogFired: boolean | null = null;
-      if (outcome.status === 'completed' && spec.contract !== undefined) {
+      // 2026-08-31: EVERY completed run gets judged — contract briefs AND
+      // task reports (the final answer that met the done-definition). A run
+      // that ends without a felt, scored result is the "feels like nothing"
+      // failure mode.
+      if (outcome.status === 'completed') {
         try {
           const stepsForJudge = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
-          const found = extractDeliverable(
-            spec,
-            stepsForJudge.map((x) => ({ seq: x.seq, kind: x.kind, payload: x.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } })),
-          );
+          const mapped = stepsForJudge.map((x) => ({ seq: x.seq, kind: x.kind, payload: x.payload as { responseText?: string; toolCalls?: unknown[]; finishReason?: string } }));
+          const found = spec.contract !== undefined
+            ? extractDeliverable(spec, mapped)
+            : (() => { const r = extractReport(spec, mapped); return r === null ? null : { brief: null, report: r.report, atSeq: r.atSeq }; })();
           if (found !== null) {
             judgedDeliverable = true;
-            if (spec.mission.kind === 'standing' && spec.mission.shape === 'watchdog') {
+            if (spec.mission.kind === 'standing' && spec.mission.shape === 'watchdog' && found.brief !== null) {
               watchdogFired = found.brief.headline.length > 0;
             }
             const deliverableStep = stepsForJudge.find((x) => x.seq === found.atSeq);
-            const deliverableText = (deliverableStep?.payload as { responseText?: string })?.responseText ?? JSON.stringify(found.brief);
+            const deliverableText = (deliverableStep?.payload as { responseText?: string })?.responseText ?? ('report' in found && typeof found.report === 'string' ? found.report : JSON.stringify(found.brief));
             const judgeClient = clientFactory({ baseUrl: servingUrl, apiKey: rawKey, clusterHint: 'multi-step-reasoning' });
             const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText) });
             if (res.kind === 'ok') {
