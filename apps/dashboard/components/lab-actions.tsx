@@ -390,6 +390,11 @@ export function InterviewForm() {
       setShape(d.shape ?? 'reporter');
       setWatchUrl(d.watchUrl ?? '');
       setHelpers(d.helpers !== undefined ? (String(d.helpers) as '3' | '5') : '');
+      // The click happened two screens below — bring the filled form to the
+      // operator, or the button appears to do nothing (2026-08-31, seen live).
+      requestAnimationFrame(() => {
+        document.querySelector('[data-testid="interview-form"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     };
     window.addEventListener('potion:hire-prefill', onPrefill);
     return () => window.removeEventListener('potion:hire-prefill', onPrefill);

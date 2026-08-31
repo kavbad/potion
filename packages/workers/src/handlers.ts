@@ -4758,6 +4758,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           tools: [...builtins.tools, ...mcp.tools, ...(fanTool !== null ? [fanTool] : [])],
           guidance: [
             'ask_operator — your question channel to the operator: when the mission is missing information you need (an unfilled [LIKE THIS] slot, a URL, a file, a concrete choice), call ask_operator with ONE specific question as your FIRST move; the run pauses and the answer arrives as your next message. Never end the run by asking in plain text — a final message is filed as your RESULT, and a result that asks a question is a failed mission.',
+            'Your FINAL message is the deliverable the operator keeps, and it is judged against the done-definition. When the mission asks for an account or report, write it IN FULL before stopping — numbered steps of what you did, what each showed, and the final state — never a bare status or a question.',
             ...builtins.guidance, ...mcp.guidance,
           ],
           legNotes: [...builtins.legNotes, ...mcp.legNotes],
@@ -4840,9 +4841,27 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             let judgeEst = 0;
             let lastMiss: { error: string; judgeTrace: string | null } | null = null;
             let wrote = false;
+            // The action digest: tool acts by name + answered check-ins,
+            // straight from the durable record (2026-08-31 — without it the
+            // judge scored an approved, executed act as "no acts").
+            const digestSteps = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
+            const toolCounts = new Map<string, number>();
+            let checkIns = 0;
+            for (const st of digestSteps) {
+              const sp = st.payload as { toolName?: string; toolOutput?: unknown; checkInTrigger?: string };
+              if (st.kind === 'tool' && typeof sp.toolName === 'string'
+                && (sp.toolOutput as { superpowerUnavailable?: unknown } | null)?.superpowerUnavailable === undefined) {
+                toolCounts.set(sp.toolName, (toolCounts.get(sp.toolName) ?? 0) + 1);
+              }
+              if (st.kind === 'check-in') checkIns += 1;
+            }
+            const actionDigest = [
+              ...[...toolCounts.entries()].map(([n, c]) => `${n} \u00d7${c}`),
+              ...(checkIns > 0 ? [`operator check-ins answered \u00d7${checkIns}`] : []),
+            ].join(', ');
             for (let attempt = 0; attempt < 2 && !wrote; attempt++) {
               const runFiles = (await listLabRunFiles(ctx.db, payload.orgId, payload.runId)).map((f) => ({ name: f.name, size: f.size }));
-              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText, { files: runFiles }), maxTokens: 900, policyRef: judgeRow.name });
+              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText, { files: runFiles, ...(actionDigest !== '' ? { actions: actionDigest } : {}) }), maxTokens: 900, policyRef: judgeRow.name });
               if (res.kind !== 'ok') {
                 lastMiss = { error: `judge call failed: ${res.kind}`, judgeTrace: null };
                 continue;

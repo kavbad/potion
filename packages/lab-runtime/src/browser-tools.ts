@@ -70,6 +70,14 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
   // True while the session was silently re-established from the record —
   // cleared by any explicit open/read (the model has then seen fresh state).
   let restoredPending = false;
+  // The last page state the MODEL saw (clipped + redacted) — what the
+  // pore's question can honestly name a control from (2026-08-31: an
+  // approval that reads "ref p8" tells the human nothing).
+  let lastSeen: PageState | null = null;
+  const seen = (state: PageState): PageState => {
+    if (state.error === undefined) lastSeen = state;
+    return state;
+  };
 
   const call = async (path: string, init?: RequestInit): Promise<PageState> => {
     try {
@@ -127,11 +135,11 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
         const sid = await ensureSession();
         if (typeof sid !== 'string') return sid;
         restoredPending = false; // an explicit open IS fresh state
-        return clipState(await call(`/session/${sid}/goto`, {
+        return seen(clipState(await call(`/session/${sid}/goto`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url: url.trim() }),
-        }));
+        })));
       },
     },
     {
@@ -143,7 +151,7 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
         const sid = await restoreSession();
         if (typeof sid !== 'string') return sid;
         restoredPending = false; // the model sees fresh state now
-        return clipState(await call(`/session/${sid}/state`));
+        return seen(clipState(await call(`/session/${sid}/state`)));
       },
     },
     {
@@ -164,6 +172,22 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
       },
       // THE LAW: driving someone else's UI is acting on the world.
       external: true,
+      describeAction: (input: unknown): string | null => {
+        const i = (input ?? {}) as { ref?: unknown; kind?: unknown; text?: unknown };
+        if (typeof i.ref !== 'string' || typeof i.kind !== 'string') return null;
+        const control = (lastSeen?.interactables ?? []).find((c) => c.ref === i.ref) as { label?: unknown; tag?: unknown } | undefined;
+        const label = typeof control?.label === 'string' && control.label.trim() !== '' ? control.label.trim().slice(0, 60) : null;
+        // An unknown control gets the raw question — never invent a label.
+        if (label === null) return null;
+        const tag = typeof control?.tag === 'string' ? ` (${control.tag})` : '';
+        const where = typeof lastSeen?.url === 'string' ? ` on ${lastSeen.url.slice(0, 80)}` : '';
+        const verb =
+          i.kind === 'click' ? 'click'
+          : i.kind === 'type' ? `type ${typeof i.text === 'string' ? `'${i.text.slice(0, 40)}'` : 'text'} into`
+          : i.kind === 'select' ? `select ${typeof i.text === 'string' ? `'${i.text.slice(0, 40)}'` : 'an option'} in`
+          : `press ${typeof i.text === 'string' ? i.text.slice(0, 20) : 'a key'} in`;
+        return `${verb} \u201c${label}\u201d${tag}${where}`;
+      },
       run: async (input: unknown): Promise<unknown> => {
         const sid = await restoreSession();
         if (typeof sid !== 'string') return sid;
@@ -194,11 +218,11 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
           }
           restoredPending = false;
         }
-        return clipState(await call(`/session/${sid}/act`, {
+        return seen(clipState(await call(`/session/${sid}/act`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ref: i.ref, kind: i.kind, ...(typeof i.text === 'string' ? { text: i.text } : {}) }),
-        }));
+        })));
       },
     },
   ];

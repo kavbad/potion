@@ -80,12 +80,24 @@ export function buildJudgeMessages(
    * scored "provides no artifacts" (observed live, 2/10 on a correct
    * run). Names and sizes only — the files themselves are downloadable
    * on the run page. */
-  evidence?: { files?: Array<{ name: string; size: number }> },
+  evidence?: {
+    files?: Array<{ name: string; size: number }>;
+    /** 2026-08-31 (observed live: a run that acted WITH approval scored
+     * "no acts or approvals"): a compact digest of what the run actually
+     * DID — tool acts and answered check-ins — derived from the durable
+     * record, so the judge scores the work that happened, not only the
+     * text that survived. */
+    actions?: string;
+  },
 ): Array<{ role: 'user'; content: string }> {
   const rubric = compileRubric(spec);
   const filesLine =
     evidence?.files !== undefined && evidence.files.length > 0
       ? `\nFiles this run produced (verified artifacts in its workspace): ${evidence.files.map((f) => `${f.name} (${f.size} bytes)`).join(', ')}\n`
+      : '';
+  const actionsLine =
+    evidence?.actions !== undefined && evidence.actions !== ''
+      ? `\nWhat the run did (from its verified step record): ${evidence.actions}\n`
       : '';
   return [
     {
@@ -100,6 +112,7 @@ export function buildJudgeMessages(
         `Rubric:\n${rubric.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n` +
         (spec.exemplar !== undefined ? `\nThe operator's exemplar (the standard):\n${spec.exemplar}\n` : '') +
         filesLine +
+        actionsLine +
         `\nDELIVERABLE:\n${deliverableText.slice(0, JUDGE_LIMITS.MAX_DELIVERABLE_CHARS)}`,
     },
   ];

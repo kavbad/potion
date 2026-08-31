@@ -363,7 +363,9 @@ export function LabConsole({
       {mode === 'awaiting-human' && state.glow.pendingQuestion !== null ? (
         <div className="mt-4 border-2 border-warn bg-white px-6 py-5" data-testid="form-check-in">
           <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-warn">
-            it&rsquo;s asking — the run is paused until you answer
+            {/^(About to run external tool|It wants to )/.test(state.glow.pendingQuestion)
+              ? 'it\u2019s asking permission — approve, refuse, or redirect'
+              : 'it\u2019s asking you a question — the run is paused until you answer'}
           </div>
           <p className="mt-2 text-[16px] leading-relaxed text-ink">{state.glow.pendingQuestion}</p>
           <form
@@ -373,7 +375,9 @@ export function LabConsole({
             <input
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder="yes approves · no refuses · or say what to change"
+              placeholder={/^(About to run external tool|It wants to )/.test(state.glow.pendingQuestion ?? '')
+                ? 'yes approves · no refuses · or say what to change'
+                : 'type your answer — it lands as the worker\u2019s next message'}
               className="w-full border border-[#c4bfb2] bg-white px-3 py-2 font-mono text-[13.5px] text-ink placeholder:text-faint focus:border-warn focus:outline-none"
               data-testid="form-answer"
             />

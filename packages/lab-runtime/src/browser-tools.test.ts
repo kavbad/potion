@@ -91,6 +91,27 @@ describe('session lifecycle + plumbing', () => {
   });
 });
 
+describe('the pore speaks human (describeAction)', () => {
+  it('an act on a seen control names it — label, tag, page; an unseen ref stays raw', async () => {
+    const { fetchImpl } = scriptedService({
+      'https://app.example/board': { url: 'https://app.example/board', title: 'Board', text: 'Sprint 12', interactables: [{ ref: 'p1', tag: 'button', label: 'Add card' }] },
+    });
+    const setup = buildBrowserLabTools({ browserUrl: 'http://browser.test', fetchImpl });
+    const byName = new Map(setup.tools.map((t) => [t.name, t]));
+    const act = byName.get('browser_act')!;
+    // Before any page is seen: no label to speak of — raw question.
+    expect(act.describeAction!({ ref: 'p1', kind: 'click' })).toBeNull();
+    await byName.get('browser_open')!.run({ url: 'https://app.example/board' });
+    const described = act.describeAction!({ ref: 'p1', kind: 'click' });
+    expect(described).toContain('click');
+    expect(described).toContain('Add card');
+    expect(described).toContain('(button)');
+    expect(described).toContain('https://app.example/board');
+    // A ref the model was never shown gets no invented label.
+    expect(act.describeAction!({ ref: 'p9', kind: 'click' })).toBeNull();
+  });
+});
+
 describe('custody at the tool boundary', () => {
   it('key-shaped content in page text is redacted before model context', async () => {
     const { fetchImpl } = scriptedService({

@@ -47,6 +47,13 @@ export interface LabTool {
    * brain.policy (planning is thinking; the A2 partition is about real
    * tool serving). */
   core?: boolean;
+  /** Human words for the pore's question (2026-08-31, from watching a real
+   * approval read "input {\"ref\": \"p8\"}"): a tool that knows what its
+   * input MEANS renders it for the person approving — 'click "Add card"
+   * (button) on https://…'. Falls back to the raw-input question. The
+   * question is record DATA (replay never re-derives it), so this is
+   * replay-safe for old records. */
+  describeAction?(input: unknown): string | null;
   run(input: unknown): Promise<unknown>;
 }
 
@@ -705,7 +712,13 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           const gate = opts.spec.checkIns.some((c) => c.trigger === 'before-external-action');
           const fingerprint = actionFingerprint(tool.name, call.function.arguments);
           if (gate && tool.external) {
-            const question = `About to run external tool '${tool.name}' with input ${JSON.stringify(call.function.arguments).slice(0, 200)}. Proceed?`;
+            let described: string | null = null;
+            try {
+              described = tool.describeAction?.(JSON.parse(call.function.arguments || '{}')) ?? null;
+            } catch { /* malformed args → raw question */ }
+            const question = described !== null
+              ? `It wants to ${described}. Proceed?`
+              : `About to run external tool '${tool.name}' with input ${JSON.stringify(call.function.arguments).slice(0, 200)}. Proceed?`;
             seq += 1;
             await appendLabStep(opts.db, {
               runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
