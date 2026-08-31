@@ -196,15 +196,23 @@ export function LabBenchRail({
 
         <span className="mx-1 hidden h-5 w-px bg-[#d9d5cb] sm:inline-block" />
 
-        {/* the primary action, never below the fold */}
+        {/* the primary action, never below the fold. When powers are
+             unmet the worker will fail fast (it won't flail or fake-
+             complete) — so the button says so honestly rather than
+             inviting a guaranteed dead run. */}
         <button
           type="button"
           onClick={() => void runTrial()}
           disabled={role === 'viewer' || busyId !== null}
-          className="bg-ink px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+          className={
+            unmetPowers.length > 0
+              ? 'border border-warn px-4 py-1.5 text-[13px] font-semibold text-warn hover:bg-warn hover:text-white disabled:opacity-40'
+              : 'bg-ink px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40'
+          }
+          title={unmetPowers.length > 0 ? 'connect its powers first (above) — a trial now fails fast with a clear reason' : ''}
           data-testid="rail-trial"
         >
-          {busyId === 'trial' ? 'Starting…' : 'Run a trial'}
+          {busyId === 'trial' ? 'Starting…' : unmetPowers.length > 0 ? 'Run a trial anyway' : 'Run a trial'}
         </button>
 
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-faint">

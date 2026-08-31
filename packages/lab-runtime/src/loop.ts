@@ -447,6 +447,29 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       messages.push(toolResultMessage(legNote.toolName, legNote.note));
     }
 
+    // ---- HONEST START (2026-08-31): a worker BORN TOOLLESS does not flail.
+    // If it declared superpowers but NONE loaded (every declared power came
+    // back as a superpowerUnavailable leg note), it cannot do its job — so
+    // it fails fast with a crisp, ACTIONABLE reason instead of producing
+    // prose that pretends to work and then "completes" hollow. A truly
+    // brain-only worker declares no superpowers and is untouched; a worker
+    // with even one connected power is left to do its partial work.
+    // Recomputed each leg from the handler's fresh notes.
+    if (opts.spec.superpowers.length > 0) {
+      const realToolLoaded = (opts.tools ?? []).some((t) => t.core !== true);
+      const unavailable = (opts.legNotes ?? [])
+        .map((n) => (n.note as { superpowerUnavailable?: { connectorId?: string; detail?: string } } | null)?.superpowerUnavailable)
+        .filter((x): x is { connectorId?: string; detail?: string } => x !== undefined && x !== null);
+      if (!realToolLoaded && unavailable.length > 0) {
+        // The reason carries each power's OWN remediation (connect vs a
+        // deployment gap) so it is always actionable, never generic.
+        const parts = unavailable.map((u) => `${u.connectorId ?? 'a superpower'}${u.detail !== undefined ? ` (${u.detail})` : ''}`);
+        const reason = `not ready: this worker needs ${[...new Set(parts)].join('; ')} before it can work. Fix that, then run again — it will not spend a cent flailing without its tools.`;
+        await fenced.transition('failed', reason);
+        return { status: 'failed', reason: 'superpowers-unconnected', steps: 0 };
+      }
+    }
+
     // ---- the APPROVED action runs; the model is not asked to re-propose ----
     //
     // Step 12 (L2, second half). Binding the approval to a fingerprint is
@@ -686,6 +709,21 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
               }
               const reason = `contract-violation: the check ended without a valid deliverable (${parsedBrief.issues.join('; ')})`;
               await fenced.transition('failed', reason);
+              return { status: 'failed', reason: 'contract-violation', steps: stepsThisLeg };
+            }
+            // A schema-valid brief can still say NOTHING — headline/byEntity/
+            // quiet all empty AND coverage.checked===0 is "I did no work",
+            // not a completed check. Treat it like an unparsed brief: one
+            // repair round, then an honest failure. (A legitimate quiet
+            // watchdog check has coverage.checked>0 and passes.)
+            const b = parsedBrief.brief;
+            const hollow = b.headline.length === 0 && b.byEntity.length === 0 && b.quiet.length === 0 && b.coverage.checked === 0;
+            if (hollow) {
+              if (contractRepairsIn(messages) < 1) {
+                messages.push(contractRepairMessage(['the deliverable is empty — do the work and report what you found, or state honestly what you checked and why there is nothing (coverage must reflect real checking)']));
+                continue;
+              }
+              await fenced.transition('failed', 'contract-violation: the check produced an empty deliverable — nothing was actually done');
               return { status: 'failed', reason: 'contract-violation', steps: stepsThisLeg };
             }
             await fenced.transition('completed', 'check complete — deliverable filed; the mission rests until its next check');

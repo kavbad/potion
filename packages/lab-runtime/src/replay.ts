@@ -201,11 +201,20 @@ export function replayRun(
       if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'standing' && derivedTerminal === null && estSpent < spec.fuel.maxUsdPerRun) {
         if (spec.contract !== undefined) {
           const parsedBrief = parseBrief(p.responseText ?? '');
-          if (parsedBrief.ok) {
+          // 2026-08-31 (mirrored same commit): a schema-valid but EMPTY
+          // brief is not a completion — the loop runs one repair round then
+          // fails; replay must derive the same or every hollow record reads
+          // as a false 'completed'.
+          const hollow = parsedBrief.ok
+            && parsedBrief.brief.headline.length === 0 && parsedBrief.brief.byEntity.length === 0
+            && parsedBrief.brief.quiet.length === 0 && parsedBrief.brief.coverage.checked === 0;
+          if (parsedBrief.ok && !hollow) {
             derivedTerminal = { state: 'completed', atSeq: step.seq };
           } else if (contractRepairs < 1) {
             contractRepairs += 1;
-            messages.push(contractRepairMessage(parsedBrief.issues));
+            messages.push(contractRepairMessage(parsedBrief.ok
+              ? ['the deliverable is empty — do the work and report what you found, or state honestly what you checked and why there is nothing (coverage must reflect real checking)']
+              : parsedBrief.issues));
           } else {
             derivedTerminal = { state: 'failed', atSeq: step.seq };
           }
@@ -220,6 +229,16 @@ export function replayRun(
     }
 
     if (step.kind === 'tool') {
+      // Leg-start superpower notes (Step 10) are recorded as tool steps but
+      // are CONTEXT, not responses to a model tool call — the loop pushes
+      // them before the first model step. Replay treats them the same:
+      // inject the message, never match a pending call. (This is what lets a
+      // toolless fail-fast record — legNotes only, no model step — verify.)
+      const isLegNote = (p.toolOutput as { superpowerUnavailable?: unknown } | null)?.superpowerUnavailable !== undefined;
+      if (isLegNote) {
+        if (messages !== null) messages.push(toolResultMessage(p.toolName ?? '?', p.toolOutput ?? null));
+        continue;
+      }
       const expected = pendingToolCalls.shift();
       if (expected === undefined) {
         divergences.push(div('stream-shape', step.seq, 'no pending tool call', p.toolName, 'kind'));
@@ -273,7 +292,12 @@ export function replayRun(
   if (derivedTerminal === null && expectWrapUp) {
     derivedTerminal = { state: 'completed', atSeq: lastSeq };
   }
-  const expectedState = derivedTerminal?.state ?? 'running';
+  // 2026-08-31 (mirrors the loop's HONEST START fail-fast): a run that
+  // never called the model (a worker born toolless, failed before any
+  // model step) has no conversation to derive — the recorded terminal
+  // stands unchallenged. A record WITH model steps but no derived terminal
+  // is still the leg-cap 'running' case.
+  const expectedState = derivedTerminal?.state ?? (modelSteps === 0 ? terminal.state : 'running');
   if (expectedState !== terminal.state) {
     divergences.push(div('terminal-state', lastSeq, expectedState, terminal.state, 'state'));
   }

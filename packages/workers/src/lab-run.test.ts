@@ -377,11 +377,17 @@ describe('X1 — the code superpower against a REAL sandbox (integration)', () =
     });
     const { factory } = scriptedFactory([ok({ text: 'the thing is done' }), ok({ text: 'Wrap-up: done-definition met.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
-    expect(res.state).toBe('completed');
+    // HONEST START (2026-08-31): a code worker with no sandbox does not
+    // fake-complete — it fails fast with the actual remediation, and burns
+    // no model call doing it.
+    expect(res.state).toBe('failed');
     const steps = await listLabSteps(db.db, runId, ORG);
     const note = steps.find((st) => JSON.stringify(st.payload).includes('superpowerUnavailable'));
     expect(note, 'expected the typed sandbox-unconfigured leg note').toBeDefined();
     expect(JSON.stringify(note!.payload)).toContain('POTION_SANDBOX_URL');
+    const run = await getLabRun(db.db, runId, ORG);
+    expect(run!.stateReason).toContain('POTION_SANDBOX_URL');
+    expect(steps.every((st) => st.kind !== 'model')).toBe(true);
   });
 });
 
@@ -814,7 +820,8 @@ describe('X6 — the browser hand: reads free, every act at the pore', () => {
     await seedRun(runId, s);
     const { factory } = scriptedFactory([ok({ text: 'the thing is done' }), ok({ text: 'Wrap-up: done.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId }, ctx());
-    expect(res.state).toBe('completed');
+    // HONEST START: a browser worker with no service fails fast, not hollow.
+    expect(res.state).toBe('failed');
     const { listLabSteps } = await import('@potion/db');
     const steps = await listLabSteps(db.db, runId, ORG);
     const note = steps.find((st) => JSON.stringify(st.payload).includes('POTION_BROWSER_URL'));
