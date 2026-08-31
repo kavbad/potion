@@ -81,6 +81,31 @@ Smaller sharpenings, also law:
 - **Evaluators ride their own dials** (the judge-slot lesson, 2026-08-31):
   every evaluator gets its own quality-floored policy, never the worker's.
 
+## The fifth amendment — the flagship binding (added same day, on the
+operator's challenge "do you fully think this is the right plan?")
+
+**A5 — The ladder is pulled by a flagship, and the plan names its own
+external dependency.** As first written, the W-ladder was horizontal —
+layers of trust/evolution machinery whose fuel (production evidence)
+does not yet exist, because usage does not yet exist. Two corrections:
+
+1. **A flagship worker family is committed now and treated as a product:
+   the Spreadsheet Analyst first** (zero external dependencies, proven
+   10/10 end-to-end on prod 2026-08-31), **the Codebase Surgeon second**
+   (tests-as-ground-truth; the strongest evolution testbed once GitHub
+   connects). Every W-phase from W2 onward is scoped to what the
+   flagship's real runs actually produce — evidence classes, eval cases,
+   mutations — never built abstractly ahead of demand. W4 (IR) is
+   explicitly conditional: it waits until a concrete worker is blocked
+   by the loop's shape.
+2. **The critical path is one path.** Evidence-driven evolution needs
+   evidence; evidence needs users; users need the operator-side work
+   (OAuth sprint, Stripe, demo clicks, distribution). The W-ladder
+   interleaves with that work — it cannot succeed around it. W1 remains
+   urgent independent of scale because it is an honesty defect TODAY:
+   an OpenClaw worker's earned grant is honored while a native worker's
+   identical grant is ignored.
+
 ## Adopted vocabulary
 
 **Workers** is the user-facing noun (hire, job, responsibility, work
@@ -181,7 +206,7 @@ class, coverage, and the records behind them.*
 *Surface proof: Potion proposes a descendant with receipts and the
 operator promotes it from the Improve inbox.*
 
-### W4 — Harness IR
+### W4 — Harness IR (conditional — waits for a puller, per A5)
 
 - The existing loop **compiles into** IR — it becomes one particular
   graph, not legacy. The durable step grammar is unchanged; the replay
