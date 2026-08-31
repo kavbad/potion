@@ -115,10 +115,11 @@ export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
     {
       name: 'run_python',
       description:
-        'Run Python 3.12 in the Potion sandbox (pandas, numpy, openpyxl, matplotlib preinstalled; no network). ' +
-        'The run has ONE persistent file workspace: files already in it are placed in the working directory before ' +
-        'your code runs, and files your code writes to the working directory are kept for later steps and delivered ' +
-        'as the run’s artifacts. Print what you need to see; write files you want to keep.',
+        'Run Python 3.12 in the Potion sandbox (pandas, numpy, openpyxl, matplotlib; no network). ' +
+        'FRESH PROCESS each call — no variable or import survives from a previous call; only FILES in the working ' +
+        'directory persist (existing workspace files are placed there first; files you write are kept for later ' +
+        'calls and delivered as artifacts). Do the whole job in one call when you can, or write intermediate data ' +
+        'to a file and reload it. Print what you need to see; write real deliverables (csv, xlsx, png, md) as files.',
       parameters: {
         type: 'object',
         properties: {
@@ -143,9 +144,10 @@ export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
       // terminal provably cannot phone home — a shell that cannot reach
       // the world is thinking, not acting.
       description:
-        'Run a shell script in the Potion sandbox (bash; git and node available, python too; NO network — installs cannot run here, and nothing can phone home). ' +
-        'Same persistent workspace as run_python: the whole tree is placed in the working directory first, and files you write are kept. ' +
-        'Use it to run tests, inspect trees, and do local git operations on fetched repos.',
+        'Run a bash script in the Potion sandbox (git, node, python available; NO network). ' +
+        'FRESH PROCESS each call — nothing survives except FILES in the working directory (the whole workspace tree ' +
+        'is placed there first; files you write are kept). Use it to run tests, inspect the tree, and do local git ' +
+        'operations on fetched repos.',
       parameters: {
         type: 'object',
         properties: {

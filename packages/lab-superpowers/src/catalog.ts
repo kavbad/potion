@@ -93,9 +93,10 @@ const CODE = pkg({
   },
   usage: {
     preamble:
-      'Code: run Python 3.12 in an isolated sandbox (pandas, numpy, openpyxl, matplotlib; NO network — fetch data with the web tools first). ' +
-      'The run has one persistent file workspace: files you write are kept across steps and delivered as artifacts. ' +
-      'Prefer computing answers over estimating them; write deliverables (xlsx, csv, png, md) as files.',
+      'Code: run Python 3.12 (pandas, numpy, openpyxl, matplotlib) and bash in an isolated sandbox; NO network. ' +
+      'CRITICAL — each run_python/run_shell call is a FRESH process: variables, imports, and in-memory data do NOT survive between calls. ONLY files you write to the working directory persist (they are restored into your next call and delivered as the run’s artifacts). ' +
+      'So: do a self-contained job in ONE call when you can; if you must work in steps, WRITE intermediate results to a file and RELOAD them next call — never rely on a variable from a previous call. ' +
+      'Compute answers, never estimate them; write real deliverables (xlsx, csv, png, md) as files in the working directory. If you need outside data, fetch it with the web tools first, then paste it into your code or a file.',
     tokenBudget: DEFAULT_TOKEN_BUDGET,
   },
   tools: [
