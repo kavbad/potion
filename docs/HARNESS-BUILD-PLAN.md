@@ -468,6 +468,13 @@ earlier passes could not see, plus one weapon underused. Build answers:
   retreat wearing discipline's clothes. The check-in channel generalizes
   into live steering of a running worker — same loop, laws, receipts.
   NOT-list amended: not "never", sequenced after X7.
+  **SHIPPED 2026-08-30, commit 94cca69, deployed** (0072 steering queue;
+  steers fold in at the next model step, stamped + consumed with the seq,
+  replay divergence-free via the shared builder; guidance NEVER
+  authorizes — parked runs stay parked, helpers unsteerable; member
+  inlet with custody scan + caps; steer box on live run pages). THE
+  X-LADDER IS COMPLETE: X1 sandbox, X2 ledger, X3 judge, X4 fan-out,
+  BYO-MCP, X6 browser, X7 dev hands, X8 session shape — all live.
 - **Harness-of-harnesses, promoted to doctrine.** For needs where a rival
   agent is peak, registerPotionGate is the answer we undersold: run
   OpenClaw / Claude-Agent-SDK / anything UNDER Potion — routed inference,
