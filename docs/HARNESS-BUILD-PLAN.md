@@ -448,6 +448,14 @@ changes this document should be evidence from production.
 Verdict: NO as previously locked — this bar exposed two structural gaps the
 earlier passes could not see, plus one weapon underused. Build answers:
 
+- **X7 — SHIPPED 2026-08-30, commit b487282, deployed** (workspace v2
+  trees at 400 files/64MB with storage-boundary path law — dotfiles yes,
+  traversal and loose .git no; run_shell sealed by the no-egress network
+  law, proven live: "Network is unreachable" from inside, git 2.47 + node
+  20 working offline; governed git — repo_fetch snapshots in via tarball
+  + custody token, github_pr out through the pore, dark until the OAuth
+  sprint and lights up that day; governance paid: 3 T8 rows, count
+  122→125, baseline regen).
 - **X7 — the dev hands.** Against Claude Code on real dev work we lose on
   physique: sixteen flat files vs a filesystem. Workspace v2 (directory
   trees, repo-scale quotas); a SHELL inside the no-egress sandbox (a
