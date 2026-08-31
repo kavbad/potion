@@ -274,7 +274,7 @@ export function MissionGallery() {
     <section className="mt-12" data-testid="mission-gallery">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-          the gallery — any agent, for any need
+          the gallery — hire workers that own real jobs
         </h2>
         <span className="font-mono text-[11.5px] text-faint">
           every species hire-able today · promises only what the runtime enforces

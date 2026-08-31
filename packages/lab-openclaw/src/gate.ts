@@ -11,6 +11,8 @@
 // Zero dependencies: plain fetch, structural types, so the client embeds in
 // any runtime plugin without dragging Potion's workspace along.
 
+import { createHash, randomUUID } from 'node:crypto';
+
 export interface PotionGateConfig {
   /** https://api.withpotion.com */
   apiUrl: string;
@@ -36,7 +38,11 @@ const HOLD_UNREACHABLE: PoreDecision = {
 };
 
 export class PotionGateClient {
-  private runId: string | null = null;
+  /** W0 (2026-08-31): per-sessionKey run state. The old single mutable
+   * runId attributed every later session's actions to whichever session
+   * initialized first — evidence landing on the wrong run is worse than
+   * no evidence. */
+  private readonly runs = new Map<string, string>();
 
   constructor(private readonly config: PotionGateConfig) {}
 
@@ -63,56 +69,68 @@ export class PotionGateClient {
     }
   }
 
-  /** Register (idempotently) the runtime session this client speaks for. */
+  /** Register (idempotently) the runtime session this client speaks for.
+   * Per-sessionKey: two sessions on one client get two runs. */
   async ensureSession(sessionKey: string): Promise<string | null> {
-    if (this.runId) return this.runId;
+    const known = this.runs.get(sessionKey);
+    if (known !== undefined) return known;
     const body = await this.post('/v1/lab/runtime/sessions', {
       harnessHash: this.config.harnessHash,
       sessionKey,
       runtime: 'openclaw',
     });
-    this.runId = typeof body?.runId === 'string' ? body.runId : null;
-    return this.runId;
+    const runId = typeof body?.runId === 'string' ? body.runId : null;
+    if (runId !== null) this.runs.set(sessionKey, runId);
+    return runId;
   }
 
-  /** The gate decision for one proposed action. */
-  async pore(input: { toolName: string; argsHash: string; argsSummary?: string }): Promise<PoreDecision> {
-    if (!this.runId) return HOLD_UNREACHABLE;
-    const body = await this.post('/v1/lab/runtime/pore', { runId: this.runId, ...input });
-    if (body?.decision === 'allow') return { decision: 'allow', audit: body.audit === true };
+  /** The gate decision for one proposed action. Mints the per-call
+   * actionId — the identity that audit state and outcomes bind to, so
+   * identical concurrent actions never share a fate. */
+  async pore(
+    sessionKey: string,
+    input: { toolName: string; argsHash: string; argsSummary?: string },
+  ): Promise<PoreDecision & { actionId: string }> {
+    const actionId = randomUUID();
+    const runId = this.runs.get(sessionKey);
+    if (runId === undefined) return { ...HOLD_UNREACHABLE, actionId };
+    const body = await this.post('/v1/lab/runtime/pore', { runId, actionId, ...input });
+    if (body?.decision === 'allow') return { decision: 'allow', audit: body.audit === true, actionId };
     if (body?.decision === 'blocked')
-      return { decision: 'blocked', reason: typeof body.reason === 'string' ? body.reason : 'blocked' };
+      return { decision: 'blocked', reason: typeof body.reason === 'string' ? body.reason : 'blocked', actionId };
     if (body?.decision === 'hold')
-      return { decision: 'hold', question: typeof body.question === 'string' ? body.question : 'Allow this action?' };
-    return HOLD_UNREACHABLE; // network failure, 4xx, anything else: supervise
+      return { decision: 'hold', question: typeof body.question === 'string' ? body.question : 'Allow this action?', actionId };
+    return { ...HOLD_UNREACHABLE, actionId }; // network failure, 4xx, anything else: supervise
   }
 
   /** Report how the human resolved a hold. Best-effort: a lost report loses
    * evidence, never correctness. */
-  async resolve(argsHash: string, resolution: PoreResolution): Promise<void> {
-    if (!this.runId) return;
-    await this.post('/v1/lab/runtime/pore/resolve', { runId: this.runId, argsHash, resolution });
+  async resolve(sessionKey: string, input: { actionId: string; argsHash: string; resolution: PoreResolution }): Promise<void> {
+    const runId = this.runs.get(sessionKey);
+    if (runId === undefined) return;
+    await this.post('/v1/lab/runtime/pore/resolve', { runId, ...input });
   }
 
   /** Report the execution outcome (validator-grade evidence later). */
-  async outcome(input: { toolName: string; argsHash: string; ok: boolean; fromAudit?: boolean }): Promise<void> {
-    if (!this.runId) return;
-    await this.post('/v1/lab/runtime/outcome', { runId: this.runId, ...input });
+  async outcome(
+    sessionKey: string,
+    input: { toolName: string; argsHash: string; actionId?: string; ok: boolean; fromAudit?: boolean },
+  ): Promise<void> {
+    const runId = this.runs.get(sessionKey);
+    if (runId === undefined) return;
+    await this.post('/v1/lab/runtime/outcome', { runId, ...input });
   }
 }
 
-/** Stable fingerprint for a tool call's arguments — sorted-key JSON, FNV-free
- * plain djb2-xor hex; the gate only needs equality, not cryptography. */
+/** Fingerprint for a tool call's arguments — sha256 over sorted-key JSON.
+ * W0 (2026-08-31): the old djb2-xor hex claimed "the gate only needs
+ * equality, not cryptography" — false. This hash IS the approval identity
+ * (checkInAction.argsHash binds what the human authorized to what runs);
+ * a collision means an approval could authorize different arguments.
+ * Human authorization binds to a real hash. node:crypto is a builtin —
+ * the zero-workspace-dependency property of this client holds. */
 export function argsHashOf(params: unknown): string {
-  const canonical = JSON.stringify(sortKeys(params));
-  let h1 = 0x811c9dc5;
-  let h2 = 0x01000193;
-  for (let i = 0; i < canonical.length; i++) {
-    const c = canonical.charCodeAt(i);
-    h1 = ((h1 ^ c) * 0x01000193) >>> 0;
-    h2 = ((h2 + c) * 0x85ebca6b) >>> 0;
-  }
-  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+  return createHash('sha256').update(JSON.stringify(sortKeys(params))).digest('hex');
 }
 
 function sortKeys(v: unknown): unknown {

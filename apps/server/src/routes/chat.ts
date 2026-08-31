@@ -1555,6 +1555,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // requested settings vs resolved outcome, no trace parsing required.
         // The trace header stays the source record.
         potion: {
+          // W0 (2026-08-31): the METERED charge for this request, as billed
+          // — what honest budget enforcement runs on (the flat token
+          // heuristic neither upper- nor lower-bounds real prices).
+          ...(result.usage?.costUsd !== undefined ? { cost_usd: result.usage.costUsd } : {}),
           requested_cluster: hintedClusterId ?? 'auto',
           resolved_cluster: clusterId,
           requested_policy: policyOverrideName,

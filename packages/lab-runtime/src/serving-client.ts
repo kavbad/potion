@@ -45,6 +45,10 @@ export type ServingResult =
       toolCalls: ToolCall[];
       finishReason: string;
       usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+      /** W0: the metered charge for this request (potion.cost_usd) — the
+       * billed truth budget enforcement prefers over the token estimate.
+       * Absent when the server predates the extension. */
+      costUsd?: number;
       /** x-frontier-trace, verbatim — per-step provenance as served. */
       frontierTrace: string;
     }
@@ -131,6 +135,7 @@ export class ServingClient {
         finish_reason?: string;
       }>;
       usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      potion?: { cost_usd?: number };
     };
     const choice = json.choices[0];
     return {
@@ -144,6 +149,7 @@ export class ServingClient {
         completionTokens: json.usage?.completion_tokens ?? 0,
         totalTokens: json.usage?.total_tokens ?? 0,
       },
+      ...(typeof json.potion?.cost_usd === 'number' ? { costUsd: json.potion.cost_usd } : {}),
       frontierTrace,
     };
   }

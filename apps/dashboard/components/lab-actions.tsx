@@ -734,8 +734,8 @@ export function InterviewForm() {
             <label htmlFor="lab-q-example">a great result looks like…</label>
             <InfoDot label="a great result">
               Concreteness beats adjectives: one pasted example of what you&rsquo;d love to receive
-              teaches the build more than a paragraph of description. It is read while your worker is
-              being designed — it is not stored on the worker, and secrets are refused before
+              teaches the build more than a paragraph of description. It is stored on the worker as
+              its standard — the judge scores every run against it — and secrets are refused before
               anything is read.
             </InfoDot>
           </div>

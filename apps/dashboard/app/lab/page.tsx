@@ -33,7 +33,7 @@ export default async function LabPage() {
   return (
     <LabStage>
       <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-        Agents · supervised first, trusted per action
+        Workers · supervised first, trusted per action
       </div>
       <h1 className="mt-3 text-[2.2rem] font-semibold leading-[1.05] tracking-[-0.025em] text-ink">
         Your workers

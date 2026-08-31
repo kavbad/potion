@@ -98,6 +98,7 @@ export function replayRun(
   let modelSteps = 0;
   let derivedTerminal: { state: string; atSeq: number } | null = null;
   let askedAlready = false;
+  let budgetKillPending = false;
   // Step 8: a TOOL-BEARING task run ends with the loop's deliberate
   // tool-free wrap-up call — after a done-shaped step, expect exactly one
   // more model step derived as messages + wrapUpMessage().
@@ -174,7 +175,12 @@ export function replayRun(
         if (p.estCostUsd !== undefined && Math.abs(p.estCostUsd - est) > 1e-12) {
           divergences.push(div('payload-mismatch', step.seq, est, p.estCostUsd, 'estCostUsd'));
         }
-        estSpent += est;
+        // W0 honest cap (mirrored same commit): spend the METERED charge
+        // where money actually moved, the estimate as the activity bound
+        // where it did not ($0 routes, old records) — exactly the loop's
+        // rule. Old records have no costUsd and derive exactly as before.
+        const metered = (p as { costUsd?: number }).costUsd;
+        estSpent += metered !== undefined && metered > 0 ? metered : est;
       }
       // Adopt the RECORD to keep later comparisons local.
       messages = [...((p.requestPayload?.messages as ChatMessage[] | undefined) ?? messages)];
@@ -233,7 +239,15 @@ export function replayRun(
         }
       }
       if (estSpent >= spec.fuel.maxUsdPerRun && derivedTerminal === null) {
-        derivedTerminal = { state: 'killed-budget', atSeq: step.seq };
+        // W0 honest-cap test exposed the seam: the LOOP executes the
+        // crossing step's tool calls first and kills at its next gate —
+        // so a kill with pending calls DEFERS until the batch's tool
+        // steps are consumed (the loop's true order, now mirrored).
+        if (pendingToolCalls.length === 0) {
+          derivedTerminal = { state: 'killed-budget', atSeq: step.seq };
+        } else {
+          budgetKillPending = true;
+        }
       }
       continue;
     }
@@ -265,6 +279,10 @@ export function replayRun(
       // spend counts against the family cap at exactly this point — the
       // same pure derivation the loop uses.
       estSpent += fanOutSpentFromSteps([{ kind: 'tool', payload: { toolName: p.toolName, toolOutput: p.toolOutput } }]);
+      if (budgetKillPending && pendingToolCalls.length === 0 && derivedTerminal === null) {
+        derivedTerminal = { state: 'killed-budget', atSeq: step.seq };
+        budgetKillPending = false;
+      }
       if (messages !== null) {
         messages.push(toolResultMessage(p.toolName ?? '?', p.toolOutput ?? null));
       }

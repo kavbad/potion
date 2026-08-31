@@ -28,7 +28,7 @@ const PRIMARY = [
   { href: '/', label: 'Router', hint: 'Your router — what it saved, how it decides, every version' },
   { href: '/receipts', label: 'Receipts', hint: 'Every request, accounted for — try one live' },
   { href: '/usage', label: 'Savings', hint: 'What you kept, verified per receipt' },
-  { href: '/lab', label: 'Agents', hint: 'Hire agents that earn autonomy — supervised first, trusted per action' },
+  { href: '/lab', label: 'Workers', hint: 'Hire workers that earn autonomy — supervised first, trusted per action' },
   { href: '/settings/keys', label: 'Settings', hint: 'Keys, controls, frontier, billing, team, audit' },
   { href: '/docs', label: 'Docs', hint: 'Quickstart and API reference' },
 ];

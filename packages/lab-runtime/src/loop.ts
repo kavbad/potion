@@ -71,6 +71,23 @@ export const systemClock: Clock = { now: () => Date.now() };
 export const WRAP_UP_PROMPT =
   'Summarize what you did in this run and state plainly whether the done-definition is met.';
 
+/** W0 approval-rendering law (2026-08-31): the fallback pore question for
+ * a tool with no describeAction. The old version silently cut arguments at
+ * 200 chars — a truncation that can change the meaning of an approval is
+ * a lie to the person approving. Truncation is now NAMED, generous, and
+ * points at where the full arguments live (the durable record binds the
+ * approval to the full fingerprint regardless — checkInAction.argsHash
+ * covers the whole payload, never the excerpt). */
+export function buildRawPoreQuestion(toolName: string, rawArguments: string): string {
+  const shown = JSON.stringify(rawArguments);
+  const cut = shown.length > 900;
+  return (
+    `About to run external tool '${toolName}' with input ${cut ? shown.slice(0, 900) : shown}` +
+    (cut ? ` \u2026 [${shown.length - 900} more characters — the full arguments are fingerprint-bound in the run record]` : '') +
+    '. Proceed?'
+  );
+}
+
 export function wrapUpMessage(): ChatMessage {
   return { role: 'user', content: WRAP_UP_PROMPT };
 }
@@ -408,8 +425,14 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
 
     // Per-run fuel accounting: estimates from checkpointed usage. Labeled an
     // estimate everywhere; the completionId join to request_logs is truth.
+    // The spend ledger: metered truth (costUsd) where money actually moved;
+    // the token estimate as the ACTIVITY bound where it did not ($0 routes,
+    // old steps) — a free route must not unbound a runaway loop.
     let estSpentUsd = priorSteps.reduce(
-      (acc, s) => acc + ((s.payload as StepPayload).estCostUsd ?? 0),
+      (acc, s) => {
+        const sp = s.payload as StepPayload;
+        return acc + (sp.costUsd !== undefined && sp.costUsd > 0 ? sp.costUsd : (sp.estCostUsd ?? 0));
+      },
       0,
     );
     // X4 (one fuel tree): helper spend recorded in delegate outputs counts
@@ -657,6 +680,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           toolCalls: result.toolCalls, finishReason: result.finishReason,
           completionId: result.completionId, frontierTrace: result.frontierTrace,
           usage: result.usage, clockMs: clock.now(), rngSample: rng(),
+          ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {}),
           ...(steerTexts !== undefined ? { steers: steerTexts } : {}),
         }),
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
@@ -669,7 +693,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       // estimates conservatively from tokens at a flat per-1K figure recorded
       // in the payload. The join to request_logs is the auditable number.
       const stepEst = (result.usage.totalTokens / 1000) * 0.01;
-      estSpentUsd += stepEst;
+      estSpentUsd += result.costUsd !== undefined && result.costUsd > 0 ? result.costUsd : stepEst;
       messages.push({ role: 'assistant', content: result.text });
 
       if (result.toolCalls.length > 0) {
@@ -718,7 +742,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             } catch { /* malformed args → raw question */ }
             const question = described !== null
               ? `It wants to ${described}. Proceed?`
-              : `About to run external tool '${tool.name}' with input ${JSON.stringify(call.function.arguments).slice(0, 200)}. Proceed?`;
+              : buildRawPoreQuestion(tool.name, call.function.arguments);
             seq += 1;
             await appendLabStep(opts.db, {
               runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
@@ -873,6 +897,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
                 finishReason: wrap.finishReason, completionId: wrap.completionId,
                 frontierTrace: wrap.frontierTrace, usage: wrap.usage,
                 clockMs: clock.now(), rngSample: rng(),
+                ...(wrap.costUsd !== undefined ? { costUsd: wrap.costUsd } : {}),
               }),
               harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
             });

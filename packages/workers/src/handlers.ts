@@ -4650,7 +4650,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
         capUsd: spec.fuel.maxUsdPerRun,
         familySpentUsd: async () => {
           const parentSteps = await listLabStepsRepo(ctx.db, payload.runId, payload.orgId);
-          const own = parentSteps.reduce((a, x) => a + (((x.payload as { estCostUsd?: number }).estCostUsd) ?? 0), 0);
+          const own = parentSteps.reduce((a, x) => { const sp = x.payload as { costUsd?: number; estCostUsd?: number }; return a + (sp.costUsd !== undefined && sp.costUsd > 0 ? sp.costUsd : (sp.estCostUsd ?? 0)); }, 0);
           return own + fanOutSpentFromSteps(parentSteps.map((x) => ({ kind: x.kind, payload: x.payload })));
         },
         runSub: async (task, budgetUsd) => {
@@ -4714,7 +4714,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             });
           } while (subOut.status === 'leg-cap');
           const subSteps = await listLabStepsRepo(ctx.db, subId, payload.orgId);
-          const estUsd = subSteps.reduce((a, x) => a + (((x.payload as { estCostUsd?: number }).estCostUsd) ?? 0), 0);
+          const estUsd = subSteps.reduce((a, x) => { const sp = x.payload as { costUsd?: number; estCostUsd?: number }; return a + (sp.costUsd !== undefined && sp.costUsd > 0 ? sp.costUsd : (sp.estCostUsd ?? 0)); }, 0);
           const lastModel = [...subSteps].reverse().find((x) => x.kind === 'model');
           const answer = ((lastModel?.payload as { responseText?: string })?.responseText ?? '').trim();
           const state: 'completed' | 'failed' | 'killed-budget' =

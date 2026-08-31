@@ -22,6 +22,12 @@ export interface StepPayload {
   /** LABELED ESTIMATE (flat per-1K figure). The completionId join to
    * request_logs is the auditable number. */
   estCostUsd?: number;
+  /** W0 (2026-08-31): the METERED charge for this step as billed by
+   * serving (potion.cost_usd). The honest-cap rule spends this when
+   * present and falls back to estCostUsd — the flat token heuristic
+   * neither upper- nor lower-bounds real prices. Absent on old records
+   * (their accounting derives exactly as before). */
+  costUsd?: number;
   /** Step 8 (the toolPolicy activation): which policy slot served this
    * model step — calls carrying toolDefs are 'tools', deliberate tool-free
    * calls (the wrap-up) and toolless runs are 'brain'. */
@@ -56,7 +62,15 @@ export interface StepPayload {
    * and it ran ungated. The pore fired for one action and a different one
    * went out. The approval is now bound to this fingerprint.
    */
-  checkInAction?: { toolName: string; argsHash: string; arguments: string };
+  checkInAction?: {
+    toolName: string;
+    argsHash: string;
+    arguments: string;
+    /** W0 (2026-08-31): per-call unique id so identical concurrent actions
+     * never share an approval/audit identity. Optional — old records and
+     * the hosted loop's fingerprint-bound path predate it. */
+    actionId?: string;
+  };
   checkInAnswer?: string;
   /** X8: operator steers folded into THIS model step's conversation —
    * replay re-injects them (steerMessage) before deriving the request. */

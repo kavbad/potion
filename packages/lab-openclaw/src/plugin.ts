@@ -56,12 +56,17 @@ export interface OpenClawPluginApi {
   ): void;
 }
 
-/** Per-session audit flags: an allowed-with-audit action reports fromAudit
- * on its outcome so the sampled-review stream stays labeled. */
-const auditFlags = new Map<string, boolean>();
-
 export function registerPotionGate(api: OpenClawPluginApi, config: PotionGateConfig): PotionGateClient {
   const client = new PotionGateClient(config);
+  // W0 (2026-08-31): audit/outcome identity is the per-call actionId, and
+  // the state lives PER REGISTRATION — the old module-level map keyed
+  // toolName:argsHash was shared across every registered gate and collided
+  // on identical concurrent actions. Correlation from before→after hook:
+  // by toolCallId when the runtime provides one; otherwise FIFO per
+  // (session, tool, argsHash) — order-preserving, never cross-attributing.
+  const byCallId = new Map<string, { actionId: string; audit: boolean }>();
+  const fifo = new Map<string, Array<{ actionId: string; audit: boolean }>>();
+  const fifoKey = (sessionKey: string, toolName: string, argsHash: string) => `${sessionKey}|${toolName}|${argsHash}`;
 
   api.on(
     'before_tool_call',
@@ -69,14 +74,21 @@ export function registerPotionGate(api: OpenClawPluginApi, config: PotionGateCon
       const sessionKey = ctx.sessionKey ?? ctx.sessionId ?? 'default';
       await client.ensureSession(sessionKey);
       const argsHash = argsHashOf(event.params);
-      const decision = await client.pore({
+      const decision = await client.pore(sessionKey, {
         toolName: event.toolName,
         argsHash,
         argsSummary: JSON.stringify(event.params).slice(0, 400),
       });
 
       if (decision.decision === 'allow') {
-        auditFlags.set(`${event.toolName}:${argsHash}`, decision.audit);
+        const entry = { actionId: decision.actionId, audit: decision.audit };
+        if (event.toolCallId !== undefined) byCallId.set(event.toolCallId, entry);
+        else {
+          const k = fifoKey(sessionKey, event.toolName, argsHash);
+          const q = fifo.get(k) ?? [];
+          q.push(entry);
+          fifo.set(k, q);
+        }
         return; // earned autonomy — no block, no ceremony
       }
       if (decision.decision === 'blocked') {
@@ -93,23 +105,34 @@ export function registerPotionGate(api: OpenClawPluginApi, config: PotionGateCon
           // Defensive: we never OFFER allow-always, but if the runtime hands
           // one through anyway it is still a single human allowance — record
           // it as allow-once; standing autonomy only ever comes from grants.
-          onResolution: (resolved) => client.resolve(argsHash, resolved === 'allow-always' ? 'allow-once' : resolved),
+          onResolution: (resolved) =>
+            client.resolve(sessionKey, {
+              actionId: decision.actionId,
+              argsHash,
+              resolution: resolved === 'allow-always' ? 'allow-once' : resolved,
+            }),
         },
       };
     },
     { priority: 100 },
   );
 
-  api.on('after_tool_call', async (event) => {
+  api.on('after_tool_call', async (event, ctx) => {
+    const sessionKey = ctx.sessionKey ?? ctx.sessionId ?? 'default';
     const argsHash = argsHashOf(event.params);
-    const key = `${event.toolName}:${argsHash}`;
-    const fromAudit = auditFlags.get(key) === true;
-    auditFlags.delete(key);
-    await client.outcome({
+    let entry: { actionId: string; audit: boolean } | undefined;
+    if (event.toolCallId !== undefined) {
+      entry = byCallId.get(event.toolCallId);
+      byCallId.delete(event.toolCallId);
+    } else {
+      entry = fifo.get(fifoKey(sessionKey, event.toolName, argsHash))?.shift();
+    }
+    await client.outcome(sessionKey, {
       toolName: event.toolName,
       argsHash,
+      ...(entry !== undefined ? { actionId: entry.actionId } : {}),
       ok: event.error === undefined || event.error === null,
-      ...(fromAudit ? { fromAudit } : {}),
+      ...(entry?.audit === true ? { fromAudit: true } : {}),
     });
   });
 

@@ -135,7 +135,7 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
   return (
     <LabStage>
       <nav className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-        <Link href="/lab" className="text-soft hover:text-accent">Agents</Link>
+        <Link href="/lab" className="text-soft hover:text-accent">Workers</Link>
         {' · '}the specimen
       </nav>
 

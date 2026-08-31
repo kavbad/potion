@@ -108,3 +108,103 @@ describe('argsHashOf', () => {
     expect(argsHashOf({ a: 1 })).not.toBe(argsHashOf({ a: 2 }));
   });
 });
+
+// ── W0 (2026-08-31): the three seams, each with the test that would have
+// caught it. Sessions isolate; hashes are cryptographic; audit identity is
+// the per-call actionId, never toolName+argsHash.
+describe('W0 — session isolation', () => {
+  it('two sessions on one client register two runs, and each action reports to ITS OWN run', async () => {
+    let sessionN = 0;
+    const { impl, calls } = fakeFetch((path) =>
+      path.endsWith('/sessions') ? { runId: `runx-${++sessionN}`, state: 'running' }
+      : path.endsWith('/pore') ? { decision: 'allow', audit: false }
+      : { recorded: true },
+    );
+    const { api, handlers } = fakeApi();
+    registerPotionGate(api, { ...CONFIG, fetchImpl: impl });
+    await handlers.before!(EVENT, { sessionKey: 'alpha' });
+    await handlers.before!(EVENT, { sessionKey: 'beta' });
+    expect(calls.filter((c) => c.path.endsWith('/sessions'))).toHaveLength(2);
+    const pores = calls.filter((c) => c.path.endsWith('/pore'));
+    expect(pores[0]!.body.runId).toBe('runx-1');
+    expect(pores[1]!.body.runId).toBe('runx-2');
+    await handlers.after!({ ...EVENT }, { sessionKey: 'beta' });
+    const outcome = calls.find((c) => c.path.endsWith('/outcome'))!;
+    expect(outcome.body.runId, 'beta outcome must land on beta run').toBe('runx-2');
+  });
+});
+
+describe('W0 — cryptographic fingerprints', () => {
+  it('argsHashOf is full sha256 over sorted-key JSON, insertion-order independent', async () => {
+    const { createHash } = await import('node:crypto');
+    const h = argsHashOf({ b: 2, a: 1 });
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+    expect(h).toBe(argsHashOf({ a: 1, b: 2 }));
+    expect(h).toBe(createHash('sha256').update('{"a":1,"b":2}').digest('hex'));
+  });
+});
+
+describe('W0 — audit identity is the per-call actionId', () => {
+  it('two identical concurrent allowed actions keep their OWN audit flags (toolCallId correlation)', async () => {
+    let poreN = 0;
+    const { impl, calls } = fakeFetch((path) =>
+      path.endsWith('/sessions') ? { runId: 'runx-1', state: 'running' }
+      // First identical call is audited, the second is not — the old
+      // toolName+argsHash keying collapsed these into one flag.
+      : path.endsWith('/pore') ? { decision: 'allow', audit: ++poreN === 1 }
+      : { recorded: true },
+    );
+    const { api, handlers } = fakeApi();
+    registerPotionGate(api, { ...CONFIG, fetchImpl: impl });
+    const ctx = { sessionKey: 's1' };
+    await handlers.before!({ ...EVENT, toolCallId: 'c1' }, ctx);
+    await handlers.before!({ ...EVENT, toolCallId: 'c2' }, ctx);
+    // Outcomes arrive OUT OF ORDER — c2 first. Identity must hold anyway.
+    await handlers.after!({ ...EVENT, toolCallId: 'c2' }, ctx);
+    await handlers.after!({ ...EVENT, toolCallId: 'c1' }, ctx);
+    const outcomes = calls.filter((c) => c.path.endsWith('/outcome'));
+    expect(outcomes).toHaveLength(2);
+    const pores = calls.filter((c) => c.path.endsWith('/pore'));
+    const auditedActionId = pores[0]!.body.actionId;
+    // c2 (second pore, unaudited) reported first, without fromAudit.
+    expect(outcomes[0]!.body.fromAudit).toBeUndefined();
+    expect(outcomes[1]!.body.fromAudit).toBe(true);
+    expect(outcomes[1]!.body.actionId).toBe(auditedActionId);
+    expect(pores[0]!.body.actionId).not.toBe(pores[1]!.body.actionId);
+  });
+
+  it('without toolCallId, FIFO per (session, tool, args) preserves order and never cross-attributes sessions', async () => {
+    let poreN = 0;
+    const { impl, calls } = fakeFetch((path) =>
+      path.endsWith('/sessions') ? { runId: `runx-${path.length % 7}`, state: 'running' }
+      : path.endsWith('/pore') ? { decision: 'allow', audit: poreN++ === 0 }
+      : { recorded: true },
+    );
+    const { api, handlers } = fakeApi();
+    registerPotionGate(api, { ...CONFIG, fetchImpl: impl });
+    await handlers.before!(EVENT, { sessionKey: 's1' }); // audited
+    await handlers.before!(EVENT, { sessionKey: 's2' }); // not audited
+    // s2 finishes first — its outcome must NOT consume s1's audited entry.
+    await handlers.after!({ ...EVENT }, { sessionKey: 's2' });
+    await handlers.after!({ ...EVENT }, { sessionKey: 's1' });
+    const outcomes = calls.filter((c) => c.path.endsWith('/outcome'));
+    expect(outcomes[0]!.body.fromAudit, 's2 was not audited').toBeUndefined();
+    expect(outcomes[1]!.body.fromAudit, 's1 was audited').toBe(true);
+  });
+
+  it('the resolve report carries the actionId of the held action', async () => {
+    const { impl, calls } = fakeFetch((path) =>
+      path.endsWith('/sessions') ? { runId: 'runx-1', state: 'running' }
+      : path.endsWith('/pore') ? { decision: 'hold', question: 'Allow?' }
+      : { recorded: true },
+    );
+    const { api, handlers } = fakeApi();
+    registerPotionGate(api, { ...CONFIG, fetchImpl: impl });
+    const result = (await handlers.before!(EVENT, { sessionKey: 's1' })) as OpenClawBeforeToolCallResult;
+    await result.requireApproval!.onResolution!('deny');
+    const pore = calls.find((c) => c.path.endsWith('/pore'))!;
+    const resolve = calls.find((c) => c.path.endsWith('/pore/resolve'))!;
+    expect(resolve.body.actionId).toBe(pore.body.actionId);
+    expect(typeof resolve.body.actionId).toBe('string');
+  });
+});

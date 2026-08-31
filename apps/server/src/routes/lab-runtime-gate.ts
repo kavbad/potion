@@ -44,6 +44,10 @@ const SessionBody = z.object({
 
 const PoreBody = z.object({
   runId: z.string().min(1),
+  /** W0: per-call unique identity — audit/approval state binds to it so
+   * identical concurrent actions never collide. Optional for older
+   * clients; ours always sends it. */
+  actionId: z.string().min(1).max(64).optional(),
   toolName: z.string().min(1).max(200),
   argsHash: z.string().min(1).max(128),
   /** Shown to the supervisor; the runtime should pre-truncate. */
@@ -52,12 +56,14 @@ const PoreBody = z.object({
 
 const ResolveBody = z.object({
   runId: z.string().min(1),
+  actionId: z.string().min(1).max(64).optional(),
   argsHash: z.string().min(1).max(128),
   resolution: z.enum(['allow-once', 'deny', 'timeout', 'cancelled']),
 });
 
 const OutcomeBody = z.object({
   runId: z.string().min(1),
+  actionId: z.string().min(1).max(64).optional(),
   toolName: z.string().min(1).max(200),
   argsHash: z.string().min(1).max(128),
   ok: z.boolean(),
@@ -145,7 +151,12 @@ export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionCo
         kind: 'check-in',
         checkInTrigger: 'before-external-action',
         checkInQuestion: question,
-        checkInAction: { toolName: body.data.toolName, argsHash: body.data.argsHash, arguments: body.data.argsSummary ?? '' },
+        checkInAction: {
+          toolName: body.data.toolName,
+          argsHash: body.data.argsHash,
+          arguments: body.data.argsSummary ?? '',
+          ...(body.data.actionId !== undefined ? { actionId: body.data.actionId } : {}),
+        },
         clockMs: Date.now(),
         rngSample: Math.random(),
       }),
@@ -171,7 +182,9 @@ export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionCo
         kind: 'model',
         payload: buildStepPayload({
           kind: 'model',
-          checkInAnswer: body.data.resolution === 'allow-once' ? 'approved' : 'rejected by supervisor',
+          checkInAnswer:
+            (body.data.resolution === 'allow-once' ? 'approved' : 'rejected by supervisor') +
+            (body.data.actionId !== undefined ? ` [action ${body.data.actionId}]` : ''),
           clockMs: Date.now(),
           rngSample: Math.random(),
         }),
@@ -198,7 +211,10 @@ export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionCo
         toolName: body.data.toolName,
         // fromAudit rides the output marker so the sampled-review stream
         // stays labeled when the audit surface reads these steps back.
-        toolOutput: `${body.data.ok ? 'executed' : 'failed'}${body.data.fromAudit ? ' (audit sample)' : ''}`,
+        toolOutput:
+          `${body.data.ok ? 'executed' : 'failed'}` +
+          `${body.data.fromAudit ? ' (audit sample)' : ''}` +
+          `${body.data.actionId !== undefined ? ` [action ${body.data.actionId}]` : ''}`,
         clockMs: Date.now(),
         rngSample: Math.random(),
       }),

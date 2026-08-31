@@ -192,6 +192,19 @@ export function buildGitLabTools(deps: GitToolDeps): LabTool[] {
       },
       // THE LAW: a PR is an outward act — the pore gates every one.
       external: true,
+      // W0 approval-rendering law: the human sees every material parameter —
+      // repo, branch, title, and the FULL file list (a PR's meaning is which
+      // files it touches; a truncated list would change what was approved).
+      describeAction: (input: unknown): string | null => {
+        const i = (input ?? {}) as { repo?: unknown; branch?: unknown; title?: unknown; paths?: unknown; baseBranch?: unknown };
+        if (typeof i.repo !== 'string' || typeof i.branch !== 'string' || typeof i.title !== 'string' || !Array.isArray(i.paths)) return null;
+        const paths = i.paths.filter((x): x is string => typeof x === 'string');
+        return (
+          `open a pull request on ${i.repo}` +
+          `${typeof i.baseBranch === 'string' ? ` (into ${i.baseBranch})` : ''}` +
+          ` from new branch '${i.branch}', titled \u201c${i.title}\u201d, committing ${paths.length} file(s): ${paths.join(', ')}`
+        );
+      },
       run: async (input: unknown): Promise<unknown> => {
         const i = (input ?? {}) as { repo?: unknown; branch?: unknown; title?: unknown; body?: unknown; paths?: unknown; baseBranch?: unknown };
         if (typeof i.repo !== 'string' || typeof i.branch !== 'string' || typeof i.title !== 'string' || !Array.isArray(i.paths)) {
