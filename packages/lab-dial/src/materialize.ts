@@ -28,17 +28,17 @@ function orgDiscriminator(orgId: string): string {
   return sha256(orgId).slice(0, 6);
 }
 
-export function dialPolicyId(orgId: string, harnessHash: string, slot: 'brain' | 'tools'): string {
+export function dialPolicyId(orgId: string, harnessHash: string, slot: 'brain' | 'tools' | 'judge'): string {
   return `pol-lab-${orgDiscriminator(orgId)}-${harnessHash.slice(0, 12)}-${slot}`;
 }
 
-export function dialPolicyName(orgId: string, harnessHash: string, slot: 'brain' | 'tools'): string {
+export function dialPolicyName(orgId: string, harnessHash: string, slot: 'brain' | 'tools' | 'judge'): string {
   return `lab-${orgDiscriminator(orgId)}-${harnessHash.slice(0, 12)}-${slot}`;
 }
 
 export async function materializeDialPolicy(
   db: PotionDb,
-  opts: { orgId: string; harnessHash: string; slot: 'brain' | 'tools'; policy: Policy },
+  opts: { orgId: string; harnessHash: string; slot: 'brain' | 'tools' | 'judge'; policy: Policy },
 ): Promise<{ id: string; name: string }> {
   const id = dialPolicyId(opts.orgId, opts.harnessHash, opts.slot);
   const name = dialPolicyName(opts.orgId, opts.harnessHash, opts.slot);

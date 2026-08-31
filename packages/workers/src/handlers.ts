@@ -4820,6 +4820,15 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             }
             const deliverableStep = stepsForJudge.find((x) => x.seq === found.atSeq);
             const deliverableText = (deliverableStep?.payload as { responseText?: string })?.responseText ?? ('report' in found && typeof found.report === 'string' ? found.report : JSON.stringify(found.brief));
+            // The judge rides its OWN policy — a quality-floored point,
+            // never the worker's dial (2026-08-31 live finding: a floor-0
+            // worker sent its judge to the cheapest possible model, which
+            // truncated every verdict; the verdict's reliability must not
+            // depend on how cheap the WORKER runs).
+            const judgeRow = await materializeDialPolicy(ctx.db, {
+              orgId: payload.orgId, harnessHash: run.harnessHash, slot: 'judge',
+              policy: { type: 'min_cost', qualityFloor: 0.97 },
+            });
             const judgeClient = clientFactory({ baseUrl: servingUrl, apiKey: rawKey, clusterHint: 'multi-step-reasoning' });
             // One bounded retry (2026-08-31): the judge rides the cheap end
             // of the frontier, and cheap routes occasionally truncate the
@@ -4830,7 +4839,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             let wrote = false;
             for (let attempt = 0; attempt < 2 && !wrote; attempt++) {
               const runFiles = (await listLabRunFiles(ctx.db, payload.orgId, payload.runId)).map((f) => ({ name: f.name, size: f.size }));
-              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText, { files: runFiles }), maxTokens: 900 });
+              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText, { files: runFiles }), maxTokens: 900, policyRef: judgeRow.name });
               if (res.kind !== 'ok') {
                 lastMiss = { error: `judge call failed: ${res.kind}`, judgeTrace: null };
                 continue;
