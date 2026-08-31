@@ -146,6 +146,11 @@ def run_exec(payload):
             "GIT_COMMITTER_NAME": "potion-worker",
             "GIT_COMMITTER_EMAIL": "worker@potion.local",
             "MPLBACKEND": "Agg",
+            # matplotlib caches its font list under HOME/.cache; HOME is the
+            # collected workdir, so without this the cache pollutes the run's
+            # ARTIFACTS. Point it at a fixed dir OUTSIDE the workdir (built
+            # once, reused, never collected). 2026-08-31 flagship finding.
+            "MPLCONFIGDIR": os.environ.get("POTION_MPLCONFIGDIR", "/tmp/potion-mplconfig"),
             "PYTHONUNBUFFERED": "1",
             "OPENBLAS_NUM_THREADS": "1",
             "OMP_NUM_THREADS": "1",

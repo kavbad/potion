@@ -78,7 +78,12 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
       answers.kind === 'task'
         ? {
             kind: 'task',
-            goal: extraction.normalizedGoal,
+            // FAITHFUL GOAL (2026-08-31): the mission goal is the user's
+            // OWN words, verbatim — never the model's "restatement", which
+            // silently dropped embedded data, examples, and specifics and
+            // left workers unable to do the actual job. The extraction
+            // still gives the name slug, cluster, and sharpened done-def.
+            goal: answers.goal.trim(),
             // extract.ts guarantees presence for tasks; the non-null makes
             // a future regression loud instead of emitting an invalid spec.
             doneDefinition: extraction.doneDefinition!,
@@ -86,7 +91,12 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
           }
         : {
             kind: 'standing',
-            goal: extraction.normalizedGoal,
+            // FAITHFUL GOAL (2026-08-31): the mission goal is the user's
+            // OWN words, verbatim — never the model's "restatement", which
+            // silently dropped embedded data, examples, and specifics and
+            // left workers unable to do the actual job. The extraction
+            // still gives the name slug, cluster, and sharpened done-def.
+            goal: answers.goal.trim(),
             // P5: the shape rides the mission — the runtime's watchdog law
             // (quiet checks are valid deliverables) keys on it.
             ...(answers.shape === 'watchdog' ? { shape: 'watchdog' as const } : {}),
