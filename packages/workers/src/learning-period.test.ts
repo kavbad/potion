@@ -94,3 +94,17 @@ describe('learning:period', () => {
     expect((await runLearningPeriodForOrg(ctx, 'org_lp')).outcome).toBe('no-consent');
   });
 });
+
+describe('the bar derivation (2026-08-31 — the number IS the measurement)', () => {
+  it('proposes exactly what the incumbent measured — no hidden minimum', async () => {
+    const { suggestedFloorFor } = await import('./learning-period.js');
+    // The screenshot case: kimi measured 0.38 → the bar is 0.38, not 0.50.
+    expect(suggestedFloorFor(0.38)).toBe(0.38);
+    expect(suggestedFloorFor(0.955)).toBe(0.95); // floored, never rounded up
+    expect(suggestedFloorFor(1.0)).toBe(1.0);
+    expect(suggestedFloorFor(0.5)).toBe(0.5);
+    // Near-zero is a problem to surface, not a bar to invent.
+    expect(suggestedFloorFor(0.02)).toBeNull();
+    expect(suggestedFloorFor(0)).toBeNull();
+  });
+});

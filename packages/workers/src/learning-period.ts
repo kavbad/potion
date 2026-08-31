@@ -242,7 +242,20 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     const incumbentPoint = frontier.points.find((p) => p.strategyHash === incumbentHash) ?? null;
     const incumbentCostPer1K = incumbentPoint?.costPer1K ?? null;
     const projectedSaving = incumbentCostPer1K && incumbentCostPer1K > 0 ? Math.max(0, 1 - serving.costPer1K / incumbentCostPer1K) : null;
-    const suggestedFloor = Math.max(0.5, Math.min(1, Math.floor(incumbentQuality * 100) / 100));
+    // The bar IS the measurement (2026-08-31 fix): the floor's meaning is
+    // "never worse than what your current model measures on your own work",
+    // so it derives from incumbentQuality and NOTHING else. The old
+    // Math.max(0.5, …) clamp silently proposed bars the incumbent itself
+    // failed while the card claimed the number was measured — the
+    // caption-vs-provenance class of lie, eradicated. A near-zero
+    // measurement is an instrument or sampling problem, not a bar: skip
+    // with a typed reason rather than invent a number.
+    const suggestedFloor = suggestedFloorFor(incumbentQuality);
+    if (suggestedFloor === null) {
+      report.skipped.push({ clusterId, why: `incumbent measured ${incumbentQuality.toFixed(3)} — near zero; check the instrument/sampling before proposing a bar` });
+      report.spendUsd += summary.spendUsd;
+      continue;
+    }
     const id = `lp-${randomUUID().slice(0, 8)}`;
     await insertLearningProposal(ctx.db, {
       id, orgId, clusterId, suiteId,
@@ -255,6 +268,16 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   }
   if (suites === 0) return { ...report, outcome: 'no-suites' };
   return report;
+}
+
+/** The bar derivation, pure and pinned (2026-08-31): the proposed floor IS
+ * the incumbent's measured quality, floored to 2dp — never a typed-in
+ * minimum (the old Math.max(0.5,…) clamp proposed bars the incumbent
+ * itself failed while the card claimed measurement). null = near-zero
+ * measurement: an instrument/sampling problem, not a bar. */
+export function suggestedFloorFor(incumbentQuality: number): number | null {
+  const floor = Math.min(1, Math.floor(incumbentQuality * 100) / 100);
+  return floor < 0.05 ? null : floor;
 }
 
 /** learning:period — one org when named, else every org with sampled spans. */
