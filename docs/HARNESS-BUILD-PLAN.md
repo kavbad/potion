@@ -259,6 +259,13 @@ stay and interleave; the X-sequence is the capability spine.
   excluded from feed/digest/run-list; family card + helper banner on
   run pages; "may it split the work?" on the recipe card.
 - **X5 — "Any tool."** BYO-MCP through full custody.
+- **X6 — SHIPPED 2026-08-30, commit 927162d, deployed** (deploy/browser:
+  Chromium behind per-request SSRF interception, proven live — example.com
+  renders, metadata + internal hosts refuse; catalog `browser` builtin,
+  reads free / every act at the pore, T8+baseline governance paid;
+  the RESUME LAW found by its own test: an approved act re-establishes
+  its page and is label-guarded against drift — the human's yes binds to
+  what they saw).
 - **X6 — the honest gap, named: browser-driving.** OpenClaw-types can
   operate a computer: click through web apps, fill forms, drive UIs. After
   X5 our worker reads the web but doesn't drive it, and a fetch tool must
