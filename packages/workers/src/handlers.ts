@@ -4829,7 +4829,8 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
             let lastMiss: { error: string; judgeTrace: string | null } | null = null;
             let wrote = false;
             for (let attempt = 0; attempt < 2 && !wrote; attempt++) {
-              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText) });
+              const runFiles = (await listLabRunFiles(ctx.db, payload.orgId, payload.runId)).map((f) => ({ name: f.name, size: f.size }));
+              const res = await judgeClient.complete({ messages: buildJudgeMessages(spec, deliverableText, { files: runFiles }) });
               if (res.kind !== 'ok') {
                 lastMiss = { error: `judge call failed: ${res.kind}`, judgeTrace: null };
                 continue;

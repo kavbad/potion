@@ -75,8 +75,18 @@ export function compileRubric(spec: HarnessSpec): string[] {
 export function buildJudgeMessages(
   spec: HarnessSpec,
   deliverableText: string,
+  /** 2026-08-31: the run's PRODUCED FILES — evidence the judge must see.
+   * Without it, honest runs that put their substance in artifacts get
+   * scored "provides no artifacts" (observed live, 2/10 on a correct
+   * run). Names and sizes only — the files themselves are downloadable
+   * on the run page. */
+  evidence?: { files?: Array<{ name: string; size: number }> },
 ): Array<{ role: 'user'; content: string }> {
   const rubric = compileRubric(spec);
+  const filesLine =
+    evidence?.files !== undefined && evidence.files.length > 0
+      ? `\nFiles this run produced (verified artifacts in its workspace): ${evidence.files.map((f) => `${f.name} (${f.size} bytes)`).join(', ')}\n`
+      : '';
   return [
     {
       role: 'user',
@@ -89,6 +99,7 @@ export function buildJudgeMessages(
         `Mission: ${spec.mission.goal}\n` +
         `Rubric:\n${rubric.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n` +
         (spec.exemplar !== undefined ? `\nThe operator's exemplar (the standard):\n${spec.exemplar}\n` : '') +
+        filesLine +
         `\nDELIVERABLE:\n${deliverableText.slice(0, JUDGE_LIMITS.MAX_DELIVERABLE_CHARS)}`,
     },
   ];
