@@ -91,6 +91,15 @@ function FeedRow({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
           </span>
         ) : null}
       </div>
+      {step.steers !== undefined && step.steers.length > 0 ? (
+        <div className="mt-1" data-testid="step-steers">
+          {step.steers.map((t, i) => (
+            <p key={i} className="border-l-2 border-accent/60 pl-2 font-mono text-[12px] text-accent">
+              you steered: {t}
+            </p>
+          ))}
+        </div>
+      ) : null}
       <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{step.excerpt}</p>
     </li>
   );
@@ -380,6 +389,11 @@ export function LabConsole({
           <p className="mt-2 font-mono text-[12px] text-faint">every answer lands on the permission record as evidence</p>
           {answerError && <p className="mt-1 text-[12.5px] text-refuse" data-testid="answer-error">{answerError}</p>}
         </div>
+      ) : null}
+
+      {/* ================= X8: live steering ================= */}
+      {runId !== null && run !== null && !TERMINAL.has(run.state) && role !== 'viewer' ? (
+        <SteerBox runId={runId} parked={run.state === 'awaiting-human'} />
       ) : null}
 
       {/* ================= X3: the finish, felt ================= */}
@@ -688,6 +702,64 @@ export function LabConsole({
           ))}
         </div>
       </details>
+    </div>
+  );
+}
+
+// X8 — the session shape: steer a LIVE worker. Guidance, never
+// authorization (the pore's answer channel keeps that monopoly); it lands
+// at the next model step, on the record, and renders in the feed.
+function SteerBox({ runId, parked }: { runId: string; parked: boolean }) {
+  const [text, setText] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="mt-4 border border-dashed border-accent/50 bg-white/60 px-5 py-3.5" data-testid="steer-box">
+      <div className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-accent">
+        steer it live · guidance lands at its next step, on the record
+      </div>
+      <form
+        className="mt-2 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (text.trim() === '' || busy) return;
+          setBusy(true);
+          setNote(null);
+          void fetch(`/api/lab/runs/${runId}/steer`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text: text.trim() }),
+          })
+            .then(async (r) => {
+              const b = (await r.json().catch(() => null)) as { ok?: boolean; note?: string; reason?: string } | null;
+              if (r.ok && b?.ok) {
+                setText('');
+                setNote(b.note ?? 'queued');
+              } else setNote(b?.reason ?? `steer failed (${r.status})`);
+            })
+            .finally(() => setBusy(false));
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={parked ? 'it is parked on its check-in — steering queues for after your answer' : 'e.g. “skip the pricing pages, focus on the changelog”'}
+          className="w-full border border-[#c4bfb2] bg-white px-3 py-1.5 font-mono text-[13px] text-ink placeholder:text-faint focus:border-accent focus:outline-none"
+          data-testid="steer-input"
+        />
+        <button
+          type="submit"
+          disabled={busy || text.trim() === ''}
+          className="border border-accent px-4 py-1.5 text-[13px] font-semibold text-accent hover:bg-accent hover:text-white disabled:opacity-30"
+          data-testid="steer-send"
+        >
+          {busy ? '…' : 'Steer'}
+        </button>
+      </form>
+      <p className="mt-1.5 font-mono text-[11.5px] text-faint">
+        steering guides — it never approves. External actions still ask through the check-in.
+      </p>
+      {note !== null ? <p className="mt-1 text-[12.5px] text-soft" data-testid="steer-note">{note}</p> : null}
     </div>
   );
 }

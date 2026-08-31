@@ -1790,6 +1790,22 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   },
 });
 
+/** X8: live-steering queue — operator guidance for a running run, consumed
+ * by the loop at its next model step (stamped on that step for replay). */
+export const labRunSteers = pgTable('lab_run_steers', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id, { onDelete: 'cascade' }),
+  runId: text('run_id').notNull(),
+  text: text('text').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  consumedSeq: integer('consumed_seq'),
+});
+export type LabRunSteerRow = typeof labRunSteers.$inferSelect;
+
 export const labCustomConnectors = pgTable(
   'lab_custom_connectors',
   {

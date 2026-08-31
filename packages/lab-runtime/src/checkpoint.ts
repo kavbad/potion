@@ -58,6 +58,9 @@ export interface StepPayload {
    */
   checkInAction?: { toolName: string; argsHash: string; arguments: string };
   checkInAnswer?: string;
+  /** X8: operator steers folded into THIS model step's conversation —
+   * replay re-injects them (steerMessage) before deriving the request. */
+  steers?: string[];
   // nondeterminism taps, recorded so Step 4 replay can pin them
   clockMs: number;
   rngSample: number;

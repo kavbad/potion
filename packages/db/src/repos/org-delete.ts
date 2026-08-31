@@ -55,6 +55,7 @@ import {
   labRunFiles,
   labDigests,
   labCustomConnectors,
+  labRunSteers,
   routerInterpretations,
   labRuns,
   labRunSteps,
@@ -274,6 +275,7 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count('lab_run_files', db.delete(labRunFiles).where(eq(labRunFiles.orgId, orgId)).returning({ x: labRunFiles.orgId }));
   await count('lab_digests', db.delete(labDigests).where(eq(labDigests.orgId, orgId)).returning({ x: labDigests.orgId }));
   await count('lab_custom_connectors', db.delete(labCustomConnectors).where(eq(labCustomConnectors.orgId, orgId)).returning({ x: labCustomConnectors.orgId }));
+  await count('lab_run_steers', db.delete(labRunSteers).where(eq(labRunSteers.orgId, orgId)).returning({ x: labRunSteers.orgId }));
   await count('lab_harness_memory', db.delete(labHarnessMemory).where(eq(labHarnessMemory.orgId, orgId)).returning({ x: labHarnessMemory.key }));
   // Lab Step 7 (0036): felt-sample cache — org-scoped like all lab data.
   await count('lab_felt_samples', db.delete(labFeltSamples).where(eq(labFeltSamples.orgId, orgId)).returning({ x: labFeltSamples.probeHash }));

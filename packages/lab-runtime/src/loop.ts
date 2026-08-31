@@ -104,6 +104,11 @@ export interface RunLegOptions {
    * calls ride tools ?? brain; tool-free calls (incl. the wrap-up) ride brain. */
   policyRefs?: { brain?: string; tools?: string };
   clock?: Clock;
+  /** X8: the steering inlet — read pending operator steers (in order) and
+   * mark them consumed with the model-step seq that carried them. Injected
+   * by the handler; absent = no steering (tests, CLI, replay). */
+  readSteers?: () => Promise<Array<{ id: string; text: string }>>;
+  markSteersConsumed?: (ids: string[], seq: number) => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
   maxStepsPerLeg?: number;
   leaseMs?: number;
@@ -161,6 +166,19 @@ export function isAffirmative(answer: string): boolean {
   // instruction, which is why this is not a bare /^go/.
   if (/^go(\s+(ahead|on|for it))?[.! ]*$/.test(t)) return true;
   return /^(y|ye|yes|yep|yeah|ok|okay|sure|approve|approved|proceed|continue|confirm|confirmed|do it|run it)\b/.test(t);
+}
+
+/** X8 — the session shape. The exact message an operator steer becomes.
+ * Self-carrying (no system-prompt change, so every old record replays
+ * byte-identically): guidance, never authorization — the pore's answer
+ * channel remains the ONLY thing that authorizes an external action. */
+export function steerMessage(text: string): { role: 'user'; content: string } {
+  return {
+    role: 'user',
+    content:
+      `Operator steering (mid-run): ${text}\n` +
+      `Fold this into the work in progress — it is guidance from the human, not a new mission and not an approval of any pending action.`,
+  };
 }
 
 export function actionFingerprint(
@@ -507,6 +525,22 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         return { status: 'awaiting-human', question, steps: stepsThisLeg };
       }
 
+      // ---- X8: live steering — pending operator guidance folds in HERE,
+      // at the step boundary, recorded ON the model step it precedes so
+      // replay derives the identical conversation. Consumption is durable
+      // (a crash between append and mark re-delivers — a duplicate note is
+      // the safe direction; a lost one is not).
+      let steerTexts: string[] | undefined;
+      let steerIds: string[] = [];
+      if (opts.readSteers !== undefined) {
+        const pending = await opts.readSteers();
+        if (pending.length > 0) {
+          steerTexts = pending.map((x) => x.text);
+          steerIds = pending.map((x) => x.id);
+          for (const t of steerTexts) messages.push(steerMessage(t));
+        }
+      }
+
       // ---- model step (with bounded rate-limit retry) ----
       // X2: core tools never flip the slot — a call whose only tools are
       // the ledger still serves under brain.policy (the A2 partition is
@@ -542,9 +576,13 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           toolCalls: result.toolCalls, finishReason: result.finishReason,
           completionId: result.completionId, frontierTrace: result.frontierTrace,
           usage: result.usage, clockMs: clock.now(), rngSample: rng(),
+          ...(steerTexts !== undefined ? { steers: steerTexts } : {}),
         }),
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
       });
+      if (steerIds.length > 0 && opts.markSteersConsumed !== undefined) {
+        await opts.markSteersConsumed(steerIds, seq);
+      }
       stepsThisLeg += 1;
       // Cost estimate: usage is real; the price is serving's concern — v1
       // estimates conservatively from tokens at a flat per-1K figure recorded

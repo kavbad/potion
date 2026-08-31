@@ -140,6 +140,8 @@ import {
   listLabSteps as listLabStepsRepo,
   listLabCustomConnectors,
   listLabRunChildren,
+  listPendingLabRunSteers,
+  markLabRunSteersConsumed,
   createLabRun,
   listLabRunFiles,
   getLabRunFile,
@@ -4770,6 +4772,10 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId,
           ...(payload.answer !== undefined ? { answer: payload.answer } : {}),
           policyRefs, tools: leg.tools, legNotes: leg.legNotes, toolGuidance: leg.guidance,
+          // X8: live steering — the queue reads/consumes on THIS run only
+          // (helpers are never steerable; their loop gets no inlet).
+          readSteers: async () => (await listPendingLabRunSteers(ctx.db, payload.orgId, payload.runId)).map((x) => ({ id: x.id, text: x.text })),
+          markSteersConsumed: async (ids, seq) => markLabRunSteersConsumed(ctx.db, payload.orgId, ids, seq),
         });
       } finally {
         await leg.close();
@@ -4780,6 +4786,8 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           outcome = await resumeRun({
             db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId, policyRefs,
             tools: leg.tools, legNotes: leg.legNotes, toolGuidance: leg.guidance,
+            readSteers: async () => (await listPendingLabRunSteers(ctx.db, payload.orgId, payload.runId)).map((x) => ({ id: x.id, text: x.text })),
+            markSteersConsumed: async (ids, seq) => markLabRunSteersConsumed(ctx.db, payload.orgId, ids, seq),
           });
         } finally {
           await leg.close();

@@ -89,6 +89,8 @@ export interface RunStepDto {
   costLabel?: 'metered' | 'est.';
   provenance?: string | null;
   simulated?: boolean;
+  /** X8: operator steers folded into this step's conversation. */
+  steers?: string[];
   /** Step 9 additive DTO flags (parsed server-side from the trace). */
   fallback?: boolean;
   latencyViolated?: boolean;

@@ -515,3 +515,51 @@ describe('H2 — the artifact that escapes (share a deliverable)', () => {
     expect((await post('/api/lab/runs/run-share-bare/share', {})).statusCode).toBe(409); // pending
   });
 });
+
+describe('X8 — the steering inlet', () => {
+  async function seedLiveRun(runId: string, state: 'running' | 'awaiting-human' | 'completed'): Promise<void> {
+    const s = spec({ name: `steer harness ${runId}`, mission: { kind: 'standing', goal: 'work' } });
+    const hash = await seedCatalog(s);
+    await createLabRun(h.db, { id: runId, orgId: ORG, harnessHash: hash, harnessName: s.name, spec: s });
+    if (state !== 'running') {
+      const { labRuns } = await import('@potion/db');
+      const { eq } = await import('drizzle-orm');
+      await h.db.update(labRuns).set({ state }).where(eq(labRuns.id, runId));
+    }
+  }
+
+  it('queues guidance with the honest note; parked runs stay parked', async () => {
+    await seedLiveRun('run-steer-live', 'running');
+    const res = await post('/api/lab/runs/run-steer-live/steer', { text: 'focus on the changelog' });
+    expect(res.statusCode).toBe(202);
+    expect((res.json() as { note: string }).note).toContain('next step');
+
+    await seedLiveRun('run-steer-parked', 'awaiting-human');
+    const parked = await post('/api/lab/runs/run-steer-parked/steer', { text: 'and skip pricing' });
+    expect(parked.statusCode).toBe(202);
+    expect((parked.json() as { note: string }).note).toContain('answer that to resume');
+    // Steering NEVER resumes or authorizes: the run is still parked.
+    const { getLabRun } = await import('@potion/db');
+    expect((await getLabRun(h.db, 'run-steer-parked', ORG))!.state).toBe('awaiting-human');
+  });
+
+  it('terminal runs refuse typed; key-shaped text refuses; the queue caps', async () => {
+    await seedLiveRun('run-steer-done', 'completed');
+    expect((await post('/api/lab/runs/run-steer-done/steer', { text: 'x' })).statusCode).toBe(409);
+
+    await seedLiveRun('run-steer-leak', 'running');
+    const leak = await post('/api/lab/runs/run-steer-leak/steer', { text: 'use sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' });
+    expect(leak.statusCode).toBe(422);
+    expect((leak.json() as { reason: string }).reason).toContain('key-shaped');
+
+    await seedLiveRun('run-steer-cap', 'running');
+    for (let i = 0; i < 5; i++) {
+      expect((await post('/api/lab/runs/run-steer-cap/steer', { text: `note ${i}` })).statusCode).toBe(202);
+    }
+    expect((await post('/api/lab/runs/run-steer-cap/steer', { text: 'one too many' })).statusCode).toBe(429);
+  });
+
+  it('a foreign run id is the uniform 404', async () => {
+    expect((await post('/api/lab/runs/run-not-ours/steer', { text: 'x' })).statusCode).toBe(404);
+  });
+});

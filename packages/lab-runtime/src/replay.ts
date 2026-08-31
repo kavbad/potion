@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, contractRepairMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
 import { planLedgerMessage } from './plan.js';
 
@@ -121,6 +121,7 @@ export function replayRun(
       messages.push(checkInAnswerMessage(p.checkInAnswer));
     }
 
+
     if (step.kind === 'model') {
       modelSteps += 1;
       if (messages === null) {
@@ -142,6 +143,13 @@ export function replayRun(
             { role: 'user', content: 'Begin the mission.' },
           ];
         }
+      }
+      // X8 (mirrored): steers recorded ON this model step were pushed into
+      // the conversation immediately before its request — re-derive them
+      // with the SAME shared builder, after the first-step construction and
+      // after any leg-start answer, exactly the loop's order.
+      if (p.steers !== undefined && messages !== null) {
+        for (const t of p.steers) messages.push(steerMessage(t));
       }
       // THE COMPARISON: the re-derived request vs the recorded one.
       const derived = { model: 'potion-auto', messages };

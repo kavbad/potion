@@ -57,6 +57,8 @@ import {
   listLabMemoryEntries,
   listLabRunsForHarness,
   listLabRunChildren,
+  addLabRunSteer,
+  STEER_LIMITS,
   listLabSteps,
   revokeApiKey,
   setLabMemoryKey,
@@ -924,6 +926,8 @@ export function registerLabRoutes(
         kind: s.kind,
         at: s.createdAt,
         slot: p.slot ?? null,
+        // X8: operator steers this step folded in — rendered in the feed.
+        ...(p.steers !== undefined ? { steers: p.steers } : {}),
         excerpt:
           s.kind === 'model'
             ? (p.responseText ?? '').slice(0, 400)
@@ -1085,6 +1089,50 @@ export function registerLabRoutes(
             sample: result.divergences.slice(0, 3).map((d) => ({ code: d.code, seq: d.seq, field: d.field ?? null })),
           },
     );
+  });
+
+  // ---- X8 (2026-08-30): the session shape — steer a running worker ----
+  // The check-in channel, generalized: guidance lands at the worker's NEXT
+  // model step, recorded on that step so replay derives the identical
+  // conversation. Steering NEVER authorizes an external action — the pore's
+  // answer channel keeps that monopoly (L4), and a parked run stays parked
+  // until it is ANSWERED.
+  app.post('/api/lab/runs/:id/steer', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    if (!roleAtLeast(org.role, 'member')) {
+      return reply.code(403).send(memberForbidden(org.role, 'steer runs'));
+    }
+    const body = z.object({ text: z.string().min(1).max(STEER_LIMITS.MAX_TEXT_CHARS) }).safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({ error: 'invalid_body', message: body.error.issues.map((i) => i.message).join('; ') });
+    }
+    const run = await ownRun(req);
+    if (run === null) return reply.code(404).send(notFound);
+    const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
+    if (TERMINAL.has(run.state)) {
+      return reply.code(409).send({ ok: false, reason: `this run is ${run.state} — steering targets a live run` });
+    }
+    // Custody at the inlet: a steer carrying key-shaped content would ride
+    // straight into model context and the durable record. Refused.
+    const hits = scanRawValue({ text: body.data.text }).filter((i) => i.code === 'secret-material');
+    if (hits.length > 0) {
+      return reply.code(422).send({ ok: false, reason: 'the steering text contains key-shaped content — refused (nothing was queued)' });
+    }
+    const added = await addLabRunSteer(db, {
+      id: `steer-${randomUUID().slice(0, 12)}`,
+      orgId: org.orgId,
+      runId: run.id,
+      text: body.data.text,
+      createdBy: actorOf(req),
+    });
+    if (!added.ok) return reply.code(429).send({ ok: false, reason: added.reason });
+    return reply.code(202).send({
+      ok: true,
+      note:
+        run.state === 'awaiting-human'
+          ? 'queued — this worker is parked on its check-in; answer that to resume, and your steering lands at its next step'
+          : 'queued — it lands at the worker’s next step, on the record',
+    });
   });
 
   // ---- H2 (2026-08-28): the artifact that escapes — share a deliverable ----

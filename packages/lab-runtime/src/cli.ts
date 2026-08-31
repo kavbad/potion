@@ -30,6 +30,9 @@ export interface StartRunOptions {
   maxStepsPerLeg?: number;
   /** Step 8 per-slot policy pins, threaded to the loop. */
   policyRefs?: { brain?: string; tools?: string };
+  /** X8: the steering inlet, threaded to the loop. */
+  readSteers?: () => Promise<Array<{ id: string; text: string }>>;
+  markSteersConsumed?: (ids: string[], seq: number) => Promise<void>;
 }
 
 /** Parse+validate the spec (every Step 2 gate applies), create the run,
@@ -81,6 +84,8 @@ async function executeLeg(
     ...(opts.toolGuidance !== undefined ? { toolGuidance: opts.toolGuidance } : {}),
     ...(opts.maxStepsPerLeg !== undefined ? { maxStepsPerLeg: opts.maxStepsPerLeg } : {}),
     ...(opts.policyRefs !== undefined ? { policyRefs: opts.policyRefs } : {}),
+    ...(opts.readSteers !== undefined ? { readSteers: opts.readSteers } : {}),
+    ...(opts.markSteersConsumed !== undefined ? { markSteersConsumed: opts.markSteersConsumed } : {}),
   });
   // Span emission after the leg: idempotent, safe to re-send on resume.
   const steps = await listLabSteps(opts.db, runId, opts.orgId);
