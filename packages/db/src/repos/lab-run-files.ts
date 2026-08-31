@@ -8,11 +8,40 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { labRunFiles } from '../schema.js';
 
+// X7 (2026-08-30): repo-scale quotas — the workspace went from sixteen
+// flat files to a directory TREE (dev hands need a filesystem). Paths are
+// validated HERE, at the storage boundary; the sandbox re-validates on its
+// side (defense in depth, not trust).
 export const RUN_FILE_LIMITS = {
-  MAX_FILES: 16,
+  MAX_FILES: 400,
   MAX_FILE_BYTES: 8 * 1024 * 1024,
-  MAX_TOTAL_BYTES: 20 * 1024 * 1024,
+  MAX_TOTAL_BYTES: 64 * 1024 * 1024,
+  MAX_PATH_CHARS: 240,
+  MAX_PATH_SEGMENTS: 12,
 } as const;
+
+const SEGMENT_RE = /^[A-Za-z0-9._-]{1,120}$/;
+
+/** Workspace paths: relative, '/'-separated trees. Dotfiles are allowed
+ * (dev repos need .gitignore and friends); traversal ('.', '..'), '.git'
+ * (commits leave through the governed PR gate, never as loose objects),
+ * empty segments, and hostile charsets are not. */
+export function validRunFilePath(name: string): { ok: true } | { ok: false; reason: string } {
+  if (name.length === 0 || name.length > RUN_FILE_LIMITS.MAX_PATH_CHARS) {
+    return { ok: false, reason: `path must be 1-${RUN_FILE_LIMITS.MAX_PATH_CHARS} chars` };
+  }
+  if (name.startsWith('/') || name.endsWith('/')) return { ok: false, reason: 'path must be relative (no leading/trailing slash)' };
+  const segments = name.split('/');
+  if (segments.length > RUN_FILE_LIMITS.MAX_PATH_SEGMENTS) {
+    return { ok: false, reason: `at most ${RUN_FILE_LIMITS.MAX_PATH_SEGMENTS} path segments` };
+  }
+  for (const seg of segments) {
+    if (seg === '.' || seg === '..') return { ok: false, reason: 'traversal segments are refused' };
+    if (seg === '.git') return { ok: false, reason: "'.git' is refused — commits leave through the governed PR gate" };
+    if (!SEGMENT_RE.test(seg)) return { ok: false, reason: `refused path segment '${seg.slice(0, 40)}'` };
+  }
+  return { ok: true };
+}
 
 export interface RunFileMeta {
   name: string;
@@ -49,6 +78,8 @@ export async function upsertLabRunFile(
   db: PotionDb,
   input: { orgId: string; runId: string; name: string; content: Buffer },
 ): Promise<UpsertRunFileResult> {
+  const pathVerdict = validRunFilePath(input.name);
+  if (!pathVerdict.ok) return { ok: false, reason: pathVerdict.reason };
   if (input.content.length > RUN_FILE_LIMITS.MAX_FILE_BYTES) {
     return { ok: false, reason: `'${input.name}' is ${input.content.length} bytes — the per-file cap is ${RUN_FILE_LIMITS.MAX_FILE_BYTES}` };
   }

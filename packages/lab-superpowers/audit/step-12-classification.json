@@ -149,6 +149,13 @@
    "vendorOperation": "in-process dispatch to the Potion sandbox service (lab-runtime code-tools.ts → deploy/sandbox) — executes on an internal-only network with NO egress; classified read because it cannot act on the world outside the platform, and the workspace it mutates is the run’s own"
   },
   {
+   "pkg": "code",
+   "tool": "run_shell",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "in-process dispatch to the Potion sandbox service (lab-runtime code-tools.ts → deploy/sandbox, mode=shell) — bash under the same rlimits and the same internal-only network with NO egress; classified read because a shell that cannot reach the world is thinking, not acting"
+  },
+  {
    "pkg": "confluence",
    "tool": "create_page",
    "verdict": "correct",
@@ -252,6 +259,20 @@
    "verdict": "correct",
    "confidence": "verified",
    "vendorOperation": "POST /v1/files/{key}/comments — visible to collaborators, notifies them"
+  },
+  {
+   "pkg": "git",
+   "tool": "github_pr",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "GitHub REST choreography (repos → git/ref → git/refs → contents PUT per file → pulls POST) with the org's github grant opened per call; classified ACT because a branch, commits, and a pull request are durable writes to someone else's repository — every proposal gates at the pore"
+  },
+  {
+   "pkg": "git",
+   "tool": "repo_fetch",
+   "verdict": "correct",
+   "confidence": "verified",
+   "vendorOperation": "worker-process HTTPS GET of codeload.github.com/{owner}/{repo}/tar.gz/{ref} (lab-runtime git-tools.ts), unpacked by an in-process ustar reader under the storage quotas; anonymous for public repos, Authorization from the org's github grant (custody-opened) for private — fetching source is observation"
   },
   {
    "pkg": "github",

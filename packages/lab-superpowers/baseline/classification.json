@@ -50,9 +50,10 @@
   },
   "code": {
     "version": "1.0.0",
-    "contentHash": "bea5fdf03228f784e74821b75db2ac281075f95c70fe02115d83464b706b33ec",
+    "contentHash": "4b1d17120d755a34cef0f6cfd3850ac5affb9eee10e278e23ddd4f2f9c186119",
     "actions": {
-      "run_python": "read"
+      "run_python": "read",
+      "run_shell": "read"
     }
   },
   "confluence": {
@@ -92,6 +93,14 @@
       "get_node": "read",
       "list_comments": "read",
       "post_comment": "act"
+    }
+  },
+  "git": {
+    "version": "1.0.0",
+    "contentHash": "ad79095fdf3b26b8566d970859dae64e506063816d1f845b2e416b316ee4fddd",
+    "actions": {
+      "github_pr": "act",
+      "repo_fetch": "read"
     }
   },
   "github": {

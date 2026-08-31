@@ -56,6 +56,61 @@ interface SandboxResult {
 
 export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
   const fetchFn = deps.fetchImpl ?? fetch;
+  // Shared executor for both sandbox tools: ship the whole workspace tree
+  // in, run under the same rlimits + wall clock + no-egress law, collect
+  // the produced tree back under the storage quotas.
+  const execInSandbox = async (mode: 'python' | 'shell', code: string, timeoutSeconds?: number): Promise<unknown> => {
+    const existing = await deps.workspace.list();
+    const files: Array<{ name: string; contentBase64: string }> = [];
+    for (const f of existing) {
+      const content = await deps.workspace.read(f.name);
+      if (content !== null) files.push({ name: f.name, contentBase64: content.toString('base64') });
+    }
+    let res: Response;
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), CODE_LIMITS.EXEC_TIMEOUT_MS);
+      try {
+        res = await fetchFn(`${deps.sandboxUrl}/exec`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            mode,
+            code,
+            ...(typeof timeoutSeconds === 'number' ? { timeoutSeconds } : {}),
+            files,
+          }),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(t);
+      }
+    } catch (e) {
+      return { error: `sandbox unreachable: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    const body = (await res.json().catch(() => null)) as SandboxResult | null;
+    if (body === null) return { error: `sandbox returned unparseable output (HTTP ${res.status})` };
+    if (body.error !== undefined) return { error: body.error };
+
+    const kept: Array<{ name: string; size: number }> = [];
+    const notes: string[] = [];
+    for (const f of body.files ?? []) {
+      const content = Buffer.from(f.contentBase64, 'base64');
+      const wrote = await deps.workspace.write(f.name, content);
+      if (wrote.ok) kept.push({ name: f.name, size: content.length });
+      else notes.push(`'${f.name}' not kept: ${wrote.reason}`);
+    }
+    const workspaceNow = await deps.workspace.list();
+    return {
+      exitCode: body.exitCode ?? -1,
+      timedOut: body.timedOut === true,
+      stdout: clip(redactKeyShapes(body.stdout ?? '')),
+      stderr: clip(redactKeyShapes(body.stderr ?? '')),
+      filesWritten: kept,
+      workspace: workspaceNow.map((w) => `${w.name} (${w.size} bytes)`),
+      ...(notes.length > 0 ? { notes } : {}),
+    };
+  };
   return [
     {
       name: 'run_python',
@@ -78,55 +133,34 @@ export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
         if (typeof args.code !== 'string' || args.code.trim() === '') {
           return { error: 'code (a non-empty string) is required' };
         }
-        const existing = await deps.workspace.list();
-        const files: Array<{ name: string; contentBase64: string }> = [];
-        for (const f of existing) {
-          const content = await deps.workspace.read(f.name);
-          if (content !== null) files.push({ name: f.name, contentBase64: content.toString('base64') });
+        return execInSandbox('python', args.code, typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : undefined);
+      },
+    },
+    {
+      name: 'run_shell',
+      // X7: THE SEALED SHELL. external:false is truthful for the same
+      // reason run_python's is: the no-egress network law means this
+      // terminal provably cannot phone home — a shell that cannot reach
+      // the world is thinking, not acting.
+      description:
+        'Run a shell script in the Potion sandbox (bash; git and node available, python too; NO network — installs cannot run here, and nothing can phone home). ' +
+        'Same persistent workspace as run_python: the whole tree is placed in the working directory first, and files you write are kept. ' +
+        'Use it to run tests, inspect trees, and do local git operations on fetched repos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'The shell script to execute (bash).' },
+          timeoutSeconds: { type: 'number', description: 'Wall-clock limit, 1–120 (default 30).' },
+        },
+        required: ['command'],
+      },
+      external: false,
+      run: async (input: unknown): Promise<unknown> => {
+        const args = (input ?? {}) as { command?: unknown; timeoutSeconds?: unknown };
+        if (typeof args.command !== 'string' || args.command.trim() === '') {
+          return { error: 'command (a non-empty string) is required' };
         }
-        let res: Response;
-        try {
-          const ac = new AbortController();
-          const t = setTimeout(() => ac.abort(), CODE_LIMITS.EXEC_TIMEOUT_MS);
-          try {
-            res = await fetchFn(`${deps.sandboxUrl}/exec`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({
-                code: args.code,
-                ...(typeof args.timeoutSeconds === 'number' ? { timeoutSeconds: args.timeoutSeconds } : {}),
-                files,
-              }),
-              signal: ac.signal,
-            });
-          } finally {
-            clearTimeout(t);
-          }
-        } catch (e) {
-          return { error: `sandbox unreachable: ${e instanceof Error ? e.message : String(e)}` };
-        }
-        const body = (await res.json().catch(() => null)) as SandboxResult | null;
-        if (body === null) return { error: `sandbox returned unparseable output (HTTP ${res.status})` };
-        if (body.error !== undefined) return { error: body.error };
-
-        const kept: Array<{ name: string; size: number }> = [];
-        const notes: string[] = [];
-        for (const f of body.files ?? []) {
-          const content = Buffer.from(f.contentBase64, 'base64');
-          const wrote = await deps.workspace.write(f.name, content);
-          if (wrote.ok) kept.push({ name: f.name, size: content.length });
-          else notes.push(`'${f.name}' not kept: ${wrote.reason}`);
-        }
-        const workspaceNow = await deps.workspace.list();
-        return {
-          exitCode: body.exitCode ?? -1,
-          timedOut: body.timedOut === true,
-          stdout: clip(redactKeyShapes(body.stdout ?? '')),
-          stderr: clip(redactKeyShapes(body.stderr ?? '')),
-          filesWritten: kept,
-          workspace: workspaceNow.map((w) => `${w.name} (${w.size} bytes)`),
-          ...(notes.length > 0 ? { notes } : {}),
-        };
+        return execInSandbox('shell', args.command, typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : undefined);
       },
     },
   ];

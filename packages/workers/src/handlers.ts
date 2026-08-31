@@ -166,7 +166,7 @@ import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
 import { connectableConnectors, getPackage } from '@potion/lab-superpowers';
 import { customConnectorDef } from '@potion/lab-mcp';
-import { buildBrowserLabTools, buildFanOutTool, deriveSubSpec, fanOutSpentFromSteps, runLeg } from '@potion/lab-runtime';
+import { buildBrowserLabTools, buildFanOutTool, buildGitLabTools, deriveSubSpec, fanOutSpentFromSteps, runLeg } from '@potion/lab-runtime';
 import type { HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
 import { like, isNull as colIsNull } from 'drizzle-orm';
@@ -4391,6 +4391,8 @@ export interface LabRunHandlerDeps {
   mcpFetch?: typeof fetch;
   /** X6: the browser hand (tests inject a scripted service). */
   browserToolDeps?: { browserUrl?: string; fetchImpl?: typeof fetch };
+  /** X7: the governed git (tests inject scripted GitHub endpoints). */
+  gitFetch?: typeof fetch;
   /** P1: injected fetch/lookup for the builtin web tools (tests + local
    * walkthroughs); production uses the defaults. */
   webToolDeps?: WebToolDeps;
@@ -4501,7 +4503,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // (a builtin id must never resolve against a connector endpoint), and
       // builtin tools mount once per run through the SAME grant ledger: no
       // active grant, no tools, and a typed leg note says so.
-      const BUILTIN_IDS = new Set(['web', 'code', 'browser']);
+      const BUILTIN_IDS = new Set(['web', 'code', 'browser', 'git']);
       const builtinDeclared = spec.superpowers.filter((s) => BUILTIN_IDS.has(s.id));
       const externalSpec: HarnessSpec = {
         ...spec,
@@ -4551,6 +4553,35 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 const pkgCode = getPackage('code');
                 if (pkgCode !== null) guidance.push(pkgCode.usage.preamble);
               }
+            }
+            // X7: the governed git — fetch rides THIS process (it has
+            // egress; the sandbox stays sealed), the PR act gates at the
+            // pore, and the write credential is the org's github grant
+            // opened from custody per call (never model context).
+            if (s.id === 'git') {
+              tools.push(...buildGitLabTools({
+                workspace: {
+                  list: async () => (await listLabRunFiles(ctx.db, payload.orgId, payload.runId)).map((f) => ({ name: f.name, size: f.size })),
+                  read: async (name) => (await getLabRunFile(ctx.db, payload.orgId, payload.runId, name))?.content ?? null,
+                  write: async (name, content) => {
+                    const r = await upsertLabRunFile(ctx.db, { orgId: payload.orgId, runId: payload.runId, name, content });
+                    return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+                  },
+                },
+                githubToken: async () => {
+                  try {
+                    const master = await masterKeyProvider.getMasterKey();
+                    const grant = await openGrantToken(ctx.db, master, payload.orgId, 'github');
+                    return grant !== null && grant.status === 'active' ? grant.accessToken : null;
+                  } catch {
+                    return null;
+                  }
+                },
+                ...(deps.gitFetch !== undefined ? { fetchImpl: deps.gitFetch } : {}),
+              }));
+              const pkgGit = getPackage('git');
+              if (pkgGit !== null) guidance.push(pkgGit.usage.preamble);
+              continue;
             }
             // X6: the browser hand — the service is configuration, not law
             // (the sandbox precedent): absent, a TYPED leg note, never a

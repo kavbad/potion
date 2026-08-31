@@ -821,3 +821,79 @@ describe('X6 — the browser hand: reads free, every act at the pore', () => {
     expect(note, 'expected the typed browser-unconfigured leg note').toBeDefined();
   });
 });
+
+describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)', () => {
+  it('run_shell executes with the tree mounted, git works offline, produced tree files persist', async () => {
+    const { spawn, execSync } = await import('node:child_process');
+    let python = '';
+    try { python = execSync('command -v python3').toString().trim(); } catch { /* absent */ }
+    if (python === '') return;
+    let git = '';
+    try { git = execSync('command -v git').toString().trim(); } catch { /* absent */ }
+    if (git === '') return;
+    const { fileURLToPath } = await import('node:url');
+    const serverPath = fileURLToPath(new URL('../../../deploy/sandbox/sandbox_server.py', import.meta.url));
+    const port = 19000 + Math.floor(Math.random() * 200);
+    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: 'ignore' });
+    try {
+      let up = false;
+      for (let i = 0; i < 40 && !up; i++) {
+        await new Promise((r) => setTimeout(r, 150));
+        up = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok).catch(() => false);
+      }
+      expect(up, 'sandbox failed to start').toBe(true);
+
+      const s = spec({
+        name: 'dev hands harness',
+        superpowers: [{ id: 'code', scopes: ['exec:python', 'exec:shell'] }],
+        checkIns: [],
+      });
+      const runId = 'run-shell-x7';
+      await seedRun(runId, s);
+      const { upsertLabGrant, upsertLabRunFile, listLabRunFiles } = await import('@potion/db');
+      await upsertLabGrant(db.db, {
+        id: 'grant-code-x7', orgId: ORG, connectorId: 'code', superpowerId: 'code',
+        scopesGranted: ['exec:python', 'exec:shell'], tokenEnvelope: 'builtin:no-credential', grantedBy: 'test',
+      });
+      // Pre-seed a TREE in the workspace — v2's whole point.
+      await upsertLabRunFile(db.db, { orgId: ORG, runId, name: 'repo/src/lib.js', content: Buffer.from('module.exports = 41\n') });
+      const toolCall = {
+        id: 'sh1', type: 'function' as const,
+        function: {
+          name: 'run_shell',
+          arguments: JSON.stringify({
+            command: [
+              'set -e',
+              'test -f repo/src/lib.js',
+              'mkdir -p out/report',
+              'git init -q workrepo && cd workrepo && git commit -q --allow-empty -m offline && cd ..',
+              'echo "tree ok, git ok" > out/report/result.txt',
+            ].join('\n'),
+          }),
+        },
+      };
+      const { factory } = scriptedFactory([
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [toolCall] }),
+        ok({ text: 'the thing is done' }),
+        ok({ text: 'Wrap-up: shell verified.' }),
+      ]);
+      const res = await createLabRunHandler({
+        clientFactory: factory,
+        codeToolDeps: { sandboxUrl: `http://127.0.0.1:${port}` },
+      })({ orgId: ORG, runId }, ctx());
+      expect(res.state).toBe('completed');
+
+      const files = await listLabRunFiles(db.db, ORG, runId);
+      const names = files.map((f) => f.name);
+      expect(names).toContain('repo/src/lib.js');
+      expect(names).toContain('out/report/result.txt');
+      // No loose .git objects ever persist — the storage boundary refuses them.
+      expect(names.some((n) => n.includes('.git/'))).toBe(false);
+      const { getLabRunFile } = await import('@potion/db');
+      const result = await getLabRunFile(db.db, ORG, runId, 'out/report/result.txt');
+      expect(result!.content.toString()).toContain('tree ok, git ok');
+    } finally {
+      proc.kill();
+    }
+  }, 60_000);
+});

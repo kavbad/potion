@@ -212,7 +212,9 @@ const LABEL_ROW = 'flex items-center gap-1.5 font-mono text-[12px] uppercase tra
  * fires when the target id actually exists in the org's catalog — the
  * suggestion never invents a connector. */
 const ACCOUNT_ALIASES: Record<string, string[]> = {
-  code: ['analyze', 'analyse', 'compute', 'calculate', 'spreadsheet', 'xlsx', 'chart', 'plot', 'csv', 'dataset', 'script', 'python'],
+  code: ['analyze', 'analyse', 'compute', 'calculate', 'spreadsheet', 'xlsx', 'chart', 'plot', 'csv', 'dataset', 'script', 'python', 'shell', 'tests', 'test suite'],
+  git: ['clone', 'codebase', 'pull request', 'pull requests', 'pr', 'source code'],
+  browser: ['click', 'browser', 'web app', 'form', 'login page', 'dashboard page', 'ui'],
   gmail: ['email', 'emails', 'inbox', 'mail', 'mailbox'],
   github: ['repo', 'repos', 'repository', 'pull request', 'pull requests', 'commit'],
   slack: ['channel', 'dm'],

@@ -28,11 +28,11 @@ PORT = int(os.environ.get("SANDBOX_PORT", "8790"))
 DEFAULT_TIMEOUT_S = 30
 MAX_TIMEOUT_S = 120
 MAX_CODE_BYTES = 256 * 1024
-MAX_INPUT_FILES = 16
-MAX_INPUT_TOTAL = 20 * 1024 * 1024
-MAX_OUTPUT_FILES = 16
+MAX_INPUT_FILES = 400
+MAX_INPUT_TOTAL = 64 * 1024 * 1024
+MAX_OUTPUT_FILES = 400
 MAX_OUTPUT_FILE = 8 * 1024 * 1024
-MAX_OUTPUT_TOTAL = 20 * 1024 * 1024
+MAX_OUTPUT_TOTAL = 64 * 1024 * 1024
 MAX_STREAM_BYTES = 64 * 1024  # stdout/stderr each, truncated with a marker
 RLIMIT_AS_BYTES = 768 * 1024 * 1024
 RLIMIT_CPU_S = 60
@@ -41,13 +41,17 @@ RLIMIT_NPROC = 64
 
 def child_limits():
     # Each limit is best-effort: they all apply on the Linux prod container;
-    # macOS dev refuses some (notably RLIMIT_AS). The wall-clock kill in the
-    # parent is the backstop that holds everywhere.
-    for lim, val in (
+    # macOS dev refuses some (notably RLIMIT_AS), and NPROC is skipped there
+    # outright — Darwin counts it PER USER, so a dev machine's hundreds of
+    # processes make bash unable to fork at all (X7 found this via the
+    # shell). The wall-clock kill in the parent holds everywhere.
+    limits = [
         (resource.RLIMIT_AS, RLIMIT_AS_BYTES),
         (resource.RLIMIT_CPU, RLIMIT_CPU_S),
-        (resource.RLIMIT_NPROC, RLIMIT_NPROC),
-    ):
+    ]
+    if sys.platform != "darwin":
+        limits.append((resource.RLIMIT_NPROC, RLIMIT_NPROC))
+    for lim, val in limits:
         try:
             resource.setrlimit(lim, (val, val))
         except (ValueError, OSError):
@@ -55,16 +59,35 @@ def child_limits():
     os.setsid()  # own process group so a timeout kill reaps grandchildren
 
 
-def safe_name(name):
-    # Workspace names are flat: no separators, no dotfiles, no traversal.
-    if not name or len(name) > 120 or name.startswith("."):
+SEGMENT_OK = __import__("re").compile(r"^[A-Za-z0-9._-]{1,120}$")
+
+
+def safe_relpath(name):
+    # X7 workspace v2: '/'-separated relative TREES. Dotfiles allowed (dev
+    # repos need them); traversal ('.', '..'), '.git', empty/hostile
+    # segments and absolute paths are not. Mirrors the storage boundary's
+    # validRunFilePath — defense in depth, not trust.
+    if not isinstance(name, str) or not name or len(name) > 240:
         return None
-    if any(c in name for c in ("/", "\\", "\x00")):
+    if name.startswith("/") or name.endswith("/") or "\\" in name or "\x00" in name:
         return None
+    segments = name.split("/")
+    if len(segments) > 12:
+        return None
+    for seg in segments:
+        if seg in (".", "..", ".git") or not SEGMENT_OK.match(seg):
+            return None
     return name
 
 
 def run_exec(payload):
+    # X7: the SEALED SHELL — same tmpdir, same rlimits, same wall-clock
+    # kill, same no-egress network law as python. A terminal that provably
+    # cannot phone home is safe by construction; git and node live in the
+    # image and work fully offline.
+    mode = payload.get("mode", "python")
+    if mode not in ("python", "shell"):
+        return {"error": "mode must be python or shell"}
     code = payload.get("code")
     if not isinstance(code, str) or not code.strip():
         return {"error": "code (a non-empty string) is required"}
@@ -81,7 +104,7 @@ def run_exec(payload):
     try:
         total_in = 0
         for f in files:
-            name = safe_name(f.get("name", ""))
+            name = safe_relpath(f.get("name", ""))
             if name is None:
                 return {"error": f"refused input file name: {f.get('name')!r}"}
             try:
@@ -91,15 +114,37 @@ def run_exec(payload):
             total_in += len(content)
             if total_in > MAX_INPUT_TOTAL:
                 return {"error": f"input files exceed {MAX_INPUT_TOTAL} bytes total"}
-            with open(os.path.join(workdir, name), "wb") as fh:
+            dest = os.path.join(workdir, name)
+            # Belt on the validated path: the resolved parent stays inside.
+            if not os.path.realpath(dest).startswith(os.path.realpath(workdir) + os.sep):
+                return {"error": f"refused input file path: {name!r}"}
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as fh:
                 fh.write(content)
-        before = set(os.listdir(workdir))
-        script = os.path.join(workdir, "__potion_main__.py")
+
+        def walk_files():
+            found = []
+            for root, dirs, names in os.walk(workdir):
+                dirs[:] = [d for d in dirs if d != ".git"]
+                for n in names:
+                    path = os.path.join(root, n)
+                    if os.path.islink(path):
+                        continue
+                    rel = os.path.relpath(path, workdir)
+                    found.append(rel.replace(os.sep, "/"))
+            return set(found)
+
+        before = walk_files()
+        script = os.path.join(workdir, "__potion_main__.py" if mode == "python" else "__potion_main__.sh")
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(code)
         env = {
             "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
             "HOME": workdir,
+            "GIT_AUTHOR_NAME": "potion-worker",
+            "GIT_AUTHOR_EMAIL": "worker@potion.local",
+            "GIT_COMMITTER_NAME": "potion-worker",
+            "GIT_COMMITTER_EMAIL": "worker@potion.local",
             "MPLBACKEND": "Agg",
             "PYTHONUNBUFFERED": "1",
             "OPENBLAS_NUM_THREADS": "1",
@@ -107,8 +152,9 @@ def run_exec(payload):
         }
         timed_out = False
         try:
+            argv = [sys.executable, "-I", script] if mode == "python" else ["bash", script]
             proc = subprocess.run(
-                [sys.executable, "-I", script],
+                argv,
                 cwd=workdir,
                 env=env,
                 capture_output=True,
@@ -131,10 +177,10 @@ def run_exec(payload):
 
         out_files = []
         total_out = 0
-        produced = sorted(set(os.listdir(workdir)) - before - {"__potion_main__.py"})
+        produced = sorted(walk_files() - before - {"__potion_main__.py", "__potion_main__.sh"})
         for name in produced:
             path = os.path.join(workdir, name)
-            if not os.path.isfile(path) or safe_name(name) is None:
+            if not os.path.isfile(path) or os.path.islink(path) or safe_relpath(name) is None:
                 continue
             size = os.path.getsize(path)
             if size > MAX_OUTPUT_FILE:
