@@ -4755,9 +4755,18 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 ],
                 ...(deps.mcpFetch !== undefined ? { fetchImpl: deps.mcpFetch } : {}),
               });
+        // W-flagship: attached operator files are announced in the recorded
+        // guidance — the worker starts FROM the data instead of asking for
+        // it. (toolGuidance is recorded per step; replay re-derives.)
+        const runFilesNow = await listLabRunFiles(ctx.db, payload.orgId, payload.runId);
+        const attachmentLine =
+          runFilesNow.length > 0
+            ? [`The operator provided file(s) in your working directory: ${runFilesNow.map((f) => `${f.name} (${f.size} bytes)`).join(', ')}. Start from them — never ask for data that is already attached, and never invent data when a file is present.`]
+            : [];
         return {
           tools: [...builtins.tools, ...mcp.tools, ...(fanTool !== null ? [fanTool] : [])],
           guidance: [
+            ...attachmentLine,
             'ask_operator — your question channel to the operator: when the mission is missing information you need (an unfilled [LIKE THIS] slot, a URL, a file, a concrete choice), call ask_operator with ONE specific question as your FIRST move; the run pauses and the answer arrives as your next message. A fully specified mission needs no confirmation — never ask \u201cshould I proceed?\u201d on a mission that already says what to do; just begin. Never end the run by asking in plain text — a final message is filed as your RESULT, and a result that asks a question is a failed mission.',
             'Your FINAL message is the deliverable the operator keeps, and it is judged against the done-definition. When the mission asks for an account or report, write it IN FULL before stopping — numbered steps of what you did, what each showed, and the final state — never a bare status or a question.',
             ...builtins.guidance, ...mcp.guidance,

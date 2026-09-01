@@ -236,12 +236,32 @@ export function LabConsole({
     }
   }, [harness.harnessHash, refetchHarness, liveRunAttached]);
 
+  // W-flagship: the operator's own data rides the trial — picked files are
+  // base64'd client-side and seeded into the run workspace before the
+  // worker starts.
+  const [attachments, setAttachments] = useState<Array<{ name: string; contentBase64: string; size: number }>>([]);
+  const onPickFiles = useCallback(async (list: FileList | null) => {
+    if (list === null) return;
+    const picked: Array<{ name: string; contentBase64: string; size: number }> = [];
+    for (const f of Array.from(list).slice(0, 4)) {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      let bin = '';
+      const CHUNK = 0x8000;
+      for (let i = 0; i < buf.length; i += CHUNK) bin += String.fromCharCode(...buf.subarray(i, i + CHUNK));
+      picked.push({ name: f.name.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120), contentBase64: btoa(bin), size: f.size });
+    }
+    setAttachments(picked);
+  }, []);
+
   const startTrial = useCallback(async () => {
     setBusy(true);
     try {
       const res = await fetch('/api/lab/runs', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ harnessHash: harness.harnessHash }),
+        body: JSON.stringify({
+          harnessHash: harness.harnessHash,
+          ...(attachments.length > 0 ? { attachments: attachments.map(({ name, contentBase64 }) => ({ name, contentBase64 })) } : {}),
+        }),
       });
       const body = (await res.json()) as { runId?: string };
       if (res.status === 202 && body.runId) {
@@ -254,7 +274,7 @@ export function LabConsole({
     } finally {
       setBusy(false);
     }
-  }, [harness.harnessHash]);
+  }, [harness.harnessHash, attachments]);
 
   const [answerError, setAnswerError] = useState<string | null>(null);
   // X3 surfaces: the verify-record proof and the one-time first-run recap.
@@ -320,14 +340,22 @@ export function LabConsole({
         ) : null}
         <span className="ml-auto flex items-center gap-3">
           {canStart ? (
-            <button
-              onClick={() => void startTrial()}
-              disabled={busy}
-              className="bg-ink px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
-              data-testid="form-start-trial"
-            >
-              run a supervised trial
-            </button>
+            <>
+              <label className="cursor-pointer border border-[#c4bfb2] px-3 py-1.5 font-mono text-[12px] text-soft hover:border-accent hover:text-accent" data-testid="attach-files">
+                {attachments.length > 0
+                  ? `${attachments.length} file(s) attached — ${attachments.map((a) => a.name).join(', ').slice(0, 60)}`
+                  : 'attach your data file(s)'}
+                <input type="file" multiple className="hidden" onChange={(e) => void onPickFiles(e.target.files)} />
+              </label>
+              <button
+                onClick={() => void startTrial()}
+                disabled={busy}
+                className="bg-ink px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
+                data-testid="form-start-trial"
+              >
+                run a supervised trial
+              </button>
+            </>
           ) : (
             <button
               onClick={kill}

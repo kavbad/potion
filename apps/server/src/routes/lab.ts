@@ -64,6 +64,7 @@ import {
   setLabMemoryKey,
   upsertLabHarness,
   listLabRunFiles,
+  upsertLabRunFile,
   listRecentLabRuns,
   getLabRunFile,
   armLabMission,
@@ -875,12 +876,26 @@ export function registerLabRoutes(
   });
 
   // ---- POST /api/lab/runs (member) — start a trial run ----
-  app.post('/api/lab/runs', async (req: FastifyRequest, reply) => {
+  // W-flagship (2026-09-01): trials accept ATTACHMENTS — the operator's own
+  // data files, seeded into the run workspace before the worker starts. The
+  // sandbox ships the whole workspace tree on every call, so an attached
+  // CSV is simply THERE. Base64 over JSON (binary-safe; the repo enforces
+  // per-file/total caps + path validation); the route lifts the body limit
+  // to carry it.
+  app.post('/api/lab/runs', { bodyLimit: 16_000_000 }, async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     if (!roleAtLeast(org.role, 'member')) {
       return reply.code(403).send(memberForbidden(org.role, 'start trial runs'));
     }
-    const body = z.object({ harnessHash: z.string().regex(HASH_RE) }).safeParse(req.body ?? {});
+    const body = z
+      .object({
+        harnessHash: z.string().regex(HASH_RE),
+        attachments: z
+          .array(z.object({ name: z.string().min(1).max(120), contentBase64: z.string().max(11_000_000) }).strict())
+          .max(4)
+          .optional(),
+      })
+      .safeParse(req.body ?? {});
     if (!body.success) {
       return reply.code(400).send({ error: 'invalid_body', message: 'harnessHash (64 hex chars) is required' });
     }
@@ -903,8 +918,23 @@ export function registerLabRoutes(
       harnessName: parsed.spec.name,
       spec: parsed.spec,
     });
+    // Seed attachments BEFORE the job enqueues — the first leg must see them.
+    const attached: string[] = [];
+    for (const a of body.data.attachments ?? []) {
+      let content: Buffer;
+      try {
+        content = Buffer.from(a.contentBase64, 'base64');
+      } catch {
+        return reply.code(400).send({ error: 'invalid_body', message: `attachment '${a.name}' is not valid base64` });
+      }
+      const wrote = await upsertLabRunFile(db, { orgId: org.orgId, runId, name: a.name, content });
+      if (!wrote.ok) {
+        return reply.code(422).send({ error: 'attachment_refused', message: wrote.reason });
+      }
+      attached.push(a.name);
+    }
     const jobId = await opts.queue.enqueue('lab:run', { orgId: org.orgId, runId });
-    return reply.code(202).send({ runId, jobId, state: 'pending' });
+    return reply.code(202).send({ runId, jobId, state: 'pending', ...(attached.length > 0 ? { attached } : {}) });
   });
 
   /** Run row for THIS org or uniform 404. */

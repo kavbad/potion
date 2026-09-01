@@ -87,12 +87,12 @@ export const GALLERY: GallerySpecies[] = [
     id: 'data-analyst',
     species: 'analyst · one-off',
     name: 'Spreadsheet analyst',
-    valueLine: 'An analyst pass on any data file: computes real numbers in a sandbox, hands back the spreadsheet and the chart.',
+    valueLine: 'Attach any data file and get an analyst pass: real numbers computed in a sandbox, the spreadsheet and chart handed back.',
     costLine: 'hard cap ≈ $0.75/run',
     prefill: {
       clusterId: 'agentic-tool-use',
      
-      goal: 'Download the data file at [PASTE THE FILE URL HERE], analyze it (totals, by-day patterns, outliers), and produce an xlsx of the numbers plus a labeled chart and a three-line summary.',
+      goal: 'Analyze the data file I attach to the trial (or download the one at [OPTIONAL FILE URL]): totals, by-day patterns, outliers. Produce an xlsx of the numbers plus a labeled chart and a three-line summary.',
       kind: 'task', done: 'the xlsx and chart are in the run files and the summary states the three main findings',
       accounts: 'web, code', worth: '3', whenUnsure: 'ask-first',
       qualityBar: 'every number computed from the actual file, never estimated; the chart labeled and readable',
