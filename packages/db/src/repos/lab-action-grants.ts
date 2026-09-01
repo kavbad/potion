@@ -163,7 +163,9 @@ export async function listLabStepsForHarness(
     })
     .from(labRunSteps)
     .innerJoin(labRuns, eq(labRunSteps.runId, labRuns.id))
-    .where(and(eq(labRunSteps.orgId, orgId), eq(labRuns.harnessHash, harnessHash)))
+    // W3: shadow runs are proof material, never evidence — a candidate's
+    // rehearsal must not buy or cost trust.
+    .where(and(eq(labRunSteps.orgId, orgId), eq(labRuns.harnessHash, harnessHash), eq(labRuns.shadow, false)))
     .orderBy(labRuns.createdAt, labRunSteps.seq);
 }
 
@@ -176,4 +178,25 @@ export async function setGrantSituations(
   situations: string[],
 ): Promise<void> {
   await db.update(labActionGrants).set({ situations }).where(eq(labActionGrants.id, grantId));
+}
+
+/** W3 — promotion writes an INHERITED autonomous state onto a descendant's
+ * grant row. This is not a loosening path a model can reach: it runs only
+ * inside the human-initiated promote route, carrying state a human already
+ * granted on the parent, restricted by the inheritance plan. */
+export async function inheritGrantState(
+  db: PotionDb,
+  grantId: string,
+  input: { state: 'autonomous'; auditRate: number; situations: string[]; grantedAt: Date | null; reason: string },
+): Promise<void> {
+  await db
+    .update(labActionGrants)
+    .set({
+      state: input.state,
+      auditRate: Math.max(input.auditRate, GRANT_AUDIT_RATE_FLOOR),
+      situations: input.situations,
+      grantedAt: input.grantedAt ?? new Date(),
+      stateReason: input.reason,
+    })
+    .where(eq(labActionGrants.id, grantId));
 }

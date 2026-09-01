@@ -41,3 +41,4 @@ export { buildCodeLabTools, redactKeyShapes, CODE_LIMITS, type CodeToolDeps, typ
 export { buildPlanTool, planFromSteps, renderPlanLedger, validatePlan, planLedgerMessage, PLAN_TOOL_NAME, PLAN_LIMITS, type PlanTask, type PlanStatus } from './plan.js';
 export { buildJudgeMessages, compileRubric, parseJudgment, JUDGE_LIMITS, type Judgment, type JudgeCriterion } from './judge.js';
 export { ceilingFor, constitutionTierOverrides, decideAction, type ConstitutionCeiling, type GateDecision, type GateSnapshot } from './gateway.js';
+export { buildDescendantSpec, buildShadowStub, deriveImprovements, inheritGrantPlan, recordedActOutputs, type ImproveStep, type ImprovementProposal } from './improve.js';

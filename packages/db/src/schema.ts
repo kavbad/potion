@@ -1595,6 +1595,10 @@ export const labRuns = pgTable('lab_runs', {
     .references(() => orgs.id),
   /** Spec content hash (Step 2) — the resume identity gate. */
   harnessHash: text('harness_hash').notNull(),
+  /** W3 — a SHADOW run: a candidate generation driven against recorded
+   * inputs with externals stubbed. Its steps are proof material, NEVER
+   * evidence (excluded from graduation extraction) and never notified. */
+  shadow: boolean('shadow').notNull().default(false),
   harnessName: text('harness_name').notNull(),
   /** The spec AS RUN, frozen. Replay/fork read this copy, never a file. */
   spec: jsonb('spec').notNull(),
@@ -1700,6 +1704,25 @@ export const labHarnesses = pgTable(
     sidecar: jsonb('sidecar').notNull(),
     clusterId: text('cluster_id').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** W3 (2026-09-01) — the generational identity. A worker FAMILY is the
+     * durable thing the operator owns; each content-addressed harness is
+     * one GENERATION of it. familyId groups; parentHash + generation give
+     * the lineage (a DAG — branches share a parent); mutation is the TYPED
+     * record of what changed from the parent (never an opaque diff);
+     * supersededBy points at the promoted successor. Null family = a
+     * family of one (every pre-W3 harness). A generation row never
+     * changes — learning creates descendants. */
+    familyId: text('family_id'),
+    parentHash: text('parent_hash'),
+    generation: integer('generation').notNull().default(1),
+    mutation: jsonb('mutation').$type<{
+      type: 'instruction' | 'constitution';
+      summary: string;
+      noticed: string;
+      why: string;
+      change: Record<string, unknown>;
+    }>(),
+    supersededBy: text('superseded_by'),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.harnessHash] })],
 );

@@ -89,11 +89,20 @@ import { scanRawValue, harnessSpecHash } from '@potion/lab-spec';
 import {
   acceptGraduation,
   getActionGrant,
+  ensureActionGrant,
+  ensureHarnessFamily,
+  inheritGrantState,
+  insertDescendantHarness,
+  latestCompletedLabRun,
+  latestShadowLabRun,
   listActionGrants,
   listEvidenceReports,
+  listFamilyGenerations,
+  markSuperseded,
+  tightenGrant,
   listLabStepsForHarness,
 } from '@potion/db';
-import { constitutionTierOverrides, evidenceFromReports, extractDeliverable, extractPoreEvidence, extractReport, mergeEvidence, runGraduationPass } from '@potion/lab-runtime';
+import { buildDescendantSpec, constitutionTierOverrides, deriveImprovements, evidenceFromReports, extractDeliverable, extractPoreEvidence, extractReport, inheritGrantPlan, mergeEvidence, runGraduationPass, type ImprovementProposal } from '@potion/lab-runtime';
 import {
   applyDialPosition,
   dialViews,
@@ -510,6 +519,11 @@ export function registerLabRoutes(
       name: row.name,
       clusterId: row.clusterId,
       createdAt: row.createdAt,
+      // W3 — the generational identity, for the lineage/improve surfaces.
+      generation: (row as { generation?: number }).generation ?? 1,
+      parentHash: (row as { parentHash?: string | null }).parentHash ?? null,
+      supersededBy: (row as { supersededBy?: string | null }).supersededBy ?? null,
+      mutationRecord: (row as { mutation?: unknown }).mutation ?? null,
       spec,
       // The canonical spec FILE, byte truth — the machinery view edits
       // this, not a re-serialization (round-trip honesty).
@@ -1964,6 +1978,154 @@ export function registerLabRoutes(
       } catch (e) {
         return reply.code(409).send({ error: { message: e instanceof Error ? e.message : 'refused', type: 'invalid_request_error', code: 'never_graduates' } });
       }
+    },
+  );
+
+  // ════ W3 — generations & proof ════════════════════════════════════════
+  // A generation never changes; learning creates DESCENDANTS. These routes
+  // are the improve loop: derive proposals from the record, build a
+  // candidate generation, rehearse it in shadow, compare, promote with
+  // selective trust inheritance. (WORKERS-DIRECTION W3.)
+
+  async function improveSource(req: FastifyRequest): Promise<{ row: NonNullable<Awaited<ReturnType<typeof ownHarness>>>; spec: HarnessSpec; steps: Array<{ runId: string; payload: StepPayload; createdAt: Date }> } | null> {
+    const row = await ownHarness(req);
+    if (row === null) return null;
+    const parsed = parseHarnessSpecText(row.specText);
+    if (!parsed.ok) return null;
+    const rows = await listLabStepsForHarness(db, req.potionOrg!.orgId, row.harnessHash);
+    return { row, spec: parsed.spec, steps: rows.map((x) => ({ runId: x.runId, payload: x.payload as StepPayload, createdAt: x.createdAt })) };
+  }
+
+  // ---- GET /api/lab/harnesses/:hash/improvements (viewer) — the inbox ----
+  app.get('/api/lab/harnesses/:hash/improvements', async (req: FastifyRequest, reply) => {
+    const src = await improveSource(req);
+    if (src === null) return reply.code(404).send(notFound);
+    return reply.send({ improvements: deriveImprovements(src.spec, src.steps) });
+  });
+
+  // ---- POST /api/lab/harnesses/:hash/candidates (admin) — build + rehearse ----
+  app.post(
+    '/api/lab/harnesses/:hash/candidates',
+    { preHandler: [requireRole('admin')] },
+    async (req: FastifyRequest, reply) => {
+      const src = await improveSource(req);
+      if (src === null) return reply.code(404).send(notFound);
+      const body = z.object({ improvementId: z.string().min(1).max(64) }).safeParse(req.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: { message: 'improvementId required', type: 'invalid_request_error' } });
+      const proposal = deriveImprovements(src.spec, src.steps).find((i) => i.id === body.data.improvementId);
+      if (proposal === undefined) {
+        return reply.code(409).send({ error: { message: 'that proposal is no longer derivable from the record', type: 'invalid_request_error' } });
+      }
+      // The descendant: new spec, new hash, lineage recorded, typed mutation carried.
+      const draft = buildDescendantSpec(src.spec, proposal.mutation);
+      const { hash: _drop, ...unhashed } = draft as HarnessSpec & { hash?: string };
+      const childHash = harnessSpecHash(unhashed as HarnessSpec);
+      const childSpec = { ...unhashed, hash: childHash } as HarnessSpec;
+      const reparsed = parseHarnessSpecText(canonicalJson(childSpec));
+      if (!reparsed.ok) {
+        return reply.code(422).send({ error: { message: `the mutated spec failed validation: ${reparsed.issues[0]?.code}`, type: 'invalid_request_error' } });
+      }
+      const org = req.potionOrg!;
+      const familyId = (await ensureHarnessFamily(db, org.orgId, src.row.harnessHash))!;
+      await insertDescendantHarness(db, {
+        orgId: org.orgId,
+        harnessHash: childHash,
+        name: src.row.name,
+        specText: canonicalJson(childSpec),
+        sidecar: src.row.sidecar,
+        clusterId: src.row.clusterId,
+        familyId,
+        parentHash: src.row.harnessHash,
+        generation: ((src.row as { generation?: number }).generation ?? 1) + 1,
+        mutation: proposal.mutation,
+      });
+      // The shadow rehearsal: acts stubbed from the parent's record, reads
+      // real, steps excluded from evidence, judged like any completed run.
+      const shadowRunId = `run-${randomUUID().slice(0, 8)}`;
+      await createLabRun(db, {
+        id: shadowRunId, orgId: org.orgId, harnessHash: childHash,
+        harnessName: src.row.name, spec: childSpec, shadow: true,
+      });
+      const jobId = await opts.queue.enqueue('lab:run', { orgId: org.orgId, runId: shadowRunId });
+      return reply.code(201).send({ candidateHash: childHash, generation: ((src.row as { generation?: number }).generation ?? 1) + 1, shadowRunId, jobId, mutation: proposal.mutation });
+    },
+  );
+
+  // ---- GET /api/lab/harnesses/:hash/candidates (viewer) — the comparison ----
+  app.get('/api/lab/harnesses/:hash/candidates', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const row = await ownHarness(req);
+    if (row === null) return reply.code(404).send(notFound);
+    const familyId = (row as { familyId?: string | null }).familyId;
+    const generations = familyId != null ? await listFamilyGenerations(db, org.orgId, familyId) : [];
+    const children = generations.filter((g) => (g as { parentHash?: string | null }).parentHash === row.harnessHash);
+    const baseline = await latestCompletedLabRun(db, org.orgId, row.harnessHash);
+    const summarize = async (runId: string) => {
+      const run = await getLabRun(db, runId, org.orgId);
+      if (run === null) return null;
+      const steps = await listLabSteps(db, runId, org.orgId);
+      const judge = (run as { judge?: { overall?: number } | null }).judge;
+      const metered = steps.reduce((a, x) => {
+        const sp = x.payload as { costUsd?: number; estCostUsd?: number };
+        return a + (sp.costUsd !== undefined && sp.costUsd > 0 ? sp.costUsd : (sp.estCostUsd ?? 0));
+      }, 0);
+      return {
+        runId, state: run.state,
+        judgeOverall: typeof judge?.overall === 'number' ? judge.overall : null,
+        spentUsd: Number(metered.toFixed(6)),
+        steps: steps.length,
+        asks: steps.filter((x) => x.kind === 'check-in').length,
+      };
+    };
+    const out = [];
+    for (const c of children) {
+      // The candidate's shadow run: its most recent run (shadow or not).
+      const shadowRun = await latestShadowLabRun(db, org.orgId, c.harnessHash);
+      out.push({
+        candidateHash: c.harnessHash,
+        generation: (c as { generation?: number }).generation ?? 1,
+        mutation: (c as { mutation?: unknown }).mutation ?? null,
+        supersededParent: (row as { supersededBy?: string | null }).supersededBy === c.harnessHash,
+        shadow: shadowRun !== null ? await summarize(shadowRun.id) : null,
+        baseline: baseline !== null ? await summarize(baseline.id) : null,
+      });
+    }
+    return reply.send({ candidates: out });
+  });
+
+  // ---- POST /api/lab/harnesses/:hash/promote (admin) — the succession ----
+  app.post(
+    '/api/lab/harnesses/:hash/promote',
+    { preHandler: [requireRole('admin')] },
+    async (req: FastifyRequest, reply) => {
+      const org = req.potionOrg!;
+      const row = await ownHarness(req);
+      if (row === null) return reply.code(404).send(notFound);
+      const body = z.object({ candidateHash: z.string().regex(HASH_RE) }).safeParse(req.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: { message: 'candidateHash required', type: 'invalid_request_error' } });
+      const child = await getLabHarness(db, org.orgId, body.data.candidateHash);
+      if (child === null || (child as { parentHash?: string | null }).parentHash !== row.harnessHash) {
+        return reply.code(409).send({ error: { message: 'the candidate is not a descendant of this generation', type: 'invalid_request_error' } });
+      }
+      const mutation = (child as { mutation?: ImprovementProposal['mutation'] | null }).mutation;
+      // Selective trust inheritance v1: the plan says which earned states
+      // carry; preserved grants keep situations + grantedAt; re-proving
+      // classes start supervised with the reason on the row.
+      const parentGrants = await listActionGrants(db, org.orgId, row.harnessHash);
+      const plan = mutation != null
+        ? inheritGrantPlan(mutation, parentGrants.map((g) => ({ actionClass: g.actionClass, state: g.state, riskTier: g.riskTier })))
+        : parentGrants.map((g) => ({ actionClass: g.actionClass, preserve: true, why: 'no recorded mutation — states carry' }));
+      for (const g of parentGrants) {
+        const p = plan.find((x) => x.actionClass === g.actionClass)!;
+        const created = await ensureActionGrant(db, { orgId: org.orgId, harnessHash: child.harnessHash, actionClass: g.actionClass, riskTier: g.riskTier });
+        if (p.preserve && g.state === 'autonomous') {
+          await inheritGrantState(db, created.id, { state: 'autonomous', auditRate: g.auditRate, situations: (g as { situations?: string[] }).situations ?? [], grantedAt: g.grantedAt, reason: `inherited from generation ${(row as { generation?: number }).generation ?? 1}: ${p.why}` });
+        } else if (!p.preserve) {
+          await tightenGrant(db, created.id, `re-proving under the new generation: ${p.why}`);
+        }
+      }
+      await markSuperseded(db, org.orgId, row.harnessHash, child.harnessHash);
+      return reply.send({ promoted: child.harnessHash, plan });
     },
   );
 }

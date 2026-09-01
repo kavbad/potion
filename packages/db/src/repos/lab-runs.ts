@@ -28,6 +28,8 @@ export interface CreateLabRunInput {
   spec: unknown;
   /** X4: set when this run is a fan-out helper of another run. */
   parentRunId?: string;
+  /** W3: a candidate's shadow rehearsal — proof, never evidence. */
+  shadow?: boolean;
 }
 
 export async function createLabRun(db: PotionDb, input: CreateLabRunInput): Promise<void> {
@@ -39,6 +41,7 @@ export async function createLabRun(db: PotionDb, input: CreateLabRunInput): Prom
     spec: input.spec,
     state: 'pending',
     ...(input.parentRunId !== undefined ? { parentRunId: input.parentRunId } : {}),
+    ...(input.shadow === true ? { shadow: true } : {}),
   });
 }
 
@@ -551,4 +554,42 @@ export async function listOrgIdsWithLabRunsSince(db: PotionDb, since: Date): Pro
     .from(labRuns)
     .where(gte(labRuns.createdAt, since));
   return rows.map((r) => r.orgId);
+}
+
+/** W3 — the latest COMPLETED, non-shadow run of a harness: the shadow
+ * rehearsal's stub source and the comparison baseline. */
+export async function latestCompletedLabRun(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+): Promise<LabRunRow | null> {
+  const rows = await db
+    .select()
+    .from(labRuns)
+    .where(
+      and(
+        eq(labRuns.orgId, orgId),
+        eq(labRuns.harnessHash, harnessHash),
+        eq(labRuns.state, 'completed'),
+        eq(labRuns.shadow, false),
+      ),
+    )
+    .orderBy(desc(labRuns.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** W3 — the candidate's latest shadow rehearsal. */
+export async function latestShadowLabRun(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+): Promise<LabRunRow | null> {
+  const rows = await db
+    .select()
+    .from(labRuns)
+    .where(and(eq(labRuns.orgId, orgId), eq(labRuns.harnessHash, harnessHash), eq(labRuns.shadow, true)))
+    .orderBy(desc(labRuns.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
 }

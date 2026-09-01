@@ -1,0 +1,1 @@
+ALTER TABLE lab_runs ADD COLUMN IF NOT EXISTS shadow boolean NOT NULL DEFAULT false;

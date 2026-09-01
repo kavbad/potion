@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { fetchOrRecover } from '@/lib/recover';
 import { LabConsole } from '@/components/lab-console';
+import { ImproveInbox } from '@/components/lab-improve';
 import { BriefView as LatestBrief } from '@/components/lab-brief';
 import { ConnectorPanel } from '@/components/lab-actions';
 import { LabMachinery } from '@/components/lab-machinery';
@@ -208,6 +209,8 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
 
           {/* ---- the permission ledger ---- */}
           <LabPermissionLedger harnessHash={harness.harnessHash} role={me.role} />
+
+          <ImproveInbox harnessHash={harness.harnessHash} role={me.role} />
 
           {/* ---- connections: the worker's declared accounts, honestly —
                and (admin) the BYO-MCP door, even with nothing declared ---- */}

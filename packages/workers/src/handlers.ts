@@ -137,6 +137,7 @@ import {
   grantConnectionStatus,
   listLabGrants,
   setLabRunJudge,
+  latestCompletedLabRun,
   listLabSteps as listLabStepsRepo,
   listLabCustomConnectors,
   listLabRunChildren,
@@ -162,7 +163,7 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildWebLabTools, compileRubric, constitutionTierOverrides, extractDeliverable, extractReport, parseJudgment, resumeRun, runGraduationPass, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
+import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildShadowStub, buildWebLabTools, compileRubric, constitutionTierOverrides, extractDeliverable, extractReport, parseJudgment, recordedActOutputs, resumeRun, runGraduationPass, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
@@ -4769,7 +4770,25 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
         };
       };
 
+      // ── W3: SHADOW rehearsal — a candidate generation drives against the
+      // PARENT's recorded act outputs. Only external (act) tools are
+      // stubbed; reads stay real (side-effect-free by the X6 law). The
+      // rehearsal can see the live world and cannot touch it.
+      let shadowOutputs: Map<string, unknown[]> | null = null;
+      if (run.shadow === true) {
+        const candidateRow = await getLabHarness(ctx.db, payload.orgId, run.harnessHash);
+        const parentHash = (candidateRow as { parentHash?: string | null } | null)?.parentHash ?? null;
+        const baseline = parentHash !== null ? await latestCompletedLabRun(ctx.db, payload.orgId, parentHash) : null;
+        const baseSteps = baseline !== null ? await listLabStepsRepo(ctx.db, baseline.id, payload.orgId) : [];
+        shadowOutputs = recordedActOutputs(baseSteps.map((x) => ({ kind: x.kind, payload: x.payload as { toolName?: string; toolOutput?: unknown } })));
+      }
+      const shadowize = (tools: McpLegSetup['tools']): McpLegSetup['tools'] =>
+        shadowOutputs === null
+          ? tools
+          : tools.map((t) => (t.external ? buildShadowStub(t, shadowOutputs!.get(t.name) ?? []) : t));
+
       let leg = await mcpLeg();
+      if (shadowOutputs !== null) leg = { ...leg, tools: shadowize(leg.tools) };
       let outcome: LegOutcome;
       try {
         outcome = await resumeRun({
@@ -4786,6 +4805,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       }
       while (outcome.status === 'leg-cap') {
         leg = await mcpLeg();
+        if (shadowOutputs !== null) leg = { ...leg, tools: shadowize(leg.tools) };
         try {
           outcome = await resumeRun({
             db: ctx.db, client, orgId: payload.orgId, specText, runId: payload.runId, policyRefs,
@@ -4892,7 +4912,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // worker does not stay autonomous merely because nobody opened its
       // permission page. The gateway's act-time read completes the loop:
       // a tighten written here bites any run's very next action.
-      if (outcome.status === 'completed' || outcome.status === 'failed' || outcome.status === 'killed-budget' || outcome.status === 'awaiting-human') {
+      if (run.shadow !== true && (outcome.status === 'completed' || outcome.status === 'failed' || outcome.status === 'killed-budget' || outcome.status === 'awaiting-human')) {
         try {
           await runGraduationPass({
             db: ctx.db, orgId: payload.orgId, harnessHash: run.harnessHash,
@@ -4914,6 +4934,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
       // deliverable; the weekly digest still counts it). A FIRED one does.
       const quietWatchdog = outcome.status === 'completed' && watchdogFired === false;
       if (
+        run.shadow !== true &&
         !quietWatchdog &&
         (outcome.status === 'completed' ||
         outcome.status === 'failed' ||
