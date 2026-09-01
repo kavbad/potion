@@ -344,6 +344,19 @@ export function missingClaimedFiles(text: string, existing: readonly string[]): 
     .slice(0, 8);
 }
 
+/** THE EMPTY-STOP LAW (2026-09-01, runs 32b24af3 + 4638e4a1): twice in one
+ * day a cheap route returned a ZERO-TOKEN stop mid-mission and the grammar
+ * read it as "task complete" — no report, so no judge (extractReport needs
+ * ≥40 chars), so a 'completed' run with zero payoff. A task stop whose text
+ * cannot even BE a report (under extractReport's own 40-char bar) is not a
+ * completion: one stamped repair round per run, replay-mirrored, then the
+ * grammar proceeds however the model answers. */
+export const EMPTY_STOP_REPAIR_MESSAGE =
+  'You stopped without a report. A task run must end with the work DONE and a report of what was produced — finish the mission now (run the tools, write the files), or state honestly what you completed and what you could not.';
+export function emptyStopRepairMessage(): ChatMessage {
+  return { role: 'user', content: EMPTY_STOP_REPAIR_MESSAGE };
+}
+
 export const FILE_CLAIM_REPAIR_PREFIX = 'Your report names files that do NOT exist in this run:';
 export function fileClaimRepairMessage(missing: readonly string[]): ChatMessage {
   return {
@@ -443,6 +456,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // mission. The law fires only on work-free stops.
     let sawToolStep = priorSteps.some((x) => x.kind === 'tool');
     let fileClaimFiredThisLeg = false;
+    let emptyStopFiredThisLeg = false;
     const askedBefore = priorSteps.some(
       (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
     );
@@ -736,6 +750,25 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         const filesNow = await listLabRunFiles(opts.db, opts.orgId, opts.runId);
         fileClaimMissing = missingClaimedFiles(result.text ?? '', filesNow.map((f) => f.name));
       }
+      // THE EMPTY-STOP LAW: a task stop that says NOTHING cannot be a
+      // completion — there is no report, hence no judge, hence a
+      // 'completed' run with zero payoff (seen twice live as zero-token
+      // stops from a cheap route). One repair round per run, stamped
+      // BEFORE recording; the unfilled-slot park outranks it. (Terse
+      // non-empty stops still complete — extractReport's 40-char bar is
+      // the judge's bar, not the completion bar.)
+      let emptyStopRepair = false;
+      if (
+        opts.spec.mission.kind === 'task' &&
+        result.finishReason === 'stop' &&
+        result.toolCalls.length === 0 &&
+        (result.text ?? '').trim().length === 0 &&
+        !((opts.askChannel ?? 'operator') === 'operator' && !askedBefore && !sawToolStep && hasUnfilledSlot(opts.spec.mission.goal)) &&
+        !priorSteps.some((x) => (x.payload as StepPayload).emptyStopRepair !== undefined) &&
+        !emptyStopFiredThisLeg
+      ) {
+        emptyStopRepair = true;
+      }
 
       seq += 1;
       await appendLabStep(opts.db, {
@@ -749,6 +782,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {}),
           ...(steerTexts !== undefined ? { steers: steerTexts } : {}),
           ...(fileClaimMissing.length > 0 ? { fileClaimRepair: fileClaimMissing } : {}),
+          ...(emptyStopRepair ? { emptyStopRepair: true } : {}),
         }),
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
       });
@@ -963,6 +997,13 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         if (fileClaimMissing.length > 0) {
           fileClaimFiredThisLeg = true;
           messages.push(fileClaimRepairMessage(fileClaimMissing));
+          continue;
+        }
+        // THE EMPTY-STOP LAW (stamped above): no report means no completion
+        // — one repair round, then the grammar takes whatever comes back.
+        if (emptyStopRepair) {
+          emptyStopFiredThisLeg = true;
+          messages.push(emptyStopRepairMessage());
           continue;
         }
         // THE UNFILLED-SLOT LAW (2026-08-31, from the operator's second

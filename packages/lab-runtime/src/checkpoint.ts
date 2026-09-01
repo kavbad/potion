@@ -96,6 +96,10 @@ export interface StepPayload {
    * text named these files while the run did not hold them — the loop
    * pushed one repair round instead of completing; replay re-derives. */
   fileClaimRepair?: string[];
+  /** THE EMPTY-STOP LAW (2026-09-01): set on a task stop whose text was
+   * EMPTY — a stop that says nothing is not a completion; the loop pushed
+   * one repair round instead; replay re-derives. */
+  emptyStopRepair?: boolean;
   /** X8: operator steers folded into THIS model step's conversation —
    * replay re-injects them (steerMessage) before deriving the request. */
   steers?: string[];

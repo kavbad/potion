@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, contractRepairMessage, fileClaimRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
 import { decideAction } from './gateway.js';
 import { planLedgerMessage } from './plan.js';
@@ -199,6 +199,13 @@ export function replayRun(
         // completion must not derive at record end.
         if (expectWrapUp) expectWrapUp = false;
       }
+      // THE EMPTY-STOP LAW (2026-09-01, mirrored same commit): a stamped
+      // report-less stop did NOT complete — the loop pushed one repair
+      // round and continued the mission.
+      const emptyStopStamp = (p as { emptyStopRepair?: boolean }).emptyStopRepair;
+      if (emptyStopStamp === true) {
+        messages.push(emptyStopRepairMessage());
+      }
       // ask_operator (2026-08-31, mirrored same commit): calls stay pending —
       // a PARKED ask is cleared by its worker-question check-in below, and a
       // helper's refused ask is consumed by its recorded tool step like any
@@ -210,7 +217,7 @@ export function replayRun(
       // stop — the loop parked it as a worker-question; the check-in step
       // that follows derives the awaiting-human.
       const slotParked = spec.mission.kind === 'task' && !askedAlready && !sawToolStep && hasUnfilledSlot(spec.mission.goal);
-      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked && fileClaims === undefined) {
+      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked && fileClaims === undefined && emptyStopStamp !== true) {
         if (runHadTools && !expectWrapUp) {
           // The wrap-up follows; terminal completes AFTER it.
           expectWrapUp = true;

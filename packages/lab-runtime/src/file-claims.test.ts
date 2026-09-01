@@ -107,7 +107,7 @@ describe('the law in the loop', () => {
     await h.close();
   }, 60_000);
 
-  it('THE WRAP-UP IS UNDER THE LAW (run-32b24af3): an empty tools-slot stop slides past the main check, the wrap-up names an absent file — annulled, repaired, produced, replay clean', async () => {
+  it('THE WRAP-UP IS UNDER THE LAW (run-32b24af3): a file-free stop passes the main check, the wrap-up names an absent file — annulled, repaired, produced, replay clean', async () => {
     const { h, hash } = await fresh();
     const writer: LabTool = {
       name: 'write_out', description: 'write the file', parameters: { type: 'object' },
@@ -120,9 +120,9 @@ describe('the law in the loop', () => {
     const leg = await runLeg({
       db: h.db,
       client: scripted([
-        // The specimen: the tools slot stops with EMPTY text (under the
-        // 40-char guard — nothing for the main law to audit)…
-        ok({ text: '' }),
+        // The specimen: the tools slot stops with prose that names NO
+        // files (the main law has nothing to flag)…
+        ok({ text: 'I finished the analysis and computed every figure; the workbook details follow in the summary.' }),
         // …and the wrap-up — the report the customer reads — names a
         // deliverable the run does not hold.
         ok({ text: 'Wrap-up: computed every figure; analysis.xlsx holds the totals, by-day and by-customer sheets.' }),
@@ -140,6 +140,63 @@ describe('the law in the loop', () => {
     expect(stamped.length).toBe(1);
     expect((stamped[0]!.payload as { fileClaimRepair: string[]; slot?: string }).fileClaimRepair).toEqual(['analysis.xlsx']);
     expect((stamped[0]!.payload as { slot?: string }).slot).toBe('brain'); // the stamp sits on the WRAP step
+    const rec = await recordOf(h);
+    const res = replayRun(SPEC, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it('THE EMPTY-STOP LAW (run-4638e4a1): a zero-token stop mid-mission is not a completion — one repair, real work follows, replay clean', async () => {
+    const { h, hash } = await fresh();
+    const writer: LabTool = {
+      name: 'write_out', description: 'write the file', parameters: { type: 'object' },
+      external: false,
+      run: async () => {
+        await upsertLabRunFile(h.db, { orgId: ORG_A, runId: 'run-fc', name: 'analysis.xlsx', content: Buffer.from('PK') });
+        return { wrote: 'analysis.xlsx' };
+      },
+    };
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        // The specimen: the cheap route answers a fresh mission with a
+        // ZERO-TOKEN stop. Report bar unmet → repair, not completion.
+        ok({ text: '' }),
+        // The repair round does the actual work…
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'w1', type: 'function', function: { name: 'write_out', arguments: '{}' } }] }),
+        // …and stops with a real report; the wrap-up rides to completion.
+        ok({ text: 'analysis.xlsx is written with totals, by-day and by-customer sheets. done.' }),
+        ok({ text: 'Wrap-up: wrote analysis.xlsx after the nudge; done.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [writer],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    const stamped = steps.filter((x) => (x.payload as { emptyStopRepair?: boolean }).emptyStopRepair === true);
+    expect(stamped.length).toBe(1);
+    expect(stamped[0]!.seq).toBe(1);
+    const rec = await recordOf(h);
+    const res = replayRun(SPEC, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it('empty-stop law: one round only — a second empty stop completes (report-less, the record is honest about it)', async () => {
+    const { h, hash } = await fresh();
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: '' }),
+        ok({ text: '' }),
+        // toolDefs exist even when the tool list is empty at runLeg's level
+        // for tool-bearing specs; the wrap-up still rides on completion.
+        ok({ text: 'Wrap-up: the mission stopped without producing a report.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    expect(steps.filter((x) => (x.payload as { emptyStopRepair?: boolean }).emptyStopRepair === true).length).toBe(1);
     const rec = await recordOf(h);
     const res = replayRun(SPEC, rec.steps, rec.terminal);
     expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
