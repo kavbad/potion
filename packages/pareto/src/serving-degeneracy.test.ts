@@ -66,7 +66,12 @@ async function serve(over: {
     clusterId: over.clusterId ?? CLUSTER,
     strategyHash: over.strategyHash,
     status: over.status ?? 'ok',
-    usage: { promptTokens: 100, completionTokens: over.completionTokens, totalTokens: 100 + over.completionTokens },
+    // Alternate rows between the two live usage spellings — the serve path
+    // writes {inputTokens, outputTokens}; the Usage type says
+    // {promptTokens, completionTokens}. The rollup must read both.
+    usage: (over.completionTokens % 2 === 0
+      ? ({ inputTokens: 100, outputTokens: over.completionTokens } as never)
+      : { promptTokens: 100, completionTokens: over.completionTokens, totalTokens: 100 + over.completionTokens }),
   });
 }
 

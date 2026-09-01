@@ -165,16 +165,20 @@ export async function servingDegenerateCounts(
   now: Date = new Date(),
 ): Promise<ServingDegeneracyRow[]> {
   const since = new Date(now.getTime() - windowMin * 60_000);
+  // The serve path writes usage as {inputTokens, outputTokens}; older rows
+  // and the Usage type spell it {promptTokens, completionTokens}. Read both
+  // — filtering on one spelling silently nulled out every production row
+  // (found live: the first rollup returned [] over six recorded empties).
   const res = await db.execute(sql`
     SELECT strategy_hash AS strategy_hash,
            count(*) AS total,
-           count(*) FILTER (WHERE (usage->>'completionTokens')::float = 0) AS empty
+           count(*) FILTER (WHERE coalesce(usage->>'outputTokens', usage->>'completionTokens')::float = 0) AS empty
       FROM request_logs
      WHERE org_id = ${orgId}
        AND cluster_id = ${clusterId}
        AND status = 'ok'
        AND strategy_hash IS NOT NULL
-       AND usage->>'completionTokens' IS NOT NULL
+       AND coalesce(usage->>'outputTokens', usage->>'completionTokens') IS NOT NULL
        AND ts >= ${since.toISOString()}
      GROUP BY strategy_hash
   `);
