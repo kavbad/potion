@@ -6,6 +6,7 @@
 // $0.00 counter with three receipts must be as calm and honest as $18k.
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { priceVsBaseline } from '@/lib/price-words';
 import { Stamp } from '@/components/primitives';
 import type { UsageCurrentResponse } from '@/lib/types';
 
@@ -183,12 +184,21 @@ export function TodayPulse() {
       <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
         {new Date().toLocaleDateString(undefined, { month: 'long' })} · live
       </div>
+      {/* 2026-09-01 (operator, twice: "i still dont think thats right"):
+          dollars "kept" of money never committed is the wrong hero no
+          matter how it rounds. The house formula (price-words, endorsed on
+          the landing page) leads with the RATIO and NAMES the comparator:
+          "1/270th the price of the best scorer". The pulse now speaks the
+          same sentence: ratio hero, named comparator, real spend shown,
+          receipts claim carried. */}
       <div className="mt-2 font-sans text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-kept tabular-nums sm:text-[3.4rem]">
-        {moneyFloor(shown)}
+        {hasBaseline && actualSpend > 0 ? priceVsBaseline(actualSpend, spentWithout) : moneyFloor(shown)}
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-soft">
-        {hasBaseline ? (
-          <>your router kept this month — you spent <span className="text-ink">{money(actualSpend)}</span> where your measured work would have cost <span className="text-ink">{moneyCeil(spentWithout)}</span> — verified receipt by receipt</>
+        {hasBaseline && actualSpend > 0 ? (
+          <>the price of the best scorer on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, verified receipt by receipt</>
+        ) : hasBaseline ? (
+          <>measured against the best scorer on your own requests — <span className="text-ink">{moneyCeil(spentWithout)}</span> of counterfactual, nothing spent yet</>
         ) : hasTraffic ? (
           <>kept so far — your savings become a measurement against <em>your</em> model once you name it in <Link href="/settings/controls" className="text-accent underline">Controls</Link></>
         ) : (
