@@ -152,7 +152,9 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
   // carrying the changed floor, every active key rebound. Per-kind floors
   // survive a default-floor change; a latency bound survives as compound;
   // max_quality has no floor, so setting one deliberately replaces it.
-  const FloorBody = z.object({ qualityFloor: z.number().min(0.5).max(1) }).strict();
+  // No invented lower bound: core PolicySchema allows 0-1, and an operator
+  // explicitly setting a low bar is setting THEIR bar (same closure).
+  const FloorBody = z.object({ qualityFloor: z.number().min(0).max(1) }).strict();
   app.put('/api/floor', { preHandler: [requireRole('admin')] }, async (req, reply) => {
     const org = req.potionOrg!;
     const parsed = FloorBody.safeParse(req.body);
@@ -188,7 +190,13 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     const current = first?.policyId ? ((await getPolicyById(db, orgId, first.policyId))?.config ?? null) : null;
     let policy: Policy | null = current;
     for (const p of proposals) {
-      const floor = Math.max(0.5, Math.min(1, Math.round(p.suggestedFloor * 100) / 100));
+      // Caption-vs-provenance, CLOSED end-to-end (2026-09-01; the 0.5 clamp
+      // was removed proposal-side on 2026-08-31 but survived HERE): the
+      // card says "set my bar at 0.38" — the write must be 0.38. FLOOR to
+      // 2dp (the worker's own suggestedFloorFor semantics — conservative,
+      // never rounded up past the measurement), bounded only by [0, 1],
+      // which is all core PolicySchema requires.
+      const floor = Math.max(0, Math.min(1, Math.floor(p.suggestedFloor * 100) / 100));
       policy = withClusterFloor(policy, p.clusterId, floor);
     }
     const merged = policy as Policy;
