@@ -45,7 +45,7 @@ import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, in
 import { stampedRouterVersion } from '../routing/router-stamp.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
-import { loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
+import { bindServingDegeneracy, loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
@@ -768,19 +768,30 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         cid,
         (msg) => app.log.warn(msg),
       );
+      // Serving-measured degeneracy (2026-09-01): a strategy this org's own
+      // traffic measured as returning empty completions in a burst is
+      // excluded, whatever its suite score says — the or-gemini-flash
+      // incident, same doctrine as the latency substitution above.
+      const degeneracy = await bindServingDegeneracy(
+        ctx.db.db,
+        bound.frontier,
+        auth.org.orgId,
+        cid,
+        (msg) => app.log.warn(msg),
+      );
       const point = resolveOperatingPoint(
         clusterPolicy,
-        bound.frontier,
+        degeneracy.frontier,
         fallbackStrategyFor(ctx.providerMode, ctx.prices),
         { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined },
       );
       const served =
         point.config === null
           ? null
-          : ((bound.frontier?.points ?? guarded.frontier?.points ?? []).find(
+          : ((degeneracy.frontier?.points ?? guarded.frontier?.points ?? []).find(
               (pt) => pt.strategyHash === strategyHash(point.config as StrategyConfig),
             ) ?? null);
-      return { clusterId: cid, ...guarded, latency: bound, op: point, served, servedInstrument: (loaded?.instrument ?? 'default') as 'default' | 'tools' | 'vision' | 'audio' };
+      return { clusterId: cid, ...guarded, latency: bound, degenerateExcluded: degeneracy.excluded, op: point, served, servedInstrument: (loaded?.instrument ?? 'default') as 'default' | 'tools' | 'vision' | 'audio' };
     };
     let chosen = await resolveFor(clusterId);
     if (chosen === null) {
@@ -882,6 +893,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // trace is byte-identical to before this change.
       (routerVersion !== null ? `;router=v${routerVersion}` : '') +
       (servedInstrument !== null ? `;instrument=${servedInstrument}` : '') +
+      // Appended only when the org's own measured traffic excluded a
+      // degenerate route — absent, the trace is byte-identical to before.
+      (chosen.degenerateExcluded.length > 0 ? `;degenerate_excluded=${chosen.degenerateExcluded.length}` : '') +
       (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
     logBase.trace = trace;

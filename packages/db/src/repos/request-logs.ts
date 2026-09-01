@@ -121,6 +121,53 @@ export interface ServingLatencyRow {
 }
 
 /**
+ * Degenerate-serving counts per strategy (2026-09-01, the or-gemini-flash
+ * incident): how many of this org's served requests on this cluster came
+ * back with ZERO completion tokens in the window. A zero-token 'ok' is a
+ * response the customer paid to route and got nothing from — a suite score
+ * cannot see it (the flagship's route was measured q=1.0 on its instrument
+ * while returning six consecutive empties in production). status='ok' only,
+ * same reasoning as servingLatencyP95: platform jobs never speak for a
+ * customer's traffic.
+ */
+export async function servingDegenerateCounts(
+  db: PotionDb,
+  orgId: string,
+  clusterId: string,
+  windowMin: number,
+  now: Date = new Date(),
+): Promise<ServingDegeneracyRow[]> {
+  const since = new Date(now.getTime() - windowMin * 60_000);
+  const res = await db.execute(sql`
+    SELECT strategy_hash AS strategy_hash,
+           count(*) AS total,
+           count(*) FILTER (WHERE (usage->>'completionTokens')::float = 0) AS empty
+      FROM request_logs
+     WHERE org_id = ${orgId}
+       AND cluster_id = ${clusterId}
+       AND status = 'ok'
+       AND strategy_hash IS NOT NULL
+       AND usage->>'completionTokens' IS NOT NULL
+       AND ts >= ${since.toISOString()}
+     GROUP BY strategy_hash
+  `);
+  const out: ServingDegeneracyRow[] = [];
+  for (const r of res.rows as Array<Record<string, unknown>>) {
+    const total = Number(r.total);
+    const empty = Number(r.empty);
+    if (!Number.isFinite(total) || total <= 0) continue;
+    out.push({ strategyHash: String(r.strategy_hash), total, empty });
+  }
+  return out;
+}
+
+export interface ServingDegeneracyRow {
+  strategyHash: string;
+  total: number;
+  empty: number;
+}
+
+/**
  * Realized served volume and spend per (policy, cluster) over a day range
  * (G2.6) — the denominator of the guarantee report's REALIZED latency
  * premium. The DTO answers "what is the bound costing per 1K"; the report

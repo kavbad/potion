@@ -34,7 +34,7 @@ import {
   type ServingLatencySample,
   type StrategyConfig,
 } from '@potion/core';
-import { servingLatencyP95, type PotionDb } from '@potion/db';
+import { servingDegenerateCounts, servingLatencyP95, type PotionDb } from '@potion/db';
 import { strategyCapabilities } from '@potion/strategies';
 import { loadCurrentFrontier } from './persistence.js';
 
@@ -336,6 +336,79 @@ const latencyCache = new Map<string, CacheEntry>();
 /** Test seam: drop the memo so a suite can observe a fresh rollup. */
 export function clearServingLatencyCache(): void {
   latencyCache.clear();
+  degeneracyCache.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Serving-measured DEGENERACY exclusion (2026-09-01, the or-gemini-flash
+// incident). A route measured q=1.0 on its instrument suite returned six
+// consecutive ZERO-TOKEN completions in production — no floor or policy can
+// dodge a point whose suite number is perfect, so the org's own measured
+// traffic must be able to overrule the suite at serve time, exactly the way
+// serving-measured latency already substitutes (G2.6). A strategy with a
+// recent burst of empty completions on this org+cluster is EXCLUDED from
+// selection; fail-open when exclusion would empty the frontier (an outage
+// is worse than a degraded route).
+// ---------------------------------------------------------------------------
+
+/** Minimum empty completions in the window before a strategy is excludable —
+ * below this the evidence is noise, not a burst. */
+export const DEGENERACY_MIN_EMPTY = 4;
+/** Minimum share of the strategy's window servings that came back empty. */
+export const DEGENERACY_MIN_RATIO = 0.5;
+
+const degeneracyCache = new Map<string, { at: number; rows: Awaited<ReturnType<typeof servingDegenerateCounts>> }>();
+
+export interface DegeneracyBinding {
+  /** The frontier with degenerate strategies excluded — identity-equal to
+   * the input when nothing qualifies (the common path). */
+  frontier: Frontier | null;
+  /** Strategy hashes excluded, for the trace and receipts. */
+  excluded: string[];
+}
+
+export async function bindServingDegeneracy(
+  db: PotionDb,
+  frontier: Frontier | null,
+  orgId: string,
+  clusterId: string,
+  warn: (msg: string) => void = () => {},
+  now: Date = new Date(),
+): Promise<DegeneracyBinding> {
+  if (!frontier || frontier.points.length === 0) return { frontier, excluded: [] };
+  let rows: Awaited<ReturnType<typeof servingDegenerateCounts>> = [];
+  try {
+    const key = `${orgId}::${clusterId}`;
+    const hit = degeneracyCache.get(key);
+    if (hit && now.getTime() - hit.at < SERVING_LATENCY_CACHE_TTL_MS) {
+      rows = hit.rows;
+    } else {
+      rows = await servingDegenerateCounts(db, orgId, clusterId, SERVING_LATENCY_WINDOW_MIN, now);
+      degeneracyCache.set(key, { at: now.getTime(), rows });
+    }
+  } catch (err) {
+    // Measurement failure never breaks serving — no exclusion is the honest
+    // fallback (we could not measure, so we did not claim to).
+    warn(`serving-degeneracy rollup failed for org=${orgId} cluster=${clusterId}: ${String(err)}`);
+    return { frontier, excluded: [] };
+  }
+  const degenerate = new Set(
+    rows
+      .filter((r) => r.empty >= DEGENERACY_MIN_EMPTY && r.empty / r.total >= DEGENERACY_MIN_RATIO)
+      .map((r) => r.strategyHash),
+  );
+  if (degenerate.size === 0) return { frontier, excluded: [] };
+  const kept = frontier.points.filter((p) => !degenerate.has(p.strategyHash));
+  if (kept.length === 0) {
+    // Fail open: every point is degenerate-flagged — serve the frontier as
+    // measured rather than nothing, and say so.
+    warn(
+      `serving-degeneracy would exclude EVERY point for org=${orgId} cluster=${clusterId} — failing open`,
+    );
+    return { frontier, excluded: [] };
+  }
+  const excluded = frontier.points.filter((p) => degenerate.has(p.strategyHash)).map((p) => p.strategyHash);
+  return { frontier: { ...frontier, points: kept }, excluded };
 }
 
 /** True when the policy states a latency constraint at all. Only these pay
@@ -451,6 +524,9 @@ export interface ServingDecision {
   /** The policy as it applies to this cluster (its own floor substituted). */
   clusterPolicy: Policy;
   binding: LatencyBinding;
+  /** Serving-measured degeneracy exclusion applied AFTER the latency
+   * binding — org-measured empty-completion bursts overrule suite scores. */
+  degeneracy: DegeneracyBinding;
   op: OperatingPoint;
 }
 
@@ -469,6 +545,7 @@ export async function servingDecisionFor(db: PotionDb, a: ServingDecisionArgs): 
   const guarded = guardFrontierProvenance(loaded, a.providerMode, warn);
   const clusterPolicy = policyForCluster(a.policy, a.clusterId);
   const binding = await bindServingLatency(db, clusterPolicy, guarded.frontier, a.orgId, a.clusterId, warn, a.now);
-  const op = resolveOperatingPoint(clusterPolicy, binding.frontier, fallbackStrategyFor(a.providerMode, a.prices));
-  return { loaded, provenance: guarded.provenance, clusterPolicy, binding, op };
+  const degeneracy = await bindServingDegeneracy(db, binding.frontier, a.orgId, a.clusterId, warn, a.now);
+  const op = resolveOperatingPoint(clusterPolicy, degeneracy.frontier, fallbackStrategyFor(a.providerMode, a.prices));
+  return { loaded, provenance: guarded.provenance, clusterPolicy, binding, degeneracy, op };
 }
