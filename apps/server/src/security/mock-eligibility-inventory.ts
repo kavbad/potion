@@ -256,6 +256,18 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
       'mislabelled; tightening explicit mock judges under live is filed for G2.6.',
   },
   {
+    file: 'apps/server/src/routes/challengers.ts',
+    symbol: 'apply (aggregatesFromEvalResults + servingDecisionFor)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/challengers.test.ts',
+    notes:
+      'G1 promotion: mints an ORG frontier from the org\'s OWN suite measurements via the G1.8 rule — ' +
+      'org-scoped, provenance-pure (providerMode = this server\'s mode, so mock rows never build a frontier a ' +
+      'live server would serve; the serve-time guard re-checks regardless), one instrument. The post-apply ' +
+      '"now serves" readback runs the same servingDecisionFor chain as serving.',
+  },
+  {
     file: 'apps/server/src/shadow.ts',
     symbol: 'runShadow (judge resolution)',
     kind: 'class-resolution',

@@ -63,6 +63,7 @@ import {
   requestLogs,
   researchCycles,
   sessions,
+  challengerProposals,
   outcomes,
   shadowResults,
   shareTokens,
@@ -303,6 +304,11 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count(
     'outcomes',
     db.delete(outcomes).where(eq(outcomes.orgId, orgId)).returning({ id: outcomes.id }),
+  );
+  // G1 (0085): challenger promotion proposals — same treatment.
+  await count(
+    'challenger_proposals',
+    db.delete(challengerProposals).where(eq(challengerProposals.orgId, orgId)).returning({ id: challengerProposals.id }),
   );
   await count('incidents', db.delete(incidents).where(eq(incidents.orgId, orgId)).returning({ id: incidents.id }));
   await count(

@@ -629,6 +629,41 @@ export const shadowResults = pgTable('shadow_results', {
  * (@potion/pareto outcome-evidence) takes the LATEST signal of each kind
  * per request. Org-scoped tenant data.
  */
+/**
+ * G1 challenger promotion proposals (migration 0085) — see the migration
+ * header. shadow = the observational evidence snapshot (n, quality CI,
+ * measured costs); retention = the SuiteVerifyRetention block from the
+ * org-suite paired measurement against the SERVING route. Applied by one
+ * button; apply mints an org frontier (applied_frontier_id).
+ */
+export const challengerProposals = pgTable(
+  'challenger_proposals',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+    clusterId: text('cluster_id').notNull(),
+    suiteId: text('suite_id').notNull(),
+    servingHash: text('serving_hash').notNull(),
+    servingModel: text('serving_model').notNull(),
+    servingQuality: doublePrecision('serving_quality').notNull(),
+    challengerHash: text('challenger_hash').notNull(),
+    challengerModel: text('challenger_model').notNull(),
+    challengerQuality: doublePrecision('challenger_quality').notNull(),
+    retention: jsonb('retention').notNull(),
+    shadow: jsonb('shadow').notNull(),
+    items: integer('items').notNull(),
+    spendUsd: doublePrecision('spend_usd').notNull().default(0),
+    status: text('status').notNull().default('proposed'),
+    statusReason: text('status_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    appliedFrontierId: text('applied_frontier_id'),
+  },
+  (t) => [index('challenger_proposals_org_idx').on(t.orgId, t.createdAt)],
+);
+export type ChallengerProposalRow = typeof challengerProposals.$inferSelect;
+export type NewChallengerProposal = typeof challengerProposals.$inferInsert;
+
 export const outcomes = pgTable('outcomes', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   orgId: text('org_id')

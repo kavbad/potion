@@ -106,9 +106,11 @@ artifact as "your app's verdicts") · full-request eval capture SHIPPED
 (the sampler keeps the whole served conversation, redacted + parts
 stripped; derived items carry it; over-cap excluded, never truncated;
 tool/attachment samples excluded from suites with a named count) ·
-challenger promotion
-proposal on sustained shadow `qualifies` (the artifact flags today;
-proposals stay human-applied) · randomized incumbent holdout (the verified-
+challenger promotion SHIPPED (shadow-qualified challenger measured beside
+serving on the org's own suite; retention-lower-bound gate mints the
+proposal; apply mints the ORG frontier — the first customer-specific
+serving frontier — and selection's lower-bound law still decides) ·
+randomized incumbent holdout (the verified-
 savings basis pricing v2 bills against — lower-bound savings, and the
 causal prerequisite for outcome-driven optimization) · then org workload
 discovery → customer-specific frontiers. Eval-quality queue (second

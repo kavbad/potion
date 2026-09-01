@@ -12,13 +12,22 @@
 // Never applies anything. The dashboard's one button does that.
 import { randomUUID } from 'node:crypto';
 import { PolicySchema, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
-import { DEFAULT_ORG_POLICY, servingDecisionFor } from '@potion/pareto';
+import {
+  DEFAULT_ORG_POLICY,
+  clusterShadowEvidence,
+  orgShadowEvidenceInputs,
+  servingDecisionFor,
+  type ShadowChallenger,
+} from '@potion/pareto';
 import {
   evalRuns,
   getFirstApiKeyWithPolicy,
   getOrgIncumbents,
   getPolicyById,
+  getStrategyConfigs,
+  insertChallengerProposal,
   insertLearningProposal,
+  latestChallengerProposalsByCluster,
   latestProposalsByCluster,
   learningSpendSince,
   listOrgIdsWithSpans,
@@ -54,6 +63,9 @@ export interface LearningPeriodOrgReport {
   orgId: string;
   outcome: 'no-incumbent' | 'no-consent' | 'incumbent-unpriced' | 'no-suites' | 'ran';
   proposals: { clusterId: string; id: string; suggestedFloor: number; spendUsd: number }[];
+  /** G1: shadow-qualified challengers that ALSO held suite retention against
+   * the serving route — minted as challenger_proposals rows. */
+  challengers: { clusterId: string; id: string; challengerModel: string }[];
   skipped: { clusterId: string; why: string }[];
   spendUsd: number;
 }
@@ -176,7 +188,7 @@ export async function deriveLearningSuites(
 }
 
 export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, now = new Date()): Promise<LearningPeriodOrgReport> {
-  const report: LearningPeriodOrgReport = { orgId, outcome: 'ran', proposals: [], skipped: [], spendUsd: 0 };
+  const report: LearningPeriodOrgReport = { orgId, outcome: 'ran', proposals: [], challengers: [], skipped: [], spendUsd: 0 };
   const inc = await getOrgIncumbents(ctx.db, orgId);
   if (!inc || (inc.models.length === 0 && !inc.other)) return { ...report, outcome: 'no-incumbent' };
   if (!inc.samplingConsent) return { ...report, outcome: 'no-consent' };
@@ -223,6 +235,12 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   const parsedPolicy = boundConfig === null ? null : PolicySchema.safeParse(boundConfig);
   const orgPolicy: Policy = parsedPolicy?.success ? parsedPolicy.data : DEFAULT_ORG_POLICY;
 
+  // G1 CHALLENGER LEG inputs: the shadow plane's qualified challengers (if
+  // any) ride the same suite run as the serving pick — measured beside it on
+  // the org's own items, one instrument. One window read per org.
+  const shadowInputs = await orgShadowEvidenceInputs(ctx.db, orgId, now);
+  const challengerExisting = await latestChallengerProposalsByCluster(ctx.db, orgId);
+
   for (const clusterId of Object.keys(PLATFORM_SUITE_BY_CLUSTER).sort()) {
     const prev = existing.get(clusterId);
     if (prev && prev.createdAt > fresh) { report.skipped.push({ clusterId, why: 'fresh proposal' }); continue; }
@@ -267,11 +285,32 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
       continue;
     }
 
+    // G1 CHALLENGER LEG: a shadow-QUALIFIED challenger (lower bound ≥ the
+    // cluster floor on ≥30 live requests, cheaper on measured actuals)
+    // joins the run so the suite measures it BESIDE the serving pick — the
+    // same items, the same judge, one instrument. Fresh challenger
+    // proposals are not re-measured (the same refresh window as bars).
+    const clusterFloor =
+      decision.clusterPolicy.type === 'min_cost' || decision.clusterPolicy.type === 'compound'
+        ? decision.clusterPolicy.qualityFloor
+        : null;
+    const shadowEv = clusterShadowEvidence(shadowInputs, { clusterId, servingHash: serving.strategyHash, clusterFloor });
+    const qualified = shadowEv?.challengers.find((c) => c.qualifies) ?? null;
+    const prevChallenger = challengerExisting.get(clusterId);
+    let challenger: { hash: string; config: StrategyConfig; shadow: ShadowChallenger } | null = null;
+    if (qualified !== null && !(prevChallenger !== undefined && prevChallenger.createdAt > fresh)) {
+      const cfg =
+        frontier.points.find((p) => p.strategyHash === qualified.strategyHash)?.strategyConfig ??
+        (await getStrategyConfigs(ctx.db, [qualified.strategyHash]))[0]?.config;
+      if (cfg !== undefined) challenger = { hash: qualified.strategyHash, config: cfg, shadow: qualified };
+      else report.skipped.push({ clusterId, why: `challenger ${qualified.strategyHash.slice(0, 8)} has no resolvable config — skipped` });
+    }
+
     // the cap: per org per day, billed to the org's own usage (operator, 2026-08-22)
     const spentToday = await learningSpendSince(ctx.db, orgId, dayAgo);
     const remaining = LEARNING_PERIOD_DAILY_CAP_USD - spentToday;
     if (remaining <= 0.05) { report.skipped.push({ clusterId, why: 'daily cap reached' }); continue; }
-    const capUsd = Math.min(remaining, deriveSuiteVerifyCapUsd(loaded.items.length, 2));
+    const capUsd = Math.min(remaining, deriveSuiteVerifyCapUsd(loaded.items.length, challenger !== null ? 3 : 2));
 
     const meter = providerMode === 'live' ? perCallRequestLogSink(ctx.db, { orgId, clusterId, status: 'eval_live' }) : null;
     let summary: RunSummary;
@@ -280,7 +319,7 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
         {
           suiteIds: [],
           suiteV2Ids: [suiteId],
-          strategies: [serving.strategyConfig, incumbentCfg],
+          strategies: [serving.strategyConfig, incumbentCfg, ...(challenger !== null ? [challenger.config] : [])],
           budgetCapUsd: capUsd,
           provider: providerMode,
           resume: true,
@@ -297,12 +336,52 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     await ctx.db.insert(evalRuns).values({
       id: summary.runId,
       options: {
-        suiteIds: [], suiteV2Ids: [suiteId], strategyHashes: [serving.strategyHash, incumbentHash], agentCluster: clusterId,
+        suiteIds: [], suiteV2Ids: [suiteId], strategyHashes: [serving.strategyHash, incumbentHash, ...(challenger !== null ? [challenger.hash] : [])], agentCluster: clusterId,
         purpose: 'learning:period',
         ...(meter !== null ? { metering: reconcileMetering(meter, summary, `learning-period ${clusterId}`) } : {}),
       },
       budgetCapUsd: capUsd, provider: providerMode, status: 'completed', spendUsd: summary.spendUsd, orgId,
     });
+
+    // G1 CHALLENGER verdict: challenger vs the SERVING route, paired on the
+    // same run's rows. Gated on the retention LOWER bound (the lower-bound
+    // law) — a proposal is minted only when the challenger provably holds
+    // the serving route's quality on the org's own items. Never applied
+    // here: apply is one button, and it mints an ORG frontier so routing
+    // changes through the measured field under selection, never by fiat.
+    if (challenger !== null) {
+      const { pairs: cPairs } = await pairedQualities(ctx.db, {
+        clusterId, candidateHash: challenger.hash, incumbentHash: serving.strategyHash,
+        pricesVersion: prices.version, providerMode, orgId, itemIds: loaded.items.map((i) => i.id),
+      });
+      const cVerdict = computeRetention(cPairs, { seedKey: `challenger|${orgId}|${clusterId}|${suiteId}`, floor: DEFAULT_RETENTION_FLOOR });
+      if (cVerdict.retention === null || cVerdict.insufficient !== null) {
+        report.skipped.push({ clusterId, why: `challenger ${challenger.shadow.model}: insufficient pairs (${cVerdict.insufficient ?? 'none'})` });
+      } else if (cVerdict.retention.ci95[0] < DEFAULT_RETENTION_FLOOR) {
+        report.skipped.push({
+          clusterId,
+          why: `challenger ${challenger.shadow.model}: retention lower bound ${cVerdict.retention.ci95[0].toFixed(3)} below ${DEFAULT_RETENTION_FLOOR} — not proposed`,
+        });
+      } else {
+        const challengerQuality = cPairs.reduce((s, p) => s + p.candidateQuality, 0) / cPairs.length;
+        const servingQualityOnSuite = cPairs.reduce((s, p) => s + p.incumbentQuality, 0) / cPairs.length;
+        const cpId = `cp-${randomUUID().slice(0, 8)}`;
+        await insertChallengerProposal(ctx.db, {
+          id: cpId, orgId, clusterId, suiteId,
+          servingHash: serving.strategyHash, servingModel: pointLabel(serving), servingQuality: servingQualityOnSuite,
+          challengerHash: challenger.hash, challengerModel: challenger.shadow.model, challengerQuality,
+          retention: cVerdict.retention,
+          shadow: {
+            n: challenger.shadow.n, quality: challenger.shadow.quality, qualityCi: challenger.shadow.qualityCi,
+            costPer1K: challenger.shadow.costPer1K,
+            servingMeasuredCostPer1K: shadowEv?.servingMeasuredCostPer1K ?? null,
+            windowDays: shadowEv?.windowDays ?? null, reason: challenger.shadow.reason,
+          },
+          items: cPairs.length, spendUsd: 0, status: 'proposed',
+        });
+        report.challengers.push({ clusterId, id: cpId, challengerModel: challenger.shadow.model });
+      }
+    }
 
     const { pairs } = await pairedQualities(ctx.db, {
       clusterId, candidateHash: serving.strategyHash, incumbentHash, pricesVersion: prices.version, providerMode, orgId,

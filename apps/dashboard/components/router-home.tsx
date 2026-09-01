@@ -21,6 +21,7 @@ import type { Policy } from '@potion/core';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 import { TodayPulse } from '@/components/today-pulse';
 import { BarProposal } from '@/components/bar-proposal';
+import { ChallengerProposal } from '@/components/challenger-proposal';
 import { WeeklyBrief } from '@/components/weekly-brief';
 import { RouterPriorities } from '@/components/router-priorities';
 import { RouterArc } from '@/components/router-arc';
@@ -374,6 +375,7 @@ export function RouterHome({
 
           {/* ============ needs you — acts in place, then leaves ============ */}
           <BarProposal />
+          <ChallengerProposal />
 
           {/* ============ composition: one thin bar ============ */}
           {doc && (
