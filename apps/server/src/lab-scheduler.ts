@@ -12,6 +12,7 @@
 // unsupported string is a typed note, never a guess.
 import {
   getLabHarness,
+  listOrphanedLabRuns,
   listArmedMissions,
   recordMissionWindow,
   createLabRun,
@@ -71,6 +72,22 @@ export interface LabSchedulerOptions {
 
 /** One pass over every armed mission. Exported for tests; the interval
  * just calls it. */
+/** THE REAPER TICK (2026-09-01) — durable execution's re-adoption half.
+ * A restart mid-leg strands runs as 'running'/'pending' with a dead claim;
+ * this tick re-enqueues them. Grace = 2 minutes past claim expiry (an
+ * active leg heartbeats its claim; only true orphans qualify), and a
+ * re-enqueue against a live claim is harmless — claimLabRun refuses. */
+export async function reapTick(opts: LabSchedulerOptions, now = new Date()): Promise<void> {
+  const log = opts.log ?? (() => {});
+  const orphans = await listOrphanedLabRuns(opts.db.db, now, 2 * 60_000);
+  for (const o of orphans) {
+    try {
+      await opts.queue.enqueue('lab:run', { orgId: o.orgId, runId: o.id });
+      log(`[lab-reaper] re-adopted orphaned run ${o.id} (${o.state})`);
+    } catch { /* one broken run never stalls the fleet */ }
+  }
+}
+
 export async function schedulerTick(opts: LabSchedulerOptions, now = new Date()): Promise<void> {
   const log = opts.log ?? (() => {});
   const missions = await listArmedMissions(opts.db.db);
@@ -296,6 +313,8 @@ export function startLabScheduler(opts: LabSchedulerOptions): { stop: () => void
     // makes tick frequency irrelevant; its own try/catch keeps it from
     // ever touching the mission tick).
     void digestTick({ db: opts.db, log: (m) => console.warn(m) }).catch(() => {});
+    // THE REAPER: durable execution's re-adoption half rides the clock too.
+    void reapTick(opts).catch(() => {});
   }, opts.intervalMs ?? 60_000);
   interval.unref();
   return { stop: () => clearInterval(interval) };

@@ -593,3 +593,31 @@ export async function latestShadowLabRun(
     .limit(1);
   return rows[0] ?? null;
 }
+
+/** THE REAPER (2026-09-01) — durable execution's re-adoption half. A
+ * server restart mid-leg kills the worker process; the run row stays
+ * 'running'/'pending' with an expired (or never-set) claim, and NOTHING
+ * re-enqueued it — found live: a flagship trial frozen at step 7 through
+ * two deploys. Returns runs whose claim expired past the grace (or which
+ * never got claimed within it), oldest first, capped. The re-enqueued job
+ * is harmless against a live claim: claimLabRun refuses and the job exits. */
+export async function listOrphanedLabRuns(
+  db: PotionDb,
+  now: Date,
+  graceMs: number,
+  cap = 20,
+): Promise<Array<{ id: string; orgId: string; state: string }>> {
+  const cutoff = new Date(now.getTime() - graceMs);
+  return db
+    .select({ id: labRuns.id, orgId: labRuns.orgId, state: labRuns.state })
+    .from(labRuns)
+    .where(
+      and(
+        sql`${labRuns.state} IN ('pending', 'running')`,
+        sql`(${labRuns.claimExpiresAt} IS NULL OR ${labRuns.claimExpiresAt} < ${cutoff})`,
+        sql`${labRuns.updatedAt} < ${cutoff}`,
+      ),
+    )
+    .orderBy(labRuns.updatedAt)
+    .limit(cap);
+}
