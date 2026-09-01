@@ -234,13 +234,17 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
         provenance: t.provenance,
         /** The whole claim, in one field — see traceWasRouted. */
         routed: traceWasRouted(t),
-        /** R2: the router version this request's routing is recorded in;
-         * null = never minted (or no routing decision). */
-        routerVersion: routerVersionForRequest(compiled.history, {
-          clusterId: t.clusterId,
-          strategy8: t.strategyHash8,
-          frontierVersion: t.frontierVersion,
-        }),
+        /** R2/G0: the router version this request rode — the serve-time
+         * stamp (0082) when the row carries one, else reconstructed by
+         * content for pre-stamp rows; null = never minted (or no routing
+         * decision). */
+        routerVersion:
+          r.routerVersion ??
+          routerVersionForRequest(compiled.history, {
+            clusterId: t.clusterId,
+            strategy8: t.strategyHash8,
+            frontierVersion: t.frontierVersion,
+          }),
       };
     });
 

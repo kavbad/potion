@@ -44,6 +44,7 @@ import { bindServingLatency } from '../latency-policy.js';
 import { fallbackStrategyFor, type PotionContext } from '../context.js';
 import { policyForCluster } from './floors.js';
 import { routerModelName } from './router-slug.js';
+import { bustRouterStampCache } from './router-stamp.js';
 
 export interface RouterAssignment {
   clusterId: string;
@@ -219,6 +220,8 @@ export async function compileAndMintRouter(
   };
   const minted = await appendRouterVersion(db, { orgId, routerHash, document });
   const mintedNew = minted.routerHash === routerHash && latest?.routerHash !== routerHash;
+  // G0 (0082): a new mint must reach serve-time stamping immediately.
+  if (mintedNew) bustRouterStampCache(orgId);
   const fullHistory = mintedNew
     ? [{ version: minted.version, createdAt: minted.createdAt, changes, document }, ...history.map((h) => ({
         version: h.version, createdAt: h.createdAt,

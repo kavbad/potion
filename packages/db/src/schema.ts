@@ -387,6 +387,13 @@ export const requestLogs = pgTable('request_logs', {
   clusterId: text('cluster_id'),
   strategyHash: text('strategy_hash'),
   frontierVersion: integer('frontier_version'),
+  /** G0 (0082): the minted router version whose recorded assignment this
+   * request rode — stamped AT SERVE TIME by routing/router-stamp.ts on an
+   * exact content match (cluster + full strategy hash + frontier version)
+   * against the latest minted artifact. NULL = nothing minted contained the
+   * served assignment when it served, or a pre-0082 row; receipts fall back
+   * to read-time reconstruction for those. */
+  routerVersion: integer('router_version'),
   policyType: text('policy_type'),
   /** M4 #30 (SPEC §13.1, migration 0009): the policy row that SERVED the
    * request — the api key's bound policy by default, or the X-Potion-Policy

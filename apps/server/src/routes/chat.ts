@@ -43,6 +43,8 @@ import {
   type SamplingParams,
 } from '@potion/core';
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
+// G0 (0082): serve-time router-version stamping — appended import.
+import { stampedRouterVersion } from '../routing/router-stamp.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -1052,6 +1054,16 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     logBase.frontierVersion = op.frontierVersion;
+    // G0 (0082): the receipt names the version that served — decided NOW
+    // against the latest minted artifact, stamped only on exact assignment
+    // match. No match is an honest null; read-time reconstruction remains
+    // the backfill for unstamped rows.
+    const routerVersion = await stampedRouterVersion(ctx.db.db, auth.org.orgId, {
+      clusterId,
+      strategyHash: sh,
+      frontierVersion: op.frontierVersion,
+    });
+    if (routerVersion !== null) logBase.routerVersion = routerVersion;
     const trace =
       traceHeaderValue({
         clusterId,
@@ -1062,6 +1074,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         provenance,
         ...(op.toolConstraint ? { constrained: 'tools' as const } : {}),
       }) +
+      // Appended only when a minted version matched, so unstamped traffic's
+      // trace is byte-identical to before this change.
+      (routerVersion !== null ? `;router=v${routerVersion}` : '') +
       (servedInstrument !== null ? `;instrument=${servedInstrument}` : '') +
       (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
