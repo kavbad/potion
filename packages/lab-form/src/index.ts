@@ -9,3 +9,4 @@ export { diffFormState, type FormEvents } from './diff.js';
 export { DegradeController, type DegradeMode } from './degrade.js';
 export { draw, breathScale, type Canvas2DLike, type DrawView, type DrawGeometry, type LivePulse } from './draw.js';
 export { THEME, ZOOM, clampZoom, signatureTint, type ThemeKey } from './theme.js';
+export { clip, narrateStep, type NarratedStep } from './narrate.js';

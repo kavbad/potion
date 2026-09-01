@@ -103,6 +103,7 @@ import {
   tightenGrant,
   listLabStepsForHarness,
 } from '@potion/db';
+import { narrateStep } from '@potion/lab-form';
 import { buildDescendantSpec, constitutionTierOverrides, deriveImprovements, evidenceFromReports, extractDeliverable, extractPoreEvidence, extractReport, inheritGrantPlan, mergeEvidence, runGraduationPass, type ImprovementProposal } from '@potion/lab-runtime';
 import {
   applyDialPosition,
@@ -991,6 +992,27 @@ export function registerLabRoutes(
             : s.kind === 'tool'
               ? `${p.toolName}: ${JSON.stringify(p.toolOutput ?? null).slice(0, 400)}`
               : (p.checkInQuestion ?? ''),
+        // THE NARRATOR: the human rendering of this step — title/detail/
+        // hidden — built by the shared, tested translator (never raw JSON
+        // as a headline, never an empty labeled row).
+        ...((): Record<string, unknown> => {
+          const n = narrateStep({
+            kind: s.kind as 'model' | 'tool' | 'check-in',
+            ...(p.responseText !== undefined ? { responseText: p.responseText } : {}),
+            ...(p.toolCalls !== undefined ? { toolCalls: p.toolCalls } : {}),
+            ...(p.toolName !== undefined ? { toolName: p.toolName } : {}),
+            ...(p.toolInput !== undefined ? { toolInput: p.toolInput } : {}),
+            ...(p.toolOutput !== undefined ? { toolOutput: p.toolOutput } : {}),
+            ...(p.checkInTrigger !== undefined ? { checkInTrigger: p.checkInTrigger } : {}),
+            ...(p.checkInQuestion !== undefined ? { checkInQuestion: p.checkInQuestion } : {}),
+          });
+          return {
+            ...(n.title !== '' ? { title: n.title } : {}),
+            ...(n.detail !== undefined ? { detail: n.detail } : {}),
+            ...(n.detailKind !== undefined ? { detailKind: n.detailKind } : {}),
+            ...(n.hidden === true ? { hidden: true } : {}),
+          };
+        })(),
         ...(s.kind === 'model'
           ? {
               estCostUsd: p.estCostUsd ?? 0,

@@ -158,6 +158,9 @@ importers:
       '@potion/lab-dial':
         specifier: workspace:*
         version: link:../../packages/lab-dial
+      '@potion/lab-form':
+        specifier: workspace:*
+        version: link:../../packages/lab-form
       '@potion/lab-gen':
         specifier: workspace:*
         version: link:../../packages/lab-gen

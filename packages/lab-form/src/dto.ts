@@ -84,6 +84,12 @@ export interface RunStepDto {
   at: string;
   slot: 'brain' | 'tools' | null;
   excerpt: string;
+  /** THE NARRATOR (2026-09-01): the human rendering — title as the row's
+   * header, optional cleaned detail, hidden for no-information rows. */
+  title?: string;
+  detail?: string;
+  detailKind?: 'code' | 'text';
+  hidden?: boolean;
   estCostUsd?: number;
   meteredCostUsd?: number | null;
   costLabel?: 'metered' | 'est.';

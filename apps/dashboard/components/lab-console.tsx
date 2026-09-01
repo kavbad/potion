@@ -70,6 +70,9 @@ function SimBadge() {
 /** One row of the work feed — a step from the durable record, in plain
  * words. Nothing streams, nothing is invented: this is the checkpoint row. */
 function FeedRow({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
+  // THE NARRATOR (2026-09-01): rows render the human translation — a
+  // no-information step (hidden) renders nothing at all.
+  if (step.hidden === true) return null;
   const t = new Date(step.at);
   const hh = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
   const kindLabel = step.kind === 'model' ? 'thought' : step.kind === 'tool' ? 'action' : 'asked you';
@@ -108,7 +111,18 @@ function FeedRow({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
           ))}
         </div>
       ) : null}
-      <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{step.excerpt}</p>
+      {step.title !== undefined && step.kind !== 'model' ? (
+        <p className="mt-1 text-[13.5px] font-medium leading-relaxed text-ink">{step.title}</p>
+      ) : null}
+      {step.detail !== undefined ? (
+        step.detailKind === 'code' ? (
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap border-l-2 border-[#d9d5cb] pl-2 font-mono text-[12px] leading-relaxed text-soft">{step.detail}</pre>
+        ) : (
+          <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{step.detail}</p>
+        )
+      ) : step.title === undefined ? (
+        <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{step.excerpt}</p>
+      ) : null}
     </li>
   );
 }
@@ -334,6 +348,11 @@ export function LabConsole({
         <span className={`${CHIP} ${STATE_CLS[mode] ?? 'border-[#c4bfb2] text-soft'}`} data-testid="console-state">
           {STATE_LABEL[mode] ?? mode}
         </span>
+        {mode === 'running' ? (
+          <span className="font-mono text-[12px] text-soft" data-testid="now-line">
+            {[...(run?.steps ?? [])].reverse().find((x) => x.hidden !== true && (x.title ?? '') !== '')?.title ?? 'thinking…'}
+          </span>
+        ) : null}
         {state.glow.reason ? <span className="text-[12.5px] text-soft">{state.glow.reason}</span> : null}
         {state.staleness === 'disconnected' ? (
           <span className={`${CHIP} border-refuse text-refuse`}>view disconnected — showing last known state</span>
