@@ -356,6 +356,14 @@ export function clearServingLatencyCache(): void {
 export const DEGENERACY_MIN_EMPTY = 4;
 /** Minimum share of the strategy's window servings that came back empty. */
 export const DEGENERACY_MIN_RATIO = 0.5;
+/** The exclusion's MEMORY — deliberately much longer than the latency
+ * window. A 60-min memory produced a sawtooth live (2026-09-01): the burst
+ * aged out, the broken route came back, broke the next customer run, and
+ * re-tripped — one wrecked run per hour forever. While excluded a strategy
+ * serves nothing, so no fresh rows dilute the ratio: exclusion holds for
+ * the window, then the route gets ONE earned retry — still broken, one
+ * burst re-excludes it; healed, good rows wash the ratio out. */
+export const DEGENERACY_WINDOW_MIN = 7 * 24 * 60;
 
 const degeneracyCache = new Map<string, { at: number; rows: Awaited<ReturnType<typeof servingDegenerateCounts>> }>();
 
@@ -383,7 +391,7 @@ export async function bindServingDegeneracy(
     if (hit && now.getTime() - hit.at < SERVING_LATENCY_CACHE_TTL_MS) {
       rows = hit.rows;
     } else {
-      rows = await servingDegenerateCounts(db, orgId, clusterId, SERVING_LATENCY_WINDOW_MIN, now);
+      rows = await servingDegenerateCounts(db, orgId, clusterId, DEGENERACY_WINDOW_MIN, now);
       degeneracyCache.set(key, { at: now.getTime(), rows });
     }
   } catch (err) {

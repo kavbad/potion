@@ -5,7 +5,8 @@
 // traffic must overrule the suite at serve time, exactly as the
 // serving-measured latency substitution (G2.6) already does. The bar:
 // ≥4 empties AND ≥50% of that strategy's window servings, org+cluster
-// scoped, fail-open when exclusion would empty the frontier.
+// scoped over a 7-DAY memory (the 60-min version sawtoothed live),
+// fail-open when exclusion would empty the frontier.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { strategyHash, type Frontier, type FrontierPoint } from '@potion/core';
 import { createDb, insertRequestLog, migrate, seedIsolationOrgs, ORG_A, ORG_B, type DbHandle } from '@potion/db';
@@ -122,7 +123,7 @@ describe('bindServingDegeneracy', () => {
     // errored rows: none of them speak for THIS org+cluster now.
     for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, orgId: ORG_B });
     for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, clusterId: 'code-gen' });
-    for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, ts: minsAgo(120) });
+    for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, ts: minsAgo(8 * 24 * 60) });
     for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, status: 'error' });
     const bound = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
     expect(bound.excluded).toEqual([]);
