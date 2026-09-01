@@ -100,11 +100,12 @@ Savings · Try · Settings · Docs). Next: instrument enlargement
 (extraction, rewrite-edit) · then per the roadmap ledger in
 `tasks/todo.md` (the ledger is append-only history; this file is the
 summary). **Core-API ladder next (G1, sequence adopted from the 2026-08-31
-review — protect it):** Outcome API (`POST /v1/outcomes` + SDK hooks —
-customers report what actually happened; the strongest quality signal is
-post-response) · full-request eval capture (learning items are last-user-
-turn-only today: system/tools/response_format never reach the derived
-suite — the measured task must be the served task) · challenger promotion
+review — protect it):** Outcome API SHIPPED (10d7876, SPEC §16 — the
+application is now the measurement instrument; evidence on the router
+artifact as "your app's verdicts") · full-request eval capture (learning
+items are last-user-turn-only today: system/tools/response_format never
+reach the derived suite — the measured task must be the served task) ·
+challenger promotion
 proposal on sustained shadow `qualifies` (the artifact flags today;
 proposals stay human-applied) · randomized incumbent holdout (the verified-
 savings basis pricing v2 bills against — lower-bound savings, and the

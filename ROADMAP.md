@@ -59,7 +59,7 @@ Proofs: 464 tests, walkthrough 10/10. See tasks/todo.md → M2 Gate Proofs.
 ### G1 — Customer evidence 🚧
 - ✅ **Shadow judge**: candidates judge-scored in-process by the serve judge — one scale with quality_samples, spend metered, no text on the queue (5b42bba).
 - ✅ **Shadow → org evidence**: the router artifact carries "on your traffic" evidence per assignment — Jeffreys intervals, measured-vs-measured costs, lower-bound-gated challenger `qualifies`; read-only, never mints a version (3528019).
-- ⬜ **Outcome API**: `POST /v1/outcomes` + SDK hooks — success/score/validator/label per request_id; the production application becomes the measurement instrument.
+- ✅ **Outcome API** (10d7876, SPEC §16): `POST /v1/outcomes` + SDK one-liners — success/score/validator/label/human per completion id, STRICT body, attribution at ingest, append-only latest-signal-wins; 'customer-outcomes' evidence (Jeffreys intervals) rides the router artifact as "your app's verdicts". Observational by contract — the holdout stays the causal instrument.
 - ⬜ **Full-request eval capture**: learning items are last-user-turn-only today (system/tools/response_format never reach the derived suite) — the measured task must be the served task; rides consent + privacy modes.
 - ⬜ **Challenger promotion proposal**: sustained shadow `qualifies` mints a proposal (learning-proposal pattern — Potion proposes, the user applies; never silent).
 - ⬜ **Randomized incumbent holdout**: the verified-savings basis pricing v2 bills against (lower-bound savings), and the causal prerequisite for outcome-driven optimization. Needs consent framing — it deliberately serves the incumbent on a slice.
