@@ -138,6 +138,10 @@ services:
       POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
       # The learning period runs in-process here; a customer's audit must never run on mock providers
       POTION_EVAL_PROVIDER: live
+      # 2026-09-01 (external review P0, confirmed): research cycles fell
+      # back to the MOCK world on prod because only EVAL was set — prod
+      # research measures the real world, bounded by the live cycle cap.
+      POTION_RESEARCH_PROVIDER: live
       # 13a spec §1.6: error reporting. Unset → the init is a no-op.
       SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: "3000"
@@ -273,6 +277,7 @@ services:
       OBSERVATORY_ARTIFACTS: /research/artifacts
       POTION_PRICES_PATH: /app/prices.json
       POTION_EVAL_PROVIDER: live
+      POTION_RESEARCH_PROVIDER: live
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY}
       # The operator's standing grant (2026-08-22): $50/month, ledgered.
       KEY_RISK_ACCEPTED: "2026-08-22"

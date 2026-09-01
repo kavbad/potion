@@ -819,6 +819,16 @@ describe('X6 — the browser hand: reads free, every act at the pore', () => {
     const actStep = steps.find((st) => (st.payload as { toolName?: string }).toolName === 'browser_act');
     expect(actStep, 'the approved act executed and recorded').toBeDefined();
     expect(JSON.stringify((actStep!.payload as { toolOutput: unknown }).toolOutput)).toContain('card added');
+
+    // W1 — EVENT-DRIVEN TIGHTENING: the terminal IS the trigger. The
+    // graduation pass ran at completion, so the grant row for the observed
+    // class exists WITHOUT anyone opening the permission page.
+    const { listActionGrants } = await import('@potion/db');
+    const { harnessSpecHash } = await import('@potion/lab-spec');
+    const grants = await listActionGrants(db.db, ORG, harnessSpecHash(s));
+    const actGrant = grants.find((g) => g.actionClass === 'browser_act');
+    expect(actGrant, 'the terminal pass must ensure the observed grant row').toBeDefined();
+    expect(actGrant!.state).toBe('supervised');
   }, 60_000);
 
   it('an unconfigured browser service degrades to a typed leg note, never a crash', async () => {
