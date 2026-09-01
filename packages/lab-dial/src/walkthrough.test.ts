@@ -369,7 +369,7 @@ describe('Leg 5 — serving-measured latency substitution (the review scenario, 
     // Before substitution: default tolerance shows R at the 0.9 rung.
     const before = await domainFor();
     expect(before.latencyBasis).toBe('harness');
-    const topRung = before.ladder.indexOf(0.9);
+    const topRung = before.ladder.indexOf(0.9 - 0.02); // the rung is the PROVEN bound (CI campaign)
     expect(topRung).toBeGreaterThanOrEqual(0);
     const beforeView = viewPosition(before, { qualityIndex: topRung });
     if (!beforeView.feasible) throw new Error('infeasible');
@@ -391,7 +391,7 @@ describe('Leg 5 — serving-measured latency substitution (the review scenario, 
     // re-derived from the bound points and would stretch to re-admit R —
     // the flip is the story of a tolerance set when the world was faster.
     const afterView = viewPosition(after, {
-      qualityIndex: after.ladder.indexOf(0.9),
+      qualityIndex: after.ladder.indexOf(0.9 - 0.02),
       toleranceMs: before.defaultToleranceMs,
     });
     if (!afterView.feasible) throw new Error('infeasible');

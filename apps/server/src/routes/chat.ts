@@ -38,6 +38,7 @@ import {
   flattenWireMessage,
   SamplingParamsSchema,
   type SamplingParams,
+  qualityLowerBound,
 } from '@potion/core';
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
 // G0 (0082): serve-time router-version stamping — appended import.
@@ -805,7 +806,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       if (other !== null) {
       const asCandidate = (r: NonNullable<typeof chosen>) => ({
         ...r,
-        quality: r.served?.quality ?? null,
+        // 2026-09-01 (review P0): the tiebreak compares PROVEN quality —
+        // the interval's lower bound — never raw means across two
+        // different instruments.
+        quality: r.served !== undefined && r.served !== null ? qualityLowerBound(r.served) : null,
         costPer1K: r.served?.costPer1K ?? null,
       });
       const winner = pickSafer(asCandidate(chosen), asCandidate(other));

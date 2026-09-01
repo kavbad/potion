@@ -30,7 +30,11 @@ import {
   type FrontierPoint,
   type Policy,
 } from '@potion/core';
-import { BOOTSTRAP_RESAMPLES, bootstrapMeanCi, seedFromString, sha256 } from '@potion/core';
+import { BOOTSTRAP_RESAMPLES, bootstrapMeanCi, highestQualityPoint, seedFromString, sha256 } from '@potion/core';
+// 2026-09-01 (review hazard): this file carried a byte-identical duplicate
+// of core's highestQualityPoint — one authority now, re-exported for the
+// existing importers of this module.
+export { highestQualityPoint };
 import type { PotionDb } from '../db.js';
 import {
   incidents,
@@ -722,7 +726,7 @@ export async function resolveIncidentWithEvidence(
  * hazard: this file carried a byte-identical duplicate, so a change to
  * core's selector would silently diverge on the rollback path). One
  * authority, no drift. */
-export { highestQualityPoint } from '@potion/core';
+
 
 /** The "equivalent point" on a previous frontier version: what the policy
  * would have selected there, else that version's highest-quality point. */

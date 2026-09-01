@@ -14,6 +14,7 @@
 // the bound. Same computation serves the per-request developer DTO and the
 // per-month guarantee report.
 import { SELECTION_EPSILON } from './latency.js';
+import { qualityLowerBound } from './select.js';
 import type { FrontierPoint, Policy } from './types.js';
 
 /** Which constraint is actually costing money. */
@@ -82,7 +83,7 @@ function cheapest(pts: FrontierPoint[]): FrontierPoint | null {
 export function latencyPremium(policy: Policy, points: FrontierPoint[]): LatencyPremium {
   if (policy.type !== 'compound' || points.length === 0) return EMPTY;
 
-  const qualifying = points.filter((p) => p.quality >= policy.qualityFloor);
+  const qualifying = points.filter((p) => qualityLowerBound(p) >= policy.qualityFloor);
   // Quality-side infeasibility short-circuits: with nothing clearing the
   // floor there is no premium to attribute, and blaming the latency bound for
   // a quality problem would send the customer to relax the wrong knob.
@@ -134,5 +135,5 @@ export function latencyPremium(policy: Policy, points: FrontierPoint[]): Latency
 function bestQualityUnderBound(points: FrontierPoint[], p95Ms: number): number | null {
   const underBound = points.filter((p) => p.latencyP95 <= p95Ms);
   if (underBound.length === 0) return null;
-  return Math.max(...underBound.map((p) => p.quality));
+  return Math.max(...underBound.map((p) => qualityLowerBound(p)));
 }

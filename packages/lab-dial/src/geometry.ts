@@ -5,7 +5,7 @@
 // projection comes from core's selectPoint under the emitted policy —
 // the one selection authority. viewOf() is the fence: it reads the
 // SELECTED point and nothing else.
-import { fastestQualityQualifyingPoint, selectPoint, type Frontier, type FrontierPoint, type Policy } from '@potion/core';
+import { fastestQualityQualifyingPoint, selectPoint, type Frontier, type FrontierPoint, type Policy, qualityLowerBound } from '@potion/core';
 import type { DialSelectionContext } from './context.js';
 import type { DialGap } from './gaps.js';
 
@@ -136,7 +136,12 @@ export function buildDialDomain(
       },
     };
   }
-  const ladder = [...new Set(eligible.map((p) => p.quality))].sort((a, b) => a - b);
+  // 2026-09-01 (CI lower-bound campaign): rungs are the bars this frontier
+  // can PROVE — each point's interval lower bound, not its mean. A floor
+  // emitted from a rung is then always satisfiable by that rung's point
+  // under the selector's lower-bound feasibility (a mean-rung floor would
+  // exclude its own point the moment the point carries an interval).
+  const ladder = [...new Set(eligible.map((p) => qualityLowerBound(p)))].sort((a, b) => a - b);
   const maxLatency = Math.max(...eligible.map((p) => p.latencyP95));
   return {
     ok: true,
@@ -248,7 +253,7 @@ export function viewPosition(domain: DialDomain, position: DialPosition): DialVi
   // would actually do; for single-only domains a composite landing there
   // is the same partition divergence as the feasible case.
   const floor = domain.ladder[position.qualityIndex]!;
-  const qualifying = domain.eligible.filter((p) => p.quality >= floor);
+  const qualifying = domain.eligible.filter((p) => qualityLowerBound(p) >= floor);
   const relaxHintMs = Math.min(...qualifying.map((p) => p.latencyP95));
   const fallback =
     fastestQualityQualifyingPoint(domain.fullPoints, floor) ??

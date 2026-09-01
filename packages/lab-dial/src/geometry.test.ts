@@ -46,7 +46,10 @@ function domainOf(points: FrontierPoint[], toolBearing = false) {
 describe('ladder + default tolerance', () => {
   it('distinct exact-float qualities ascending; equal qualities collapse to one rung', () => {
     const d = domainOf([R, M, K]);
-    expect(d.ladder).toEqual([0.3, 0.9]);
+    // CI campaign (2026-09-01): rungs are PROVEN bounds — each point's
+    // interval lower bound (mean − ci95 here), not its mean. Float dust
+    // from the subtraction is exact-float by design.
+    expect(d.ladder).toEqual([0.3 - 0.02, 0.9 - 0.02]);
     expect(d.defaultToleranceMs).toBe(Math.ceil(1300 * DEFAULT_TOLERANCE_HEADROOM));
   });
 });

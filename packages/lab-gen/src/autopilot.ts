@@ -3,7 +3,7 @@
 // tool-bearing missions filter candidates to single-model points BEFORE
 // selection, so a Lab spec pairing tools with a composite is
 // unrepresentable as an output, not merely rejected downstream.
-import { selectPoint, type Frontier, type FrontierPoint, type Policy } from '@potion/core';
+import { qualityLowerBound, selectPoint, type Frontier, type FrontierPoint, type Policy } from '@potion/core';
 import { P95_HEADROOM } from './constants.js';
 import type { TaxonomyCluster } from './interview.js';
 
@@ -126,7 +126,11 @@ export function fillBrainSlot(opts: FillOptions): { ok: true; policy: Policy; ch
   const knee = kneePoint(candidates);
   const policy: Policy = {
     type: 'compound',
-    qualityFloor: knee.quality,
+    // The floor is a PROMISE — it may only be the bar the knee's evidence
+    // can PROVE (lower-bound law, 2026-09-01). Writing the mean here made
+    // the knee infeasible under its own policy the moment feasibility
+    // switched to proven bounds.
+    qualityFloor: qualityLowerBound(knee),
     p95Ms: Math.max(Math.ceil(knee.latencyP95 * P95_HEADROOM), 1),
   };
   // THE POLICY IS THE AUTHORITY (pre-commit review finding): on a 3-axis
@@ -138,8 +142,9 @@ export function fillBrainSlot(opts: FillOptions): { ok: true; policy: Policy; ch
   // frontiers, making whole clusters ungenerable.
   const selected = selectPoint(policy, { ...frontier, points: candidates });
   if (selected === null) {
-    // Impossible by construction: the knee itself satisfies its own floor
-    // (equality) and bound (headroom ≥ 1) — a null here is a real bug.
+    // Impossible by construction: the knee satisfies its own floor (its
+    // proven bound equals the floor) and bound (headroom ≥ 1) — a null
+    // here is a real bug.
     throw new AutopilotInvariantError(`knee ${knee.strategyHash} infeasible under its own policy`);
   }
   return {

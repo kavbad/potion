@@ -38,6 +38,7 @@ import {
   type LatencyPremium,
   type Policy,
   flattenWireMessage,
+  qualityLowerBound,
 } from '@potion/core';
 import { getFirstServingApiKeyWithPolicy, getPolicyById } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
@@ -237,7 +238,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       const other = await loadCurrentFrontier(ctx.db.db, runnerUpId, org.orgId);
       const candidate = (cid: string, f: Frontier | null) => {
         const pick = f ? pickUnderRule(f.points, body.optimizeFor ?? 'cost', floorOf(cid)) : null;
-        return { clusterId: cid, frontier: f, quality: pick?.quality ?? null, costPer1K: pick?.costPer1K ?? null };
+        return { clusterId: cid, frontier: f, quality: pick != null ? qualityLowerBound(pick) : null, costPer1K: pick?.costPer1K ?? null };
       };
       const winner = pickSafer(candidate(clusterId, frontier), candidate(runnerUpId, other));
       if (winner.clusterId !== clusterId) {
