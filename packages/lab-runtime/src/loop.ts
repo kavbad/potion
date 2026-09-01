@@ -25,6 +25,7 @@ import {
   consumeLabRunAnswer,
   appendLabStep,
   getActionGrantByClass,
+  listLabRunFiles,
   claimLabRun,
   getLabMemory,
   transitionLabRun,
@@ -313,6 +314,36 @@ export function systemPrompt(
  * response text. The prefix is the counter: the loop counts repair messages
  * in the conversation (rebuilt from durable steps on resume), never in
  * transient state. */
+/** THE FILE-CLAIMS LAW (2026-09-01, from the flagship's resurrected run):
+ * a completion whose report NAMES workspace files the run does not hold is
+ * a caption claiming provenance it lacks — the model computed everything,
+ * got stranded before the write, resumed, and simply asserted the files
+ * existed. One deterministic repair round: produce them or correct the
+ * report. Pure over the text + the actual file listing. */
+export function missingClaimedFiles(text: string, existing: readonly string[]): string[] {
+  const claimed = new Set<string>();
+  for (const m of text.matchAll(/[A-Za-z0-9_][A-Za-z0-9_./-]{0,80}\.(?:xlsx|csv|png|jpg|pdf|md|json|txt|zip|html)\b/g)) {
+    claimed.add(m[0].replace(/^\.\//, ''));
+  }
+  const have = new Set(existing.map((n) => n.toLowerCase()));
+  const haveBase = new Set(existing.map((n) => n.split('/').pop()!.toLowerCase()));
+  return [...claimed]
+    .filter((c) => {
+      const lower = c.toLowerCase();
+      const base = lower.split('/').pop()!;
+      return !have.has(lower) && !have.has(base) && !haveBase.has(base);
+    })
+    .slice(0, 8);
+}
+
+export const FILE_CLAIM_REPAIR_PREFIX = 'Your report names files that do NOT exist in this run:';
+export function fileClaimRepairMessage(missing: readonly string[]): ChatMessage {
+  return {
+    role: 'user',
+    content: `${FILE_CLAIM_REPAIR_PREFIX} ${missing.join(', ')}. Either actually produce them now (write them in the sandbox — only files in the working directory persist) or correct the report to describe only what truly exists. Never claim a deliverable the run does not hold.`,
+  };
+}
+
 export const CONTRACT_REPAIR_PREFIX = 'Contract violation — your reply was not a valid deliverable.';
 export function contractRepairMessage(issues: string[]): ChatMessage {
   return {
@@ -403,6 +434,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // not asking — converting its report into a question parks a finished
     // mission. The law fires only on work-free stops.
     let sawToolStep = priorSteps.some((x) => x.kind === 'tool');
+    let fileClaimFiredThisLeg = false;
     const askedBefore = priorSteps.some(
       (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
     );
@@ -680,6 +712,23 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         return { status: 'failed', reason, steps: stepsThisLeg };
       }
 
+      // THE FILE-CLAIMS LAW: a would-be COMPLETION whose text names files
+      // the run does not hold gets one repair round. Checked BEFORE the
+      // step records so the stamp rides the payload and replay re-derives
+      // the non-completion from the record alone. One round per run.
+      let fileClaimMissing: string[] = [];
+      if (
+        opts.spec.mission.kind === 'task' &&
+        result.finishReason === 'stop' &&
+        result.toolCalls.length === 0 &&
+        (result.text ?? '').trim().length >= 40 &&
+        !priorSteps.some((x) => (x.payload as StepPayload).fileClaimRepair !== undefined) &&
+        !fileClaimFiredThisLeg
+      ) {
+        const filesNow = await listLabRunFiles(opts.db, opts.orgId, opts.runId);
+        fileClaimMissing = missingClaimedFiles(result.text ?? '', filesNow.map((f) => f.name));
+      }
+
       seq += 1;
       await appendLabStep(opts.db, {
         runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'model',
@@ -691,6 +740,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           usage: result.usage, clockMs: clock.now(), rngSample: rng(),
           ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {}),
           ...(steerTexts !== undefined ? { steers: steerTexts } : {}),
+          ...(fileClaimMissing.length > 0 ? { fileClaimRepair: fileClaimMissing } : {}),
         }),
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
       });
@@ -899,6 +949,14 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
 
       // No tool calls + natural stop → a TASK mission is complete.
       if (opts.spec.mission.kind === 'task' && result.finishReason === 'stop') {
+        // THE FILE-CLAIMS LAW (stamped above): the report names files the
+        // run does not hold — one repair round, then honesty either way
+        // (the judge scores whatever survives).
+        if (fileClaimMissing.length > 0) {
+          fileClaimFiredThisLeg = true;
+          messages.push(fileClaimRepairMessage(fileClaimMissing));
+          continue;
+        }
         // THE UNFILLED-SLOT LAW (2026-08-31, from the operator's second
         // failed trial): a goal still carrying an authored input slot is
         // not yet a mission — a no-tool stop on it is almost always the

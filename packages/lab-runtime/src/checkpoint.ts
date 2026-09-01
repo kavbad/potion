@@ -92,6 +92,10 @@ export interface StepPayload {
     actionId?: string;
   };
   checkInAnswer?: string;
+  /** THE FILE-CLAIMS LAW (2026-09-01): set on a would-be completion whose
+   * text named these files while the run did not hold them — the loop
+   * pushed one repair round instead of completing; replay re-derives. */
+  fileClaimRepair?: string[];
   /** X8: operator steers folded into THIS model step's conversation —
    * replay re-injects them (steerMessage) before deriving the request. */
   steers?: string[];
