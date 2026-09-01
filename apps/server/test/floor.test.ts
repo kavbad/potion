@@ -35,9 +35,14 @@ describe('the org-wide floor', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('rejects a floor outside [0.5, 1]', async () => {
-    const res = await app.inject({ method: 'PUT', url: '/api/floor', headers: { authorization: `Bearer ${ADMIN_KEY}` }, payload: { qualityFloor: 0.3 } });
-    expect(res.statusCode).toBe(400);
+  it('rejects a floor outside [0, 1]; accepts a low bar — the operator sets THEIR bar (2026-09-01: the 0.5 clamp was a caption lie, not an invariant)', async () => {
+    const low = await app.inject({ method: 'PUT', url: '/api/floor', headers: { authorization: `Bearer ${ADMIN_KEY}` }, payload: { qualityFloor: 0.3 } });
+    expect(low.statusCode).toBe(200);
+    expect((low.json() as { qualityFloor: number }).qualityFloor).toBe(0.3);
+    const out = await app.inject({ method: 'PUT', url: '/api/floor', headers: { authorization: `Bearer ${ADMIN_KEY}` }, payload: { qualityFloor: 1.2 } });
+    expect(out.statusCode).toBe(400);
+    const neg = await app.inject({ method: 'PUT', url: '/api/floor', headers: { authorization: `Bearer ${ADMIN_KEY}` }, payload: { qualityFloor: -0.1 } });
+    expect(neg.statusCode).toBe(400);
   });
 
   it('an admin sets it: new policy, keys rebound, per-kind floors survive', async () => {
