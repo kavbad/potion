@@ -99,9 +99,11 @@ export function wrapUpMessage(): ChatMessage {
  * 1k, and a worker WRITING CODE hits it mid-tool-call — the xlsx-building
  * python was truncated at exactly 1024 completion tokens, the call never
  * executed, and the empty follow-up stop read as "task complete". Every
- * mission and wrap-up call now asks for explicit headroom (serving's
- * ceiling is 8192). */
-export const MISSION_MAX_TOKENS = 4096;
+ * mission and wrap-up call now asks for explicit headroom — the FULL
+ * serving ceiling (8192): the first 4096 pick truncated a real
+ * deliverables-writing call at exactly 4096 tokens (run-28a169d5 seq 44),
+ * and there is no downside to asking for the whole ceiling. */
+export const MISSION_MAX_TOKENS = 8192;
 
 export function checkInAnswerMessage(answer: string): ChatMessage {
   return { role: 'user', content: `[check-in answer] ${answer}` };

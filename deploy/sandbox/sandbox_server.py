@@ -15,6 +15,7 @@
 # This is container isolation, not VM-grade multi-tenancy — honest for a
 # single-tenant deploy, revisited before multi-tenant scale.
 import base64
+import hashlib
 import json
 import os
 import resource
@@ -134,7 +135,27 @@ def run_exec(payload):
                     found.append(rel.replace(os.sep, "/"))
             return set(found)
 
-        before = walk_files()
+        def snapshot():
+            # Content hashes, not just names (2026-09-01, run-28a169d5): a
+            # name-only "before" set silently DROPPED every rewrite of an
+            # existing file — a worker regenerated a corrupted analysis.json
+            # four times, stdout said "written OK" each time, and the
+            # workspace kept the stale copy forever. Changed content is
+            # produced output exactly like a new file.
+            state = {}
+            for rel in walk_files():
+                path = os.path.join(workdir, rel)
+                h = hashlib.sha256()
+                try:
+                    with open(path, "rb") as fh:
+                        for chunk in iter(lambda: fh.read(1 << 20), b""):
+                            h.update(chunk)
+                except OSError:
+                    continue
+                state[rel] = h.hexdigest()
+            return state
+
+        before = snapshot()
         script = os.path.join(workdir, "__potion_main__.py" if mode == "python" else "__potion_main__.sh")
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(code)
@@ -182,7 +203,12 @@ def run_exec(payload):
 
         out_files = []
         total_out = 0
-        produced = sorted(walk_files() - before - {"__potion_main__.py", "__potion_main__.sh"})
+        after = snapshot()
+        produced = sorted(
+            rel
+            for rel, digest in after.items()
+            if rel not in ("__potion_main__.py", "__potion_main__.sh") and before.get(rel) != digest
+        )
         for name in produced:
             path = os.path.join(workdir, name)
             if not os.path.isfile(path) or os.path.islink(path) or safe_relpath(name) is None:
