@@ -90,9 +90,10 @@ import {
   acceptGraduation,
   getActionGrant,
   listActionGrants,
+  listEvidenceReports,
   listLabStepsForHarness,
 } from '@potion/db';
-import { constitutionTierOverrides, extractDeliverable, extractPoreEvidence, extractReport, runGraduationPass } from '@potion/lab-runtime';
+import { constitutionTierOverrides, evidenceFromReports, extractDeliverable, extractPoreEvidence, extractReport, mergeEvidence, runGraduationPass } from '@potion/lab-runtime';
 import {
   applyDialPosition,
   dialViews,
@@ -1862,9 +1863,30 @@ export function registerLabRoutes(
     if (row === null) return reply.code(404).send(notFound);
     const grants = await listActionGrants(db, org.orgId, row.harnessHash);
     const steps = await listLabStepsForHarness(db, org.orgId, row.harnessHash);
-    const byClass = extractPoreEvidence(
-      steps.map((s0) => ({ payload: s0.payload as StepPayload, createdAt: s0.createdAt })),
+    // W2 — the ledger answers WHY with the full evidence taxonomy: the
+    // record's pore + autonomous streams merged with outside reports
+    // (outcomes, reversals, incidents, audit verdicts), each class typed.
+    const reports = await listEvidenceReports(db, org.orgId, row.harnessHash);
+    const byClass = mergeEvidence(
+      extractPoreEvidence(steps.map((s0) => ({ payload: s0.payload as StepPayload, createdAt: s0.createdAt }))),
+      evidenceFromReports(reports.map((r0) => ({ actionClass: r0.actionClass, kind: r0.kind, createdAt: r0.createdAt }))),
     );
+    // Pending audit samples: gate-allowed executions marked for review —
+    // shown as OPEN questions, never counted as evidence (unanswered says
+    // nothing about the agent).
+    const auditPending = new Map<string, number>();
+    for (const s0 of steps) {
+      const g = (s0.payload as StepPayload).gate;
+      if (g !== undefined && g.decision === 'allow' && g.audit === true) {
+        auditPending.set(g.actionClass, (auditPending.get(g.actionClass) ?? 0) + 1);
+      }
+    }
+    const auditVerdicts = new Map<string, number>();
+    for (const r0 of reports) {
+      if (r0.kind === 'audit-clean' || r0.kind === 'audit-flagged') {
+        auditVerdicts.set(r0.actionClass, (auditVerdicts.get(r0.actionClass) ?? 0) + 1);
+      }
+    }
     const rollup = (cls: string) => {
       const ev = byClass.get(cls) ?? [];
       const count = (o: string) => ev.filter((e) => e.outcome === o).length;
@@ -1873,6 +1895,11 @@ export function registerLabRoutes(
         approved: count('approved'),
         edited: count('edited'),
         rejected: count('rejected'),
+        validated: count('validated'),
+        reversed: count('reversed'),
+        execFailed: count('exec-failed'),
+        auditSampled: auditPending.get(cls) ?? 0,
+        auditJudged: auditVerdicts.get(cls) ?? 0,
         // Diversity (v3): how many distinct input situations the record
         // spans — the ledger shows breadth, not just volume.
         situations: new Set(ev.map((e) => e.situation ?? 'unfingerprinted')).size,

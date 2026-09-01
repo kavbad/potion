@@ -164,6 +164,7 @@
           "ceiling": "earnable",
           "decision": "allow",
           "auditRate": 0.05,
+          "situation": "send_email(to)",
           "grantState": "autonomous",
           "actionClass": "send_email"
         },

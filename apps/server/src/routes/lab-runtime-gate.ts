@@ -27,11 +27,13 @@ import {
   ensureExternalSession,
   getExternalSession,
   getLabHarness,
+  getLabRun,
   holdExternalSession,
+  insertEvidenceReport,
   listActionGrants,
   releaseExternalSession,
 } from '@potion/db';
-import { buildStepPayload, ceilingFor, decideAction } from '@potion/lab-runtime';
+import { buildStepPayload, ceilingFor, constitutionTierOverrides, decideAction, runGraduationPass } from '@potion/lab-runtime';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import { CATALOG } from '@potion/lab-superpowers';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
@@ -79,10 +81,19 @@ function classifyTool(actionClass: string): 'read' | 'act' | undefined {
   return undefined;
 }
 
+const EvidenceBody = z.object({
+  runId: z.string().min(1).max(128),
+  actionClass: z.string().min(1).max(200),
+  actionId: z.string().min(1).max(64).optional(),
+  kind: z.enum(['outcome-ok', 'reversal', 'incident', 'audit-clean', 'audit-flagged']),
+  detail: z.string().max(2000).optional(),
+});
+
 export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionContext): void {
   const db = ctx.db.db;
   const unauthorized = openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key');
   const notFound = openAiError('not found', 'invalid_request_error', 'not_found');
+  registerLabEvidenceRoutes(app, ctx);
 
   async function orgOf(req: FastifyRequest): Promise<string | null> {
     const auth = await authenticate(db, bearerToken(req.headers.authorization));
@@ -230,5 +241,53 @@ export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionCo
       }),
     });
     return reply.send({ recorded: true });
+  });
+}
+
+/** W2 — the Outcome ABI (v1): external systems report what actually
+ * happened downstream — outcomes, reversals, incidents, audit verdicts —
+ * bound to the run (and optionally the actionId) they judge. Reports are
+ * source documents; the graduation pass reads them beside the record, and
+ * a reversal or incident tightens autonomy at the very next evaluation.
+ * Bearer-keyed: the calling key's org scopes everything. */
+export function registerLabEvidenceRoutes(app: FastifyInstance, ctx: PotionContext): void {
+  const db = ctx.db.db;
+  const unauthorized = openAiError('missing or invalid api key', 'invalid_request_error', 'invalid_api_key');
+  const notFound = openAiError('not found', 'invalid_request_error', 'not_found');
+
+  app.post('/v1/lab/evidence', async (req: FastifyRequest, reply) => {
+    const auth = await authenticate(db, bearerToken(req.headers.authorization));
+    if (!auth) return reply.code(401).send(unauthorized);
+    const body = EvidenceBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send(openAiError('invalid evidence body', 'invalid_request_error'));
+    // The run anchors the report to a harness — evidence about a run the
+    // org does not own is a 404, never a write.
+    const run = await getLabRun(db, body.data.runId, auth.org.orgId);
+    if (run === null) return reply.code(404).send(notFound);
+    const row = await insertEvidenceReport(db, {
+      orgId: auth.org.orgId,
+      harnessHash: run.harnessHash,
+      runId: run.id,
+      actionClass: body.data.actionClass,
+      ...(body.data.actionId !== undefined ? { actionId: body.data.actionId } : {}),
+      kind: body.data.kind,
+      ...(body.data.detail !== undefined ? { detail: body.data.detail } : {}),
+      reportedBy: `key:${auth.org.orgId}`,
+    });
+    // W2 — EVIDENCE ARRIVAL IS THE TRIGGER: the graduation pass runs the
+    // moment a report lands, so a reversal or incident tightens autonomy
+    // NOW — the gateway's act-time read makes it bite the very next
+    // action. Best-effort: a pass failure never loses the report.
+    let tightened: Array<{ actionClass: string; why: string }> = [];
+    try {
+      const harnessRow2 = await getLabHarness(db, auth.org.orgId, run.harnessHash);
+      const parsed2 = harnessRow2 !== null ? parseHarnessSpecText(harnessRow2.specText) : null;
+      const pass = await runGraduationPass({
+        db, orgId: auth.org.orgId, harnessHash: run.harnessHash, classify: classifyTool,
+        tierOverrides: constitutionTierOverrides(parsed2?.ok === true ? parsed2.spec.constitution : undefined),
+      });
+      tightened = pass.tightened;
+    } catch { /* the report is durable; the next event retries the pass */ }
+    return reply.code(201).send({ id: row.id, kind: row.kind, actionClass: row.actionClass, runId: row.runId, tightened });
   });
 }

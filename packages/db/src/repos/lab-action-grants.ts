@@ -166,3 +166,14 @@ export async function listLabStepsForHarness(
     .where(and(eq(labRunSteps.orgId, orgId), eq(labRuns.harnessHash, harnessHash)))
     .orderBy(labRuns.createdAt, labRunSteps.seq);
 }
+
+/** W2 — materialize the demonstrated-situation view onto the grant row.
+ * Called only by the graduation pass; the value is always a re-derivation
+ * from records, never an edit. */
+export async function setGrantSituations(
+  db: PotionDb,
+  grantId: string,
+  situations: string[],
+): Promise<void> {
+  await db.update(labActionGrants).set({ situations }).where(eq(labActionGrants.id, grantId));
+}

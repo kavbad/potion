@@ -48,6 +48,10 @@ export interface StepPayload {
     decision: 'allow' | 'block';
     audit?: boolean;
     reason?: string;
+    /** W2 — distribution membership inputs, recorded so replay re-derives
+     * the OOD check too. */
+    situation?: string;
+    knownSituations?: string[];
     /** The gateway's own rng draw (the audit roll) — distinct from the
      * step-level rngSample. */
     sample: number;

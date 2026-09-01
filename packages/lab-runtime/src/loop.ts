@@ -20,7 +20,7 @@ import { canonicalJson, seedFromString, sha256, type ChatMessage, type Tool } fr
 import { buildPlanTool, planFromSteps, planLedgerMessage, renderPlanLedger, PLAN_TOOL_NAME } from './plan.js';
 import { beatFromMemory, buildBeatTool, emptyBeat, renderBeatLedger, BEAT_PROMPT } from './beat.js';
 import { fanOutSpentFromSteps, FANOUT_TOOL_NAME } from './fanout.js';
-import { ceilingFor, decideAction, type GateSnapshot } from './gateway.js';
+import { ceilingFor, decideAction, situationSignature, type GateSnapshot } from './gateway.js';
 import {
   consumeLabRunAnswer,
   appendLabStep,
@@ -749,11 +749,19 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           if (tool.external) {
             const ceiling = ceilingFor(opts.spec.constitution, tool.name);
             const grantRow = await getActionGrantByClass(opts.db, opts.orgId, opts.harnessHash, tool.name);
+            // W2 — distribution membership: the action's param-shape
+            // signature vs the demonstrated set materialized on the grant.
+            let parsedForSig: unknown = {};
+            try { parsedForSig = JSON.parse(call.function.arguments || '{}'); } catch { /* malformed → {} */ }
+            const sig = situationSignature(tool.name, parsedForSig);
+            const known = (grantRow as { situations?: string[] } | null)?.situations ?? [];
             const snapshot: GateSnapshot = {
               actionClass: tool.name,
               ceiling,
               grantState: grantRow?.state ?? 'none',
               auditRate: grantRow?.auditRate ?? 1,
+              situation: sig,
+              ...(known.length > 0 ? { knownSituations: known } : {}),
             };
             const sample = rng();
             const gd = decideAction(snapshot, sample);
@@ -762,9 +770,16 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
               try {
                 described = tool.describeAction?.(JSON.parse(call.function.arguments || '{}')) ?? null;
               } catch { /* malformed args → raw question */ }
-              const question = described !== null
+              // An OOD hold on an AUTONOMOUS grant says why it is asking
+              // despite earned trust (§6: authority applies only inside
+              // the demonstrated region).
+              const oodPrefix =
+                snapshot.grantState === 'autonomous'
+                  ? 'This situation is outside what this worker earned autonomy on. '
+                  : '';
+              const question = oodPrefix + (described !== null
                 ? `It wants to ${described}. Proceed?`
-                : buildRawPoreQuestion(tool.name, call.function.arguments);
+                : buildRawPoreQuestion(tool.name, call.function.arguments));
               seq += 1;
               await appendLabStep(opts.db, {
                 runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',

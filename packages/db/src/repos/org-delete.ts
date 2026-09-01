@@ -50,6 +50,7 @@ import {
   labSuperpowerGrants,
   labHarnessMemory,
   labActionGrants,
+  labEvidenceReports,
   routerVersions,
   labMissions,
   labRunFiles,
@@ -269,6 +270,7 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count('lab_runs', db.delete(labRuns).where(eq(labRuns.orgId, orgId)).returning({ x: labRuns.id }));
   // L-G1: the trust record is org-scoped evidence provenance — cascades.
   await count('lab_action_grants', db.delete(labActionGrants).where(eq(labActionGrants.orgId, orgId)).returning({ x: labActionGrants.id }));
+  await count('lab_evidence_reports', db.delete(labEvidenceReports).where(eq(labEvidenceReports.orgId, orgId)).returning({ x: labEvidenceReports.id }));
   await count('router_versions', db.delete(routerVersions).where(eq(routerVersions.orgId, orgId)).returning({ x: routerVersions.id }));
   await count('router_interpretations', db.delete(routerInterpretations).where(eq(routerInterpretations.orgId, orgId)).returning({ x: routerInterpretations.orgId }));
   await count('lab_missions', db.delete(labMissions).where(eq(labMissions.orgId, orgId)).returning({ x: labMissions.orgId }));

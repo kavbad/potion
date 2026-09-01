@@ -67,6 +67,10 @@ export const NON_SERVING_V1_ROUTES: ReadonlyArray<{ path: string; why: string }>
     path: '/v1/lab/runtime/outcome',
     why: 'runtime-gate outcome report — writes a tool step; no provider call',
   },
+  {
+    path: '/v1/lab/evidence',
+    why: 'W2 outcome ABI — evidence report insert + graduation pass; no provider call',
+  },
 ];
 
 /**

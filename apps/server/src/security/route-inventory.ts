@@ -118,6 +118,10 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/v1/lab/runtime/pore', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "runId is body-carried and org-guarded (getExternalSession); cross-org 404 pinned in lab-runtime-gate.test.ts" } },
   { method: 'POST', path: '/v1/lab/runtime/pore/resolve', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "as /v1/lab/runtime/pore" } },
   { method: 'POST', path: '/v1/lab/runtime/outcome', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "as /v1/lab/runtime/pore" } },
+  // W2 — the Outcome ABI: downstream evidence reports (outcomes,
+  // reversals, incidents, audit verdicts), run-anchored and org-guarded
+  // by the calling key; a foreign runId is a 404 before any write.
+  { method: 'POST', path: '/v1/lab/evidence', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "as /v1/lab/runtime/pore" } },
 
   // ---- /api reads (viewer+) ----
   { method: 'GET', path: '/api/frontiers', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'cluster', crossOrgProbe: { expect: 'org-list-absent' } },

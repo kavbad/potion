@@ -281,10 +281,14 @@ export function replayRun(
       // decision from the RECORDED snapshot + rng draw with the same pure
       // function. A decision that does not follow from its own recorded
       // justification is a divergence (A1: the record carries WHY).
-      const gate = (p as { gate?: { actionClass: string; ceiling: 'earnable' | 'ask-forever' | 'barred'; grantState: 'supervised' | 'autonomous' | 'blocked' | 'none'; auditRate: number; decision: string; audit?: boolean; sample: number } }).gate;
+      const gate = (p as { gate?: { actionClass: string; ceiling: 'earnable' | 'ask-forever' | 'barred'; grantState: 'supervised' | 'autonomous' | 'blocked' | 'none'; auditRate: number; decision: string; audit?: boolean; sample: number; situation?: string; knownSituations?: string[] } }).gate;
       if (gate !== undefined) {
         const rederived = decideAction(
-          { actionClass: gate.actionClass, ceiling: gate.ceiling, grantState: gate.grantState, auditRate: gate.auditRate },
+          {
+            actionClass: gate.actionClass, ceiling: gate.ceiling, grantState: gate.grantState, auditRate: gate.auditRate,
+            ...(gate.situation !== undefined ? { situation: gate.situation } : {}),
+            ...(gate.knownSituations !== undefined ? { knownSituations: gate.knownSituations } : {}),
+          },
           gate.sample,
         );
         const expectedGate = rederived.decision === 'allow'

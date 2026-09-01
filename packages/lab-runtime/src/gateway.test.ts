@@ -210,6 +210,53 @@ describe('act-time freshness — a tighten bites the very next action', () => {
   }, 60_000);
 });
 
+describe('W2 — distribution membership at the loop', () => {
+  it('an autonomous action OUTSIDE the demonstrated region parks with the OOD explanation; inside runs alone; the record replays clean', async () => {
+    const s = spec();
+    const { h, hash } = await freshRun(s);
+    const grantId = await grantAutonomy(h, hash, 'send_email');
+    const { setGrantSituations } = await import('@potion/db');
+    // The pass has materialized: this class earned its trust on {to} sends.
+    await setGrantSituations(h.db, grantId, ['send_email(to)']);
+    const sent = { n: 0 };
+    // Same class, DIFFERENT shape: {to, attachment} — outside the region.
+    const oddCall = { id: 'e9', type: 'function' as const, function: { name: 'send_email', arguments: '{"to":"ops@example.com","attachment":"report.pdf"}' } };
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([ok({ text: '', finishReason: 'tool_calls', toolCalls: [oddCall] })]),
+      runId: 'run-gate', orgId: ORG, spec: s, harnessHash: hash, tools: [emailTool(sent)],
+    });
+    expect(leg.status).toBe('awaiting-human');
+    if (leg.status === 'awaiting-human') {
+      expect(leg.question).toContain('outside what this worker earned autonomy on');
+    }
+    expect(sent.n).toBe(0);
+
+    // The demonstrated shape still runs alone.
+    await answerLabRun(h.db, 'run-gate', ORG, 'yes');
+    const leg2 = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [emailCall('e2')] }),
+        ok({ text: 'sent. done.' }),
+        ok({ text: 'Wrap-up: done.' }),
+      ]),
+      runId: 'run-gate', orgId: ORG, spec: s, harnessHash: hash, tools: [emailTool(sent)],
+    });
+    expect(leg2.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-gate', ORG);
+    const gated = steps.filter((x) => x.kind === 'tool' && (x.payload as { gate?: { decision?: string } }).gate?.decision === 'allow');
+    expect(gated).toHaveLength(1);
+    const gp = (gated[0]!.payload as { gate: { situation?: string; knownSituations?: string[] } }).gate;
+    expect(gp.situation).toBe('send_email(to)');
+    expect(gp.knownSituations).toEqual(['send_email(to)']);
+    const rec = await recordOf(h);
+    const res = replayRun(s, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+});
+
 describe('the constitution', () => {
   it("ask-forever parks even over an 'autonomous' row — the ceiling out-ranks the record", async () => {
     const s = spec({ constitution: [{ action: 'send_email', maxAuthority: 'ask-forever' }] });

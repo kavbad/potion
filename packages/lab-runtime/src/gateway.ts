@@ -33,6 +33,14 @@ export interface GateSnapshot {
   /** 'none' = no grant row existed at act time (born supervised). */
   grantState: 'supervised' | 'autonomous' | 'blocked' | 'none';
   auditRate: number;
+  /** W2 — distribution membership: this action's situation signature and
+   * the demonstrated set from the grant row (materialized from records by
+   * the graduation pass). Authority applies only inside the region where
+   * competence was demonstrated: an autonomous action OUTSIDE the set
+   * escalates to a hold. Absent fields (old records, empty set) skip the
+   * check — no set means no demonstrated boundary yet. */
+  situation?: string;
+  knownSituations?: string[];
 }
 
 export type GateDecision =
@@ -51,9 +59,28 @@ export function decideAction(snap: GateSnapshot, rngSample: number): GateDecisio
     return { decision: 'hold' };
   }
   if (snap.grantState === 'autonomous') {
+    if (
+      snap.situation !== undefined &&
+      snap.knownSituations !== undefined &&
+      snap.knownSituations.length > 0 &&
+      !snap.knownSituations.includes(snap.situation)
+    ) {
+      return { decision: 'hold' }; // outside the demonstrated region — ask
+    }
     return { decision: 'allow', audit: rngSample < Math.max(snap.auditRate, AUDIT_RATE_FLOOR) };
   }
   return { decision: 'hold' };
+}
+
+/** W2 — the situation signature: the action's PARAM SHAPE (sorted keys)
+ * plus the discriminating small enum-ish value ('kind') when present.
+ * Coarser than the argsHash fingerprint (which individuates every call),
+ * finer than the bare class — the v1 region vocabulary. Pure. */
+export function situationSignature(actionClass: string, input: unknown): string {
+  const obj = input !== null && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  const keys = Object.keys(obj).sort();
+  const kind = typeof obj.kind === 'string' && obj.kind.length <= 16 ? `:${obj.kind}` : '';
+  return `${actionClass}(${keys.join(',')})${kind}`;
 }
 
 /** The spec's ceiling for an action class (absent constitution or entry =

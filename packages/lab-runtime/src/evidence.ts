@@ -19,6 +19,7 @@
 //   · Only 'before-external-action' check-ins count. Budget and cron pores
 //     are about the run, not about an action class.
 import type { ActionEvidence, RiskTier } from './graduation.js';
+import { situationSignature } from './gateway.js';
 import { isAffirmative } from './loop.js';
 import type { StepPayload } from './checkpoint.js';
 
@@ -36,11 +37,37 @@ export function extractPoreEvidence(steps: EvidenceStep[]): Map<string, ActionEv
   // Rejections waiting for a possible edited re-proposal of the same tool.
   const openRejections: Array<{ cls: string; argsHash: string; evidence: ActionEvidence }> = [];
 
-  let pending: { cls: string; argsHash: string } | null = null;
+  let pending: { cls: string; argsHash: string; sig?: string | undefined } | null = null;
   for (const step of steps) {
     const p = step.payload;
+    // W2 — the AUTONOMOUS stream (gate-allowed executions) is evidence too:
+    //   · an execution that ERRORED is a machine-observed failure
+    //     ('exec-failed', uncapped — nobody was watching, the record was);
+    //   · a clean execution is NOT trust — a 200 proves the API worked,
+    //     never that the action was right. Correctness arrives later as a
+    //     validated audit verdict or an outcome report.
+    if (p.kind === 'tool' && p.gate !== undefined && p.gate.decision === 'allow') {
+      const errored =
+        p.toolOutput !== null &&
+        typeof p.toolOutput === 'object' &&
+        typeof (p.toolOutput as { error?: unknown }).error === 'string';
+      if (errored) {
+        push(p.gate.actionClass, {
+          at: step.createdAt,
+          outcome: 'exec-failed',
+          highStakes: false,
+          ...(p.gate.audit === true ? { fromAudit: true } : {}),
+          ...(p.gate.situation !== undefined ? { situation: p.gate.situation, situationSignature: p.gate.situation } : {}),
+        });
+      }
+      continue;
+    }
     if (p.kind === 'check-in' && p.checkInTrigger === 'before-external-action' && p.checkInAction) {
-      pending = { cls: p.checkInAction.toolName, argsHash: p.checkInAction.argsHash };
+      let sig: string | undefined;
+      try {
+        sig = situationSignature(p.checkInAction.toolName, JSON.parse(p.checkInAction.arguments || '{}'));
+      } catch { /* external argsSummary may not be JSON — no signature */ }
+      pending = { cls: p.checkInAction.toolName, argsHash: p.checkInAction.argsHash, sig };
       continue;
     }
     if (pending !== null && p.checkInAnswer !== undefined) {
@@ -57,7 +84,7 @@ export function extractPoreEvidence(steps: EvidenceStep[]): Map<string, ActionEv
         }
         // situation = the Step-12 fingerprint: WHICH version of the action
         // was observed. The evaluator's diversity dimension reads it.
-        push(pending.cls, { at: step.createdAt, outcome: 'approved', highStakes: false, situation: pending.argsHash });
+        push(pending.cls, { at: step.createdAt, outcome: 'approved', highStakes: false, situation: pending.argsHash, ...(pending.sig !== undefined ? { situationSignature: pending.sig } : {}) });
       } else {
         const evidence: ActionEvidence = { at: step.createdAt, outcome: 'rejected', highStakes: false, situation: pending.argsHash };
         push(pending.cls, evidence);
@@ -86,4 +113,57 @@ export function tierFor(
   if (classification === 'read') return 'reversible-read';
   if (classification === 'act') return 'reversible-act';
   return 'irreversible-act';
+}
+
+/** W2 — evidence REPORTS (signals born outside the record: downstream
+ * outcomes, reversals, incidents, audit verdicts) mapped into the same
+ * vocabulary and merged per class. outcome-ok and audit-clean are the only
+ * report kinds that BUY trust ('validated'); reversal/incident/audit-flagged
+ * are failures, incidents high-stakes — the veto path. */
+export function evidenceFromReports(
+  reports: Array<{ actionClass: string; kind: 'outcome-ok' | 'reversal' | 'incident' | 'audit-clean' | 'audit-flagged'; createdAt: Date }>,
+): Map<string, ActionEvidence[]> {
+  const out = new Map<string, ActionEvidence[]>();
+  for (const r of reports) {
+    const e: ActionEvidence =
+      r.kind === 'outcome-ok'
+        ? { at: r.createdAt, outcome: 'validated', highStakes: false }
+        : r.kind === 'audit-clean'
+          ? { at: r.createdAt, outcome: 'validated', highStakes: false, fromAudit: true }
+          : r.kind === 'audit-flagged'
+            ? { at: r.createdAt, outcome: 'reversed', highStakes: false, fromAudit: true }
+            : r.kind === 'incident'
+              ? { at: r.createdAt, outcome: 'reversed', highStakes: true }
+              : { at: r.createdAt, outcome: 'reversed', highStakes: false };
+    out.set(r.actionClass, [...(out.get(r.actionClass) ?? []), e]);
+  }
+  return out;
+}
+
+/** Merge evidence maps in time order (the decision rules are order-aware
+ * through timestamps; concatenation + sort keeps one stream per class). */
+export function mergeEvidence(
+  a: Map<string, ActionEvidence[]>,
+  b: Map<string, ActionEvidence[]>,
+): Map<string, ActionEvidence[]> {
+  const out = new Map<string, ActionEvidence[]>();
+  for (const m of [a, b]) {
+    for (const [cls, list] of m) out.set(cls, [...(out.get(cls) ?? []), ...list]);
+  }
+  for (const [cls, list] of out) out.set(cls, [...list].sort((x, y) => x.at.getTime() - y.at.getTime()));
+  return out;
+}
+
+/** W2 — the demonstrated-situation view: signatures of every action this
+ * class earned POSITIVE evidence on (approvals, validations), derived from
+ * the record + reports. The pass materializes this onto the grant row; the
+ * gateway holds autonomous actions outside it. */
+export function demonstratedSituations(evidence: ActionEvidence[]): string[] {
+  const sigs = new Set<string>();
+  for (const e of evidence) {
+    if ((e.outcome === 'approved' || e.outcome === 'validated') && e.situationSignature !== undefined) {
+      sigs.add(e.situationSignature);
+    }
+  }
+  return [...sigs].sort();
 }

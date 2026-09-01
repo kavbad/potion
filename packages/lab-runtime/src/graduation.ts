@@ -40,7 +40,9 @@ export interface ActionEvidence {
    * reversed   — the action ran and was later undone/complained about
    *              (a failure discovered downstream — the worst kind)
    */
-  outcome: 'approved' | 'validated' | 'edited' | 'rejected' | 'reversed';
+  /** W2 adds 'exec-failed': an autonomous (gate-allowed) execution that
+   * errored — machine-observed failure, uncapped like every failure. */
+  outcome: 'approved' | 'validated' | 'edited' | 'rejected' | 'reversed' | 'exec-failed';
   /** Consequence flag from the action's context (value bands, entity
    * importance). High-stakes failures veto; high-stakes successes do not
    * buy extra credit. */
@@ -57,6 +59,10 @@ export interface ActionEvidence {
    * cannot claim to span the distribution.
    */
   situation?: string;
+  /** W2 — the coarser param-shape signature (gateway.situationSignature):
+   * the region vocabulary for distribution membership, distinct from the
+   * per-call fingerprint above. */
+  situationSignature?: string;
 }
 
 export interface GraduationInput {
@@ -145,7 +151,7 @@ const TIGHTEN_WINDOW_DAYS = 14;
 const DAY_MS = 86_400_000;
 
 function isFailure(e: ActionEvidence): boolean {
-  return e.outcome === 'rejected' || e.outcome === 'edited' || e.outcome === 'reversed';
+  return e.outcome === 'rejected' || e.outcome === 'edited' || e.outcome === 'reversed' || e.outcome === 'exec-failed';
 }
 
 export function graduationDecision(input: GraduationInput): GraduationDecision {

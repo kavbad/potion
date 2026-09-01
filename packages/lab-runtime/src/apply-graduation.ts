@@ -9,12 +9,14 @@
 import {
   ensureActionGrant,
   listActionGrants,
+  listEvidenceReports,
   listLabStepsForHarness,
+  setGrantSituations,
   tightenGrant,
   type PotionDb,
 } from '@potion/db';
 import type { StepPayload } from './checkpoint.js';
-import { extractPoreEvidence, tierFor, type EvidenceStep } from './evidence.js';
+import { demonstratedSituations, evidenceFromReports, extractPoreEvidence, mergeEvidence, tierFor, type EvidenceStep } from './evidence.js';
 import { graduationDecision, type GraduationDecision, type RiskTier } from './graduation.js';
 
 export interface GraduationPassResult {
@@ -39,7 +41,15 @@ export async function runGraduationPass(opts: {
   const now = opts.now ?? new Date();
   const rows = await listLabStepsForHarness(opts.db, opts.orgId, opts.harnessHash);
   const steps: EvidenceStep[] = rows.map((r) => ({ payload: r.payload as StepPayload, createdAt: r.createdAt }));
-  const byClass = extractPoreEvidence(steps);
+  // W2 — two evidence sources, one stream per class: the durable record
+  // (pore answers + gate-allowed executions) and the report table (signals
+  // born outside the record: outcomes, reversals, incidents, audit
+  // verdicts). Merged in time order.
+  const reports = await listEvidenceReports(opts.db, opts.orgId, opts.harnessHash);
+  const byClass = mergeEvidence(
+    extractPoreEvidence(steps),
+    evidenceFromReports(reports.map((r) => ({ actionClass: r.actionClass, kind: r.kind, createdAt: r.createdAt }))),
+  );
 
   const result: GraduationPassResult = { tightened: [], proposals: [], evaluated: [] };
   const existing = new Map((await listActionGrants(opts.db, opts.orgId, opts.harnessHash)).map((g) => [g.actionClass, g]));
@@ -59,6 +69,15 @@ export async function runGraduationPass(opts: {
       result.tightened.push({ actionClass, why: decision.why });
     } else if (decision.kind === 'propose-graduate' && grant.state === 'supervised') {
       result.proposals.push({ grantId: grant.id, actionClass, decision });
+    }
+
+    // W2 — materialize the demonstrated-situation view (a re-derivation
+    // from the evidence, never an edit); the gateway holds autonomous
+    // actions outside it.
+    const sigs = demonstratedSituations(evidence);
+    const existingSigs = (grant as { situations?: string[] }).situations ?? [];
+    if (JSON.stringify(sigs) !== JSON.stringify(existingSigs)) {
+      await setGrantSituations(opts.db, grant.id, sigs);
     }
   }
   return result;

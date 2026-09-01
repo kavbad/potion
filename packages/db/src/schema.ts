@@ -1712,6 +1712,27 @@ export const labHarnesses = pgTable(
  * graduation proposal (enforced at the repo/API layer). */
 export type LabGrantState = 'supervised' | 'autonomous' | 'blocked';
 export type LabRiskTier = 'reversible-read' | 'reversible-act' | 'irreversible-act' | 'never-graduates';
+/** W2 — evidence REPORTS: the only evidence store, and only for signals
+ * born OUTSIDE the durable record (downstream outcomes, reversals,
+ * incidents, audit verdicts). Everything else derives from lab_run_steps
+ * at read time (A1). Each row is a source document with lineage: who
+ * reported, about which run/action, when. */
+export const labEvidenceReports = pgTable('lab_evidence_reports', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id, { onDelete: 'cascade' }),
+  harnessHash: text('harness_hash').notNull(),
+  runId: text('run_id').notNull(),
+  actionClass: text('action_class').notNull(),
+  actionId: text('action_id'),
+  kind: text('kind').$type<'outcome-ok' | 'reversal' | 'incident' | 'audit-clean' | 'audit-flagged'>().notNull(),
+  detail: text('detail'),
+  reportedBy: text('reported_by').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type LabEvidenceReportRow = typeof labEvidenceReports.$inferSelect;
+
 export const labActionGrants = pgTable(
   'lab_action_grants',
   {
@@ -1731,6 +1752,12 @@ export const labActionGrants = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     /** suite_certifications id when a graduation rode a certification. */
     certificationId: text('certification_id'),
+    /** W2 (2026-08-31): the demonstrated situation signatures — param-shape
+     * fingerprints of the actions this class earned its evidence on,
+     * MATERIALIZED from the durable records by the graduation pass (a view,
+     * recomputed each pass — never hand-written). The gateway escalates an
+     * autonomous action whose signature is outside this set. */
+    situations: jsonb('situations').$type<string[]>().notNull().default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
