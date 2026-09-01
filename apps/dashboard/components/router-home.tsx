@@ -14,7 +14,7 @@
 // composition bar drawing in once, a proposal settling) and
 // prefers-reduced-motion kills all of them. "Maintained" is never claimed
 // where it cannot be verified — the rule itself is shown instead.
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { priceVsBaseline } from '@/lib/price-words';
 import Link from 'next/link';
 import type { Policy } from '@potion/core';
@@ -42,6 +42,27 @@ interface Assignment {
   evidenceN: number | null;
   alternatives: number;
   fallback: string | null;
+  /** Shadow evidence measured on THIS org's traffic (serve-judge instrument
+   * — its own scale, never the suite-measured quality column). Absent when
+   * the window holds nothing. */
+  shadow?: {
+    instrument: 'serve-judge';
+    windowDays: number;
+    servingObserved: { n: number; quality: number; qualityCi: [number, number] } | null;
+    servingMeasuredCostPer1K: number | null;
+    challengers: Array<{
+      strategyHash: string;
+      model: string;
+      n: number;
+      quality: number;
+      qualityCi: [number, number];
+      samples: number;
+      costPer1K: number;
+      latencyP95: number;
+      qualifies: boolean;
+      reason: string;
+    }>;
+  };
 }
 
 interface RouterResponse {
@@ -166,22 +187,41 @@ function AssignmentsTable({ assignments }: { assignments: Assignment[] }) {
           </thead>
           <tbody>
             {assignments.map((a) => (
-              <tr key={a.clusterId} className="border-b border-dashed border-[#e9e6dd] last:border-0">
-                <td className="py-2 pr-4 text-ink">{a.clusterId}</td>
-                <td className="py-2 pr-4 text-ink">
-                  {a.strategy.label}
-                  {a.fallback !== null ? <span className="ml-2 text-[11px] uppercase text-warn">fallback</span> : null}
-                  {a.provenance !== 'live' ? <span className="ml-2 text-[11px] uppercase text-warn">{a.provenance}</span> : null}
-                </td>
-                <td className="py-2 pr-4 text-right tabular-nums">{a.quality?.toFixed(3) ?? '—'}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{a.costPer1K !== null ? `$${a.costPer1K.toFixed(4)}` : '—'}</td>
-                <td className="py-2 pr-4 text-right tabular-nums text-soft">{a.latencyP95 !== null ? `${Math.round(a.latencyP95)}ms` : '—'}</td>
-                <td className="py-2 text-right">
-                  <Link href={`/frontiers?cluster=${encodeURIComponent(a.clusterId)}`} className="text-accent hover:underline">
-                    {a.evidenceN !== null ? `n=${a.evidenceN} · ` : ''}v{a.frontierVersion} →
-                  </Link>
-                </td>
-              </tr>
+              <Fragment key={a.clusterId}>
+                <tr className="border-b border-dashed border-[#e9e6dd] last:border-0">
+                  <td className="py-2 pr-4 text-ink">{a.clusterId}</td>
+                  <td className="py-2 pr-4 text-ink">
+                    {a.strategy.label}
+                    {a.fallback !== null ? <span className="ml-2 text-[11px] uppercase text-warn">fallback</span> : null}
+                    {a.provenance !== 'live' ? <span className="ml-2 text-[11px] uppercase text-warn">{a.provenance}</span> : null}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">{a.quality?.toFixed(3) ?? '—'}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums">{a.costPer1K !== null ? `$${a.costPer1K.toFixed(4)}` : '—'}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-soft">{a.latencyP95 !== null ? `${Math.round(a.latencyP95)}ms` : '—'}</td>
+                  <td className="py-2 text-right">
+                    <Link href={`/frontiers?cluster=${encodeURIComponent(a.clusterId)}`} className="text-accent hover:underline">
+                      {a.evidenceN !== null ? `n=${a.evidenceN} · ` : ''}v{a.frontierVersion} →
+                    </Link>
+                  </td>
+                </tr>
+                {a.shadow && (a.shadow.challengers.length > 0 || a.shadow.servingObserved !== null) ? (
+                  <tr className="border-b border-dashed border-[#e9e6dd] last:border-0">
+                    <td colSpan={6} className="py-1.5 pl-4 text-[12px] text-faint">
+                      <span className="uppercase tracking-[0.1em]">on your traffic · {a.shadow.windowDays}d · serve judge</span>
+                      {a.shadow.servingObserved !== null ? (
+                        <span className="ml-3 text-soft">
+                          serving scored {a.shadow.servingObserved.quality.toFixed(3)} [{a.shadow.servingObserved.qualityCi[0].toFixed(3)}–{a.shadow.servingObserved.qualityCi[1].toFixed(3)}] · n={a.shadow.servingObserved.n}
+                        </span>
+                      ) : null}
+                      {a.shadow.challengers.map((c) => (
+                        <span key={c.strategyHash} className={`ml-3 ${c.qualifies ? 'text-accent' : ''}`}>
+                          {c.model} {c.n > 0 ? `${c.quality.toFixed(3)} [${c.qualityCi[0].toFixed(3)}–${c.qualityCi[1].toFixed(3)}]` : 'unscored'} · ${c.costPer1K.toFixed(4)}/1K · {c.qualifies ? 'qualifies' : c.reason}
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -150,6 +150,26 @@ export async function distinctSampledTargets(
   );
 }
 
+/** Quality-sample rows since `since` for one org — the serve judge's scores
+ * of SERVED answers: the SAME instrument the shadow plane scores candidates
+ * with, which is what makes a serving-vs-challenger comparison one-scale
+ * (shadow evidence, 2026-09-01). Row shape only; the aggregation (means,
+ * Jeffreys intervals) lives in @potion/pareto's shadow-evidence module. */
+export async function listQualitySamplesSince(
+  db: PotionDb,
+  orgId: string,
+  since: Date,
+): Promise<Array<{ clusterId: string | null; strategyHash: string; quality: number }>> {
+  return db
+    .select({
+      clusterId: qualitySamples.clusterId,
+      strategyHash: qualitySamples.strategyHash,
+      quality: qualitySamples.quality,
+    })
+    .from(qualitySamples)
+    .where(and(eq(qualitySamples.orgId, orgId), gt(qualitySamples.createdAt, since)));
+}
+
 /** All samples for an org (status API / tests), newest first. */
 export async function listQualitySamples(
   db: PotionDb,
@@ -698,11 +718,11 @@ export async function resolveIncidentWithEvidence(
 // breach evaluation
 // ---------------------------------------------------------------------------
 
-/** Highest-quality point (tie → lower cost) — the §8 NULL-fallback rule. */
-export function highestQualityPoint(points: FrontierPoint[]): FrontierPoint | null {
-  if (points.length === 0) return null;
-  return [...points].sort((a, b) => b.quality - a.quality || a.costPer1K - b.costPer1K)[0] ?? null;
-}
+/** Highest-quality point — RE-EXPORTED from core (2026-09-01, review
+ * hazard: this file carried a byte-identical duplicate, so a change to
+ * core's selector would silently diverge on the rollback path). One
+ * authority, no drift. */
+export { highestQualityPoint } from '@potion/core';
 
 /** The "equivalent point" on a previous frontier version: what the policy
  * would have selected there, else that version's highest-quality point. */

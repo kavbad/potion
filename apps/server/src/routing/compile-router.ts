@@ -37,7 +37,14 @@ import {
   getOrgIncumbents,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
-import { loadCurrentFrontier, servingDecisionFor } from '@potion/pareto';
+import {
+  clusterShadowEvidence,
+  loadCurrentFrontier,
+  orgShadowEvidenceInputs,
+  policyForCluster,
+  servingDecisionFor,
+  type ClusterShadowEvidence,
+} from '@potion/pareto';
 import { parseTraceHeader } from '../routes/chat.js';
 import { describePolicy } from '../routes/connection.js';
 import { type PotionContext } from '../context.js';
@@ -57,6 +64,13 @@ export interface RouterAssignment {
   evidenceN: number | null;
   alternatives: number;
   fallback: string | null;
+  /** SHADOW → ORG EVIDENCE (2026-09-01): what the shadow plane has MEASURED
+   * on this org's own traffic — serve-judge scores (its own instrument,
+   * never mixed with the suite-measured quality above) and measured costs
+   * on both sides of the compare. Display evidence, absent when the window
+   * holds nothing; EXCLUDED from routerHash by construction (the hash reads
+   * enumerated decision fields), so evidence drift never mints a version. */
+  shadow?: ClusterShadowEvidence;
 }
 
 export interface ExpectedProjection {
@@ -112,6 +126,26 @@ export async function compileAndMintRouter(
 
   const assignments: RouterAssignment[] =
     policy === null ? [] : await assignmentsUnderPolicy(ctx, db, orgId, policy, warn);
+  // SHADOW → ORG EVIDENCE (2026-09-01): decorate each assignment with the
+  // org's own measured challenger field. Three windowed reads per compile;
+  // `qualifies` is confidence-gated (Jeffreys lower bound vs the cluster's
+  // floor) and read-only — Potion proposes, the user reacts.
+  if (assignments.length > 0 && policy !== null) {
+    const shadowInputs = await orgShadowEvidenceInputs(db, orgId);
+    for (const a of assignments) {
+      const clusterPolicy = policyForCluster(policy, a.clusterId);
+      const clusterFloor =
+        clusterPolicy.type === 'min_cost' || clusterPolicy.type === 'compound'
+          ? clusterPolicy.qualityFloor
+          : null;
+      const ev = clusterShadowEvidence(shadowInputs, {
+        clusterId: a.clusterId,
+        servingHash: a.strategyHash,
+        clusterFloor,
+      });
+      if (ev !== null) a.shadow = ev;
+    }
+  }
   const interpretation = await getRouterInterpretation(db, orgId);
 
   const routerHash = sha256(

@@ -26,6 +26,43 @@ export async function listRequestLogs(
     .limit(limit);
 }
 
+export interface ServedClusterCostRow {
+  clusterId: string;
+  /** Mean ACTUAL cost per served request over the window. */
+  meanCostUsd: number;
+  requests: number;
+}
+
+/**
+ * Measured serving cost per cluster since `since` (status='ok' rows with a
+ * recorded cost). The shadow-evidence comparison basis (2026-09-01):
+ * challenger costs are measured actuals on the org's own traffic, so the
+ * serving side of the compare must be measured actuals too — putting a
+ * SUITE-average costPer1K on one side of the inequality would mix
+ * measurement bases (the savings-baseline critique, same class).
+ */
+export async function servedClusterCostSince(
+  db: PotionDb,
+  orgId: string,
+  since: Date,
+): Promise<ServedClusterCostRow[]> {
+  const result = await db.execute(
+    sql`SELECT cluster_id,
+               avg((usage->>'costUsd')::float) AS mean_cost_usd,
+               count(*)::int AS requests
+        FROM request_logs
+        WHERE org_id = ${orgId}
+          AND status = 'ok'
+          AND cluster_id IS NOT NULL
+          AND usage->>'costUsd' IS NOT NULL
+          AND ts > ${since.toISOString()}::timestamptz
+        GROUP BY cluster_id`,
+  );
+  return (result.rows as Array<{ cluster_id: string; mean_cost_usd: number | string; requests: number }>).map(
+    (r) => ({ clusterId: r.cluster_id, meanCostUsd: Number(r.mean_cost_usd), requests: r.requests }),
+  );
+}
+
 /**
  * Serving-grade p95 latency per strategy (G2.6).
  *
