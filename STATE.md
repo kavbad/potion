@@ -7,7 +7,9 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-08-26 (LAB UNPAUSED: direction v2 + L-G1 trust record/graduation evaluator shipped; instrument campaign complete; canonical host = withpotion.com)._
+_Last updated: 2026-09-01 (core-API review ladder: ALL P0s closed — one
+resolver, lower-bound law, serve-time router stamping, prod research live,
+shadow judge + shadow evidence on the router artifact)._
 
 ## What Potion is (current thesis)
 
@@ -39,6 +41,30 @@ clears your bar.*
   Save nothing → Potion earns nothing above cost. Implemented end to end
   (invoice, HTML render, billing page, landing); charging itself remains
   OFF until the Stripe sitting. marginPct machinery retained at 0.
+- **Core-API review ladder (external review 2026-08-31, verified
+  claim-by-claim by fan-out agents — none refuted): ALL P0s CLOSED by
+  2026-09-01.** The measured floor is the written floor end-to-end (0.5
+  clamp dead on propose AND apply, 49f675f+f5b100c). ONE RESOLVER: the
+  serve chain lives in @potion/pareto (`servingDecisionFor`) and the
+  compiler, the learning period and the serve path share it — the learning
+  bypass with the INVERTED infeasible fallback is dead (cae78d4). Floors
+  are PROMISES: every feasibility site gates on the Jeffreys lower bound;
+  rankings stay mean-based (3949947). Receipts name the version that
+  SERVED: request_logs.router_version stamped at serve time on exact
+  content match, `;router=vN` on the trace, reconstruction demoted to
+  backfill (3709743). Prod research measures the REAL world
+  (POTION_RESEARCH_PROVIDER=live in prod compose, 06f5395). The shadow
+  plane is closed into evidence: candidates are judge-scored IN-PROCESS by
+  the serve judge — one scale with quality_samples, no text on the queue,
+  Jaccard scorer and queue leg retired (5b42bba) — and the router artifact
+  carries "on your traffic" evidence per assignment: Jeffreys intervals,
+  measured-vs-measured costs, and a lower-bound-gated challenger
+  `qualifies` flag; read-only, never mints a version (3528019). Landing
+  bullet corrected ("combinations nobody else has" / "measured on release"
+  gone); README names the Chat-Completions surface and the /responses
+  AI-SDK trap. Still open from the review, operator-call tier: savings
+  "verified" wording + hero "half"/"49%" + redaction copy; then the P1
+  ladder (see ROADMAP.md §G).
 - **Capability mixing: CLOSED** (five pre-registered negatives, ≈$13; public
   note at /research/the-mixing-verdict). No further mixture legs; the weekly
   saturation alarm owns the reopening condition. verify-pick and
@@ -73,7 +99,18 @@ rides the same composition), final nav (Today · Receipts · Evidence ·
 Savings · Try · Settings · Docs). Next: instrument enlargement
 (extraction, rewrite-edit) · then per the roadmap ledger in
 `tasks/todo.md` (the ledger is append-only history; this file is the
-summary). Eval-quality queue (second external review, adopted 2026-08-25):
+summary). **Core-API ladder next (G1, sequence adopted from the 2026-08-31
+review — protect it):** Outcome API (`POST /v1/outcomes` + SDK hooks —
+customers report what actually happened; the strongest quality signal is
+post-response) · full-request eval capture (learning items are last-user-
+turn-only today: system/tools/response_format never reach the derived
+suite — the measured task must be the served task) · challenger promotion
+proposal on sustained shadow `qualifies` (the artifact flags today;
+proposals stay human-applied) · randomized incumbent holdout (the verified-
+savings basis pricing v2 bills against — lower-bound savings, and the
+causal prerequisite for outcome-driven optimization) · then org workload
+discovery → customer-specific frontiers. Eval-quality queue (second
+external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
 aggregate + frontier evidence; qualityCi95 kept as the conservative
 half-width; 42/42 now reports a ≥-bound, not ±0.000) · locked
