@@ -100,15 +100,21 @@ export function deriveImprovements(spec: HarnessSpec, steps: ImproveStep[]): Imp
   for (const [key, c] of questions) {
     if (c.runs.size < QUESTION_CLUSTER_MIN || c.answers.length === 0) continue;
     const answer = c.answers[c.answers.length - 1]!;
-    const rule = `Standing answer from the operator (do not ask again): Q: ${c.q.slice(0, 200)} A: ${answer.slice(0, 300)}`;
+    // Slot-born clusters amend the GOAL — mission details belong in the
+    // mission (confirmed live: the same answer as a buried rule lost to
+    // the ask-first guidance against a placeholder-laden goal). Prose
+    // clusters keep the standing-answer rule.
+    const slotBorn = key.startsWith('slots:');
     out.push({
       id: `imp-${slug(`q:${key}`)}`,
       mutation: {
         type: 'instruction',
-        summary: 'fold a recurring answer into the worker',
+        summary: slotBorn ? 'fold the missing mission details into the goal' : 'fold a recurring answer into the worker',
         noticed: `it asked the same question in ${c.runs.size} separate runs: “${c.q.slice(0, 120)}”`,
         why: 'a question the operator answers every run is information the mission is missing — carrying the answer removes a round-trip from every future run',
-        change: { appendRule: rule },
+        change: slotBorn
+          ? { appendToGoal: `\n\nStanding mission details from the operator (these fill the placeholders above — do not ask for them again): ${answer.slice(0, 600)}` }
+          : { appendRule: `Standing answer from the operator (do not ask again): Q: ${c.q.slice(0, 200)} A: ${answer.slice(0, 300)}` },
       },
       evidenceN: c.runs.size,
     });
@@ -157,8 +163,15 @@ export function deriveImprovements(spec: HarnessSpec, steps: ImproveStep[]): Imp
  * boundary. Throws on a change the type cannot express. */
 export function buildDescendantSpec(parent: HarnessSpec, mutation: ImprovementProposal['mutation']): HarnessSpec {
   if (mutation.type === 'instruction') {
+    const goalAmend = mutation.change.appendToGoal;
+    if (typeof goalAmend === 'string' && goalAmend.trim() !== '') {
+      return {
+        ...parent,
+        mission: { ...parent.mission, goal: `${parent.mission.goal}${goalAmend}`.slice(0, 4000) },
+      };
+    }
     const rule = mutation.change.appendRule;
-    if (typeof rule !== 'string' || rule.trim() === '') throw new Error('instruction mutation needs change.appendRule');
+    if (typeof rule !== 'string' || rule.trim() === '') throw new Error('instruction mutation needs change.appendRule or change.appendToGoal');
     return { ...parent, rules: [...parent.rules, rule.trim()].slice(0, 100) };
   }
   const action = mutation.change.action;

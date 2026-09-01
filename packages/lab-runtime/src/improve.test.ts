@@ -40,6 +40,7 @@ describe('detector 1 — the recurring worker question', () => {
     expect(twice[0]!.mutation.type).toBe('instruction');
     expect(twice[0]!.mutation.noticed).toContain('2 separate runs');
     expect(String(twice[0]!.mutation.change.appendRule)).toContain('https://board.example');
+    expect(twice[0]!.mutation.change.appendToGoal, 'prose clusters stay rules').toBeUndefined();
     const once = deriveImprovements(SPEC, [ask('r1', 'What URL should I open?'), answer('r1', 'x')]);
     expect(once).toHaveLength(0);
   });
@@ -141,5 +142,11 @@ describe('detector 1 — slot-law questions cluster by their placeholders, not t
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]!.mutation.noticed).toContain('2 separate runs');
+    // Slot-born clusters amend the GOAL — mission details belong in the
+    // mission (a buried rule lost to the ask-first guidance, live).
+    expect(String(out[0]!.mutation.change.appendToGoal)).toContain('https://withpotion.com');
+    const child = buildDescendantSpec(SPEC, out[0]!.mutation);
+    expect(child.mission.goal).toContain('Standing mission details');
+    expect(child.rules).toEqual(SPEC.rules);
   });
 });
