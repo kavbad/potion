@@ -139,7 +139,7 @@ export function Landing() {
             {[
               '49% lower bills. Each request goes to the cheapest model measured good enough.',
               'Your rule: cost, quality, or speed. Picked from the measured Pareto frontier.',
-              'Always current. New models measured on release; combinations nobody else has.',
+              'New models earn their place. Measured against your bar before they ever serve.',
               'One line of code. A receipt with every answer.',
             ].map((li) => (
               <li key={li} className="flex gap-3 text-[14.5px] leading-snug text-soft">
