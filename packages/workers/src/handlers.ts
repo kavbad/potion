@@ -162,7 +162,7 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildWebLabTools, compileRubric, extractDeliverable, extractReport, parseJudgment, resumeRun, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
+import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildWebLabTools, compileRubric, constitutionTierOverrides, extractDeliverable, extractReport, parseJudgment, resumeRun, runGraduationPass, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
@@ -4883,6 +4883,30 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
           // The judge NEVER fails the run — record the miss and move on.
           await setLabRunJudge(ctx.db, payload.runId, payload.orgId, { error: `judge error: ${e instanceof Error ? e.message : String(e)}`, judgeTrace: null, estCostUsd: 0 }).catch(() => {});
         }
+      }
+
+      // ── W1: event-driven tightening — evidence arrival IS the trigger ──
+      // Every terminal is new evidence (answers consumed, outcomes landed,
+      // failures recorded). The graduation pass runs NOW — tightens write
+      // immediately (fail closed), proposals surface in the ledger — so a
+      // worker does not stay autonomous merely because nobody opened its
+      // permission page. The gateway's act-time read completes the loop:
+      // a tighten written here bites any run's very next action.
+      if (outcome.status === 'completed' || outcome.status === 'failed' || outcome.status === 'killed-budget' || outcome.status === 'awaiting-human') {
+        try {
+          await runGraduationPass({
+            db: ctx.db, orgId: payload.orgId, harnessHash: run.harnessHash,
+            classify: (actionClass) => {
+              for (const pkgId of ['web', 'code', 'browser', 'git'] as const) {
+                const pkg = getPackage(pkgId);
+                const t = pkg?.tools.find((x) => x.name === actionClass);
+                if (t) return t.action;
+              }
+              return undefined;
+            },
+            tierOverrides: constitutionTierOverrides(spec.constitution),
+          });
+        } catch { /* the pass never fails the run; the next event retries it */ }
       }
 
       // ── X3: notifications — the supervised loop actually loops ─────────

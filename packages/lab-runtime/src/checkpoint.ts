@@ -36,6 +36,22 @@ export interface StepPayload {
   toolName?: string;
   toolInput?: unknown;
   toolOutput?: unknown;
+  /** W1 (2026-08-31): the Action Gateway's decision for this external
+   * call, with the full snapshot it decided on — recorded so replay
+   * re-derives the decision from the record alone (A1). Absent on
+   * non-external tools, human-approved executions, and old records. */
+  gate?: {
+    actionClass: string;
+    ceiling: 'earnable' | 'ask-forever' | 'barred';
+    grantState: 'supervised' | 'autonomous' | 'blocked' | 'none';
+    auditRate: number;
+    decision: 'allow' | 'block';
+    audit?: boolean;
+    reason?: string;
+    /** The gateway's own rng draw (the audit roll) — distinct from the
+     * step-level rngSample. */
+    sample: number;
+  };
   /** Fresh-run leg start only: the memory snapshot AS SEEN when the system
    * prompt was built — what makes the record self-contained (Step 4). */
   memoryReads?: Record<string, unknown>;

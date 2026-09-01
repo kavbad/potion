@@ -30,4 +30,6 @@ export const MAX_EXEMPLAR_CHARS = 2_000;
 /** Object/array nesting. The deepest legitimate path in v1 is 4 levels;
  * 12 leaves headroom for policy sub-objects while making depth bombs a
  * typed rejection instead of a stack overflow. */
+export const MAX_CONSTITUTION_ENTRIES = 40;
+export const MAX_ACTION_CLASS_CHARS = 120;
 export const MAX_DEPTH = 12;

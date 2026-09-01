@@ -13,7 +13,9 @@ import { randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createDb,
+  acceptGraduation,
   createLabRun,
+  ensureActionGrant,
   listLabSteps,
   migrate,
   seedIsolationOrgs,
@@ -114,12 +116,23 @@ afterEach(async () => {
   handle = null;
 });
 
-async function seededDb(s: HarnessSpec, opts: { expiredGrant?: boolean } = {}): Promise<{ h: DbHandle; hash: string }> {
+async function seededDb(s: HarnessSpec, opts: { expiredGrant?: boolean; supervised?: boolean } = {}): Promise<{ h: DbHandle; hash: string }> {
   const h = await createDb();
   await migrate(h.db);
   await seedIsolationOrgs(h.db);
   const hash = harnessSpecHash(s);
   await createLabRun(h.db, { id: 'run-x', orgId: ORG_A, harnessHash: hash, harnessName: s.name, spec: s });
+  // W1: externals now ALWAYS gate (born supervised, no longer opt-in via
+  // checkIns). These fixtures test CUSTODY, not permission — the driven
+  // action classes carry legitimately EARNED grants so the calls flow and
+  // the redactor/sentinel do their work. Fixture 04 (the pore test) opts
+  // out and stays supervised.
+  if (opts.supervised !== true) {
+    for (const actionClass of ['github.get_me', 'github.read_item', 'github.dump_everything']) {
+      const g = await ensureActionGrant(h.db, { orgId: ORG_A, harnessHash: hash, actionClass, riskTier: 'reversible-act' });
+      await acceptGraduation(h.db, g.id, {});
+    }
+  }
   await upsertLabGrant(h.db, {
     id: 'grant-x',
     orgId: ORG_A,
@@ -258,7 +271,7 @@ describe('Fixture 04 — server-injects-instructions → recorded as DATA, the p
     const fx = JSON.parse(readFileSync(`${GOLDEN_DIR}/04-server-injects-instructions.json`, 'utf8')) as { result: string };
     server = await MockMcpServer.start({ tools: [{ name: 'get_me', handler: () => fx.result }], requireBearer: TOKEN });
     const s = spec({ checkIns: [{ trigger: 'before-external-action' }] });
-    const { h, hash } = await seededDb(s);
+    const { h, hash } = await seededDb(s, { supervised: true });
     handle = h;
     const leg = await buildMcpLabTools({ db: h.db, orgId: ORG_A, runId: 'run-x', masterKey: MASTER, spec: s, connectors: [connectorFor(server)] });
     // first external call suspends at the pore (no tool call yet)

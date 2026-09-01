@@ -31,6 +31,7 @@ const GOLDEN_NAMES = [
   'task-simple',
   'task-tools',
   'ask-park-resume',
+  'gateway-earned-allow',
   'checkin-suspend-resume',
   'fuel-killed',
   'standing-legcap',

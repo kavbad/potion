@@ -102,6 +102,13 @@ export interface HarnessSpec {
   exemplar?: string | undefined;
   /** X4: fan-out — helper sub-runs under one fuel tree (see schema). */
   fanOut?: { maxWorkers: number } | undefined;
+  /** W1 (2026-08-31): the Action Constitution — per-action-class maximum
+   * authority, carried by the worker itself and hash-bearing (changing the
+   * leash is a different worker). 'earnable' = autonomy can be earned via
+   * the graduation path; 'ask-forever' = approvable each time, autonomous
+   * never (maps to the never-graduates tier); 'barred' = the class never
+   * runs at all. Absent entry = 'earnable' with a supervised birth. */
+  constitution?: Array<{ action: string; maxAuthority: 'earnable' | 'ask-forever' | 'barred'; note?: string | undefined }> | undefined;
 }
 
 export type SpecIssueCode =

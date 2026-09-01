@@ -82,6 +82,14 @@ function FeedRow({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
         <span className={`${CHIP} ${kindCls}`}>{kindLabel}</span>
         {step.kind === 'model' && step.simulated === true ? <SimBadge /> : null}
         {step.fallback === true ? <span className={`${CHIP} border-warn text-warn`}>fallback</span> : null}
+        {step.gate?.decision === 'allow' ? (
+          <span className={`${CHIP} border-accent text-accent`} data-testid="gate-allow">
+            ran alone — earned{step.gate.audit === true ? ' · audit sampled' : ''}
+          </span>
+        ) : null}
+        {step.gate?.decision === 'block' ? (
+          <span className={`${CHIP} border-refuse text-refuse`} data-testid="gate-block">barred by constitution</span>
+        ) : null}
         {step.latencyViolated === true ? <span className={`${CHIP} border-warn text-warn`}>slow</span> : null}
         {step.kind === 'model' ? (
           <span className="font-mono text-[11.5px] tabular-nums text-faint">

@@ -34,6 +34,28 @@ export async function listActionGrants(
     .orderBy(labActionGrants.actionClass);
 }
 
+/** W1 — the gateway's act-time read: ONE class, FRESH, every action.
+ * No caching layer may wrap this; a tighten written anywhere must bite
+ * the very next action everywhere. */
+export async function getActionGrantByClass(
+  db: PotionDb,
+  orgId: string,
+  harnessHash: string,
+  actionClass: string,
+): Promise<LabActionGrantRow | null> {
+  const rows = await db
+    .select()
+    .from(labActionGrants)
+    .where(
+      and(
+        eq(labActionGrants.orgId, orgId),
+        eq(labActionGrants.harnessHash, harnessHash),
+        eq(labActionGrants.actionClass, actionClass),
+      ),
+    );
+  return rows[0] ?? null;
+}
+
 /** Idemptent birth: every observed action class gets a supervised row. */
 export async function ensureActionGrant(
   db: PotionDb,

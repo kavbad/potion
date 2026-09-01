@@ -1,8 +1,8 @@
 {
-  "name": "checkin-suspend-resume",
+  "name": "gateway-earned-allow",
   "spec": {
     "specVersion": 1,
-    "name": "golden checkin harness",
+    "name": "golden gateway harness",
     "brain": {
       "policy": {
         "type": "min_cost",
@@ -25,11 +25,7 @@
       "maxUsdPerRun": 1,
       "hardStop": true
     },
-    "checkIns": [
-      {
-        "trigger": "before-external-action"
-      }
-    ]
+    "checkIns": []
   },
   "steps": [
     {
@@ -44,14 +40,14 @@
           "completionTokens": 5
         },
         "clockMs": 1780000001000,
-        "rngSample": 0.2752357276622206,
+        "rngSample": 0.22944266279228032,
         "toolCalls": [
           {
-            "id": "t1",
+            "id": "g1",
             "type": "function",
             "function": {
               "name": "send_email",
-              "arguments": "{}"
+              "arguments": "{\"to\":\"ops@example.com\"}"
             }
           }
         ],
@@ -148,7 +144,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden gateway harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",
@@ -160,37 +156,31 @@
     },
     {
       "seq": 2,
-      "kind": "check-in",
+      "kind": "tool",
       "payload": {
-        "kind": "check-in",
-        "clockMs": 1780000003000,
-        "rngSample": 0.0852009505033493,
-        "checkInAction": {
-          "argsHash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
-          "toolName": "send_email",
-          "arguments": "{}"
+        "gate": {
+          "audit": false,
+          "sample": 0.3092784381005913,
+          "ceiling": "earnable",
+          "decision": "allow",
+          "auditRate": 0.05,
+          "grantState": "autonomous",
+          "actionClass": "send_email"
         },
-        "checkInTrigger": "before-external-action",
-        "checkInQuestion": "About to run external tool 'send_email' with input \"{}\". Proceed?"
+        "kind": "tool",
+        "clockMs": 1780000003000,
+        "toolName": "send_email",
+        "rngSample": 0.11106568784452975,
+        "toolInput": {
+          "to": "ops@example.com"
+        },
+        "toolOutput": {
+          "sent": true
+        }
       }
     },
     {
       "seq": 3,
-      "kind": "tool",
-      "payload": {
-        "kind": "tool",
-        "clockMs": 1780000007000,
-        "toolName": "send_email",
-        "rngSample": 0.2752357276622206,
-        "toolInput": {},
-        "toolOutput": {
-          "sent": true
-        },
-        "checkInAnswer": "yes, send it"
-      }
-    },
-    {
-      "seq": 4,
       "kind": "model",
       "payload": {
         "kind": "model",
@@ -200,13 +190,13 @@
           "promptTokens": 10,
           "completionTokens": 5
         },
-        "clockMs": 1780000009000,
-        "rngSample": 0.3526497078128159,
+        "clockMs": 1780000005000,
+        "rngSample": 0.641018042806536,
         "toolCalls": [],
         "estCostUsd": 0.00015,
         "completionId": "chatcmpl-golden0002",
         "finishReason": "stop",
-        "responseText": "sent; mission complete.",
+        "responseText": "Sent the status email under earned autonomy; done.",
         "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
         "requestPayload": {
           "model": "potion-auto",
@@ -294,7 +284,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden gateway harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",
@@ -303,10 +293,6 @@
             {
               "role": "assistant",
               "content": ""
-            },
-            {
-              "role": "user",
-              "content": "[check-in answer] yes, send it"
             },
             {
               "role": "user",
@@ -317,7 +303,7 @@
       }
     },
     {
-      "seq": 5,
+      "seq": 4,
       "kind": "model",
       "payload": {
         "kind": "model",
@@ -327,20 +313,20 @@
           "promptTokens": 10,
           "completionTokens": 5
         },
-        "clockMs": 1780000011000,
-        "rngSample": 0.0852009505033493,
+        "clockMs": 1780000007000,
+        "rngSample": 0.12627370143309236,
         "toolCalls": [],
         "estCostUsd": 0.00015,
         "completionId": "chatcmpl-golden0003",
         "finishReason": "stop",
-        "responseText": "Wrap-up: sent the email after approval; done-definition met.",
+        "responseText": "Wrap-up: one external act, gate-allowed, audit-sampled; done.",
         "frontierTrace": "cluster=summarization;strategy=golden;frontier=v1;policy=min_cost;fallback=0;provenance=mock",
         "requestPayload": {
           "model": "potion-auto",
           "messages": [
             {
               "role": "system",
-              "content": "You are a harness named 'golden checkin harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
+              "content": "You are a harness named 'golden gateway harness'.\nMission (task): Summarize the weekly report\nDone when: A summary exists\nRules:\n- be terse\nMaintain a task ledger with update_plan: for multi-step work, file the plan first and update statuses as you go — the ledger survives interruptions and is re-shown to you when work resumes.\nWhen the mission is complete, answer normally with no tool calls."
             },
             {
               "role": "user",
@@ -352,15 +338,11 @@
             },
             {
               "role": "user",
-              "content": "[check-in answer] yes, send it"
-            },
-            {
-              "role": "user",
               "content": "[tool send_email result] {\"sent\":true}"
             },
             {
               "role": "assistant",
-              "content": "sent; mission complete."
+              "content": "Sent the status email under earned autonomy; done."
             },
             {
               "role": "user",
@@ -376,7 +358,6 @@
     "reason": null
   },
   "outcomes": [
-    "awaiting-human",
     "completed"
   ]
 }

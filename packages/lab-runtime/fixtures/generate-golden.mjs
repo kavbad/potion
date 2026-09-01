@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createDb, createLabRun, migrate, createOrg, listLabSteps, getLabRun, answerLabRun } from '@potion/db';
+import { createDb, createLabRun, migrate, createOrg, listLabSteps, getLabRun, answerLabRun, ensureActionGrant, acceptGraduation } from '@potion/db';
 import { harnessSpecHash, scanRawValue } from '@potion/lab-spec';
 import { runLeg } from '../dist/loop.js';
 
@@ -81,7 +81,11 @@ const emailTool = {
   run: async () => ({ sent: true }),
 };
 
-async function record(name, spec, legs, { runId, tools = [], preMemoryRun = null } = {}) {
+async function recordWithSetup(name, spec, legs, opts) {
+  return record(name, spec, legs, opts);
+}
+
+async function record(name, spec, legs, { runId, tools = [], preMemoryRun = null, setup = null } = {}) {
   const h = await createDb();
   await migrate(h.db);
   await createOrg(h.db, { id: ORG, name: 'Golden Org' });
@@ -98,6 +102,7 @@ async function record(name, spec, legs, { runId, tools = [], preMemoryRun = null
     });
   }
 
+  if (setup !== null) await setup(h, hash);
   await createLabRun(h.db, { id: runId, orgId: ORG, harnessHash: hash, harnessName: spec.name, spec });
   const outcomes = [];
   for (const leg of legs) {
@@ -142,6 +147,31 @@ await record('task-tools', baseSpec({ name: 'golden tools harness' }), [
 // ask_operator (2026-08-31): the worker parks and ASKS instead of hollow-
 // completing on missing inputs; the answer resumes the leg. Two legs, one
 // question, one honest finish.
+// W1 (2026-08-31): the gateway golden — an EARNED grant lets the external
+// act run without a park; the tool step records the full gate snapshot the
+// decision followed from, and replay re-derives it.
+await recordWithSetup('gateway-earned-allow',
+  baseSpec({ name: 'golden gateway harness' }),
+  [
+    { results: [
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'g1', type: 'function', function: { name: 'send_email', arguments: '{"to":"ops@example.com"}' } }] }),
+        ok({ text: 'Sent the status email under earned autonomy; done.' }),
+        ok({ text: 'Wrap-up: one external act, gate-allowed, audit-sampled; done.' }),
+    ] },
+  ],
+  {
+    runId: 'golden-gateway-earned',
+    tools: [{
+      name: 'send_email', description: 'send an email', parameters: { type: 'object' },
+      external: true,
+      run: async () => ({ sent: true }),
+    }],
+    setup: async (h, hash) => {
+      const g = await ensureActionGrant(h.db, { orgId: ORG, harnessHash: hash, actionClass: 'send_email', riskTier: 'reversible-act' });
+      await acceptGraduation(h.db, g.id, {});
+    },
+  });
+
 await record('ask-park-resume', baseSpec({ name: 'golden ask harness' }), [
   { results: [
       ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'ask1', type: 'function', function: { name: 'ask_operator', arguments: '{"question":"What URL should I open?"}' } }] }),

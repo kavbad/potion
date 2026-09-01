@@ -21,6 +21,7 @@ import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
 import { checkInAnswerMessage, contractRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
+import { decideAction } from './gateway.js';
 import { planLedgerMessage } from './plan.js';
 
 export type ReplayDivergenceCode =
@@ -273,6 +274,25 @@ export function replayRun(
         const expectedInput: unknown = JSON.parse(expected.args || '{}');
         if (canonicalJson(expectedInput) !== canonicalJson(p.toolInput ?? {})) {
           divergences.push(div('request-drift', step.seq, expectedInput, p.toolInput, 'toolInput'));
+        }
+      }
+      // W1 (mirrored same commit): a tool step carrying a gate payload is
+      // an external call the Action Gateway decided — re-derive the
+      // decision from the RECORDED snapshot + rng draw with the same pure
+      // function. A decision that does not follow from its own recorded
+      // justification is a divergence (A1: the record carries WHY).
+      const gate = (p as { gate?: { actionClass: string; ceiling: 'earnable' | 'ask-forever' | 'barred'; grantState: 'supervised' | 'autonomous' | 'blocked' | 'none'; auditRate: number; decision: string; audit?: boolean; sample: number } }).gate;
+      if (gate !== undefined) {
+        const rederived = decideAction(
+          { actionClass: gate.actionClass, ceiling: gate.ceiling, grantState: gate.grantState, auditRate: gate.auditRate },
+          gate.sample,
+        );
+        const expectedGate = rederived.decision === 'allow'
+          ? { decision: 'allow', audit: rederived.audit }
+          : { decision: rederived.decision };
+        const recordedGate = { decision: gate.decision, ...(gate.decision === 'allow' ? { audit: gate.audit } : {}) };
+        if (canonicalJson(expectedGate) !== canonicalJson(recordedGate)) {
+          divergences.push(div('payload-mismatch', step.seq, expectedGate, recordedGate, 'gate'));
         }
       }
       // X4 (one fuel tree, mirrored): a delegate step's recorded helper

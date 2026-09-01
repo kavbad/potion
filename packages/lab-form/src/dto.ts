@@ -91,6 +91,9 @@ export interface RunStepDto {
   simulated?: boolean;
   /** X8: operator steers folded into this step's conversation. */
   steers?: string[];
+  /** W1: the Action Gateway's decision for this external call — how an
+   * act ran without asking (earned autonomy) or why it was refused. */
+  gate?: { decision: 'allow' | 'block'; grantState: string; audit?: boolean; reason?: string };
   /** Step 9 additive DTO flags (parsed server-side from the trace). */
   fallback?: boolean;
   latencyViolated?: boolean;

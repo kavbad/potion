@@ -116,6 +116,12 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
       ? { exemplar: sanitizeVerbatim(answers.exampleResult).slice(0, SPEC_LIMITS.MAX_EXEMPLAR_CHARS) }
       : {}),
     fuel: { maxUsdPerRun: fuelFromWorth(answers.worthUsd), hardStop: true },
+    // W1: the Action Constitution — every ACT-classified tool of every
+    // declared superpower gets an explicit entry at birth. v1 authors
+    // 'earnable' (autonomy can be earned through the graduation path; the
+    // grant still starts supervised); the operator can tighten entries to
+    // ask-forever/barred by re-hiring — the leash is hash-bearing.
+    ...(constitutionFor(superpowers).length > 0 ? { constitution: constitutionFor(superpowers) } : {}),
     // Step 8: a STANDING mission checks in at half fuel — "a standing
     // mission has no natural run in the user's head; a check does" (Step 6
     // review outcome 1). Without this a Step 8 standing trial (tools not
@@ -157,4 +163,21 @@ export function assembleSpec(answers: InterviewAnswers, extraction: Extraction, 
 export function specToText(spec: HarnessSpec): string {
   const hash = harnessSpecHash(spec);
   return canonicalJson({ ...spec, hash });
+}
+
+/** W1: birth constitution — one entry per act-classified tool of the
+ * declared superpowers, so the leash is visible and hash-bound from the
+ * first moment. Reads only the static catalog (no model call). */
+function constitutionFor(
+  superpowers: Array<{ id: string }>,
+): Array<{ action: string; maxAuthority: 'earnable' }> {
+  const out: Array<{ action: string; maxAuthority: 'earnable' }> = [];
+  for (const sp of superpowers) {
+    const pkg = getPackage(sp.id);
+    if (pkg === undefined || pkg === null) continue;
+    for (const t of pkg.tools) {
+      if (t.action === 'act') out.push({ action: t.name, maxAuthority: 'earnable' });
+    }
+  }
+  return out.slice(0, SPEC_LIMITS.MAX_CONSTITUTION_ENTRIES);
 }

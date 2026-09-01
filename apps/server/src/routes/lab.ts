@@ -92,7 +92,7 @@ import {
   listActionGrants,
   listLabStepsForHarness,
 } from '@potion/db';
-import { extractDeliverable, extractPoreEvidence, extractReport, runGraduationPass } from '@potion/lab-runtime';
+import { constitutionTierOverrides, extractDeliverable, extractPoreEvidence, extractReport, runGraduationPass } from '@potion/lab-runtime';
 import {
   applyDialPosition,
   dialViews,
@@ -928,6 +928,18 @@ export function registerLabRoutes(
         slot: p.slot ?? null,
         // X8: operator steers this step folded in — rendered in the feed.
         ...(p.steers !== undefined ? { steers: p.steers } : {}),
+        // W1: the gateway's decision, surfaced — the ledger's word made
+        // visible where the action happened.
+        ...(p.gate !== undefined
+          ? {
+              gate: {
+                decision: p.gate.decision,
+                grantState: p.gate.grantState,
+                ...(p.gate.audit !== undefined ? { audit: p.gate.audit } : {}),
+                ...(p.gate.reason !== undefined ? { reason: p.gate.reason } : {}),
+              },
+            }
+          : {}),
         excerpt:
           s.kind === 'model'
             ? (p.responseText ?? '').slice(0, 400)
@@ -1896,11 +1908,13 @@ export function registerLabRoutes(
       const org = req.potionOrg!;
       const row = await ownHarness(req);
       if (row === null) return reply.code(404).send(notFound);
+      const parsedForPass = parseHarnessSpecText(row.specText);
       const result = await runGraduationPass({
         db,
         orgId: org.orgId,
         harnessHash: row.harnessHash,
         classify: classifyTool,
+        tierOverrides: constitutionTierOverrides(parsedForPass.ok ? parsedForPass.spec.constitution : undefined),
       });
       return reply.send(result);
     },

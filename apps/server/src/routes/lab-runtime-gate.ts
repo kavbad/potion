@@ -31,7 +31,8 @@ import {
   listActionGrants,
   releaseExternalSession,
 } from '@potion/db';
-import { buildStepPayload } from '@potion/lab-runtime';
+import { buildStepPayload, ceilingFor, decideAction } from '@potion/lab-runtime';
+import { parseHarnessSpecText } from '@potion/lab-spec';
 import { CATALOG } from '@potion/lab-superpowers';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import type { PotionContext } from '../context.js';
@@ -130,13 +131,22 @@ export function registerLabRuntimeGateRoutes(app: FastifyInstance, ctx: PotionCo
               : 'irreversible-act', // fail closed: unknown consequence is high consequence
       }));
 
-    if (grant.state === 'blocked') {
-      return reply.send({ decision: 'blocked', reason: grant.stateReason ?? 'this action class is blocked for this harness' });
+    // W1: ONE decision function for every runtime — the same pure
+    // decideAction the native loop records and replay re-derives. The
+    // harness's constitution ceiling out-ranks the grant row here too.
+    const harnessRow = await getLabHarness(db, orgId, run.harnessHash);
+    const parsedSpec = harnessRow !== null ? parseHarnessSpecText(harnessRow.specText) : null;
+    const ceiling = ceilingFor(parsedSpec?.ok === true ? parsedSpec.spec.constitution : undefined, body.data.toolName);
+    const gd = decideAction(
+      { actionClass: body.data.toolName, ceiling, grantState: grant.state, auditRate: grant.auditRate },
+      Math.random(),
+    );
+    if (gd.decision === 'block') {
+      return reply.send({ decision: 'blocked', reason: grant.state === 'blocked' ? (grant.stateReason ?? gd.reason) : gd.reason });
     }
-    if (grant.state === 'autonomous') {
+    if (gd.decision === 'allow') {
       // The standing sampled audit: unaudited autonomy is unmeasured autonomy.
-      const audit = Math.random() < grant.auditRate;
-      return reply.send({ decision: 'allow', audit });
+      return reply.send({ decision: 'allow', audit: gd.audit });
     }
     // Supervised: the pore opens. Fingerprint-bound, exactly like the loop's.
     const question =

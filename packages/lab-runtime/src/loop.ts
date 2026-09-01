@@ -20,9 +20,11 @@ import { canonicalJson, seedFromString, sha256, type ChatMessage, type Tool } fr
 import { buildPlanTool, planFromSteps, planLedgerMessage, renderPlanLedger, PLAN_TOOL_NAME } from './plan.js';
 import { beatFromMemory, buildBeatTool, emptyBeat, renderBeatLedger, BEAT_PROMPT } from './beat.js';
 import { fanOutSpentFromSteps, FANOUT_TOOL_NAME } from './fanout.js';
+import { ceilingFor, decideAction, type GateSnapshot } from './gateway.js';
 import {
   consumeLabRunAnswer,
   appendLabStep,
+  getActionGrantByClass,
   claimLabRun,
   getLabMemory,
   transitionLabRun,
@@ -724,42 +726,71 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             await fenced.transition('failed', `model called unknown tool '${call.function.name}'`);
             return { status: 'failed', reason: 'unknown-tool', steps: stepsThisLeg };
           }
-          // ---- before-external-action check-in ----
+          // ---- W1: the Action Gateway (before-external-action, one truth) ----
           //
-          // Step 12: there is no "already authorized" branch here any more,
-          // and its absence is the point. The ONLY way an external action
-          // runs without a human seeing it is the approved-call execution
-          // above, which replays the exact call the human read. Inside the
-          // loop, every external call the model proposes fires the pore —
-          // no exceptions, no in-flight flag to get out of step with the
-          // durable record.
-          const gate = opts.spec.checkIns.some((c) => c.trigger === 'before-external-action');
+          // Step 12's law stands: there is STILL no "already authorized"
+          // branch — one-shot approvals authorize only the exact call a
+          // human read (the approved-call execution above). What decides
+          // here is the STANDING trust record: the worker's constitution
+          // ceiling and its grant for this action class, read FRESH at act
+          // time (a tighten written anywhere bites the very next action),
+          // fed through the pure decideAction with a recorded rng draw so
+          // replay re-derives the decision from the record alone.
+          //   hold  → the pore parks, exactly as it always has;
+          //   allow → earned autonomy runs, audit-sampled, justification
+          //           recorded on the tool step;
+          //   block → the call is refused typed; the model continues.
+          // Every external call gates — born supervised is the default,
+          // no longer conditional on the spec's checkIns list.
           const fingerprint = actionFingerprint(tool.name, call.function.arguments);
-          if (gate && tool.external) {
-            let described: string | null = null;
-            try {
-              described = tool.describeAction?.(JSON.parse(call.function.arguments || '{}')) ?? null;
-            } catch { /* malformed args → raw question */ }
-            const question = described !== null
-              ? `It wants to ${described}. Proceed?`
-              : buildRawPoreQuestion(tool.name, call.function.arguments);
-            seq += 1;
-            await appendLabStep(opts.db, {
-              runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
-              payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'before-external-action', checkInQuestion: question, checkInAction: fingerprint, clockMs: clock.now(), rngSample: rng() }),
-              harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
-            });
-            await fenced.transition('awaiting-human', undefined, question);
-            return { status: 'awaiting-human', question, steps: stepsThisLeg };
+          let gatePayload:
+            | (GateSnapshot & { decision: 'allow' | 'block'; audit?: boolean; reason?: string; sample: number })
+            | undefined;
+          if (tool.external) {
+            const ceiling = ceilingFor(opts.spec.constitution, tool.name);
+            const grantRow = await getActionGrantByClass(opts.db, opts.orgId, opts.harnessHash, tool.name);
+            const snapshot: GateSnapshot = {
+              actionClass: tool.name,
+              ceiling,
+              grantState: grantRow?.state ?? 'none',
+              auditRate: grantRow?.auditRate ?? 1,
+            };
+            const sample = rng();
+            const gd = decideAction(snapshot, sample);
+            if (gd.decision === 'hold') {
+              let described: string | null = null;
+              try {
+                described = tool.describeAction?.(JSON.parse(call.function.arguments || '{}')) ?? null;
+              } catch { /* malformed args → raw question */ }
+              const question = described !== null
+                ? `It wants to ${described}. Proceed?`
+                : buildRawPoreQuestion(tool.name, call.function.arguments);
+              seq += 1;
+              await appendLabStep(opts.db, {
+                runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
+                payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'before-external-action', checkInQuestion: question, checkInAction: fingerprint, clockMs: clock.now(), rngSample: rng() }),
+                harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
+              });
+              await fenced.transition('awaiting-human', undefined, question);
+              return { status: 'awaiting-human', question, steps: stepsThisLeg };
+            }
+            gatePayload =
+              gd.decision === 'allow'
+                ? { ...snapshot, decision: 'allow', audit: gd.audit, sample }
+                : { ...snapshot, decision: 'block', reason: gd.reason, sample };
           }
           const input: unknown = JSON.parse(call.function.arguments || '{}');
-          const output = await tool.run(input);
+          const output =
+            gatePayload?.decision === 'block'
+              ? { error: gatePayload.reason ?? 'this action class is barred' }
+              : await tool.run(input);
           seq += 1;
           await appendLabStep(opts.db, {
             runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'tool',
             payload: buildStepPayload({
               ...takeLegStamp(),
               kind: 'tool', toolName: tool.name, toolInput: input, toolOutput: output,
+              ...(gatePayload !== undefined ? { gate: gatePayload } : {}),
               clockMs: clock.now(), rngSample: rng(),
             }),
             harnessHash: opts.harnessHash,

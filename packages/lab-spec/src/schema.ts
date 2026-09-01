@@ -30,6 +30,8 @@ import {
   MAX_SCOPE_CHARS,
   MAX_SUPERPOWERS,
   MAX_SUPERPOWER_ID_CHARS,
+  MAX_CONSTITUTION_ENTRIES,
+  MAX_ACTION_CLASS_CHARS,
 } from './limits.js';
 
 /** Strict subset of core's Policy vocabulary — see the header. */
@@ -180,6 +182,19 @@ export const HarnessSpecSchema = z
     fanOut: z
       .object({ maxWorkers: z.number().int().min(1).max(5) })
       .strict()
+      .optional(),
+    // W1: the Action Constitution (see types.ts) — small, typed, strict.
+    constitution: z
+      .array(
+        z
+          .object({
+            action: z.string().min(1).max(MAX_ACTION_CLASS_CHARS),
+            maxAuthority: z.enum(['earnable', 'ask-forever', 'barred']),
+            note: z.string().max(200).optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_CONSTITUTION_ENTRIES)
       .optional(),
     // C-3 (2026-08-28): the operator's pasted "a great result looks like" —
     // THE standard to hit, carried on the spec and injected into every

@@ -544,6 +544,14 @@ describe('BYO-MCP — a registered endpoint is a real superpower (integration)',
       const s = spec({ name: 'byo open harness', superpowers: [{ id: 'our-crm', scopes: [] }], checkIns: [] });
       const runId = 'run-byo-open';
       await seedRun(runId, s);
+      // W1: externals always gate — this test is about the WIRE (no auth
+      // header), so the class carries an earned grant and the call flows.
+      {
+        const { ensureActionGrant, acceptGraduation } = await import('@potion/db');
+        const { harnessSpecHash } = await import('@potion/lab-spec');
+        const g = await ensureActionGrant(db.db, { orgId: ORG, harnessHash: harnessSpecHash(s), actionClass: 'our-crm.crm_update', riskTier: 'reversible-act' });
+        await acceptGraduation(db.db, g.id, {});
+      }
       const toolCall = {
         id: 'call-byo2', type: 'function' as const,
         function: { name: 'our-crm.crm_update', arguments: '{}' },
