@@ -102,9 +102,10 @@ Savings · Try · Settings · Docs). Next: instrument enlargement
 summary). **Core-API ladder next (G1, sequence adopted from the 2026-08-31
 review — protect it):** Outcome API SHIPPED (10d7876, SPEC §16 — the
 application is now the measurement instrument; evidence on the router
-artifact as "your app's verdicts") · full-request eval capture (learning
-items are last-user-turn-only today: system/tools/response_format never
-reach the derived suite — the measured task must be the served task) ·
+artifact as "your app's verdicts") · full-request eval capture SHIPPED
+(the sampler keeps the whole served conversation, redacted + parts
+stripped; derived items carry it; over-cap excluded, never truncated;
+tool/attachment samples excluded from suites with a named count) ·
 challenger promotion
 proposal on sustained shadow `qualifies` (the artifact flags today;
 proposals stay human-applied) · randomized incumbent holdout (the verified-

@@ -350,7 +350,6 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       // gated, capped, redacted), and measure the moment a kind of work has
       // enough — the journey's own trial requests count toward it.
       {
-        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
         const cfg = resolved.config as { type: string; model?: string };
         void maybeKeepLearningSample(
           ctx.db.db,
@@ -359,8 +358,12 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
             requestId: id,
             clusterId,
             model: cfg.type === 'single' ? (cfg.model ?? null) : `combination:${cfg.type}`,
-            prompt: typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content ?? ''),
+            // FULL-REQUEST CAPTURE (G1): the whole conversation, like the
+            // key-served path. Playground requests carry no tools/parts.
+            messages,
             completion: result.text,
+            toolCount: 0,
+            responseFormat: null,
             costUsd: result.usage.costUsd ?? 0,
             usage: result.usage as unknown as Record<string, unknown>,
           },

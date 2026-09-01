@@ -140,6 +140,59 @@ describe("the serving pick is the serve path's own resolution (2026-08-31, one-r
   });
 });
 
+describe('FULL-REQUEST derivation (2026-09-01, G1 — the measured task is the served task)', () => {
+  const span = (traceId: string, attrs: Record<string, unknown>) => ({
+    orgId: 'org_lp', traceId, spanId: 'chat', parentId: null, name: LEARNING_SPAN_NAME,
+    model: 'mock-cheap', usage: {}, costUsd: 0, ts: new Date(),
+    attrs: { 'gen_ai.operation.name': 'chat', 'potion.cluster_id': 'classification', 'gen_ai.completion': 'routine', ...attrs },
+  });
+
+  it('a full-capture span derives the WHOLE conversation; a legacy span still derives its last turn', async () => {
+    const { deriveLearningSuites, learningSuiteId } = await import('./learning-period.js');
+    const { loadDerivedSuite } = await import('@potion/db');
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await insertTraceSpans(db.db, [
+      span('learn-full', {
+        'potion.messages': [
+          { role: 'system', content: 'You label tickets.' },
+          { role: 'user', content: 'Prior turn.' },
+          { role: 'assistant', content: 'Noted.' },
+          { role: 'user', content: 'Urgent or routine?' },
+        ],
+        'potion.tool_count': 0,
+      }),
+      span('learn-legacy', { 'gen_ai.prompt': 'Is this spam?' }),
+    ]);
+    const { sizes, excluded } = await deriveLearningSuites(ctx, 'org_lp', 'mock-judge');
+    expect(sizes.classification).toBe(2);
+    expect(excluded).toEqual({});
+    const suite = await loadDerivedSuite(db.db, learningSuiteId('org_lp', 'classification'));
+    const full = suite!.items.find((i) => i.id === 'learn-full')!;
+    expect(full.prompt.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(full.prompt[0]!.content).toBe('You label tickets.');
+    const legacy = suite!.items.find((i) => i.id === 'learn-legacy')!;
+    expect(legacy.prompt).toEqual([{ role: 'user', content: 'Is this spam?' }]);
+  });
+
+  it('tool- and attachment-carrying spans are EXCLUDED and the report names them', async () => {
+    const { deriveLearningSuites } = await import('./learning-period.js');
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await insertTraceSpans(db.db, [
+      span('learn-t1', { 'potion.messages': [{ role: 'user', content: 'call the tool' }], 'potion.tool_count': 3 }),
+      span('learn-p1', { 'potion.messages': [{ role: 'user', content: 'see attachment' }], 'potion.multimodal_parts': 1 }),
+      span('learn-ok', { 'potion.messages': [{ role: 'user', content: 'plain text task' }], 'potion.tool_count': 0 }),
+    ]);
+    const { sizes, excluded } = await deriveLearningSuites(ctx, 'org_lp', 'mock-judge');
+    expect(sizes.classification).toBe(1);
+    expect(excluded).toEqual({ classification: 2 });
+    // …and through the full period, the exclusion is named, never hidden
+    await upsertOrgIncumbents(db.db, { orgId: 'org_lp', models: ['mock-mid'], other: null, samplingConsent: true });
+    await saveFrontier(db.db, 'classification', [point('mock-cheap', 0.96, 0.4, 120), point('mock-mid', 0.98, 2.1, 340)], 'manual', 'test-prices');
+    const report = await runLearningPeriodForOrg(ctx, 'org_lp');
+    expect(report.skipped.some((s) => s.why.includes('carry tools or attachments'))).toBe(true);
+  });
+});
+
 describe('the bar derivation (2026-08-31 — the number IS the measurement)', () => {
   it('proposes exactly what the incumbent measured — no hidden minimum', async () => {
     const { suggestedFloorFor } = await import('./learning-period.js');

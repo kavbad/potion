@@ -1026,15 +1026,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // PII-redacted; never throws into the served response). Called after a
     // successful completion on every path, fire-and-forget.
     const keepSample = (text: string, cfg: { type: string; model?: string }, usage: { costUsd?: number } | undefined, cluster: string) => {
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const prompt = typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content ?? '');
+      // FULL-REQUEST CAPTURE (G1): the whole served conversation plus the
+      // structural facts — the measured task must be the served task.
       void maybeKeepLearningSample(ctx.db.db, {
         orgId: auth.org.orgId,
         requestId: id,
         clusterId: cluster,
         model: cfg.type === 'single' ? (cfg.model ?? null) : `combination:${cfg.type}`,
-        prompt,
+        messages,
         completion: text,
+        toolCount: body.tools?.length ?? 0,
+        responseFormat: body.response_format?.type ?? null,
         costUsd: usage?.costUsd ?? 0,
         usage: (usage ?? {}) as Record<string, unknown>,
       }, () => {

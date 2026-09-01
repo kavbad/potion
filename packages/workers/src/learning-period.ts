@@ -84,28 +84,70 @@ function rubricFor(clusterId: string): string {
   );
 }
 
+/** A sampled span's messages array, strictly validated — anything else
+ * falls back to the legacy last-user-turn capture. */
+function parseSampledMessages(v: unknown): ChatMessage[] | null {
+  if (!Array.isArray(v) || v.length === 0) return null;
+  const out: ChatMessage[] = [];
+  for (const m of v) {
+    const role = (m as { role?: unknown }).role;
+    const content = (m as { content?: unknown }).content;
+    if (
+      (role !== 'system' && role !== 'user' && role !== 'assistant' && role !== 'tool') ||
+      typeof content !== 'string'
+    ) {
+      return null;
+    }
+    out.push({ role, content });
+  }
+  return out;
+}
+
 /**
  * Build (or extend) one derived suite per kind of work from the sampled
- * spans the serving path kept under consent. Items: the last user turn as
- * the prompt, the served answer as the reference, judge-scored.
+ * spans the serving path kept under consent.
+ *
+ * FULL-REQUEST items (2026-09-01, G1 — external review §7): a span captured
+ * with `potion.messages` contributes the WHOLE served conversation (system
+ * + prior turns + last user) as the item's prompt — the measured task is
+ * the served task. Legacy spans (last-user-turn only) still derive, as the
+ * lesser capture they are. Spans whose request carried TOOLS or MULTIMODAL
+ * PARTS are EXCLUDED and counted: the replay cannot execute the customer's
+ * tools or see their attachments, and measuring the text-only remainder
+ * would measure a different task. (Known follow-up: excluded spans still
+ * occupy the per-cluster sampling cap.)
  */
-export async function deriveLearningSuites(ctx: JobContext, orgId: string, judgeModel: string): Promise<Record<string, number>> {
+export async function deriveLearningSuites(
+  ctx: JobContext,
+  orgId: string,
+  judgeModel: string,
+): Promise<{ sizes: Record<string, number>; excluded: Record<string, number> }> {
   const rows = await ctx.db
     .select({ traceId: traceSpans.traceId, attrs: traceSpans.attrs, ts: traceSpans.ts })
     .from(traceSpans)
     .where(and(eq(traceSpans.orgId, orgId), eq(traceSpans.name, LEARNING_SPAN_NAME)));
   const byCluster = new Map<string, Array<EvalItem & { sourceTraceId?: string }>>();
+  const excluded: Record<string, number> = {};
   for (const r of rows) {
     const a = r.attrs as Record<string, unknown>;
     const clusterId = typeof a['potion.cluster_id'] === 'string' ? a['potion.cluster_id'] : null;
-    const prompt = typeof a['gen_ai.prompt'] === 'string' ? a['gen_ai.prompt'] : null;
     const completion = typeof a['gen_ai.completion'] === 'string' ? a['gen_ai.completion'] : null;
-    if (!clusterId || !prompt || !completion) continue;
+    if (!clusterId || !completion) continue;
+    const toolCount = typeof a['potion.tool_count'] === 'number' ? a['potion.tool_count'] : 0;
+    const partCount = typeof a['potion.multimodal_parts'] === 'number' ? a['potion.multimodal_parts'] : 0;
+    if (toolCount > 0 || partCount > 0) {
+      excluded[clusterId] = (excluded[clusterId] ?? 0) + 1;
+      continue;
+    }
+    const full = parseSampledMessages(a['potion.messages']);
+    const legacy = typeof a['gen_ai.prompt'] === 'string' ? a['gen_ai.prompt'] : null;
+    const prompt: ChatMessage[] | null = full ?? (legacy !== null && legacy.length > 0 ? [{ role: 'user', content: legacy }] : null);
+    if (prompt === null) continue;
     const list = byCluster.get(clusterId) ?? [];
     list.push({
       id: r.traceId,
       clusterId,
-      prompt: [{ role: 'user', content: prompt }] as ChatMessage[],
+      prompt,
       reference: completion,
       scoring: { kind: 'llm-judge', rubric: rubricFor(clusterId), judgeModel, scale: [0, 1] },
       sourceTraceId: r.traceId,
@@ -130,7 +172,7 @@ export async function deriveLearningSuites(ctx: JobContext, orgId: string, judge
     const loaded = await loadDerivedSuite(ctx.db, suiteId);
     sizes[clusterId] = loaded?.items.length ?? 0;
   }
-  return sizes;
+  return { sizes, excluded };
 }
 
 export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, now = new Date()): Promise<LearningPeriodOrgReport> {
@@ -159,7 +201,12 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   }
 
   // 1. suites from what was sampled, one per kind of work
-  const sizes = await deriveLearningSuites(ctx, orgId, judgeModelOverride ?? 'mock-judge');
+  const { sizes, excluded } = await deriveLearningSuites(ctx, orgId, judgeModelOverride ?? 'mock-judge');
+  // Excluded samples are named, never hidden: tool/attachment-carrying
+  // requests were captured as metadata but cannot be replayed faithfully.
+  for (const [clusterId, n] of Object.entries(excluded)) {
+    report.skipped.push({ clusterId, why: `${n} sampled request${n === 1 ? '' : 's'} carry tools or attachments — not yet measurable` });
+  }
 
   const dayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
   const fresh = new Date(now.getTime() - LEARNING_PERIOD_REFRESH_DAYS * 24 * 3600 * 1000);
