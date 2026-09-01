@@ -23,6 +23,7 @@ export function extractReport(
 ): { report: string; atSeq: number } | null {
   if (spec.contract !== undefined || spec.mission.kind !== 'task') return null;
   const ordered = [...steps].sort((a, b) => b.seq - a.seq);
+  let wrapFallback: { report: string; atSeq: number } | null = null;
   for (const s of ordered) {
     if (s.kind !== 'model') continue;
     const calls = s.payload.toolCalls ?? [];
@@ -31,15 +32,22 @@ export function extractReport(
     // process narration ("Summary of this run: 1. I received…"), not the
     // answer — the report is the done-shaped step the completion law
     // accepted, which sits BEFORE the wrap-up. A step answering the wrap-up
-    // prompt is skipped.
+    // prompt is skipped — but KEPT as the fallback (2026-09-01, runs
+    // 4638e4a1 + b91e9566): when a degenerate run holds NO qualifying stop
+    // before the wrap-up, the honest narration beats a silent null — a null
+    // here skips the judge entirely, and a 'completed' run with no verdict
+    // is the "feels like nothing" failure mode.
+    const text = (s.payload.responseText ?? '').trim();
     const msgs = s.payload.requestPayload?.messages ?? [];
     const last = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
-    if (typeof last?.content === 'string' && last.content.startsWith('Summarize what you did in this run')) continue;
-    const text = (s.payload.responseText ?? '').trim();
+    if (typeof last?.content === 'string' && last.content.startsWith('Summarize what you did in this run')) {
+      if (wrapFallback === null && text.length >= 40) wrapFallback = { report: text, atSeq: s.seq };
+      continue;
+    }
     if (text.length < 40) continue; // a bare "done." is not a report
     return { report: text, atSeq: s.seq };
   }
-  return null;
+  return wrapFallback;
 }
 
 export function extractDeliverable(

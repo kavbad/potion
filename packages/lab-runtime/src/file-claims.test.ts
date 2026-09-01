@@ -160,7 +160,10 @@ describe('the law in the loop', () => {
       db: h.db,
       client: scripted([
         // The specimen: the cheap route answers a fresh mission with a
-        // ZERO-TOKEN stop. Report bar unmet → repair, not completion.
+        // ZERO-TOKEN stop — and keeps doing it through both unrecorded
+        // retries. Report bar unmet → repair, not completion.
+        ok({ text: '' }),
+        ok({ text: '' }),
         ok({ text: '' }),
         // The repair round does the actual work…
         ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'w1', type: 'function', function: { name: 'write_out', arguments: '{}' } }] }),
@@ -186,6 +189,13 @@ describe('the law in the loop', () => {
     const leg = await runLeg({
       db: h.db,
       client: scripted([
+        // First empty stop: two unrecorded retries, then the stamped repair.
+        ok({ text: '' }),
+        ok({ text: '' }),
+        ok({ text: '' }),
+        // Second empty stop (retries exhausted again): the one-round guard
+        // is consumed, so this one completes report-less.
+        ok({ text: '' }),
         ok({ text: '' }),
         ok({ text: '' }),
         // toolDefs exist even when the tool list is empty at runLeg's level

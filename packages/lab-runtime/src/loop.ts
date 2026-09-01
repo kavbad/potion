@@ -723,6 +723,21 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         await sleep(result.retryAfterMs);
         result = await opts.client.complete({ messages, maxTokens: MISSION_MAX_TOKENS, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
       }
+      // RETRY-ON-EMPTY (2026-09-01): one cheap route (41a39732, agentic-
+      // tool-use) intermittently returns ZERO-TOKEN stops mid-conversation
+      // — four specimens in one day, each derailing a mission at a decision
+      // point. A degenerate response is a serving anomaly, not an answer:
+      // re-ask up to twice, same request, unrecorded like rate-limit
+      // retries (the recorded step is the final result; replay derives the
+      // identical request either way). Still empty after that → the
+      // empty-stop law takes it.
+      for (
+        let retry = 0;
+        result.kind === 'ok' && result.toolCalls.length === 0 && result.finishReason === 'stop' && result.text.trim() === '' && retry < 2;
+        retry++
+      ) {
+        result = await opts.client.complete({ messages, maxTokens: MISSION_MAX_TOKENS, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
+      }
       if (result.kind === 'budget-exceeded') {
         // The ORG hard stop — serving refused to spend. Terminal.
         await fenced.transition('killed-budget', `org budget hard stop: ${result.detail}`);

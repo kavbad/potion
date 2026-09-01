@@ -51,6 +51,17 @@ describe('the report is the answer, never the wrap-up', () => {
     expect(extractReport(TASK, [modelStep(1, 'done.')])).toBeNull();
   });
 
+  it('FALLBACK (runs 4638e4a1 + b91e9566): when NO qualifying stop precedes it, the wrap-up narration IS the report — a null here silently skips the judge', () => {
+    const wrapUp = 'In this run I attempted the analysis but the script failed on the Amount column; no deliverables were produced.';
+    const res = extractReport(TASK, [
+      modelStep(1, ''), // the degenerate zero-token stop
+      modelStep(2, wrapUp, 'Summarize what you did in this run and state plainly whether the done-definition is met.'),
+    ]);
+    expect(res).not.toBeNull();
+    expect(res!.report).toBe(wrapUp);
+    expect(res!.atSeq).toBe(2);
+  });
+
   it('contract runs and standing missions extract nothing here', () => {
     const standing: HarnessSpec = { ...TASK, mission: { kind: 'standing', goal: 'watch the thing' } };
     expect(extractReport(standing, [modelStep(1, 'a long enough answer to pass the forty character bar easily')])).toBeNull();
