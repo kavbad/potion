@@ -56,6 +56,17 @@ function normalizeQuestion(q: string): string {
     .join(' ');
 }
 
+/** The cluster identity for a recurring question. Slot-law questions name
+ * the literal [ALL-CAPS] placeholders they are missing — the slots ARE the
+ * identity, robust to the model's phrasing ("The mission briefing has
+ * empty placeholders: [X]" vs "I'm ready, but [X] needs filling"). Prose
+ * questions fall back to the first-five-words key. */
+function questionClusterKey(q: string): string {
+  const slots = [...q.matchAll(/\[[A-Z][A-Z0-9 ./-]+\]/g)].map((m) => m[0]).sort();
+  if (slots.length > 0) return `slots:${slots.join('|')}`;
+  return normalizeQuestion(q);
+}
+
 function slug(s: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) h = ((h ^ s.charCodeAt(i)) * 0x01000193) >>> 0;
@@ -74,7 +85,7 @@ export function deriveImprovements(spec: HarnessSpec, steps: ImproveStep[]): Imp
   for (const s of steps) {
     const p = s.payload;
     if (p.kind === 'check-in' && p.checkInTrigger === 'worker-question' && p.checkInQuestion !== undefined) {
-      const key = normalizeQuestion(p.checkInQuestion);
+      const key = questionClusterKey(p.checkInQuestion);
       const entry = questions.get(key) ?? { runs: new Set<string>(), q: p.checkInQuestion, answers: [] };
       entry.runs.add(s.runId);
       questions.set(key, entry);

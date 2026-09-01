@@ -130,3 +130,16 @@ describe('the shadow rehearsal', () => {
     expect(dry.note).toContain('no recorded output');
   });
 });
+
+describe('detector 1 — slot-law questions cluster by their placeholders, not their phrasing', () => {
+  it('two differently-worded asks naming the same [SLOTS] form one cluster', () => {
+    const out = deriveImprovements(SPEC, [
+      ask('r1', 'The mission briefing has empty placeholders: [PASTE THE APP URL HERE] and [DESCRIBE THE TASK HERE]. Can you provide them?'),
+      answer('r1', 'https://withpotion.com — report the headline'),
+      ask('r2', "I'm ready to begin, but the mission description contains placeholders: [PASTE THE APP URL HERE] — the URL, and [DESCRIBE THE TASK HERE]."),
+      answer('r2', 'https://withpotion.com — report the headline'),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.mutation.noticed).toContain('2 separate runs');
+  });
+});
