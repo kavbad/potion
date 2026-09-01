@@ -70,6 +70,11 @@ export interface GraduationInput {
   state: GrantState;
   evidence: ActionEvidence[];
   now: Date;
+  /** W2 — when the human accepted the current grant. Evidence the grantor
+   * already saw never re-indicts an autonomous class; only observations
+   * AFTER the grant can auto-revoke it. Absent (old callers/supervised
+   * states) = no filter. */
+  grantedAt?: Date;
 }
 
 export type GraduationDecision =
@@ -167,10 +172,14 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
   const rules = TIER_RULES[tier];
   const inWindow = evidence.filter((e) => now.getTime() - e.at.getTime() <= rules.windowDays * DAY_MS);
   const recent = evidence.filter((e) => now.getTime() - e.at.getTime() <= TIGHTEN_WINDOW_DAYS * DAY_MS);
+  // W2: the auto-revoke branches see only what arrived AFTER the human's
+  // grant — the grantor read the ledger; known evidence never re-indicts.
+  const grantedMs = input.grantedAt?.getTime() ?? 0;
+  const sinceGrant = (e: ActionEvidence): boolean => e.at.getTime() > grantedMs;
 
   // ---- automatic tightening first: fail closed beats everything else ----
-  const reversals = inWindow.filter((e) => e.outcome === 'reversed');
-  const recentFailures = recent.filter(isFailure);
+  const reversals = inWindow.filter((e) => e.outcome === 'reversed' && sinceGrant(e));
+  const recentFailures = recent.filter((e) => isFailure(e) && sinceGrant(e));
   if (state === 'autonomous') {
     if (reversals.length > 0) {
       return {
@@ -189,11 +198,14 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
   // ---- the high-stakes veto: consequence outweighs volume ----
   const highStakesFailures = inWindow.filter((e) => isFailure(e) && e.highStakes);
   if (highStakesFailures.length > 0) {
-    if (state === 'autonomous') {
+    if (state === 'autonomous' && highStakesFailures.some(sinceGrant)) {
       return {
         kind: 'tighten',
-        why: `${highStakesFailures.length} high-stakes failure(s) in window — vetoes the record regardless of rate`,
+        why: `${highStakesFailures.filter(sinceGrant).length} high-stakes failure(s) since the grant — vetoes the record regardless of rate`,
       };
+    }
+    if (state === 'autonomous') {
+      return { kind: 'hold', why: 'autonomous — the high-stakes failures on record predate the grant the human accepted' };
     }
     return {
       kind: 'hold',
@@ -208,10 +220,19 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
     // cap governs earning, never revocation.
     const rawScores: number[] = inWindow.map((e) => (isFailure(e) ? 0 : 1));
     const [rawLower] = jeffreysCi(rawScores);
-    if (inWindow.length > 0 && rawLower < rules.lowerFloor) {
+    // W2 correction (found live, 2026-08-31): a human's grant on thin
+    // evidence was auto-revoked at the very next pass — one clean approval
+    // has a lower bound of 0.147, "below the floor", with ZERO negative
+    // signal. The bound with tiny n says "we don't know", not "it's bad",
+    // and the grantor already saw exactly that evidence when accepting.
+    // UNCERTAINTY ALONE NEVER REVOKES A HUMAN GRANT; failures do — the
+    // drift check indicts only when the window holds at least one failure
+    // (the reversal/recent-failure/high-stakes branches above catch the
+    // acute cases regardless).
+    if (inWindow.length > 0 && rawLower < rules.lowerFloor && inWindow.some((e) => isFailure(e) && sinceGrant(e))) {
       return {
         kind: 'tighten',
-        why: `validated lower bound ${rawLower.toFixed(3)} fell below the ${tier} floor ${rules.lowerFloor}`,
+        why: `validated lower bound ${rawLower.toFixed(3)} fell below the ${tier} floor ${rules.lowerFloor} with failures in window`,
       };
     }
     return { kind: 'hold', why: 'autonomous and holding its floor — standing sampled audit continues' };

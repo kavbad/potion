@@ -146,3 +146,51 @@ describe('the pass: reports tighten, situations materialize', () => {
     await h.close();
   }, 60_000);
 });
+
+describe('W2 correction — uncertainty alone never revokes a human grant', () => {
+  const now = new Date('2026-08-31T12:00:00Z');
+  it('a freshly-accepted grant with one clean approval HOLDS autonomous (lower bound 0.147 is ignorance, not indictment)', async () => {
+    const { graduationDecision } = await import('./graduation.js');
+    const d = graduationDecision({
+      tier: 'reversible-act', state: 'autonomous', now,
+      evidence: [{ at: new Date(now.getTime() - 3_600_000), outcome: 'approved', highStakes: false }],
+    });
+    expect(d.kind, 'no failure in window → the human grant stands').toBe('hold');
+  });
+  it('the same thin window WITH a failure still tightens — failures indict', async () => {
+    const { graduationDecision } = await import('./graduation.js');
+    const d = graduationDecision({
+      tier: 'reversible-act', state: 'autonomous', now,
+      evidence: [
+        { at: new Date(now.getTime() - 3_600_000), outcome: 'approved', highStakes: false },
+        { at: new Date(now.getTime() - 1_800_000), outcome: 'exec-failed', highStakes: false },
+      ],
+    });
+    expect(d.kind).toBe('tighten');
+  });
+});
+
+describe('W2 correction — known evidence never re-indicts', () => {
+  const now = new Date('2026-08-31T12:00:00Z');
+  const hourAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+  it('a reversal the grantor already saw does not revoke a re-grant; a NEW one does', async () => {
+    const { graduationDecision } = await import('./graduation.js');
+    const before = graduationDecision({
+      tier: 'reversible-act', state: 'autonomous', now, grantedAt: hourAgo(1),
+      evidence: [
+        { at: hourAgo(5), outcome: 'approved', highStakes: false },
+        { at: hourAgo(3), outcome: 'reversed', highStakes: false }, // predates the grant
+      ],
+    });
+    expect(before.kind, 'the grantor read the ledger — known evidence stands').toBe('hold');
+    const after = graduationDecision({
+      tier: 'reversible-act', state: 'autonomous', now, grantedAt: hourAgo(1),
+      evidence: [
+        { at: hourAgo(5), outcome: 'approved', highStakes: false },
+        { at: hourAgo(0.5), outcome: 'reversed', highStakes: false }, // NEW signal
+      ],
+    });
+    expect(after.kind).toBe('tighten');
+    if (after.kind === 'tighten') expect(after.why).toContain('reversed');
+  });
+});

@@ -61,7 +61,10 @@ export async function runGraduationPass(opts: {
       existing.get(actionClass) ??
       (await ensureActionGrant(opts.db, { orgId: opts.orgId, harnessHash: opts.harnessHash, actionClass, riskTier: tier }));
 
-    const decision = graduationDecision({ tier: grant.riskTier, state: grant.state, evidence, now });
+    const decision = graduationDecision({
+      tier: grant.riskTier, state: grant.state, evidence, now,
+      ...(grant.grantedAt !== null ? { grantedAt: grant.grantedAt } : {}),
+    });
     result.evaluated.push({ actionClass, state: grant.state, decision: decision.kind, why: decision.why });
 
     if (decision.kind === 'tighten') {
