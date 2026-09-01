@@ -107,6 +107,45 @@ describe('the law in the loop', () => {
     await h.close();
   }, 60_000);
 
+  it('THE WRAP-UP IS UNDER THE LAW (run-32b24af3): an empty tools-slot stop slides past the main check, the wrap-up names an absent file — annulled, repaired, produced, replay clean', async () => {
+    const { h, hash } = await fresh();
+    const writer: LabTool = {
+      name: 'write_out', description: 'write the file', parameters: { type: 'object' },
+      external: false,
+      run: async () => {
+        await upsertLabRunFile(h.db, { orgId: ORG_A, runId: 'run-fc', name: 'analysis.xlsx', content: Buffer.from('PK') });
+        return { wrote: 'analysis.xlsx' };
+      },
+    };
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        // The specimen: the tools slot stops with EMPTY text (under the
+        // 40-char guard — nothing for the main law to audit)…
+        ok({ text: '' }),
+        // …and the wrap-up — the report the customer reads — names a
+        // deliverable the run does not hold.
+        ok({ text: 'Wrap-up: computed every figure; analysis.xlsx holds the totals, by-day and by-customer sheets.' }),
+        // The annulled completion continues the mission: write it…
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'w1', type: 'function', function: { name: 'write_out', arguments: '{}' } }] }),
+        // …stop honestly, and the second wrap-up rides to completion.
+        ok({ text: 'analysis.xlsx is now truly written with every computed sheet in place. done.' }),
+        ok({ text: 'Wrap-up: produced analysis.xlsx after the repair; done.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [writer],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    const stamped = steps.filter((x) => (x.payload as { fileClaimRepair?: string[] }).fileClaimRepair !== undefined);
+    expect(stamped.length).toBe(1);
+    expect((stamped[0]!.payload as { fileClaimRepair: string[]; slot?: string }).fileClaimRepair).toEqual(['analysis.xlsx']);
+    expect((stamped[0]!.payload as { slot?: string }).slot).toBe('brain'); // the stamp sits on the WRAP step
+    const rec = await recordOf(h);
+    const res = replayRun(SPEC, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
   it('one round only: a second false claim completes anyway (the judge takes it from there)', async () => {
     const { h, hash } = await fresh();
     const leg = await runLeg({

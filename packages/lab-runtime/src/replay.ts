@@ -193,6 +193,11 @@ export function replayRun(
       const fileClaims = (p as { fileClaimRepair?: string[] }).fileClaimRepair;
       if (fileClaims !== undefined) {
         messages.push(fileClaimRepairMessage(fileClaims));
+        // THE LAW COVERS THE WRAP-UP (2026-09-01, mirrored same commit): a
+        // STAMPED wrap-up annulled its completion attempt — the loop pushed
+        // the repair and continued the mission, so the pending wrap-up
+        // completion must not derive at record end.
+        if (expectWrapUp) expectWrapUp = false;
       }
       // ask_operator (2026-08-31, mirrored same commit): calls stay pending —
       // a PARKED ask is cleared by its worker-question check-in below, and a

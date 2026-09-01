@@ -95,6 +95,14 @@ export function wrapUpMessage(): ChatMessage {
   return { role: 'user', content: WRAP_UP_PROMPT };
 }
 
+/** 2026-09-01 (flagship run-32b24af3): providers default max_tokens near
+ * 1k, and a worker WRITING CODE hits it mid-tool-call — the xlsx-building
+ * python was truncated at exactly 1024 completion tokens, the call never
+ * executed, and the empty follow-up stop read as "task complete". Every
+ * mission and wrap-up call now asks for explicit headroom (serving's
+ * ceiling is 8192). */
+export const MISSION_MAX_TOKENS = 4096;
+
 export function checkInAnswerMessage(answer: string): ChatMessage {
   return { role: 'user', content: `[check-in answer] ${answer}` };
 }
@@ -696,10 +704,10 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         ? (opts.policyRefs?.tools ?? opts.policyRefs?.brain)
         : opts.policyRefs?.brain;
       const requestPayload = { model: 'potion-auto', messages: [...messages], ...(toolDefs ? { tools: toolDefs } : {}) };
-      let result = await opts.client.complete({ messages, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
+      let result = await opts.client.complete({ messages, maxTokens: MISSION_MAX_TOKENS, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
       for (let retry = 0; result.kind === 'rate-limited' && retry < (opts.rateRetries ?? 3); retry++) {
         await sleep(result.retryAfterMs);
-        result = await opts.client.complete({ messages, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
+        result = await opts.client.complete({ messages, maxTokens: MISSION_MAX_TOKENS, ...(toolDefs ? { tools: toolDefs } : {}), ...(slotRef !== undefined ? { policyRef: slotRef } : {}) });
       }
       if (result.kind === 'budget-exceeded') {
         // The ORG hard stop — serving refused to spend. Terminal.
@@ -988,17 +996,33 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           messages.push(wrapUpMessage());
           const wrapPayload = { model: 'potion-auto', messages: [...messages] };
           let wrap = await opts.client.complete({
-            messages,
+            messages, maxTokens: MISSION_MAX_TOKENS,
             ...(opts.policyRefs?.brain !== undefined ? { policyRef: opts.policyRefs.brain } : {}),
           });
           for (let retry = 0; wrap.kind === 'rate-limited' && retry < (opts.rateRetries ?? 3); retry++) {
             await sleep(wrap.retryAfterMs);
             wrap = await opts.client.complete({
-              messages,
+              messages, maxTokens: MISSION_MAX_TOKENS,
               ...(opts.policyRefs?.brain !== undefined ? { policyRef: opts.policyRefs.brain } : {}),
             });
           }
           if (wrap.kind === 'ok') {
+            // THE FILE-CLAIMS LAW COVERS THE WRAP-UP (2026-09-01, flagship
+            // run-32b24af3): the wrap-up IS the report the customer reads,
+            // and it was the only text auditing nothing — a tools-slot stop
+            // with EMPTY text slid past the law, then the wrap-up named an
+            // analysis.xlsx that never existed and the run still read
+            // 'completed'. Same one-round-per-run law, stamped on the wrap
+            // step itself; a stamped wrap-up ANNULS the completion attempt
+            // and the mission loop continues with the repair message.
+            let wrapClaimMissing: string[] = [];
+            if (
+              !priorSteps.some((x) => (x.payload as StepPayload).fileClaimRepair !== undefined) &&
+              !fileClaimFiredThisLeg
+            ) {
+              const filesAtWrap = await listLabRunFiles(opts.db, opts.orgId, opts.runId);
+              wrapClaimMissing = missingClaimedFiles(wrap.text ?? '', filesAtWrap.map((f) => f.name));
+            }
             seq += 1;
             await appendLabStep(opts.db, {
               runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'model',
@@ -1010,10 +1034,17 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
                 frontierTrace: wrap.frontierTrace, usage: wrap.usage,
                 clockMs: clock.now(), rngSample: rng(),
                 ...(wrap.costUsd !== undefined ? { costUsd: wrap.costUsd } : {}),
+                ...(wrapClaimMissing.length > 0 ? { fileClaimRepair: wrapClaimMissing } : {}),
               }),
               harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
             });
             stepsThisLeg += 1;
+            if (wrapClaimMissing.length > 0) {
+              fileClaimFiredThisLeg = true;
+              messages.push({ role: 'assistant', content: wrap.text });
+              messages.push(fileClaimRepairMessage(wrapClaimMissing));
+              continue;
+            }
           }
           // A failed wrap-up never blocks completion — the mission is done;
           // the report falls back to the final mission response.
