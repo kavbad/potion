@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional
 
+import httpx
 import openai
 from openai.types.chat import ChatCompletion
 
@@ -147,6 +148,54 @@ class Potion:
         self.openai = openai.OpenAI(base_url=base, api_key=api_key, **openai_kwargs)
         self.default_policy = default_policy
         self.chat = _Chat(self)
+
+    def outcome(
+        self,
+        request_id: str,
+        *,
+        success: Optional[bool] = None,
+        score: Optional[float] = None,
+        validator: Optional[str] = None,
+        label: Optional[str] = None,
+        human: Optional[str] = None,
+        failure_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """G1 Outcome API: report what ACTUALLY happened after a served
+        response — ``request_id`` is the completion's ``id``. Call it where
+        your application already knows the truth (tests ran, validator
+        passed, a human accepted or edited)::
+
+            resp = client.chat.completions.create(...)
+            # ...later, when the generated SQL has run:
+            client.outcome(resp.id, success=True, validator="sql_executed")
+
+        Outcomes are append-only — send a later signal as another call; the
+        latest signal of each kind wins. The server requires at least one
+        signal. Returns the outcome id plus the served request it attached
+        to (cluster / strategy prefix / router version).
+        """
+        body: Dict[str, Any] = {"request_id": request_id}
+        if success is not None:
+            body["success"] = success
+        if score is not None:
+            body["score"] = score
+        if validator is not None:
+            body["validator"] = validator
+        if label is not None:
+            body["label"] = label
+        if human is not None:
+            body["human"] = human
+        if failure_reason is not None:
+            body["failure_reason"] = failure_reason
+        try:
+            raw = self.openai.post("/outcomes", body=body, cast_to=httpx.Response)
+        except openai.APIStatusError as err:
+            raise map_error(
+                status_code=err.status_code,
+                body=_Completions._error_body(err),
+                fallback_message=str(err),
+            ) from err
+        return raw.json()
 
     def __getattr__(self, name: str) -> Any:
         # Escape hatch to the wrapped client (models, embeddings, …).

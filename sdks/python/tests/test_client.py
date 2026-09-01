@@ -59,6 +59,29 @@ class MockPotionHandler(BaseHTTPRequestHandler):
         MockPotionHandler.last_body = json.loads(body) if body else None
         MockPotionHandler.last_path = self.path
 
+        # G1 Outcome API (SPEC §16) — the wire contract client.outcome() speaks.
+        if self.path.endswith("/outcomes"):
+            if (MockPotionHandler.last_body or {}).get("request_id") == "chatcmpl-unknown":
+                return self._send(
+                    404,
+                    {
+                        "error": {
+                            "message": "no served request 'chatcmpl-unknown' for this org — outcomes attach to requests Potion served",
+                            "type": "invalid_request_error",
+                            "param": None,
+                            "code": "unknown_request",
+                        }
+                    },
+                )
+            return self._send(
+                201,
+                {
+                    "id": "oc-1",
+                    "request_id": (MockPotionHandler.last_body or {}).get("request_id"),
+                    "attached": {"cluster": "code-gen", "strategy": "1a2b3c4d", "router_version": 3},
+                },
+            )
+
         policy_header = self.headers.get("x-potion-policy")
         if policy_header == "does-not-exist":
             return self._send(
@@ -233,3 +256,32 @@ class TestErrorMapping:
         assert type(exc.value) is PotionError
         assert exc.value.code == "service_unavailable"
         assert exc.value.status_code == 500
+
+
+class TestOutcome:
+    """G1 Outcome API: client.outcome() speaks POST /v1/outcomes."""
+
+    def test_posts_snake_cased_signals_and_returns_receipt(self, server):
+        receipt = make_client(server).outcome(
+            "chatcmpl-test",
+            success=True,
+            validator="tests_passed",
+            failure_reason="flaky suite",
+        )
+        assert MockPotionHandler.last_path == "/v1/outcomes"
+        assert MockPotionHandler.last_body == {
+            "request_id": "chatcmpl-test",
+            "success": True,
+            "validator": "tests_passed",
+            "failure_reason": "flaky suite",
+        }
+        assert receipt["id"] == "oc-1"
+        assert receipt["attached"]["cluster"] == "code-gen"
+        assert receipt["attached"]["router_version"] == 3
+
+    def test_unknown_request_maps_to_potion_error(self, server):
+        with pytest.raises(PotionError) as exc:
+            make_client(server).outcome("chatcmpl-unknown", success=True)
+        assert exc.value.status_code == 404
+        assert exc.value.code == "unknown_request"
+        assert "outcomes attach to requests Potion served" in str(exc.value)

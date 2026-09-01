@@ -47,7 +47,9 @@ curl https://api.withpotion.com/v1/chat/completions \
 
 Any OpenAI SDK works against the **Chat Completions** surface: set `baseURL` to
 `https://api.withpotion.com/v1` and the API key to a Potion key. Potion serves
-`/v1/chat/completions` (plus `/v1/models`, `/v1/embeddings`, `/v1/completions`);
+`/v1/chat/completions` (plus `/v1/models`, `/v1/embeddings`, `/v1/completions`,
+and `POST /v1/outcomes` — report what actually happened after a response, keyed
+by its completion id; see SPEC §16);
 the Responses API (`/responses`) is not served — Vercel AI SDK users must call
 `potion.chat('potion-auto')`, since the bare `potion('potion-auto')` constructor
 builds a Responses-API model and POSTs to `/responses`. Keys, policies, usage,

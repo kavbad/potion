@@ -90,6 +90,28 @@ export interface PotionOptions extends Omit<ClientOptions, 'baseURL' | 'apiKey'>
   defaultPolicy?: string;
 }
 
+/** G1 Outcome API signals — what ACTUALLY happened after a served response.
+ * The server requires at least one signal per report. */
+export interface OutcomeSignals {
+  success?: boolean;
+  /** Customer-defined score on [0,1]. */
+  score?: number;
+  /** Name of the check that produced the signal (e.g. 'tests_passed'). */
+  validator?: string;
+  /** The correct answer/class per your application. */
+  label?: string;
+  human?: 'accepted' | 'edited' | 'rejected' | 'regenerated';
+  failureReason?: string;
+}
+
+/** POST /v1/outcomes response: the outcome row id and the served request it
+ * attached to (cluster / strategy prefix / router version). */
+export interface OutcomeReceipt {
+  id: string;
+  request_id: string;
+  attached: { cluster: string | null; strategy: string | null; router_version: number | null };
+}
+
 class Completions {
   constructor(private readonly client: Potion) {}
 
@@ -203,5 +225,42 @@ export class Potion {
   /** Convenience passthrough to `openai.embeddings`. */
   get embeddings(): OpenAI['embeddings'] {
     return this.openai.embeddings;
+  }
+
+  /**
+   * G1 Outcome API: report what ACTUALLY happened after a served response —
+   * `requestId` is the completion's `id`. Call it where your application
+   * already knows the truth (tests ran, validator passed, a human accepted
+   * or edited, the customer clicked regenerate):
+   *
+   * ```ts
+   * const resp = await client.chat.completions.create({ ... });
+   * // …later, when the generated SQL has run:
+   * await client.outcome(resp.id, { success: true, validator: 'sql_executed' });
+   * ```
+   *
+   * Outcomes are append-only — send a later signal (e.g. the human verdict)
+   * as another call; the latest signal of each kind wins.
+   */
+  async outcome(requestId: string, signals: OutcomeSignals): Promise<OutcomeReceipt> {
+    const { failureReason, ...rest } = signals;
+    try {
+      return (await this.openai.post('/outcomes', {
+        body: {
+          request_id: requestId,
+          ...rest,
+          ...(failureReason !== undefined ? { failure_reason: failureReason } : {}),
+        },
+      })) as OutcomeReceipt;
+    } catch (err) {
+      if (err instanceof APIError) {
+        throw mapError({
+          statusCode: err.status,
+          body: extractErrorBody(err),
+          fallbackMessage: err.message,
+        });
+      }
+      throw err;
+    }
   }
 }

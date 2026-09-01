@@ -38,11 +38,14 @@ import {
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import {
+  clusterOutcomeEvidence,
   clusterShadowEvidence,
   loadCurrentFrontier,
+  orgOutcomeRows,
   orgShadowEvidenceInputs,
   policyForCluster,
   servingDecisionFor,
+  type ClusterOutcomeEvidence,
   type ClusterShadowEvidence,
 } from '@potion/pareto';
 import { parseTraceHeader } from '../routes/chat.js';
@@ -71,6 +74,12 @@ export interface RouterAssignment {
    * holds nothing; EXCLUDED from routerHash by construction (the hash reads
    * enumerated decision fields), so evidence drift never mints a version. */
   shadow?: ClusterShadowEvidence;
+  /** G1 Outcome API: the customer's OWN application's verdicts on this
+   * assignment's served answers — ground truth, on its own instrument,
+   * never blended with the serve-judge or suite numbers. Same display-only
+   * rules as `shadow`: absent when the window holds nothing, excluded from
+   * routerHash by construction. */
+  outcomes?: ClusterOutcomeEvidence;
 }
 
 export interface ExpectedProjection {
@@ -131,7 +140,10 @@ export async function compileAndMintRouter(
   // `qualifies` is confidence-gated (Jeffreys lower bound vs the cluster's
   // floor) and read-only — Potion proposes, the user reacts.
   if (assignments.length > 0 && policy !== null) {
-    const shadowInputs = await orgShadowEvidenceInputs(db, orgId);
+    const [shadowInputs, outcomeRows] = await Promise.all([
+      orgShadowEvidenceInputs(db, orgId),
+      orgOutcomeRows(db, orgId),
+    ]);
     for (const a of assignments) {
       const clusterPolicy = policyForCluster(policy, a.clusterId);
       const clusterFloor =
@@ -144,6 +156,11 @@ export async function compileAndMintRouter(
         clusterFloor,
       });
       if (ev !== null) a.shadow = ev;
+      const oc = clusterOutcomeEvidence(outcomeRows, {
+        clusterId: a.clusterId,
+        servingHash: a.strategyHash,
+      });
+      if (oc !== null) a.outcomes = oc;
     }
   }
   const interpretation = await getRouterInterpretation(db, orgId);

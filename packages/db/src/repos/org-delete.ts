@@ -63,6 +63,7 @@ import {
   requestLogs,
   researchCycles,
   sessions,
+  outcomes,
   shadowResults,
   shareTokens,
   traceSpans,
@@ -296,6 +297,12 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count(
     'shadow_results',
     db.delete(shadowResults).where(eq(shadowResults.orgId, orgId)).returning({ id: shadowResults.id }),
+  );
+  // G1 (0083): outcome signals — cascade-covered at birth, deleted
+  // explicitly anyway so the count ledger names them.
+  await count(
+    'outcomes',
+    db.delete(outcomes).where(eq(outcomes.orgId, orgId)).returning({ id: outcomes.id }),
   );
   await count('incidents', db.delete(incidents).where(eq(incidents.orgId, orgId)).returning({ id: incidents.id }));
   await count(

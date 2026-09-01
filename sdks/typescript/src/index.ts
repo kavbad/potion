@@ -13,6 +13,8 @@
 
 export { Potion, PotionChatCompletion } from './client.js';
 export type {
+  OutcomeReceipt,
+  OutcomeSignals,
   PotionChatCompletionCreateParams,
   PotionOptions,
   PotionRequestOptions,

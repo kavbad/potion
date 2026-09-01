@@ -46,6 +46,8 @@ import { registerJobRoutes } from './routes/jobs.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerGuaranteeReportRoutes } from './routes/guarantee-report.js';
 // ---- end M3 #21 shadow imports ----
+// G1 Outcome API (SPEC §16) — appended import.
+import { registerOutcomeRoutes } from './routes/outcomes.js';
 // ---- M3 #22 guarantee (m3-guarantee) — appended imports ----
 import { createAlertsDispatchHandler, createGuaranteeEvaluateHandler } from '@potion/workers';
 import { registerGuaranteeRoutes } from './routes/guarantee.js';
@@ -333,6 +335,9 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   registerReportRoutes(app, ctx);
   registerGuaranteeReportRoutes(app, ctx);
   // ---- end M3 #21 shadow ----
+  // G1 Outcome API: POST /v1/outcomes — ground-truth signals from the
+  // customer's own application, attached at ingest to the served request.
+  registerOutcomeRoutes(app, ctx);
 
   // ---- M4 #31 share (m4-playground) ----
   // Playground + share links (SPEC §13.3): POST/GET /api/share + admin

@@ -19,6 +19,7 @@ export * from './repos/learning-proposals.js';
 export * from './repos/request-logs.js';
 export * from './repos/usage.js';
 export * from './repos/shadow.js';
+export * from './repos/outcomes.js';
 export * from './repos/guarantee.js';
 export * from './repos/verdicts.js';
 export * from './repos/judge-calibrations.js';

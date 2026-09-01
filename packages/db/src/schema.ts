@@ -619,6 +619,42 @@ export const shadowResults = pgTable('shadow_results', {
 });
 
 /**
+ * G1 Outcome API (SPEC §16, migration 0083) — what ACTUALLY happened after a
+ * served response, reported by the customer's own application: the first
+ * ground-truth evidence stream (every other quality number is a judge's
+ * opinion). Routing keys are resolved AT INGEST from the served request's
+ * log row (org + completion_id), so attribution survives log retention and
+ * evidence reads never join. Append-only: a request may accumulate several
+ * signal rows over time (validator now, human later); the aggregation
+ * (@potion/pareto outcome-evidence) takes the LATEST signal of each kind
+ * per request. Org-scoped tenant data.
+ */
+export const outcomes = pgTable('outcomes', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => orgs.id, { onDelete: 'cascade' }),
+  /** Chat completion id (chatcmpl-…) — correlation label, not an FK. */
+  requestId: text('request_id').notNull(),
+  clusterId: text('cluster_id'),
+  strategyHash: text('strategy_hash'),
+  routerVersion: integer('router_version'),
+  success: boolean('success'),
+  /** Customer-defined score on [0,1] (bounded at the route). */
+  score: doublePrecision('score'),
+  /** Name of the check that produced the signal (e.g. 'tests_passed'). */
+  validator: text('validator'),
+  /** The correct answer/class per the customer (e.g. a fixed label). */
+  label: text('label'),
+  /** 'accepted' | 'edited' | 'rejected' | 'regenerated'. */
+  human: text('human'),
+  failureReason: text('failure_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type OutcomeRow = typeof outcomes.$inferSelect;
+export type NewOutcome = typeof outcomes.$inferInsert;
+
+/**
  * Quality-guarantee samples (M3, ROADMAP #22, SPEC §12.5, migration 0008) —
  * one row per SAMPLED served answer, written AFTER the primary response was
  * sent (fire-and-forget; never on the latency path). Org-scoped tenant data.

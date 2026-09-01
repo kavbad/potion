@@ -584,3 +584,29 @@ _(renumbered from 0013: request_logs_policy took 0013 in M4 #30)_
 
 ### 15.7 Discipline
 - End-to-end mock determinism (seeded) is mandatory; live only via operator runbook or admin-triggered cycles with ledger accounting. The $50 M1b cap and research-cycle caps are separate ledgers — document both in tasks/todo.md.
+
+## 16. Outcome API (G1, migration 0083) — apps/server, packages/db, packages/pareto, SDKs
+
+```ts
+// POST /v1/outcomes (api-key) — STRICT body: unknown fields 400, never silently stripped.
+{ request_id: string,               // the chat completion id every response carries
+  success?: boolean, score?: number /* [0,1] */, validator?: string,
+  label?: string, human?: 'accepted'|'edited'|'rejected'|'regenerated', failure_reason?: string }
+// ≥1 signal required. Attribution AT INGEST: the served request is looked up by
+// (org, completion_id, status='ok') and its cluster/strategy/router_version are copied onto
+// the outcome row — evidence never joins, attribution survives log retention. Unknown
+// request_id → 404 unknown_request (org-scoped: one org can never annotate another's traffic).
+// Append-only: later signals are NEW rows (a correction is one more POST); the aggregation
+// takes the LATEST signal of each kind per request.
+```
+- Evidence: `@potion/pareto` outcome-evidence — instrument **'customer-outcomes'** (its own
+  scale; never blended with serve-judge or suite-measured numbers), 30-day window, exact
+  Jeffreys binomial over success verdicts + generalized Jeffreys over scores for the SERVING
+  strategy, human-signal counts, other-strategy signals counted (never ranked). Rides
+  `RouterAssignment.outcomes` → GET /api/router → the router page's "your app's verdicts"
+  sub-row. Display-only: excluded from routerHash, so outcome churn never mints a version.
+- OBSERVATIONAL, by contract: routing chose which requests each strategy saw — outcome
+  evidence is monitoring/evaluation, not causal proof; the randomized incumbent holdout
+  (ROADMAP §G1) is the causal instrument.
+- SDKs: `await client.outcome(resp.id, { success: true, validator: 'tests_passed' })` (TS) /
+  `client.outcome(resp.id, success=True, validator="tests_passed")` (Python).

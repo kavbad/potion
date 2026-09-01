@@ -110,6 +110,10 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
     method: 'POST', path: '/v1/policies', surface: 'v1', mutating: true, guard: 'serve',
     notes: "G2.3 DELIBERATE: rebinds the CALLING key's OWN policy only — self-scoped onboarding mutation, stays serve-reachable", tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "rebinds the CALLING key’s own policy (G2.3 deliberate)" } },
   { method: 'POST', path: '/v1/traces', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "stamps spans with the CALLING key’s org" } },
+  // G1 Outcome API (SPEC §16): outcomes attach to the CALLING key's org's
+  // own served requests — a foreign org's completion id is a 404 by the
+  // org-scoped lookup (pinned in outcomes.test.ts).
+  { method: 'POST', path: '/v1/outcomes', surface: 'v1', mutating: true, guard: 'serve', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "attaches to the CALLING key's org's own served request; foreign request ids 404 (outcomes.test.ts)" } },
   // L-G4: the runtime gate — the pore over HTTP for external runtimes
   // (OpenClaw first). Bearer-key surface; org from the calling key; run ids
   // are body-carried and org-guarded in the handler (lab-runtime-gate tests

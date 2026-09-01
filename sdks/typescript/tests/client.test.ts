@@ -41,6 +41,7 @@ const COMPLETION = {
 /** Capture of the last request for assertions. */
 let lastHeaders: Record<string, string | string[] | undefined> = {};
 let lastPath = '';
+let lastOutcomeBody: Record<string, unknown> | null = null;
 
 function errorPayload(message: string, type: string, code: string, param: string | null = null) {
   return { error: { message, type, param, code } };
@@ -70,6 +71,26 @@ beforeAll(async () => {
         });
         res.end(data);
       };
+      // G1 Outcome API (SPEC §16) — the wire contract client.outcome() speaks.
+      if ((req.url ?? '').endsWith('/outcomes')) {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+        lastOutcomeBody = body;
+        if (body.request_id === 'chatcmpl-unknown') {
+          return send(
+            404,
+            errorPayload(
+              "no served request 'chatcmpl-unknown' for this org — outcomes attach to requests Potion served",
+              'invalid_request_error',
+              'unknown_request',
+            ),
+          );
+        }
+        return send(201, {
+          id: 'oc-1',
+          request_id: body.request_id,
+          attached: { cluster: 'code-gen', strategy: '1a2b3c4d', router_version: 3 },
+        });
+      }
       if (policy === 'does-not-exist') {
         return send(
           400,
@@ -232,5 +253,36 @@ describe('error mapping', () => {
     const e = err as PotionError;
     expect(e.code).toBe('service_unavailable');
     expect(e.statusCode).toBe(500);
+  });
+});
+
+describe('outcome (G1 Outcome API)', () => {
+  it('POSTs /v1/outcomes with snake-cased signals and returns the receipt', async () => {
+    const receipt = await makeClient().outcome('chatcmpl-test', {
+      success: true,
+      validator: 'tests_passed',
+      failureReason: 'flaky suite',
+    });
+    expect(lastPath).toBe('/v1/outcomes');
+    expect(lastOutcomeBody).toEqual({
+      request_id: 'chatcmpl-test',
+      success: true,
+      validator: 'tests_passed',
+      failure_reason: 'flaky suite',
+    });
+    expect(receipt.id).toBe('oc-1');
+    expect(receipt.attached.cluster).toBe('code-gen');
+    expect(receipt.attached.router_version).toBe(3);
+  });
+
+  it('maps an unknown request to a PotionError carrying the server message', async () => {
+    const err = await makeClient()
+      .outcome('chatcmpl-unknown', { success: true })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PotionError);
+    const e = err as PotionError;
+    expect(e.statusCode).toBe(404);
+    expect(e.code).toBe('unknown_request');
+    expect(e.message).toContain('outcomes attach to requests Potion served');
   });
 });

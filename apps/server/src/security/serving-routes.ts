@@ -48,6 +48,10 @@ export const NON_SERVING_V1_ROUTES: ReadonlyArray<{ path: string; why: string }>
     path: '/v1/traces',
     why: 'trace ingestion — writes customer spans, prices them at ingest, spends nothing',
   },
+  {
+    path: '/v1/outcomes',
+    why: 'outcome ingestion (G1, SPEC §16) — attaches a customer verdict to a SERVED request; no strategy resolution, no provider call, spends nothing',
+  },
   // L-G4: the runtime gate — governance calls from external runtimes.
   // They read the trust record and write run/step rows; no strategy is
   // resolved and no provider is called. Spend never happens here.

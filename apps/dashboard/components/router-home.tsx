@@ -42,6 +42,18 @@ interface Assignment {
   evidenceN: number | null;
   alternatives: number;
   fallback: string | null;
+  /** G1 Outcome API: the customer's own application's verdicts on this
+   * assignment's answers — ground truth, its own instrument. Absent when
+   * the window holds nothing. */
+  outcomes?: {
+    instrument: 'customer-outcomes';
+    windowDays: number;
+    requests: number;
+    success: { n: number; rate: number; ci: [number, number] } | null;
+    score: { n: number; mean: number; ci: [number, number] } | null;
+    human: { accepted: number; edited: number; rejected: number; regenerated: number } | null;
+    otherStrategyRequests: number;
+  };
   /** Shadow evidence measured on THIS org's traffic (serve-judge instrument
    * — its own scale, never the suite-measured quality column). Absent when
    * the window holds nothing. */
@@ -204,6 +216,29 @@ function AssignmentsTable({ assignments }: { assignments: Assignment[] }) {
                     </Link>
                   </td>
                 </tr>
+                {a.outcomes ? (
+                  <tr className="border-b border-dashed border-[#e9e6dd] last:border-0">
+                    <td colSpan={6} className="py-1.5 pl-4 text-[12px] text-faint">
+                      <span className="uppercase tracking-[0.1em]">your app&apos;s verdicts · {a.outcomes.windowDays}d</span>
+                      <span className="ml-3 text-soft">{a.outcomes.requests} request{a.outcomes.requests === 1 ? '' : 's'}</span>
+                      {a.outcomes.success !== null ? (
+                        <span className="ml-3 text-soft">
+                          success {(a.outcomes.success.rate * 100).toFixed(1)}% [{(a.outcomes.success.ci[0] * 100).toFixed(0)}–{(a.outcomes.success.ci[1] * 100).toFixed(0)}] · n={a.outcomes.success.n}
+                        </span>
+                      ) : null}
+                      {a.outcomes.score !== null ? (
+                        <span className="ml-3 text-soft">
+                          score {a.outcomes.score.mean.toFixed(3)} [{a.outcomes.score.ci[0].toFixed(3)}–{a.outcomes.score.ci[1].toFixed(3)}] · n={a.outcomes.score.n}
+                        </span>
+                      ) : null}
+                      {a.outcomes.human !== null ? (
+                        <span className="ml-3">
+                          {a.outcomes.human.accepted} accepted · {a.outcomes.human.edited} edited · {a.outcomes.human.rejected} rejected · {a.outcomes.human.regenerated} regenerated
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ) : null}
                 {a.shadow && (a.shadow.challengers.length > 0 || a.shadow.servingObserved !== null) ? (
                   <tr className="border-b border-dashed border-[#e9e6dd] last:border-0">
                     <td colSpan={6} className="py-1.5 pl-4 text-[12px] text-faint">

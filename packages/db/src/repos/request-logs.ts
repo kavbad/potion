@@ -1,7 +1,7 @@
 // Thin typed repository for request_logs (SPEC §7/§8; ORG-SCOPED since M2
 // Wave 1 / ROADMAP #13). Rows carry org_id NOT NULL — including
 // unauthenticated traffic, which the server attributes to the default org.
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { requestLogs, type NewRequestLog, type RequestLogRow } from '../schema.js';
 
@@ -24,6 +24,33 @@ export async function listRequestLogs(
     .where(eq(requestLogs.orgId, orgId))
     .orderBy(desc(requestLogs.id))
     .limit(limit);
+}
+
+/** The routing facts of one SERVED request, looked up by completion id —
+ * the Outcome API's ingest-time attribution (newest row wins on the
+ * pathological duplicate). null = no served request with that id. */
+export async function servedRequestRouting(
+  db: PotionDb,
+  orgId: string,
+  completionId: string,
+): Promise<{ clusterId: string | null; strategyHash: string | null; routerVersion: number | null } | null> {
+  const rows = await db
+    .select({
+      clusterId: requestLogs.clusterId,
+      strategyHash: requestLogs.strategyHash,
+      routerVersion: requestLogs.routerVersion,
+    })
+    .from(requestLogs)
+    .where(
+      and(
+        eq(requestLogs.orgId, orgId),
+        eq(requestLogs.completionId, completionId),
+        eq(requestLogs.status, 'ok'),
+      ),
+    )
+    .orderBy(desc(requestLogs.id))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export interface ServedClusterCostRow {
