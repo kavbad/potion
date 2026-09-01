@@ -1,6 +1,6 @@
 // Worker tests (SPEC §12.2): eval:run end-to-end on mock providers with
-// results persisted + artifact written; staleness:scan; shadow:judge stub;
-// handler override; sweep:run budget-governed loop.
+// results persisted + artifact written; staleness:scan; shadow:judge
+// retirement tombstone; handler override; sweep:run budget-governed loop.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -149,18 +149,14 @@ describe('runWorker', () => {
     expect(result.newlyFlagged).toBe(0);
   });
 
-  it('shadow:judge stub accepts a payload and no-ops (ROADMAP #21)', async () => {
+  it('shadow:judge is RETIRED — a legacy queued job drains as a typed no-op (scoring is in-process)', async () => {
     const queue = createQueue('memory');
     await runWorker({ queue, db, suitesDir });
     const jobId = await queue.enqueue('shadow:judge', { shadowResultId: 'shadow-1' });
     await queue.close();
     const status = await queue.getJob(jobId);
     expect(status?.state).toBe('completed');
-    expect(status?.result).toEqual({
-      stub: true,
-      shadowResultId: 'shadow-1',
-      status: 'accepted',
-    });
+    expect(status?.result).toMatchObject({ retired: true });
   });
 
   it('handlers override wins over the defaults', async () => {

@@ -21,14 +21,26 @@
 //     the volume knob. Shadow executions use the org's provider set, which
 //     the provider factory already wraps with `resilient` defaults
 //     (SPEC §12.1) — no double-wrapping here.
-//   · QUALITY — mock world: the deterministic in-process scorer
-//     (shadowScore, token-set Jaccard against the primary answer, reusing
-//     the harness normalizeText contract). Live mode with a job queue on
-//     ctx (ROADMAP #28): a `shadow:judge` job is enqueued instead and the
-//     row is written with quality NULL until the worker scores it.
+//   · QUALITY (2026-09-01, shadow:judge implemented) — every candidate is
+//     scored IN-PROCESS by the SERVE JUDGE (@potion/harness serve-judge):
+//     the same reference-free instrument that scores guarantee samples, so
+//     the primary's quality_samples and the candidates' shadow_results are
+//     on one scale. Mock world gets the deterministic mock judge, live gets
+//     the judge class — one code path, only the alias differs (guarantee.ts
+//     precedent). This replaced two things at once: the token-set-Jaccard
+//     scorer (anchored on the primary answer — sameness, not quality) and
+//     the `shadow:judge` queue leg, whose enqueued payload shipped raw
+//     candidate/primary TEXT through the queue — the exact exposure the
+//     guarantee's G0.1 content-free rule exists to prevent (and whose
+//     worker stub validated a field the enqueuer never sent, so every live
+//     job threw). Judge spend is metered per call (SHADOW_JUDGE_LOG_STATUS
+//     rows — org-attributable for budgets + invoices, excluded from
+//     serving p95 by status). A failed judge call drops the SCORE loudly
+//     (quality NULL = unscored), never the row: the execution evidence
+//     (cost, latency) is real either way.
 import type { ChatMessage, Frontier, ShadowConfig, StrategyConfig, Usage } from '@potion/core';
-import { getStrategyConfigs, insertShadowResult } from '@potion/db';
-import { normalizeText } from '@potion/harness';
+import { getStrategyConfigs, insertRequestLog, insertShadowResult } from '@potion/db';
+import { defaultServeJudgeModel, scoreServedAnswer } from '@potion/harness';
 import { execute } from '@potion/strategies';
 import type { OrgProviders, PotionContext } from './context.js';
 import { programModels } from '@potion/core';
@@ -37,9 +49,10 @@ import { programModels } from '@potion/core';
  * see the file header for why this replaces a proportional cost cap). */
 export const MAX_SHADOW_CANDIDATES = 2;
 
-/** Job name enqueued for live-mode quality judging when a queue is present
- * (ROADMAP #28 queue-workers consumes it). */
-export const SHADOW_JUDGE_JOB = 'shadow:judge';
+/** request_logs.status for shadow-judge spend meter rows (the
+ * GUARANTEE_JUDGE_LOG_STATUS pattern): org-attributable judge cost, never
+ * served traffic — serving p95 counts status 'ok' only. */
+export const SHADOW_JUDGE_LOG_STATUS = 'shadow_judge';
 
 /** One resolved candidate: a strategy config + its content hash. */
 export interface ShadowCandidate {
@@ -62,16 +75,6 @@ export interface ShadowRunParams {
   /** The request's per-org provider set (resilient from the factory in live
    * mode — see header). */
   orgProviders: OrgProviders;
-}
-
-/** Queue duck-type (ROADMAP #28 lands ctx.queue; structurally detected so
- * this branch compiles and behaves correctly both before and after it). */
-interface QueueLike {
-  enqueue(name: string, payload: unknown): Promise<unknown> | unknown;
-}
-
-function queueOf(ctx: PotionContext): QueueLike | undefined {
-  return (ctx as unknown as { queue?: QueueLike }).queue;
 }
 
 /**
@@ -160,29 +163,12 @@ export function candidateModelOf(config: StrategyConfig): string {
   }
 }
 
-/**
- * Deterministic in-process shadow quality scorer (mock world; SPEC §12.4):
- * token-set Jaccard similarity between the candidate answer and the PRIMARY
- * answer (the serving path has no reference answer — the primary is the
- * best available anchor). Reuses the harness normalizeText contract (trim,
- * collapse whitespace, lowercase). 1 = identical token sets, 0 = disjoint.
- */
-export function shadowScore(primaryText: string, candidateText: string): number {
-  const tokens = (s: string): Set<string> => new Set(normalizeText(s).split(' ').filter(Boolean));
-  const a = tokens(primaryText);
-  const b = tokens(candidateText);
-  if (a.size === 0 && b.size === 0) return 1;
-  if (a.size === 0 || b.size === 0) return 0;
-  let inter = 0;
-  for (const t of a) if (b.has(t)) inter += 1;
-  return inter / (a.size + b.size - inter);
-}
-
 /** One candidate's outcome, ready to persist. */
 export interface ShadowOutcome {
   candidate: ShadowCandidate;
   usage: Usage;
-  /** null when a shadow:judge job was enqueued (score pending). */
+  /** null when the judge call failed — the score is dropped loudly while
+   * the execution evidence (cost, latency) still lands. */
   quality: number | null;
 }
 
@@ -200,8 +186,6 @@ export async function runShadow(
   const candidates = await resolveShadowCandidates(ctx, params, warn);
   if (candidates.length === 0) return [];
 
-  const live = ctx.providerMode === 'live';
-  const queue = queueOf(ctx);
   const execBase = {
     providers: params.orgProviders.providers,
     prices: ctx.prices,
@@ -212,20 +196,42 @@ export async function runShadow(
     candidates.map(async (candidate): Promise<ShadowOutcome | null> => {
       try {
         const result = await execute(candidate.config, params.messages, execBase);
+        // Judge-score with the SERVE JUDGE — the same reference-free
+        // instrument that scores guarantee samples, on the org's own
+        // provider set (BYOK-aware), mock judge under mock. A failed judge
+        // call drops the SCORE loudly, never the row (see file header).
         let quality: number | null = null;
-        if (live && queue) {
-          // Live + queue present: the judge worker scores asynchronously
-          // (ROADMAP #28); the row is written with quality NULL until then.
-          await queue.enqueue(SHADOW_JUDGE_JOB, {
+        const judgeModel = defaultServeJudgeModel(ctx.providerMode);
+        try {
+          const score = await scoreServedAnswer(
+            {
+              requestId: params.requestId,
+              clusterId: params.clusterId,
+              messages: params.messages,
+              answerText: result.text,
+              judgeModel,
+            },
+            { providers: params.orgProviders.providers, prices: ctx.prices },
+          );
+          quality = score.quality;
+          // Judge spend meter row (guarantee.ts precedent): org-attributable
+          // cost for budgets + invoices. strategyHash = the CANDIDATE the
+          // judge scored; the status keeps it out of serving-grade latency.
+          await insertRequestLog(ctx.db.db, {
             orgId: params.orgId,
-            requestId: params.requestId,
             clusterId: params.clusterId,
-            candidateHash: candidate.hash,
-            candidateText: result.text,
-            primaryText: params.primary.text,
+            strategyHash: candidate.hash,
+            model: judgeModel,
+            usage: score.usage,
+            latencyMs: score.usage.latencyMs,
+            status: SHADOW_JUDGE_LOG_STATUS,
+            completionId: params.requestId,
           });
-        } else {
-          quality = shadowScore(params.primary.text, result.text);
+        } catch (err) {
+          warn(
+            `shadow: judge failed for candidate ${candidate.hash.slice(0, 8)} on request ` +
+              `${params.requestId}: ${(err as Error).message} — quality NULL (execution evidence kept)`,
+          );
         }
         const outcome: ShadowOutcome = { candidate, usage: result.usage, quality };
         await insertShadowResult(ctx.db.db, {

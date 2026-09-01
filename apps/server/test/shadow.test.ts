@@ -1,7 +1,9 @@
 // Shadow mode tests (M3, ROADMAP #21, SPEC §12.4).
-//   · shouldSample / shadowScore / candidate resolution (pure + db lookups)
+//   · shouldSample / candidate resolution (pure + db lookups)
 //   · runShadow: sampled request → shadow_results rows (≤2 candidates),
-//     candidate failure swallowed, 'frontier' vs explicit-hash resolution
+//     serve-judge scoring + shadow_judge spend meter rows, judge failure →
+//     quality NULL (evidence kept), candidate failure swallowed,
+//     'frontier' vs explicit-hash resolution
 //   · serving integration: POST /v1/chat/completions with a shadow policy →
 //     200 + normal trace + rows appear; sampleRate 0 → none, 1 → all;
 //     org isolation; response latency NOT blocked by a slow (hanging)
@@ -12,6 +14,7 @@ import { sha256, strategyHash, type FrontierPoint, type Policy, type StrategyCon
 import {
   insertApiKey,
   insertPolicy,
+  listRequestLogs,
   listShadowResults,
   upsertStrategyConfig,
   utcDay,
@@ -27,10 +30,10 @@ import { DEFAULT_PRICES_PATH } from '../src/context.js';
 import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 import {
   MAX_SHADOW_CANDIDATES,
+  SHADOW_JUDGE_LOG_STATUS,
   candidateModelOf,
   resolveShadowCandidates,
   runShadow,
-  shadowScore,
   shouldSample,
 } from '../src/shadow.js';
 
@@ -157,17 +160,11 @@ describe('shouldSample', () => {
   });
 });
 
-describe('shadowScore (deterministic in-process scorer)', () => {
-  it('is 1 for identical texts, 0 for disjoint token sets, in (0,1) for partial overlap', () => {
-    expect(shadowScore('the quick brown fox', 'the quick brown fox')).toBe(1);
-    expect(shadowScore('the quick brown fox', 'completely different words here')).toBe(0);
-    const partial = shadowScore('the quick brown fox', 'the quick red fox');
-    expect(partial).toBeGreaterThan(0);
-    expect(partial).toBeLessThan(1);
-    // deterministic: normalization makes case/whitespace irrelevant
-    expect(shadowScore('The   QUICK brown fox', 'the quick brown fox')).toBe(1);
-  });
-});
+// (The token-set-Jaccard shadowScore is gone: candidates are scored by the
+// serve judge — the guarantee's instrument — in both modes. Jaccard against
+// the primary measured SAMENESS, not quality; a candidate that answered
+// better but differently scored low, which is exactly the self-anchoring
+// the shadow plane exists to escape. See the runShadow suite below.)
 
 describe('candidateModelOf', () => {
   it('labels each strategy type', () => {
@@ -252,6 +249,64 @@ describe('runShadow', () => {
       expect(r.costUsd).toBeGreaterThanOrEqual(0);
       expect(Number.isInteger(r.latencyMs)).toBe(true);
     }
+  });
+
+  it('every scored candidate leaves a shadow_judge spend meter row (judge cost is org-attributable)', async () => {
+    const orgProviders = await app.potion.providersForOrg(ORG_A);
+    await runShadow(
+      app.potion,
+      {
+        orgId: ORG_A,
+        requestId: 'chatcmpl-unit-shadow-judge-1',
+        clusterId: 'code-gen',
+        messages: [{ role: 'user', content: CODE_PROMPT }],
+        primary: { hash: H_CHEAP, text: 'primary answer text' },
+        shadow: { sampleRate: 1, candidates: 'frontier' },
+        frontier: { points: POINTS } as never,
+        orgProviders,
+      },
+      () => {},
+    );
+    const meter = (await listRequestLogs(db(), ORG_A, 100)).filter(
+      (r) => r.status === SHADOW_JUDGE_LOG_STATUS && r.completionId === 'chatcmpl-unit-shadow-judge-1',
+    );
+    expect(meter).toHaveLength(2); // one judge call per candidate
+    expect(meter.every((r) => r.model === 'mock-judge')).toBe(true); // mock world → mock judge
+    expect(meter.map((r) => r.strategyHash).sort()).toEqual([H_MID, H_STRONG].sort());
+  });
+
+  it('a failed judge call keeps the row with quality NULL — score dropped loudly, evidence kept', async () => {
+    const orgProviders = await app.potion.providersForOrg(ORG_A);
+    const mockP = orgProviders.providers.mock;
+    // Fail ONLY the judge call: candidates route to mock-mid, the judge to
+    // mock-judge — same provider id, distinguishable by requested model.
+    const judgeDown = {
+      ...mockP,
+      complete: async (req: Parameters<typeof mockP.complete>[0]) =>
+        req.model === 'mock-judge' ? Promise.reject(new Error('judge transport down')) : mockP.complete(req),
+    };
+    const warnings: string[] = [];
+    const outcomes = await runShadow(
+      app.potion,
+      {
+        orgId: ORG_A,
+        requestId: 'chatcmpl-unit-shadow-judge-2',
+        clusterId: 'code-gen',
+        messages: [{ role: 'user', content: CODE_PROMPT }],
+        primary: { hash: H_CHEAP, text: 'primary answer text' },
+        shadow: { sampleRate: 1, candidates: [H_MID] },
+        frontier: { points: POINTS } as never,
+        orgProviders: { ...orgProviders, providers: { ...orgProviders.providers, mock: judgeDown } },
+      },
+      (m) => warnings.push(m),
+    );
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]!.quality).toBeNull();
+    expect(warnings.some((w) => w.includes('judge failed'))).toBe(true);
+    const mine = (await rowsFor(ORG_A)).filter((r) => r.requestId === 'chatcmpl-unit-shadow-judge-2');
+    expect(mine).toHaveLength(1); // execution evidence lands…
+    expect(mine[0]!.quality).toBeNull(); // …the score honestly does not
+    expect(mine[0]!.costUsd).toBeGreaterThanOrEqual(0);
   });
 
   it('swallows a failing candidate — the other candidate still lands', async () => {

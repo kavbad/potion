@@ -487,19 +487,22 @@ export const stalenessScanHandler: WorkerHandler<'staleness:scan'> = async (
 };
 
 // ---------------------------------------------------------------------------
-// shadow:judge — STUB for ROADMAP #21 (shadow mode). Another stream implements
-// the real judge; this accepts the payload and succeeds as a no-op so the
-// queue plumbing + endpoint contract can be exercised end-to-end today.
+// shadow:judge — RETIRED (2026-09-01): shadow scoring moved IN-PROCESS. The
+// serving path now judge-scores each candidate itself via the serve judge
+// (apps/server shadow.ts + @potion/harness serve-judge) — the guarantee's
+// exact G0.1 posture: raw prompts/answers never transit the queue. The old
+// enqueuer shipped candidate/primary TEXT while this stub validated a
+// `shadowResultId` it never sent, so every live job THREW here — nothing
+// was ever scored through this leg. The kind stays registered so any
+// legacy queued job drains as a typed no-op instead of erroring; its
+// shadow_results row simply keeps quality NULL (unscored, honestly).
 // ---------------------------------------------------------------------------
 
 export const shadowJudgeHandler: WorkerHandler<'shadow:judge'> = async (
-  payload: ShadowJudgePayload,
+  _payload: ShadowJudgePayload,
   _ctx: JobContext,
-): Promise<{ stub: true; shadowResultId: string; status: 'accepted' }> => {
-  if (typeof payload.shadowResultId !== 'string' || payload.shadowResultId.length === 0) {
-    throw new Error("shadow:judge payload requires a non-empty 'shadowResultId' string");
-  }
-  return { stub: true, shadowResultId: payload.shadowResultId, status: 'accepted' };
+): Promise<{ retired: true; scoredBy: 'serving path (in-process serve judge)' }> => {
+  return { retired: true, scoredBy: 'serving path (in-process serve judge)' };
 };
 
 // ---------------------------------------------------------------------------

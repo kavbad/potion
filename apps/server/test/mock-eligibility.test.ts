@@ -101,7 +101,6 @@ const NOT_A_DECISION: Record<string, string> = {
   'packages/pareto/src/demo.ts': 'demo script, hard-coded mock mode',
   'packages/pareto/src/dominance.ts': 'carries providerMode through unchanged',
   'apps/server/src/seed.ts': 'seeds mock-provenance demo data, honestly labelled',
-  'apps/server/src/shadow.ts': 'executes an already-resolved candidate set on the org provider set',
   'packages/researcher/src/generate.ts': 'consumes the registry it is HANDED — the caller filters (see handlers.ts rows)',
   'packages/researcher/src/gate.ts': 'promotion statistics; no resolution',
   'packages/workers/src/index.ts': 'worker wiring only',

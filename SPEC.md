@@ -432,7 +432,7 @@ export interface SavingsReport {
 // GET /api/reports/savings?from&to → SavingsReport (org-scoped). confidence: low <30, medium <200, high ≥200 samples.
 ```
 - Dashboard `/reports` page: actual vs projected spend chart, per-alternative table, CSV export.
-- Shadow quality: mock = deterministic scorer; live = `shadow:judge` job via queue (#28) when available, else in-process scorer.
+- Shadow quality (2026-09-01): every candidate is judge-scored IN-PROCESS by the serve judge (§12.5's instrument — mock judge under mock, judge class under live; spend metered as `shadow_judge` request-log rows). One scale for quality_samples and shadow_results; quality NULL = the judge call failed (unscored, loudly). The `shadow:judge` queue job is retired — answers never transit the queue (G0.1).
 
 ### 12.5 Quality guarantee + auto-rollback (#22) — apps/server, packages/db
 

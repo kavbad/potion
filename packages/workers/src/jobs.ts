@@ -85,8 +85,12 @@ export interface StalenessScanPayload {
   orgId?: string;
 }
 
+/** RETIRED (2026-09-01): shadow candidates are judge-scored in-process on
+ * the serving path (apps/server shadow.ts — the guarantee's G0.1
+ * content-free posture). The kind stays registered so legacy queued jobs
+ * drain as typed no-ops; see shadowJudgeHandler. */
 export interface ShadowJudgePayload {
-  shadowResultId: string;
+  shadowResultId?: string;
   orgId?: string;
 }
 

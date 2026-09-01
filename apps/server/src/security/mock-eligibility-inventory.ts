@@ -256,6 +256,19 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
       'mislabelled; tightening explicit mock judges under live is filed for G2.6.',
   },
   {
+    file: 'apps/server/src/shadow.ts',
+    symbol: 'runShadow (judge resolution)',
+    kind: 'class-resolution',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/shadow.test.ts',
+    notes:
+      'shadow:judge implemented in-process (2026-09-01, guarantee.ts precedent): each candidate is scored by ' +
+      'defaultServeJudgeModel(ctx.providerMode) — a real judge class under live, the deterministic mock judge ' +
+      'otherwise — on the org provider set, with spend metered as shadow_judge rows. Candidates themselves are ' +
+      'an already-resolved set (frontier points / strategy_configs); a failed judge call records quality NULL, ' +
+      'never a fake score.',
+  },
+  {
     file: 'packages/harness/src/cli.ts',
     symbol: 'potion-harness --provider (calibration + run wiring)',
     kind: 'alias-guard',
