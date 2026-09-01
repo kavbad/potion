@@ -73,6 +73,9 @@ const RESOLUTION_PATTERNS: RegExp[] = [
   /\bfallbackStrategyFor\s*\(/,
   /\bliveDefaultStrategy\s*\(/,
   /\bguardFrontierProvenance\s*\(/,
+  // One-resolver P0 (2026-08-31): the composed serve decision — any caller
+  // is by definition resolving what production would serve.
+  /\bservingDecisionFor\s*\(/,
 ];
 
 /** Files the patterns match but that carry no eligibility DECISION — pure
@@ -112,7 +115,13 @@ const NOT_A_DECISION: Record<string, string> = {
   'apps/server/src/routes/guarantee.ts': 'reads guarantee config/incidents; judge resolution lives in src/guarantee.ts',
   'apps/server/src/incumbents/roster.ts': 'names incumbents from the price table for onboarding; skips mock aliases; no resolution',
   'packages/workers/src/learning-period.ts':
-    'derives learn-* suites and hands them to runEval on the org provider set; alias guards (MockAliasInLiveRunError) apply in the harness',
+    'the serving pick comes from @potion/pareto servingDecisionFor (inventoried there); suites run via runEval ' +
+    'on the org provider set with harness alias guards (MockAliasInLiveRunError), and the live judge is the ' +
+    'reachable classRepresentative — the same excluded-live posture the handlers.ts rows pin',
+  'apps/server/src/context.ts':
+    'provider-set construction (createProviders/createResolver) over the price table — transports, not ' +
+    'eligibility; the serving defaults (DEFAULT_STRATEGY/liveDefaultStrategy/fallbackStrategyFor) moved to ' +
+    '@potion/pareto serving.ts (inventoried there) and are re-exported here unchanged',
 };
 
 describe('mock-eligibility inventory completeness (grep-derived)', () => {

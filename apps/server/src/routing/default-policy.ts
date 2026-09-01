@@ -7,6 +7,7 @@
 // than the one the org actually got. One constant, used by both, so the
 // preview and the binding can never drift again: quality-first, cheapest
 // point that clears the bar.
-import type { Policy } from '@potion/core';
-
-export const DEFAULT_ORG_POLICY: Policy = { type: 'min_cost', qualityFloor: 0.95 };
+// Canonical home is @potion/pareto's serving module (2026-08-31, one-resolver
+// P0): the learning period needs the same constant and workers cannot import
+// apps/server. Re-exported here so every existing import keeps working.
+export { DEFAULT_ORG_POLICY } from '@potion/pareto';

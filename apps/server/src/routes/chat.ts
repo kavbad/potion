@@ -24,13 +24,10 @@ import {
   ChatMessageSchema,
   ToolChoiceSchema,
   ToolSchema,
-  fastestQualityQualifyingPoint,
   highestQualityPoint,
-  latencyPremium,
   lshBucket,
   requestShape,
   shapeClass,
-  selectPoint,
   strategyHash,
   type ChatMessage,
   type Frontier,
@@ -47,8 +44,7 @@ import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, in
 import { stampedRouterVersion } from '../routing/router-stamp.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
-import { loadCurrentFrontier } from '@potion/pareto';
-import { strategyCapabilities } from '@potion/strategies';
+import { loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
 import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
 import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
@@ -60,7 +56,6 @@ import { execute } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
   fallbackStrategyFor,
-  DEFAULT_STRATEGY,
   assignmentCacheKey,
   type PotionContext,
 } from '../context.js';
@@ -136,213 +131,18 @@ export const ChatCompletionsRequestSchema = z.object({
   n: z.number().int().min(1).max(1).optional(),
 }).merge(SamplingParamsSchema);
 
-export interface OperatingPoint {
-  /** Why the fallback fired (2026-08-24, beta feedback): 'policy_infeasible'
-   * = no measured point met the policy (e.g. the quality floor); the best
-   * point served. Absent when fallback is 0. */
-  fallbackReason?: 'no_frontier' | 'no_point_resolvable' | 'policy_infeasible';
-  /** null = no strategy is resolvable for this server's mode (live server,
-   * no non-mock price entry) — the caller REFUSES rather than serving mock
-   * output on a live path (G2.4). */
-  config: StrategyConfig | null;
-  /** 1 when the policy was infeasible (or no frontier exists) and the
-   * documented fallback fired. */
-  fallback: 0 | 1;
-  frontierVersion: number;
-  frontier: Frontier | null;
-  /**
-   * G2.6 — set ONLY in the compound-policy latency-infeasible case: points
-   * cleared the quality floor but none cleared the latency bound, so the
-   * FASTEST quality-qualifying point was served and the SLO was knowingly
-   * missed. Owner's rule: violate the customer-observable dimension
-   * (latency), never the customer-invisible one (quality) — detecting quality
-   * degradation is the product itself. Never silent: it rides the trace, the
-   * DTO, the playground response, and a standing policy condition.
-   */
-  latencyViolation?: LatencyViolation;
-  /**
-   * Set ONLY when a request carried `tools` and the policy's optimum was a
-   * prompt-transforming strategy, so selection was narrowed to single-model
-   * points. Same discipline as latencyViolation: the substitution is real, so
-   * it is labelled rather than hidden.
-   *
-   * Note what is and is not given up. Restricting to single points can never
-   * BREACH a policy's stated bound — a quality floor still holds, a cost
-   * ceiling still holds, a latency bound still holds, because the restricted
-   * set is a subset of the qualifying set. It costs optimality only. That is
-   * why `fallback` stays 0 when a single point still satisfies the policy:
-   * the request genuinely was routed on measured evidence.
-   */
-  toolConstraint?: ToolConstraint;
-}
+// The operating-point machinery — resolveOperatingPoint, the provenance
+// guard, and their types — moved to @potion/pareto's serving module
+// (2026-08-31, one-resolver P0) so the router compiler and the learning
+// period run the serve path's exact chain. Re-exported here (and imported
+// above for this route's own use) so every existing import keeps working.
+export { resolveOperatingPoint, guardFrontierProvenance };
+export type { OperatingPoint, ToolConstraint, LatencyViolation } from '@potion/pareto';
 
-/** The labelled consequence of tools forcing a single-model point. */
-export interface ToolConstraint {
-  /** The strategy type the policy would have selected without tools. */
-  wouldHaveServedType: string;
-  /** Its hash, so the substitution is auditable against the frontier. */
-  wouldHaveServedHash: string;
-}
-
-/** The labeled consequence of an unmeetable latency bound (G2.6). */
-export interface LatencyViolation {
-  boundMs: number;
-  qualityFloor: number;
-  /** The p95 actually served — always > boundMs. */
-  servedP95Ms: number;
-  servedStrategyHash: string;
-  /** Relax the bound to this and the policy is feasible on cost again. */
-  relaxLatencyToMs: number | null;
-  /** Or relax quality to this and the CURRENT bound is feasible. */
-  relaxQualityToFloor: number | null;
-}
-
-/** Highest-quality point (tie → lower cost) — the documented NULL fallback. */
-// Canonical home is @potion/core (select.ts) since M4b #37 — imported above
-// and re-exported here for the dashboard route's existing import.
+/** Highest-quality point (tie → lower cost) — the documented NULL fallback.
+ * Canonical home is @potion/core (select.ts) since M4b #37 — imported above
+ * and re-exported here for the dashboard route's existing import. */
 export { highestQualityPoint };
-
-/**
- * selectPoint(policy) with the §8 NULL fallback applied.
- *
- * G2.4: `fallbackStrategy` is the LAST-RESORT config for this server's
- * provider mode — DEFAULT_STRATEGY (mock-mid) under mock, the designated
- * live default under live (fallbackStrategyFor in context.ts). It is null
- * only when a live server's price table has no non-mock entry; callers turn
- * that into an honest refusal instead of serving mock text as a live 200
- * (the fifth false-live instance, first on the serving path).
- */
-export function resolveOperatingPoint(
-  policy: Policy,
-  frontier: Frontier | null,
-  fallbackStrategy: StrategyConfig | null = DEFAULT_STRATEGY,
-  opts: { toolCapableOnly?: boolean } = {},
-): OperatingPoint {
-  // TOOL-CAPABLE NARROWING. A request carrying `tools` cannot be served by a
-  // strategy that rewrites or fans out the prompt — cascade/ensemble/
-  // draft-verify transform what the model sees, and tool-call semantics
-  // cannot be guaranteed through that. This used to be a hard 400, which
-  // meant a customer whose policy happened to select a cascade discovered it
-  // in production and had no route through: the refusal named the problem and
-  // offered only "choose a different policy".
-  //
-  // Instead: resolve normally, and if the optimum is not single, re-resolve
-  // over the single-only subset and LABEL the substitution. 41 of the 44
-  // points on the committed platform frontier are single, so this almost
-  // always finds a measured answer, and both last-resort fallbacks
-  // (DEFAULT_STRATEGY, liveDefaultStrategy) are single by construction.
-  if (opts.toolCapableOnly) {
-    const unrestricted = resolveOperatingPoint(policy, frontier, fallbackStrategy);
-    if (unrestricted.config === null) return unrestricted;
-    if (unrestricted.config.type === 'single') return unrestricted;
-    const unrestrictedPoint = frontier?.points.find((p) => p.strategyHash === strategyHash(unrestricted.config as StrategyConfig));
-    if (strategyCapabilities(unrestricted.config).canServeTools && unrestrictedPoint?.evidence?.toolsMeasured === true) return unrestricted;
-    // MIXING M3: a point may carry tools when its SHAPE can (strategyCapabilities)
-    // and — for anything but a single model — it was MEASURED on items that
-    // carried tools (evidence.toolsMeasured). Singles are trusted as before.
-    const singles = frontier
-      ? frontier.points.filter(
-          (p) =>
-            strategyCapabilities(p.strategyConfig).canServeTools &&
-            (p.strategyConfig.type === 'single' || p.evidence?.toolsMeasured === true),
-        )
-      : [];
-    const narrowed: Frontier | null =
-      frontier && singles.length > 0 ? { ...frontier, points: singles } : null;
-    const restricted = resolveOperatingPoint(policy, narrowed, fallbackStrategy);
-    return {
-      ...restricted,
-      // A narrowed frontier still reports its real version; only an absent
-      // one falls to 0, which resolveOperatingPoint already handles.
-      toolConstraint: {
-        wouldHaveServedType: unrestricted.config.type,
-        wouldHaveServedHash: strategyHash(unrestricted.config),
-      },
-    };
-  }
-  if (!frontier || frontier.points.length === 0) {
-    return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_frontier', frontierVersion: 0, frontier };
-  }
-  const selected = selectPoint(policy, frontier);
-  if (selected) {
-    return {
-      config: selected.strategyConfig,
-      fallback: 0,
-      frontierVersion: frontier.version,
-      frontier,
-    };
-  }
-  // G2.6 case (ii) — LATENCY-side infeasibility on a compound policy. Points
-  // clear the quality floor; none clear the bound. Serving the highest-quality
-  // point (the generic fallback below) would ignore the SLO entirely; refusing
-  // would break serving. So: serve the FASTEST point that still meets the
-  // quality floor, and label the violation everywhere. Quality is never traded
-  // away to meet latency — that is the one substitution the customer cannot
-  // detect for themselves.
-  //
-  // Case (i), quality-side infeasibility, falls through to the existing
-  // highest-quality fallback: no latency SLO is violated by serving the best
-  // quality available, and blaming the bound would send the customer to relax
-  // the wrong knob.
-  if (policy.type === 'compound') {
-    const fastest = fastestQualityQualifyingPoint(frontier.points, policy.qualityFloor);
-    if (fastest) {
-      const premium = latencyPremium(policy, frontier.points);
-      return {
-        config: fastest.strategyConfig,
-        fallback: 1,
-        frontierVersion: frontier.version,
-        frontier,
-        latencyViolation: {
-          boundMs: policy.p95Ms,
-          qualityFloor: policy.qualityFloor,
-          servedP95Ms: fastest.latencyP95,
-          servedStrategyHash: fastest.strategyHash,
-          relaxLatencyToMs: premium.relaxLatencyToMs,
-          relaxQualityToFloor: premium.relaxQualityToFloor,
-        },
-      };
-    }
-  }
-  const best = highestQualityPoint(frontier.points);
-  if (!best) {
-    return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_point_resolvable', frontierVersion: frontier.version, frontier };
-  }
-  return { config: best.strategyConfig, fallback: 1, fallbackReason: 'policy_infeasible', frontierVersion: frontier.version, frontier };
-}
-
-/**
- * Serve-time provenance guard (ROADMAP M1a item 4): a simulated number may
- * never masquerade as live evidence.
- *
- * A frontier is TAINTED when any point's provider_mode is 'mock' or
- * 'unknown' (absent on the value object — pre-M1a rows). When the server
- * runs with live providers we REFUSE to serve from a tainted frontier: the
- * request falls back per the existing no-frontier rule (DEFAULT_STRATEGY,
- * frontier=v0, fallback=1) and the trace header carries provenance=blocked.
- * When running mock-only (dev), tainted frontiers serve with
- * provenance=mock. All-live frontiers always serve with provenance=live.
- */
-export function guardFrontierProvenance(
-  frontier: Frontier | null,
-  serverMode: 'mock' | 'live',
-  warn: (msg: string) => void = () => {},
-): { frontier: Frontier | null; provenance: 'live' | 'mock' | 'blocked' } {
-  if (!frontier || frontier.points.length === 0) {
-    return { frontier, provenance: serverMode };
-  }
-  const tainted = frontier.points.some((p) => (p.providerMode ?? 'unknown') !== 'live');
-  if (!tainted) return { frontier, provenance: 'live' };
-  if (serverMode === 'live') {
-    warn(
-      `provenance guard: refusing to serve cluster '${frontier.clusterId}' from ` +
-        `frontier v${frontier.version} — provider_mode mock/unknown under live providers ` +
-        `(falling back to the no-frontier default)`,
-    );
-    return { frontier: null, provenance: 'blocked' };
-  }
-  return { frontier, provenance: 'mock' };
-}
 
 /**
  * What this request would have cost on the frontier's HIGHEST-QUALITY point —

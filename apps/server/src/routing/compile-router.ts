@@ -37,12 +37,10 @@ import {
   getOrgIncumbents,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
-import { loadCurrentFrontier } from '@potion/pareto';
-import { guardFrontierProvenance, parseTraceHeader, resolveOperatingPoint } from '../routes/chat.js';
+import { loadCurrentFrontier, servingDecisionFor } from '@potion/pareto';
+import { parseTraceHeader } from '../routes/chat.js';
 import { describePolicy } from '../routes/connection.js';
-import { bindServingLatency } from '../latency-policy.js';
-import { fallbackStrategyFor, type PotionContext } from '../context.js';
-import { policyForCluster } from './floors.js';
+import { type PotionContext } from '../context.js';
 import { routerModelName } from './router-slug.js';
 import { bustRouterStampCache } from './router-stamp.js';
 
@@ -246,7 +244,10 @@ export async function compileAndMintRouter(
 
 
 /** The per-cluster assignment loop, shared by the compiler and the O1
- * onboarding reveal — the SERVE PATH'S own functions, one implementation. */
+ * onboarding reveal — delegated to @potion/pareto's servingDecisionFor,
+ * THE serve chain (2026-08-31, one-resolver P0): the same function the
+ * learning period measures against, so the artifact, the reveal, and the
+ * learning comparison can never disagree about what production serves. */
 export async function assignmentsUnderPolicy(
   ctx: PotionContext,
   db: PotionDb,
@@ -264,28 +265,32 @@ export async function assignmentsUnderPolicy(
     if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
   }
   for (const cid of clusterIds.sort()) {
-    const loaded = await loadCurrentFrontier(db, cid, orgId);
-    if (!loaded || loaded.points.length === 0) continue;
-    const guarded = guardFrontierProvenance(loaded, ctx.providerMode, warn);
-    const clusterPolicy = policyForCluster(policy, cid);
-    const bound = await bindServingLatency(ctx, clusterPolicy, guarded.frontier, orgId, cid, warn);
-    const op = resolveOperatingPoint(clusterPolicy, bound.frontier, fallbackStrategyFor(ctx.providerMode, ctx.prices));
+    const d = await servingDecisionFor(db, {
+      orgId,
+      clusterId: cid,
+      policy,
+      providerMode: ctx.providerMode,
+      prices: ctx.prices,
+      warn,
+    });
+    if (!d.loaded || d.loaded.points.length === 0) continue;
+    const op = d.op;
     if (op.config === null) continue;
     const hash = strategyHash(op.config as StrategyConfig);
-    const served = (bound.frontier?.points ?? guarded.frontier?.points ?? []).find((p) => p.strategyHash === hash) ?? null;
+    const served = (d.binding.frontier?.points ?? []).find((p) => p.strategyHash === hash) ?? null;
     const cfg = op.config as StrategyConfig & { model?: string };
     assignments.push({
       clusterId: cid,
-      frontierId: loaded.id,
-      frontierVersion: loaded.version,
-      provenance: guarded.provenance,
+      frontierId: d.loaded.id,
+      frontierVersion: d.loaded.version,
+      provenance: d.provenance,
       strategyHash: hash,
       strategy: { type: cfg.type, label: cfg.type === 'single' && cfg.model !== undefined ? cfg.model : cfg.type },
       quality: served?.quality ?? null,
       costPer1K: served?.costPer1K ?? null,
       latencyP95: served?.latencyP95 ?? null,
       evidenceN: served?.evidence?.n ?? null,
-      alternatives: loaded.points.length,
+      alternatives: d.loaded.points.length,
       fallback: op.fallbackReason ?? null,
     });
   }

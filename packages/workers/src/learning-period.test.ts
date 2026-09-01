@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { strategyHash, type FrontierPoint } from '@potion/core';
-import { createDb, migrate, orgs, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
+import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
+import { createDb, migrate, orgs, insertApiKey, insertPolicy, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { LEARNING_SPAN_NAME, runLearningPeriodForOrg } from './learning-period.js';
 import type { JobContext } from './handlers.js';
@@ -92,6 +92,51 @@ describe('learning:period', () => {
     expect((await runLearningPeriodForOrg(ctx, 'org_lp')).outcome).toBe('no-incumbent');
     await upsertOrgIncumbents(db.db, { orgId: 'org_lp', models: ['mock-mid'], other: null, samplingConsent: false });
     expect((await runLearningPeriodForOrg(ctx, 'org_lp')).outcome).toBe('no-consent');
+  });
+});
+
+describe("the serving pick is the serve path's own resolution (2026-08-31, one-resolver P0)", () => {
+  // Frontier: mock-cheap (q 0.96, $0.4) and mock-mid (q 0.98, $2.1). The
+  // old reimplementation ("top-level floor-or-0.95 → cheapest above,
+  // cheapest-overall on infeasible") picks mock-cheap under EVERY policy
+  // below; the serve chain picks mock-mid. Incumbent is mock-cheap so the
+  // measured pair is always two distinct models.
+  async function servingModelUnder(policy: Policy): Promise<string | undefined> {
+    await saveFrontier(db.db, 'classification', [point('mock-cheap', 0.96, 0.4, 120), point('mock-mid', 0.98, 2.1, 340)], 'manual', 'test-prices');
+    await upsertOrgIncumbents(db.db, { orgId: 'org_lp', models: ['mock-cheap'], other: null, samplingConsent: true });
+    await insertPolicy(db.db, { id: 'pol-lp', orgId: 'org_lp', name: 'lp', config: policy });
+    await insertApiKey(db.db, { id: 'key-lp', keyHash: sha256('pk_lp'), name: 'serve', orgId: 'org_lp', policyId: 'pol-lp' });
+    await insertTraceSpans(
+      db.db,
+      Array.from({ length: 10 }, (_, i) => ({
+        orgId: 'org_lp', traceId: `learn-s${i}`, spanId: 'chat', parentId: null, name: LEARNING_SPAN_NAME, model: 'mock-cheap', usage: {}, costUsd: 0,
+        attrs: { 'gen_ai.operation.name': 'chat', 'gen_ai.prompt': `Is ticket ${i} urgent or routine?`, 'gen_ai.completion': 'routine', 'potion.cluster_id': 'classification' },
+        ts: new Date(),
+      })),
+    );
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    const report = await runLearningPeriodForOrg(ctx, 'org_lp');
+    expect(report.outcome, JSON.stringify(report.skipped)).toBe('ran');
+    const rows = await listLearningProposals(db.db, 'org_lp');
+    return rows[0]?.servingModel;
+  }
+
+  it('honors the CLUSTER floor, not just the top-level floor', async () => {
+    // 0.97 for classification (top-level 0.7 is permissive): only mock-mid
+    // clears. The bypass read only the top-level floor → mock-cheap.
+    expect(await servingModelUnder({ type: 'min_cost', qualityFloor: 0.7, clusterFloors: { classification: 0.97 } })).toBe('mock-mid');
+  });
+
+  it('an infeasible floor measures the HIGHEST-QUALITY point production actually serves', async () => {
+    // 0.995: nothing clears. Production serves highest-quality
+    // (policy_infeasible); the bypass INVERTED this to cheapest-overall.
+    expect(await servingModelUnder({ type: 'min_cost', qualityFloor: 0.995 })).toBe('mock-mid');
+  });
+
+  it('a max_quality policy measures the max-quality pick, never a 0.95-floor default', async () => {
+    // Ceiling $3: both points eligible → max quality wins. The bypass had
+    // no qualityFloor to read, defaulted 0.95, and picked cheapest-above.
+    expect(await servingModelUnder({ type: 'max_quality', costCeilingPer1K: 3 })).toBe('mock-mid');
   });
 });
 

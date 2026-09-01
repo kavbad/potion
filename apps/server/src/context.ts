@@ -6,7 +6,7 @@
 // + mock embedder are the defaults; live providers/embeddings only engage
 // when the matching *_API_KEY env vars are present.
 import { fileURLToPath } from 'node:url';
-import type { PriceTable, ProviderId, ProviderMode, StrategyConfig } from '@potion/core';
+import type { PriceTable, ProviderId } from '@potion/core';
 import { DemandAccumulator, sha256 } from '@potion/core';
 import {
   CANONICAL_EMBED_DIMS,
@@ -72,47 +72,11 @@ export const DEFAULT_PRICES_PATH = fileURLToPath(
   new URL('../../../prices.json', import.meta.url),
 );
 
-/** Strategy used when the assigned cluster has NO frontier yet (e.g.
- * 'general') on a MOCK server: a plain mid-tier single. Documented
- * fallback; requests served this way carry `fallback=1` and `frontier=v0`
- * in the trace header. */
-export const DEFAULT_STRATEGY: StrategyConfig = { type: 'single', model: 'mock-mid' };
-
-/**
- * G2.4 (FIFTH false-live instance — the first on the SERVING path): under a
- * LIVE server the last-resort fallback must be a REAL strategy, never the
- * mock-alias DEFAULT_STRATEGY. Pre-G2.4, a live deployment with an absent
- * or provenance-blocked frontier executed `mock-mid`, which resolves to the
- * mock transport that createProviders always carries — mock text returned
- * as a live 200.
- *
- * Owner decision: preserve FAIL-OPEN serving by designating a live default
- * (the mid-class representative with mock excluded — the G1.5
- * excludeProvider convention), and refuse honestly ONLY when no live
- * strategy is resolvable at all. Returns null when the price table has no
- * non-mock entry; callers turn that into an explicit refusal.
- */
-export function liveDefaultStrategy(prices: PriceTable): StrategyConfig | null {
-  // Mid-class band mirrors @potion/researcher's classifyModel (inputPer1M
-  // <= 3 and > 0.5); the tie-break — cheapest, then alias — is the
-  // classRepresentative rule. Resolved here rather than importing the
-  // researcher package so the serving path keeps its dependency surface.
-  const live = prices.entries.filter((e) => e.provider !== 'mock');
-  const byPrice = [...live].sort(
-    (a, b) => a.inputPer1M - b.inputPer1M || a.alias.localeCompare(b.alias),
-  );
-  const mid = byPrice.find((e) => e.inputPer1M > 0.5 && e.inputPer1M <= 3);
-  return (mid ?? byPrice[0]) ? { type: 'single', model: (mid ?? byPrice[0])!.alias } : null;
-}
-
-/** The fallback strategy for a server in `mode`: the mock default under
- * mock, the designated live default under live (null = refuse). */
-export function fallbackStrategyFor(
-  mode: ProviderMode,
-  prices: PriceTable,
-): StrategyConfig | null {
-  return mode === 'live' ? liveDefaultStrategy(prices) : DEFAULT_STRATEGY;
-}
+// DEFAULT_STRATEGY, liveDefaultStrategy and fallbackStrategyFor moved to
+// @potion/pareto's serving module (2026-08-31, one-resolver P0) so workers
+// resolve the serve path's fallback exactly; re-exported here so every
+// existing import keeps working.
+export { DEFAULT_STRATEGY, liveDefaultStrategy, fallbackStrategyFor } from '@potion/pareto';
 
 export type EmbedderKind = EmbedderMode;
 

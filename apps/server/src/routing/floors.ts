@@ -6,19 +6,15 @@
 // policy — which is what 'apply' did before, silently dropping a floor set
 // for another kind of work.
 import type { Policy } from '@potion/core';
+// The serving-side half (policyForCluster) moved to @potion/pareto's serving
+// module (2026-08-31, one-resolver P0) so the learning period runs the exact
+// serve chain; re-exported here so every existing import keeps working.
+export { policyForCluster } from '@potion/pareto';
 
 export function floorFor(policy: Policy, clusterId: string): number | null {
   if (policy.type !== 'min_cost' && policy.type !== 'compound') return null;
   const own = policy.clusterFloors?.[clusterId];
   return typeof own === 'number' ? own : policy.qualityFloor;
-}
-
-/** The policy as it applies to one cluster: its own floor substituted in. */
-export function policyForCluster(policy: Policy, clusterId: string): Policy {
-  if (policy.type !== 'min_cost' && policy.type !== 'compound') return policy;
-  const own = policy.clusterFloors?.[clusterId];
-  if (typeof own !== 'number' || own === policy.qualityFloor) return policy;
-  return { ...policy, qualityFloor: own };
 }
 
 /**

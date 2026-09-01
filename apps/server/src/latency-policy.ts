@@ -5,103 +5,43 @@
 // mean) where they exist; where they don't, treat the harness number as
 // provisional and say so."
 //
-// This module is the ONE seam where that substitution happens. All three
-// resolveOperatingPoint call sites (chat, openai-parity, playground) go
-// through it, because a bound enforced only in /v1/chat/completions is
-// silently non-binding on /v1/completions — the "handled in one route is not
-// handled" class that G2.4 closed out.
-//
-// Three non-negotiables, in order of how badly they break things:
-//   1. A rollup failure NEVER breaks serving. Catch, warn, fall back to the
-//      harness numbers marked provisional (the resolveGuaranteeOverride
-//      precedent).
-//   2. Only policies with a latency DIMENSION pay the query. A min_cost
-//      policy must not acquire a per-request database read.
-//   3. The cached frontier is never mutated — resolveLatency shallow-copies,
-//      and so does everything here.
-import {
-  latencyPremium,
-  resolveLatency,
-  type Frontier,
-  type LatencyEvidence,
-  type LatencyPremium,
-  type Policy,
-  type ServingLatencySample,
-} from '@potion/core';
+// The binding implementation moved to @potion/pareto's serving module
+// (2026-08-31, one-resolver P0) so the learning period binds exactly as the
+// serve path does; this file keeps the ctx-shaped seam every server call
+// site uses, plus the trace/condition halves that are server concerns. All
+// three resolveOperatingPoint call sites (chat, openai-parity, playground)
+// still go through here, because a bound enforced only in
+// /v1/chat/completions is silently non-binding on /v1/completions — the
+// "handled in one route is not handled" class that G2.4 closed out.
+import type { Frontier, Policy } from '@potion/core';
 import {
   POLICY_INFEASIBLE,
   clearPolicyCondition,
   raisePolicyCondition,
-  servingLatencyP95,
   type PolicyInfeasibleDetail,
 } from '@potion/db';
+import {
+  bindServingLatency as bindServingLatencyOnDb,
+  policyHasLatencyDimension,
+  type LatencyBinding,
+} from '@potion/pareto';
 import type { PotionContext } from './context.js';
 import type { LatencyViolation } from './routes/chat.js';
 
-/** Rollup window. An hour of traffic is long enough to accumulate the sample
- * minimum on a modest workload and short enough that a regression shows up
- * while it still matters. */
-export const SERVING_LATENCY_WINDOW_MIN = 60;
-
-/** Per-(org, cluster) rollup cache TTL. Matches the org provider-set cache
- * (context.ts ORG_PROVIDER_CACHE_TTL_MS): fresh enough that a latency
- * regression binds within a minute, cheap enough that a hot cluster does not
- * issue a quantile query per request. Per-replica by construction — a shared
- * cache is a G2.5 (Redis) seam, not a correctness gap: replicas converge
- * within the TTL. */
-export const SERVING_LATENCY_CACHE_TTL_MS = 60_000;
-
-interface CacheEntry {
-  at: number;
-  rows: ServingLatencySample[];
-}
-
-const cache = new Map<string, CacheEntry>();
-
-/** Test seam: drop the memo so a suite can observe a fresh rollup. */
-export function clearServingLatencyCache(): void {
-  cache.clear();
-}
-
-/** True when the policy states a latency constraint at all. Only these pay
- * for the rollup — and latency_bound gets the SAME binding as compound,
- * because shipping two meanings of "p95" would be worse than shipping one
- * that is sometimes provisional. */
-export function policyHasLatencyDimension(policy: Policy): boolean {
-  return policy.type === 'compound' || policy.type === 'latency_bound';
-}
-
-export interface LatencyBinding {
-  /** The frontier the policy should be evaluated against — serving-grade p95
-   * substituted where the evidence supports it. Identity-equal to the input
-   * when no substitution applies. */
-  frontier: Frontier | null;
-  /** Per-strategyHash evidence: which number, from which clock, over what n. */
-  evidence: Record<string, LatencyEvidence>;
-  /** 'serving' when ANY point resolved to serving-grade evidence. The value
-   * the trace's latency_src= field reports. */
-  source: 'serving' | 'harness';
-  /** The cost the bound is charging, computed against the SAME resolved
-   * points the selection used. */
-  premium: LatencyPremium;
-}
-
-/** The no-op binding: the policy has no latency dimension, or there is no
- * frontier to bind against. */
-function inert(frontier: Frontier | null): LatencyBinding {
-  return {
-    frontier,
-    evidence: {},
-    source: 'harness',
-    premium: latencyPremium({ type: 'min_cost', qualityFloor: 0 }, []),
-  };
-}
+// Moved machinery, re-exported so every existing import keeps working.
+export {
+  SERVING_LATENCY_WINDOW_MIN,
+  SERVING_LATENCY_CACHE_TTL_MS,
+  clearServingLatencyCache,
+  policyHasLatencyDimension,
+  type LatencyBinding,
+} from '@potion/pareto';
 
 /**
- * Resolve the latency the policy will be evaluated against.
- *
- * Returns the frontier unchanged for policies without a latency dimension, so
- * the common path costs one boolean.
+ * Resolve the latency the policy will be evaluated against — the ctx-shaped
+ * seam over @potion/pareto's bindServingLatency (same cache, same
+ * semantics; the package function takes the raw db handle so workers can
+ * call it too).
  */
 export async function bindServingLatency(
   ctx: PotionContext,
@@ -112,50 +52,7 @@ export async function bindServingLatency(
   warn: (msg: string) => void = () => {},
   now: Date = new Date(),
 ): Promise<LatencyBinding> {
-  if (!policyHasLatencyDimension(policy)) return inert(frontier);
-  if (!frontier || frontier.points.length === 0) return inert(frontier);
-
-  let rows: ServingLatencySample[] = [];
-  try {
-    rows = await cachedRollup(ctx, orgId, clusterId, now);
-  } catch (err) {
-    // Non-negotiable 1. The customer's request is served against the harness
-    // numbers, and every surface says the evidence is provisional — which is
-    // exactly the honest answer: we could not measure, so we did not claim to.
-    warn(
-      `serving-latency rollup failed for org=${orgId} cluster=${clusterId} — ` +
-        `binding against PROVISIONAL harness latency: ${String(err)}`,
-    );
-    rows = [];
-  }
-
-  const resolved = resolveLatency(frontier.points, rows, SERVING_LATENCY_WINDOW_MIN);
-  return {
-    frontier: { ...frontier, points: resolved.points },
-    evidence: resolved.evidence,
-    source: resolved.allProvisional ? 'harness' : 'serving',
-    premium: latencyPremium(policy, resolved.points),
-  };
-}
-
-async function cachedRollup(
-  ctx: PotionContext,
-  orgId: string,
-  clusterId: string,
-  now: Date,
-): Promise<ServingLatencySample[]> {
-  const key = `${orgId}::${clusterId}`;
-  const hit = cache.get(key);
-  if (hit && now.getTime() - hit.at < SERVING_LATENCY_CACHE_TTL_MS) return hit.rows;
-  const rows = await servingLatencyP95(
-    ctx.db.db,
-    orgId,
-    clusterId,
-    SERVING_LATENCY_WINDOW_MIN,
-    now,
-  );
-  cache.set(key, { at: now.getTime(), rows });
-  return rows;
+  return bindServingLatencyOnDb(ctx.db.db, policy, frontier, orgId, clusterId, warn, now);
 }
 
 /**

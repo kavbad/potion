@@ -1,0 +1,474 @@
+// THE SERVING DECISION — one implementation (2026-08-31, external core-API
+// review P0 "make learning use the exact production route resolver").
+//
+// Before this module, the serve path's chain — policyForCluster →
+// loadCurrentFrontier → guardFrontierProvenance → bindServingLatency →
+// resolveOperatingPoint(fallbackStrategyFor) — lived in apps/server, which
+// packages/workers cannot import. The learning period reimplemented it as
+// "top-level qualityFloor-or-0.95 → cheapest point above", which ignored
+// cluster floors (including the very floors its own proposals write),
+// mishandled max_quality and latency policies, skipped the provenance
+// guard, and INVERTED the infeasible fallback (cheapest, where production
+// serves highest-quality). The route it measured could be the opposite end
+// of the frontier from the route production serves.
+//
+// Now the chain lives here, and apps/server re-exports it (routes/chat.ts,
+// latency-policy.ts, routing/floors.ts, context.ts keep their public
+// surface as shims). servingDecisionFor() is the authoritative answer to:
+// given org + kind of work + bound policy, what would Potion serve right
+// now? Callers: the router compiler (assignmentsUnderPolicy), the learning
+// period, and — function by function — the serve path itself.
+import {
+  fastestQualityQualifyingPoint,
+  highestQualityPoint,
+  latencyPremium,
+  resolveLatency,
+  selectPoint,
+  strategyHash,
+  type Frontier,
+  type LatencyEvidence,
+  type LatencyPremium,
+  type Policy,
+  type PriceTable,
+  type ProviderMode,
+  type ServingLatencySample,
+  type StrategyConfig,
+} from '@potion/core';
+import { servingLatencyP95, type PotionDb } from '@potion/db';
+import { strategyCapabilities } from '@potion/strategies';
+import { loadCurrentFrontier } from './persistence.js';
+
+// ---------------------------------------------------------------------------
+// Defaults and fallbacks (moved from apps/server context.ts / default-policy.ts)
+// ---------------------------------------------------------------------------
+
+/** THE one starting rule (2026-08-28, operator: "why did it choose 74.5%
+ * quality... that is kind of low no?"). One constant, used by the first-run
+ * reveal, the key mint, and the learning period, so no surface can drift:
+ * quality-first, cheapest point that clears the bar. */
+export const DEFAULT_ORG_POLICY: Policy = { type: 'min_cost', qualityFloor: 0.95 };
+
+/** Strategy used when the assigned cluster has NO frontier yet (e.g.
+ * 'general') on a MOCK server: a plain mid-tier single. Documented
+ * fallback; requests served this way carry `fallback=1` and `frontier=v0`
+ * in the trace header. */
+export const DEFAULT_STRATEGY: StrategyConfig = { type: 'single', model: 'mock-mid' };
+
+/**
+ * G2.4 (FIFTH false-live instance — the first on the SERVING path): under a
+ * LIVE server the last-resort fallback must be a REAL strategy, never the
+ * mock-alias DEFAULT_STRATEGY. Pre-G2.4, a live deployment with an absent
+ * or provenance-blocked frontier executed `mock-mid`, which resolves to the
+ * mock transport that createProviders always carries — mock text returned
+ * as a live 200.
+ *
+ * Owner decision: preserve FAIL-OPEN serving by designating a live default
+ * (the mid-class representative with mock excluded — the G1.5
+ * excludeProvider convention), and refuse honestly ONLY when no live
+ * strategy is resolvable at all. Returns null when the price table has no
+ * non-mock entry; callers turn that into an explicit refusal.
+ */
+export function liveDefaultStrategy(prices: PriceTable): StrategyConfig | null {
+  // Mid-class band mirrors @potion/researcher's classifyModel (inputPer1M
+  // <= 3 and > 0.5); the tie-break — cheapest, then alias — is the
+  // classRepresentative rule. Resolved here rather than importing the
+  // researcher package so the serving path keeps its dependency surface.
+  const live = prices.entries.filter((e) => e.provider !== 'mock');
+  const byPrice = [...live].sort(
+    (a, b) => a.inputPer1M - b.inputPer1M || a.alias.localeCompare(b.alias),
+  );
+  const mid = byPrice.find((e) => e.inputPer1M > 0.5 && e.inputPer1M <= 3);
+  return (mid ?? byPrice[0]) ? { type: 'single', model: (mid ?? byPrice[0])!.alias } : null;
+}
+
+/** The fallback strategy for a server in `mode`: the mock default under
+ * mock, the designated live default under live (null = refuse). */
+export function fallbackStrategyFor(
+  mode: ProviderMode,
+  prices: PriceTable,
+): StrategyConfig | null {
+  return mode === 'live' ? liveDefaultStrategy(prices) : DEFAULT_STRATEGY;
+}
+
+// ---------------------------------------------------------------------------
+// Per-cluster floors (moved from apps/server routing/floors.ts)
+// ---------------------------------------------------------------------------
+
+/** The policy as it applies to one cluster: its own floor substituted in. */
+export function policyForCluster(policy: Policy, clusterId: string): Policy {
+  if (policy.type !== 'min_cost' && policy.type !== 'compound') return policy;
+  const own = policy.clusterFloors?.[clusterId];
+  if (typeof own !== 'number' || own === policy.qualityFloor) return policy;
+  return { ...policy, qualityFloor: own };
+}
+
+// ---------------------------------------------------------------------------
+// Operating-point resolution (moved from apps/server routes/chat.ts)
+// ---------------------------------------------------------------------------
+
+export interface OperatingPoint {
+  /** Why the fallback fired (2026-08-24, beta feedback): 'policy_infeasible'
+   * = no measured point met the policy (e.g. the quality floor); the best
+   * point served. Absent when fallback is 0. */
+  fallbackReason?: 'no_frontier' | 'no_point_resolvable' | 'policy_infeasible';
+  /** null = no strategy is resolvable for this server's mode (live server,
+   * no non-mock price entry) — the caller REFUSES rather than serving mock
+   * output on a live path (G2.4). */
+  config: StrategyConfig | null;
+  /** 1 when the policy was infeasible (or no frontier exists) and the
+   * documented fallback fired. */
+  fallback: 0 | 1;
+  frontierVersion: number;
+  frontier: Frontier | null;
+  /**
+   * G2.6 — set ONLY in the compound-policy latency-infeasible case: points
+   * cleared the quality floor but none cleared the latency bound, so the
+   * FASTEST quality-qualifying point was served and the SLO was knowingly
+   * missed. Owner's rule: violate the customer-observable dimension
+   * (latency), never the customer-invisible one (quality) — detecting quality
+   * degradation is the product itself. Never silent: it rides the trace, the
+   * DTO, the playground response, and a standing policy condition.
+   */
+  latencyViolation?: LatencyViolation;
+  /**
+   * Set ONLY when a request carried `tools` and the policy's optimum was a
+   * prompt-transforming strategy, so selection was narrowed to single-model
+   * points. Same discipline as latencyViolation: the substitution is real, so
+   * it is labelled rather than hidden.
+   *
+   * Note what is and is not given up. Restricting to single points can never
+   * BREACH a policy's stated bound — a quality floor still holds, a cost
+   * ceiling still holds, a latency bound still holds, because the restricted
+   * set is a subset of the qualifying set. It costs optimality only. That is
+   * why `fallback` stays 0 when a single point still satisfies the policy:
+   * the request genuinely was routed on measured evidence.
+   */
+  toolConstraint?: ToolConstraint;
+}
+
+/** The labelled consequence of tools forcing a single-model point. */
+export interface ToolConstraint {
+  /** The strategy type the policy would have selected without tools. */
+  wouldHaveServedType: string;
+  /** Its hash, so the substitution is auditable against the frontier. */
+  wouldHaveServedHash: string;
+}
+
+/** The labeled consequence of an unmeetable latency bound (G2.6). */
+export interface LatencyViolation {
+  boundMs: number;
+  qualityFloor: number;
+  /** The p95 actually served — always > boundMs. */
+  servedP95Ms: number;
+  servedStrategyHash: string;
+  /** Relax the bound to this and the policy is feasible on cost again. */
+  relaxLatencyToMs: number | null;
+  /** Or relax quality to this and the CURRENT bound is feasible. */
+  relaxQualityToFloor: number | null;
+}
+
+/**
+ * selectPoint(policy) with the §8 NULL fallback applied.
+ *
+ * G2.4: `fallbackStrategy` is the LAST-RESORT config for this server's
+ * provider mode — DEFAULT_STRATEGY (mock-mid) under mock, the designated
+ * live default under live (fallbackStrategyFor above). It is null
+ * only when a live server's price table has no non-mock entry; callers turn
+ * that into an honest refusal instead of serving mock text as a live 200
+ * (the fifth false-live instance, first on the serving path).
+ */
+export function resolveOperatingPoint(
+  policy: Policy,
+  frontier: Frontier | null,
+  fallbackStrategy: StrategyConfig | null = DEFAULT_STRATEGY,
+  opts: { toolCapableOnly?: boolean } = {},
+): OperatingPoint {
+  // TOOL-CAPABLE NARROWING. A request carrying `tools` cannot be served by a
+  // strategy that rewrites or fans out the prompt — cascade/ensemble/
+  // draft-verify transform what the model sees, and tool-call semantics
+  // cannot be guaranteed through that. This used to be a hard 400, which
+  // meant a customer whose policy happened to select a cascade discovered it
+  // in production and had no route through: the refusal named the problem and
+  // offered only "choose a different policy".
+  //
+  // Instead: resolve normally, and if the optimum is not single, re-resolve
+  // over the single-only subset and LABEL the substitution. 41 of the 44
+  // points on the committed platform frontier are single, so this almost
+  // always finds a measured answer, and both last-resort fallbacks
+  // (DEFAULT_STRATEGY, liveDefaultStrategy) are single by construction.
+  if (opts.toolCapableOnly) {
+    const unrestricted = resolveOperatingPoint(policy, frontier, fallbackStrategy);
+    if (unrestricted.config === null) return unrestricted;
+    if (unrestricted.config.type === 'single') return unrestricted;
+    const unrestrictedPoint = frontier?.points.find((p) => p.strategyHash === strategyHash(unrestricted.config as StrategyConfig));
+    if (strategyCapabilities(unrestricted.config).canServeTools && unrestrictedPoint?.evidence?.toolsMeasured === true) return unrestricted;
+    // MIXING M3: a point may carry tools when its SHAPE can (strategyCapabilities)
+    // and — for anything but a single model — it was MEASURED on items that
+    // carried tools (evidence.toolsMeasured). Singles are trusted as before.
+    const singles = frontier
+      ? frontier.points.filter(
+          (p) =>
+            strategyCapabilities(p.strategyConfig).canServeTools &&
+            (p.strategyConfig.type === 'single' || p.evidence?.toolsMeasured === true),
+        )
+      : [];
+    const narrowed: Frontier | null =
+      frontier && singles.length > 0 ? { ...frontier, points: singles } : null;
+    const restricted = resolveOperatingPoint(policy, narrowed, fallbackStrategy);
+    return {
+      ...restricted,
+      // A narrowed frontier still reports its real version; only an absent
+      // one falls to 0, which resolveOperatingPoint already handles.
+      toolConstraint: {
+        wouldHaveServedType: unrestricted.config.type,
+        wouldHaveServedHash: strategyHash(unrestricted.config),
+      },
+    };
+  }
+  if (!frontier || frontier.points.length === 0) {
+    return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_frontier', frontierVersion: 0, frontier };
+  }
+  const selected = selectPoint(policy, frontier);
+  if (selected) {
+    return {
+      config: selected.strategyConfig,
+      fallback: 0,
+      frontierVersion: frontier.version,
+      frontier,
+    };
+  }
+  // G2.6 case (ii) — LATENCY-side infeasibility on a compound policy. Points
+  // clear the quality floor; none clear the bound. Serving the highest-quality
+  // point (the generic fallback below) would ignore the SLO entirely; refusing
+  // would break serving. So: serve the FASTEST point that still meets the
+  // quality floor, and label the violation everywhere. Quality is never traded
+  // away to meet latency — that is the one substitution the customer cannot
+  // detect for themselves.
+  //
+  // Case (i), quality-side infeasibility, falls through to the existing
+  // highest-quality fallback: no latency SLO is violated by serving the best
+  // quality available, and blaming the bound would send the customer to relax
+  // the wrong knob.
+  if (policy.type === 'compound') {
+    const fastest = fastestQualityQualifyingPoint(frontier.points, policy.qualityFloor);
+    if (fastest) {
+      const premium = latencyPremium(policy, frontier.points);
+      return {
+        config: fastest.strategyConfig,
+        fallback: 1,
+        frontierVersion: frontier.version,
+        frontier,
+        latencyViolation: {
+          boundMs: policy.p95Ms,
+          qualityFloor: policy.qualityFloor,
+          servedP95Ms: fastest.latencyP95,
+          servedStrategyHash: fastest.strategyHash,
+          relaxLatencyToMs: premium.relaxLatencyToMs,
+          relaxQualityToFloor: premium.relaxQualityToFloor,
+        },
+      };
+    }
+  }
+  const best = highestQualityPoint(frontier.points);
+  if (!best) {
+    return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_point_resolvable', frontierVersion: frontier.version, frontier };
+  }
+  return { config: best.strategyConfig, fallback: 1, fallbackReason: 'policy_infeasible', frontierVersion: frontier.version, frontier };
+}
+
+/**
+ * Serve-time provenance guard (ROADMAP M1a item 4): a simulated number may
+ * never masquerade as live evidence.
+ *
+ * A frontier is TAINTED when any point's provider_mode is 'mock' or
+ * 'unknown' (absent on the value object — pre-M1a rows). When the server
+ * runs with live providers we REFUSE to serve from a tainted frontier: the
+ * request falls back per the existing no-frontier rule (DEFAULT_STRATEGY,
+ * frontier=v0, fallback=1) and the trace header carries provenance=blocked.
+ * When running mock-only (dev), tainted frontiers serve with
+ * provenance=mock. All-live frontiers always serve with provenance=live.
+ */
+export function guardFrontierProvenance(
+  frontier: Frontier | null,
+  serverMode: 'mock' | 'live',
+  warn: (msg: string) => void = () => {},
+): { frontier: Frontier | null; provenance: 'live' | 'mock' | 'blocked' } {
+  if (!frontier || frontier.points.length === 0) {
+    return { frontier, provenance: serverMode };
+  }
+  const tainted = frontier.points.some((p) => (p.providerMode ?? 'unknown') !== 'live');
+  if (!tainted) return { frontier, provenance: 'live' };
+  if (serverMode === 'live') {
+    warn(
+      `provenance guard: refusing to serve cluster '${frontier.clusterId}' from ` +
+        `frontier v${frontier.version} — provider_mode mock/unknown under live providers ` +
+        `(falling back to the no-frontier default)`,
+    );
+    return { frontier: null, provenance: 'blocked' };
+  }
+  return { frontier, provenance: 'mock' };
+}
+
+// ---------------------------------------------------------------------------
+// Serving-grade latency binding (moved from apps/server latency-policy.ts)
+// ---------------------------------------------------------------------------
+
+/** Rollup window. An hour of traffic is long enough to accumulate the sample
+ * minimum on a modest workload and short enough that a regression shows up
+ * while it still matters. */
+export const SERVING_LATENCY_WINDOW_MIN = 60;
+
+/** Per-(org, cluster) rollup cache TTL. Matches the org provider-set cache
+ * (context.ts ORG_PROVIDER_CACHE_TTL_MS): fresh enough that a latency
+ * regression binds within a minute, cheap enough that a hot cluster does not
+ * issue a quantile query per request. Per-replica by construction — a shared
+ * cache is a G2.5 (Redis) seam, not a correctness gap: replicas converge
+ * within the TTL. */
+export const SERVING_LATENCY_CACHE_TTL_MS = 60_000;
+
+interface CacheEntry {
+  at: number;
+  rows: ServingLatencySample[];
+}
+
+const latencyCache = new Map<string, CacheEntry>();
+
+/** Test seam: drop the memo so a suite can observe a fresh rollup. */
+export function clearServingLatencyCache(): void {
+  latencyCache.clear();
+}
+
+/** True when the policy states a latency constraint at all. Only these pay
+ * for the rollup — and latency_bound gets the SAME binding as compound,
+ * because shipping two meanings of "p95" would be worse than shipping one
+ * that is sometimes provisional. */
+export function policyHasLatencyDimension(policy: Policy): boolean {
+  return policy.type === 'compound' || policy.type === 'latency_bound';
+}
+
+export interface LatencyBinding {
+  /** The frontier the policy should be evaluated against — serving-grade p95
+   * substituted where the evidence supports it. Identity-equal to the input
+   * when no substitution applies. */
+  frontier: Frontier | null;
+  /** Per-strategyHash evidence: which number, from which clock, over what n. */
+  evidence: Record<string, LatencyEvidence>;
+  /** 'serving' when ANY point resolved to serving-grade evidence. The value
+   * the trace's latency_src= field reports. */
+  source: 'serving' | 'harness';
+  /** The cost the bound is charging, computed against the SAME resolved
+   * points the selection used. */
+  premium: LatencyPremium;
+}
+
+/** The no-op binding: the policy has no latency dimension, or there is no
+ * frontier to bind against. */
+function inert(frontier: Frontier | null): LatencyBinding {
+  return {
+    frontier,
+    evidence: {},
+    source: 'harness',
+    premium: latencyPremium({ type: 'min_cost', qualityFloor: 0 }, []),
+  };
+}
+
+/**
+ * Resolve the latency the policy will be evaluated against (G2.6).
+ *
+ * Returns the frontier unchanged for policies without a latency dimension, so
+ * the common path costs one boolean. A rollup failure NEVER breaks serving:
+ * catch, warn, fall back to the harness numbers marked provisional.
+ */
+export async function bindServingLatency(
+  db: PotionDb,
+  policy: Policy,
+  frontier: Frontier | null,
+  orgId: string,
+  clusterId: string,
+  warn: (msg: string) => void = () => {},
+  now: Date = new Date(),
+): Promise<LatencyBinding> {
+  if (!policyHasLatencyDimension(policy)) return inert(frontier);
+  if (!frontier || frontier.points.length === 0) return inert(frontier);
+
+  let rows: ServingLatencySample[] = [];
+  try {
+    rows = await cachedRollup(db, orgId, clusterId, now);
+  } catch (err) {
+    // The customer's request is served against the harness numbers, and every
+    // surface says the evidence is provisional — which is exactly the honest
+    // answer: we could not measure, so we did not claim to.
+    warn(
+      `serving-latency rollup failed for org=${orgId} cluster=${clusterId} — ` +
+        `binding against PROVISIONAL harness latency: ${String(err)}`,
+    );
+    rows = [];
+  }
+
+  const resolved = resolveLatency(frontier.points, rows, SERVING_LATENCY_WINDOW_MIN);
+  return {
+    frontier: { ...frontier, points: resolved.points },
+    evidence: resolved.evidence,
+    source: resolved.allProvisional ? 'harness' : 'serving',
+    premium: latencyPremium(policy, resolved.points),
+  };
+}
+
+async function cachedRollup(
+  db: PotionDb,
+  orgId: string,
+  clusterId: string,
+  now: Date,
+): Promise<ServingLatencySample[]> {
+  const key = `${orgId}::${clusterId}`;
+  const hit = latencyCache.get(key);
+  if (hit && now.getTime() - hit.at < SERVING_LATENCY_CACHE_TTL_MS) return hit.rows;
+  const rows = await servingLatencyP95(db, orgId, clusterId, SERVING_LATENCY_WINDOW_MIN, now);
+  latencyCache.set(key, { at: now.getTime(), rows });
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// THE composed decision
+// ---------------------------------------------------------------------------
+
+export interface ServingDecisionArgs {
+  orgId: string;
+  clusterId: string;
+  /** The org's bound policy (callers resolve it; DEFAULT_ORG_POLICY is what
+   * any key would have been minted with). */
+  policy: Policy;
+  providerMode: ProviderMode;
+  prices: PriceTable;
+  warn?: (msg: string) => void;
+  now?: Date;
+}
+
+export interface ServingDecision {
+  /** The frontier as loaded (org-preferred, default instrument); null = none. */
+  loaded: Frontier | null;
+  provenance: 'live' | 'mock' | 'blocked';
+  /** The policy as it applies to this cluster (its own floor substituted). */
+  clusterPolicy: Policy;
+  binding: LatencyBinding;
+  op: OperatingPoint;
+}
+
+/**
+ * THE authoritative answer to: given org + kind of work + bound policy, what
+ * would Potion serve right now? Exactly the serve path's chain — one
+ * implementation, so nothing that evaluates "the current route" (the router
+ * compiler, the learning period) can drift from what production executes.
+ * The request-level serve path composes the same functions itself, adding
+ * per-request concerns (instrument selection, tool narrowing, pins,
+ * guarantee overrides) on top of this workload-level decision.
+ */
+export async function servingDecisionFor(db: PotionDb, a: ServingDecisionArgs): Promise<ServingDecision> {
+  const warn = a.warn ?? (() => {});
+  const loaded = await loadCurrentFrontier(db, a.clusterId, a.orgId);
+  const guarded = guardFrontierProvenance(loaded, a.providerMode, warn);
+  const clusterPolicy = policyForCluster(a.policy, a.clusterId);
+  const binding = await bindServingLatency(db, clusterPolicy, guarded.frontier, a.orgId, a.clusterId, warn, a.now);
+  const op = resolveOperatingPoint(clusterPolicy, binding.frontier, fallbackStrategyFor(a.providerMode, a.prices));
+  return { loaded, provenance: guarded.provenance, clusterPolicy, binding, op };
+}

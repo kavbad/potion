@@ -11,13 +11,13 @@
 //      pick's retention against it, the floor Potion suggests, the saving.
 // Never applies anything. The dashboard's one button does that.
 import { randomUUID } from 'node:crypto';
-import { strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
+import { PolicySchema, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
+import { DEFAULT_ORG_POLICY, servingDecisionFor } from '@potion/pareto';
 import {
   evalRuns,
   getFirstApiKeyWithPolicy,
   getOrgIncumbents,
   getPolicyById,
-  getServingFrontier,
   insertLearningProposal,
   latestProposalsByCluster,
   learningSpendSince,
@@ -166,6 +166,16 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   const existing = await latestProposalsByCluster(ctx.db, orgId);
   let suites = 0;
 
+  // The org's bound policy — the same anchor the learning routes bind floors
+  // to (getFirstApiKeyWithPolicy: the earliest LIVE customer key), parsed;
+  // absent or unparseable → DEFAULT_ORG_POLICY, exactly what any key would
+  // have been minted with (keys.ts / the first-run reveal use the same
+  // constant, so no surface drifts).
+  const key = await getFirstApiKeyWithPolicy(ctx.db, orgId);
+  const boundConfig = key?.policyId ? ((await getPolicyById(ctx.db, orgId, key.policyId))?.config ?? null) : null;
+  const parsedPolicy = boundConfig === null ? null : PolicySchema.safeParse(boundConfig);
+  const orgPolicy: Policy = parsedPolicy?.success ? parsedPolicy.data : DEFAULT_ORG_POLICY;
+
   for (const clusterId of Object.keys(PLATFORM_SUITE_BY_CLUSTER).sort()) {
     const prev = existing.get(clusterId);
     if (prev && prev.createdAt > fresh) { report.skipped.push({ clusterId, why: 'fresh proposal' }); continue; }
@@ -176,9 +186,19 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     suites += 1;
     if (loaded.items.length < LEARNING_PERIOD_MIN_ITEMS) { report.skipped.push({ clusterId, why: `${loaded.items.length} of ${LEARNING_PERIOD_MIN_ITEMS} prompts` }); continue; }
 
-    // the org's current serving pick for this kind of work
-    const frontier = await getServingFrontier(ctx.db, clusterId, orgId);
-    if (!frontier || frontier.points.length === 0) { report.skipped.push({ clusterId, why: 'no frontier' }); continue; }
+    // the org's current serving pick for this kind of work — THE serve
+    // chain itself (2026-08-31, one-resolver P0: external review found the
+    // old reimplementation here — "top-level floor → cheapest above" —
+    // ignored cluster floors, mishandled max_quality/latency policies,
+    // skipped the provenance guard, and INVERTED the infeasible fallback:
+    // cheapest, where production serves highest-quality. The route it
+    // measured could be one production never serves.)
+    const decision = await servingDecisionFor(ctx.db, { orgId, clusterId, policy: orgPolicy, providerMode, prices });
+    const frontier = decision.binding.frontier;
+    if (!frontier || frontier.points.length === 0) {
+      report.skipped.push({ clusterId, why: decision.provenance === 'blocked' ? 'frontier blocked by the provenance guard' : 'no frontier' });
+      continue;
+    }
     // The measurement reference: the named incumbent when one is priced,
     // else the greenfield fallback (top-quality single on this frontier).
     const topSingle = frontier.points
@@ -188,11 +208,17 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     if (!incumbentModel) { report.skipped.push({ clusterId, why: 'no reference model (no named incumbent, no single on the frontier)' }); continue; }
     const incumbentCfg = singleCfg(incumbentModel);
     const incumbentHash = strategyHash(incumbentCfg);
-    const key = await getFirstApiKeyWithPolicy(ctx.db, orgId);
-    const policy = key?.policyId ? (await getPolicyById(ctx.db, orgId, key.policyId))?.config : null;
-    const floorNow = policy && (policy as { qualityFloor?: number }).qualityFloor !== undefined ? (policy as { qualityFloor: number }).qualityFloor : 0.95;
-    const above = frontier.points.filter((p) => p.quality >= floorNow);
-    const serving = (above.length ? above : frontier.points).reduce((a, b) => (b.costPer1K < a.costPer1K ? b : a));
+    const op = decision.op;
+    if (op.config === null) { report.skipped.push({ clusterId, why: 'no route resolvable for this provider mode' }); continue; }
+    const servingPickHash = strategyHash(op.config);
+    const serving = frontier.points.find((p) => p.strategyHash === servingPickHash) ?? null;
+    if (!serving) {
+      // The route production would serve is a last-resort fallback config,
+      // not a measured frontier point — there is no priced measurement to
+      // compare against, so say that rather than measure a different route.
+      report.skipped.push({ clusterId, why: `serving is the ${op.fallbackReason ?? 'fallback'} route — not a measured frontier point` });
+      continue;
+    }
 
     // the cap: per org per day, billed to the org's own usage (operator, 2026-08-22)
     const spentToday = await learningSpendSince(ctx.db, orgId, dayAgo);

@@ -166,15 +166,17 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
 
   // ---- serving path ----
   {
-    file: 'apps/server/src/context.ts',
-    symbol: 'DEFAULT_STRATEGY / liveDefaultStrategy / fallbackStrategyFor',
+    file: 'packages/pareto/src/serving.ts',
+    symbol: 'DEFAULT_STRATEGY / liveDefaultStrategy / fallbackStrategyFor / servingDecisionFor',
     kind: 'default-strategy',
     mockPosture: 'excluded-live',
     regressionTest: 'apps/server/test/provenance.test.ts',
     notes:
-      'G2.4 (fifth false-live instance, FIRST on the serving path): the mock-alias DEFAULT_STRATEGY is the ' +
-      'fallback under MOCK only. A live server falls back to the designated live default (mock excluded) and ' +
-      'refuses honestly when none resolves — it never answers with mock text on a live 200.',
+      'G2.4 (fifth false-live instance, FIRST on the serving path; moved here from apps/server context.ts by ' +
+      'the 2026-08-31 one-resolver P0): the mock-alias DEFAULT_STRATEGY is the fallback under MOCK only. A ' +
+      'live server falls back to the designated live default (mock excluded) and refuses honestly when none ' +
+      'resolves — it never answers with mock text on a live 200. servingDecisionFor composes the same guard + ' +
+      'binding + resolution the serve path runs, so the compiler and the learning period inherit this posture.',
   },
   {
     file: 'apps/server/src/routes/chat.ts',
@@ -186,16 +188,16 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
   },
   {
     file: 'apps/server/src/routing/compile-router.ts',
-    symbol: 'compileAndMintRouter (guardFrontierProvenance + resolveOperatingPoint)',
+    symbol: 'compileAndMintRouter (servingDecisionFor)',
     kind: 'alias-guard',
     mockPosture: 'excluded-live',
     regressionTest: 'apps/server/test/router.test.ts',
     notes:
-      'R1/R2, READ-ONLY: the router artifact is assembled by the SAME guard + operating-point resolution the ' +
-      'serve path runs (guardFrontierProvenance discards mock-provenance frontiers under live providers; ' +
-      'resolveOperatingPoint takes the same fallbackStrategyFor). Nothing is served from here — the document ' +
-      'records what serving WOULD do, and any non-live provenance is carried on the assignment and rendered as ' +
-      'a visible badge, never laundered.',
+      'R1/R2, READ-ONLY: the router artifact is assembled by @potion/pareto servingDecisionFor — the SAME ' +
+      'guard + operating-point resolution the serve path runs (mock-provenance frontiers discarded under live ' +
+      'providers; the same fallbackStrategyFor). Nothing is served from here — the document records what ' +
+      'serving WOULD do, and any non-live provenance is carried on the assignment and rendered as a visible ' +
+      'badge, never laundered.',
   },
   {
     file: 'apps/server/src/routes/connection.ts',
