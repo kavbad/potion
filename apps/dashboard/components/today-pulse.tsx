@@ -79,9 +79,19 @@ export function TodayPulse() {
   const kept = current ? Math.max(0, (current.mtd.baselineCostUsd ?? 0) - current.mtd.costUsd) : 0;
   const shown = useEased(kept);
   const spentWithout = current ? (current.mtd.baselineCostUsd ?? 0) : 0;
+  const actualSpend = current?.mtd.costUsd ?? 0;
   // Day-2 honesty: cents-rounding tiny sums turns "kept $0.0186 of $0.0189"
   // into "kept $0.02 of $0.02" — a 98% claim rounded into a 100% one.
   const money = (n: number) => (n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
+  // 2026-09-01 (caption-vs-provenance, found on the operator's screen at
+  // the ≥$1 tier: "kept $1.32 of $1.32"): the SAME hazard survives above a
+  // dollar — kept $1.3158 and baseline $1.3162 both round to $1.32, a
+  // 99.7% measurement rendered as an impossible 100%. The honest rounding
+  // direction is fixed: KEPT always floors (never overstated), the
+  // baseline always ceils, and the actual spend is SHOWN — three numbers
+  // that add up beat two that collide.
+  const moneyFloor = (n: number) => { const f = n >= 1 ? 100 : 10_000; return `$${(Math.floor(n * f) / f).toFixed(n >= 1 ? 2 : 4)}`; };
+  const moneyCeil = (n: number) => { const f = n >= 1 ? 100 : 10_000; return `$${(Math.ceil(n * f) / f).toFixed(n >= 1 ? 2 : 4)}`; };
   const hasTraffic = (current?.mtd.requests ?? 0) > 0;
   const hasBaseline = spentWithout > 0;
 
@@ -174,11 +184,11 @@ export function TodayPulse() {
         {new Date().toLocaleDateString(undefined, { month: 'long' })} · live
       </div>
       <div className="mt-2 font-sans text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-kept tabular-nums sm:text-[3.4rem]">
-        {money(shown)}
+        {moneyFloor(shown)}
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-soft">
         {hasBaseline ? (
-          <>your router kept this month, of <span className="text-ink">{money(spentWithout)}</span> you would have spent — verified receipt by receipt</>
+          <>your router kept this month — you spent <span className="text-ink">{money(actualSpend)}</span> where your measured work would have cost <span className="text-ink">{moneyCeil(spentWithout)}</span> — verified receipt by receipt</>
         ) : hasTraffic ? (
           <>kept so far — your savings become a measurement against <em>your</em> model once you name it in <Link href="/settings/controls" className="text-accent underline">Controls</Link></>
         ) : (
