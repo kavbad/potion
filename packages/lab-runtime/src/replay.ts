@@ -99,6 +99,7 @@ export function replayRun(
   let modelSteps = 0;
   let derivedTerminal: { state: string; atSeq: number } | null = null;
   let askedAlready = false;
+  let sawToolStep = false;
   let budgetKillPending = false;
   // Step 8: a TOOL-BEARING task run ends with the loop's deliberate
   // tool-free wrap-up call — after a done-shaped step, expect exactly one
@@ -196,7 +197,7 @@ export function replayRun(
       // carrying an authored input slot cannot complete on its first no-tool
       // stop — the loop parked it as a worker-question; the check-in step
       // that follows derives the awaiting-human.
-      const slotParked = spec.mission.kind === 'task' && !askedAlready && hasUnfilledSlot(spec.mission.goal);
+      const slotParked = spec.mission.kind === 'task' && !askedAlready && !sawToolStep && hasUnfilledSlot(spec.mission.goal);
       if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked) {
         if (runHadTools && !expectWrapUp) {
           // The wrap-up follows; terminal completes AFTER it.
@@ -264,6 +265,7 @@ export function replayRun(
         if (messages !== null) messages.push(toolResultMessage(p.toolName ?? '?', p.toolOutput ?? null));
         continue;
       }
+      sawToolStep = true;
       const expected = pendingToolCalls.shift();
       if (expected === undefined) {
         divergences.push(div('stream-shape', step.seq, 'no pending tool call', p.toolName, 'kind'));

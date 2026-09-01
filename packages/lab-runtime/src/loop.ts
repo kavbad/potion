@@ -397,6 +397,12 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // One honest ask per run for unfilled-slot missions (the spec is frozen,
     // so the slot never leaves the goal — without this guard the answered
     // run could never complete).
+    // W3 correction (predicted, then confirmed on the first shadow
+    // rehearsal): the slot law exists to catch a PROSE ASK IN LIEU OF
+    // WORK. A run that did real tool work and then stopped is REPORTING,
+    // not asking — converting its report into a question parks a finished
+    // mission. The law fires only on work-free stops.
+    let sawToolStep = priorSteps.some((x) => x.kind === 'tool');
     const askedBefore = priorSteps.some(
       (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
     );
@@ -591,6 +597,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           ...(isMemoryCarrier(output) ? { memoryWrites: output._memoryWrites } : {}),
           leaseMs, now: new Date(clock.now()),
         });
+        sawToolStep = true;
         messages.push(toolResultMessage(tool.name, output));
         // Consumed — one answer, THAT one action, once. The durable clear is
         // what makes "once" survive a leg boundary (L3): the in-memory null
@@ -820,6 +827,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           if (tool.name === FANOUT_TOOL_NAME) {
             estSpentUsd += fanOutSpentFromSteps([{ kind: 'tool', payload: { toolName: tool.name, toolOutput: output } }]);
           }
+          sawToolStep = true;
           messages.push(toolResultMessage(tool.name, output));
         }
         continue;
@@ -899,7 +907,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         // stop BECOMES the ask: its text parks the run as the question.
         // Once per run (askedBefore), operator channel only. Mirrored in
         // replay same commit.
-        if ((opts.askChannel ?? 'operator') === 'operator' && !askedBefore && hasUnfilledSlot(opts.spec.mission.goal)) {
+        if ((opts.askChannel ?? 'operator') === 'operator' && !askedBefore && !sawToolStep && hasUnfilledSlot(opts.spec.mission.goal)) {
           const q = (result.text ?? '').trim().slice(0, 600)
             || 'The mission has unfilled input slots — what should they be?';
           seq += 1;

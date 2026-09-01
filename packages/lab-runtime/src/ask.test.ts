@@ -260,3 +260,34 @@ describe('ask_operator parks the run and asks — never a hollow completion', ()
     await h.close();
   }, 60_000);
 });
+
+describe('W3 correction — the slot law fires only on WORK-FREE stops', () => {
+  it('a slotted-goal run that did real tool work completes on its report — the report is not a question', async () => {
+    const s = spec({
+      mission: { kind: 'task', goal: 'Open [PASTE THE APP URL HERE] and do this task: [DESCRIBE THE TASK HERE].', doneDefinition: 'done' },
+      rules: ['Standing answer from the operator (do not ask again): open https://board.example and report the title'],
+    });
+    const { h, hash } = await freshRun(s);
+    let read = 0;
+    const readTool: LabTool = {
+      name: 'open_page', description: 'open a page', parameters: { type: 'object' },
+      external: false,
+      run: async () => { read += 1; return { title: 'Board — Sprint 12' }; },
+    };
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'o1', type: 'function', function: { name: 'open_page', arguments: '{"url":"https://board.example"}' } }] }),
+        ok({ text: 'Opened https://board.example — the page title is "Board — Sprint 12". Mission complete.' }),
+        ok({ text: 'Wrap-up: used the standing answer, did the work, reported; done.' }),
+      ]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [readTool],
+    });
+    expect(leg.status, 'the report must complete, not park').toBe('completed');
+    expect(read).toBe(1);
+    const rec = await recordOf(h);
+    const res = replayRun(s, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+});
