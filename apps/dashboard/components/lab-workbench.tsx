@@ -139,10 +139,17 @@ export function LabWorkbench({
   const [versions, setVersions] = useState<Map<string, number>>(new Map());
   const [nowTick, setNowTick] = useState(Date.now());
   const shas = useRef<Map<string, string>>(new Map());
-  const activeSha = useRef<string | null>(null);
 
   const activeName = active ?? ordered[0]?.name ?? null;
   const activeFile = ordered.find((f) => f.name === activeName) ?? null;
+  // THE STABLE KEY (2026-09-02, the operator's 3MB file): the render effect
+  // must depend on CONTENT identity, not the object — the 1.5s poll
+  // recreates the files array every tick, and an object-keyed effect
+  // re-fired each tick, running the previous cleanup and marking the
+  // in-flight render stale. Any file slower than one poll interval to
+  // parse had its result silently DISCARDED — eternal "loading…". Small
+  // files always won that race, so it looked like the bench worked.
+  const activeKey = activeFile === null ? null : `${activeFile.name}:${activeFile.sha256}`;
 
   // Content-hash change detection over the polling DTO — flash changed
   // tabs, bump their observed version, refresh the open view.
@@ -165,18 +172,23 @@ export function LabWorkbench({
     for (const f of files) shas.current.set(f.name, f.sha256);
   }, [files]);
 
-  // Render the active tab; refetch when its content hash moves.
+  // Render the active tab; re-runs ONLY when the content key moves (a tab
+  // switch or a rewrite), so the poll can never invalidate an in-flight
+  // render of unchanged content.
+  const fileForKey = useRef(activeFile);
+  fileForKey.current = activeFile;
   useEffect(() => {
-    if (activeFile === null) return;
-    if (activeSha.current === `${activeFile.name}:${activeFile.sha256}`) return;
-    activeSha.current = `${activeFile.name}:${activeFile.sha256}`;
+    if (activeKey === null) return;
+    const f = fileForKey.current;
+    if (f === null) return;
     let stale = false;
     setSheetIdx(0);
-    void renderFile(runId, activeFile).then((r) => {
+    setView(null);
+    void renderFile(runId, f).then((r) => {
       if (!stale) setView(r);
     });
     return () => { stale = true; };
-  }, [runId, activeFile]);
+  }, [runId, activeKey]);
 
   // The now-strip's elapsed clock.
   useEffect(() => {
@@ -212,8 +224,8 @@ export function LabWorkbench({
   }, [live, runId]);
 
   const pick = useCallback((name: string) => {
+    // Same-tab re-picks change no key — leave the rendered view alone.
     setActive(name);
-    setView(null);
   }, []);
 
   if (ordered.length === 0) return null;
