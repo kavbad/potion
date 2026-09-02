@@ -147,7 +147,7 @@ export function FrontierExplorer() {
           <span className="w-36 shrink-0 text-faint">
             {kind === 'min_cost' && <>floor <span className="text-ink">{floor.toFixed(2)}</span></>}
             {kind === 'max_quality' && <>ceiling <span className="text-ink">{usd(ceiling)}</span></>}
-            {kind === 'latency_bound' && <>p95 ≤ <span className="text-ink">{p95.toLocaleString()} ms</span></>}
+            {kind === 'latency_bound' && <>p95 ≤ <span className="text-ink">{p95.toLocaleString('en-US')} ms</span></>}
           </span>
           {kind === 'min_cost' && (
             <input type="range" min={0.4} max={1} step={0.01} value={floor} onChange={(e) => setFloor(Number(e.target.value))} className="lab-range flex-1" />
@@ -211,7 +211,7 @@ export function FrontierExplorer() {
           return (
             <g key={p.label} opacity={ok ? 1 : 0.35} style={{ transition: 'opacity 200ms' }}
               onMouseEnter={() => setHover(p.label)} onMouseLeave={() => setHover(null)}>
-              <title>{`${p.label} — q ${p.quality.toFixed(2)} ±${p.ci.toFixed(2)} · ${usd(p.costPer1K)}/1k · p95 ${p.p95Ms.toLocaleString()} ms`}</title>
+              <title>{`${p.label} — q ${p.quality.toFixed(2)} ±${p.ci.toFixed(2)} · ${usd(p.costPer1K)}/1k · p95 ${p.p95Ms.toLocaleString('en-US')} ms`}</title>
               <line x1={px} x2={px} y1={y(Math.min(Q_MAX, p.quality + p.ci))} y2={y(Math.max(Q_MIN, p.quality - p.ci))}
                 stroke={sel ? ACCENT : INK} strokeWidth="1" opacity={sel ? 0.9 : 0.45} />
               <line x1={px - 3} x2={px + 3} y1={y(Math.min(Q_MAX, p.quality + p.ci))} y2={y(Math.min(Q_MAX, p.quality + p.ci))} stroke={sel ? ACCENT : INK} strokeWidth="1" opacity={sel ? 0.9 : 0.45} />
@@ -242,7 +242,7 @@ export function FrontierExplorer() {
             </text>
             <text x={callout.lx} y={callout.ly + 12} textAnchor={callout.anchor} fontSize="9" fill={FAINT}
               stroke="#fbfaf7" strokeWidth="4" style={{ paintOrder: 'stroke' }}>
-              {labelled.quality.toFixed(2)} ± {labelled.ci.toFixed(2)} · {usd(labelled.costPer1K)}/1k · p95 {labelled.p95Ms.toLocaleString()} ms
+              {labelled.quality.toFixed(2)} ± {labelled.ci.toFixed(2)} · {usd(labelled.costPer1K)}/1k · p95 {labelled.p95Ms.toLocaleString('en-US')} ms
             </text>
           </g>
         )}
@@ -267,7 +267,7 @@ export function FrontierExplorer() {
             <span><span className="text-faint">selected </span><span className="text-ink">{chosen.label}</span></span>
             <span><span className="text-faint">quality </span><span className="text-ink">{chosen.quality.toFixed(2)}</span><span className="text-faint"> ± {chosen.ci.toFixed(2)}</span></span>
             <span><span className="text-faint">cost </span><span className="text-ink">{usd(chosen.costPer1K)}</span><span className="text-faint"> / 1k</span></span>
-            <span><span className="text-faint">p95 </span><span className="text-ink">{chosen.p95Ms.toLocaleString()} ms</span></span>
+            <span><span className="text-faint">p95 </span><span className="text-ink">{chosen.p95Ms.toLocaleString('en-US')} ms</span></span>
           </div>
         ) : (
           <div><span className="text-ink">Nothing measured qualifies.</span> <span className="text-soft">Potion refuses to invent a number; the request rides the default strategy and the trace says so.</span></div>

@@ -182,7 +182,13 @@ export function TodayPulse() {
   return (
     <div>
       <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-        {new Date().toLocaleDateString(undefined, { month: 'long' })} · live
+        {/* pinned to UTC/en-US: the MTD numbers below run on the UTC calendar
+            month (usage.ts monthStart), so this label must name THAT month —
+            and a viewer-dependent render here breaks hydration (React #418:
+            SSR runs in the prod container's UTC/en-US ICU, the browser in the
+            viewer's locale, and the month NAME differs on every load for a
+            non-English browser, not just at month boundaries) */}
+        {new Date().toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' })} · live
       </div>
       {/* 2026-09-01 (operator, twice: "i still dont think thats right"):
           dollars "kept" of money never committed is the wrong hero no

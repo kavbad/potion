@@ -89,7 +89,11 @@ export function ServingKeys({ initial }: { initial: ServingKeyDto[] }) {
                   <div className="text-xs text-faint">
                     <span className="font-mono">{k.id}</span>
                     {k.scopes ? ` · ${k.scopes}` : ''}
-                    {k.createdAt ? ` · issued ${new Date(k.createdAt).toLocaleDateString()}` : ''}
+                    {/* pinned UTC/en-US: these rows SSR from the `initial` prop
+                        (home pre-traffic branch), and keys issued in-session
+                        render client-side — one deterministic format keeps the
+                        list coherent and hydration clean (React #418) */}
+                    {k.createdAt ? ` · issued ${new Date(k.createdAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}` : ''}
                   </div>
                 </div>
               </li>

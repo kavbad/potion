@@ -171,7 +171,10 @@ export function ApiKeysManager({ initial }: { initial: ServingKeyDto[] }) {
                     <div className="text-xs text-faint">
                       <span className="font-mono">{k.id}</span>
                       {k.scopes ? ` · ${k.scopes}` : ''}
-                      {k.createdAt ? ` · created ${new Date(k.createdAt).toLocaleDateString()}` : ''}
+                      {/* pinned UTC/en-US: rows SSR from the `initial` prop on
+                          /settings/keys — viewer-dependent formatting here is a
+                          hydration mismatch (React #418) */}
+                      {k.createdAt ? ` · created ${new Date(k.createdAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}` : ''}
                     </div>
                   </div>
                 </li>

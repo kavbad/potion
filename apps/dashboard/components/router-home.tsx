@@ -270,7 +270,11 @@ function AssignmentsTable({ assignments }: { assignments: Assignment[] }) {
   );
 }
 
-/** Versions: a quiet rule-line timeline — latest expanded, history one line each. */
+/** Versions: a quiet rule-line timeline — latest expanded, history one line each.
+ * The viewer-local dates below are hydration-safe ONLY because `router` arrives
+ * by client fetch (null during SSR, so this never renders on the server). If an
+ * `initialRouter` SSR prop is ever added, these need the fe49252 treatment
+ * (mounted-gate or a pinned format) or the home page throws React #418. */
 function Versions({ history }: { history: RouterResponse['history'] }) {
   if (history.length === 0) return null;
   const [head, ...rest] = history;
