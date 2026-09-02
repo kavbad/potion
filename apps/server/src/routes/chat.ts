@@ -885,6 +885,13 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
     if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = heldOut !== null ? null : await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
+    // 0089: the recorded savings number carries its comparator — a caption
+    // saying "vs your incumbent" must be provable from the row, and the
+    // silent best-of-frontier fallback must be distinguishable from it.
+    const baselineFields = (sh2: string, costUsd: number | undefined) => {
+      const cost = baselineCostUsd(op.frontier, sh2, costUsd, baseline?.hash ?? null);
+      return { baselineCostUsd: cost, baselineBasis: cost === null ? null : (baseline?.basis ?? 'best-of-frontier') };
+    };
     logBase.frontierVersion = op.frontierVersion;
     // G0 (0082): the receipt names the version that served — decided NOW
     // against the latest minted artifact, stamped only on exact assignment
@@ -1193,7 +1200,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         latencyMs: elapsed(),
         // S3: the counterfactual, captured while the frontier that
         // defines it is still in hand. null = comparison undefined.
-        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd, baseline?.hash ?? null),
+        ...baselineFields(sh, result.usage?.costUsd),
       });
       keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       // ---- M3 #21 shadow (m3-shadow) ----
@@ -1328,7 +1335,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         latencyMs: elapsed(),
         // S3: the counterfactual, captured while the frontier that
         // defines it is still in hand. null = comparison undefined.
-        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd, baseline?.hash ?? null),
+        ...baselineFields(sh, result.usage?.costUsd),
       });
       keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       return;
@@ -1386,7 +1393,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         latencyMs: elapsed(),
         // S3: the counterfactual, captured while the frontier that
         // defines it is still in hand. null = comparison undefined.
-        baselineCostUsd: baselineCostUsd(op.frontier, sh, result.usage?.costUsd, baseline?.hash ?? null),
+        ...baselineFields(sh, result.usage?.costUsd),
       });
       keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
       const sent = reply.send({

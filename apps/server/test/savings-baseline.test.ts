@@ -54,7 +54,7 @@ async function serve(prompt: string) {
     payload: { model: 'potion-auto', messages: [{ role: 'user', content: prompt }] },
   });
   const [row] = await db().select().from(requestLogs).orderBy(desc(requestLogs.id)).limit(1);
-  return { status: res.statusCode, model: res.headers['x-potion-model'], cost: row?.costUsd ?? null, baseline: row?.baselineCostUsd ?? null };
+  return { status: res.statusCode, model: res.headers['x-potion-model'], cost: row?.costUsd ?? null, baseline: row?.baselineCostUsd ?? null, basis: row?.baselineBasis ?? null };
 }
 
 describe('the baseline on a served request', () => {
@@ -65,6 +65,7 @@ describe('the baseline on a served request', () => {
     expect(r.status).toBe(200);
     expect(r.model).toBe('mock-cheap');
     expect(r.baseline).toBeCloseTo((r.cost as number) * (4.0 / 0.2), 9);
+    expect(r.basis).toBe('best-of-frontier'); // 0089: the silent fallback is now distinguishable on the row
   });
   it('is the org’s named model from onboarding when it sits on the frontier', async () => {
     await upsertOrgIncumbents(db(), { orgId: ORG, models: ['mock-mid'], other: null, samplingConsent: false });
@@ -72,6 +73,7 @@ describe('the baseline on a served request', () => {
     expect(await baselineFor(db(), ORG, 'code-gen', FRONTIER)).toEqual({ hash: H(MID), basis: 'org-incumbent' });
     const r = await serve('write a function that reverses a list — baseline org');
     expect(r.baseline).toBeCloseTo((r.cost as number) * (1.0 / 0.2), 9);
+    expect(r.basis).toBe('org-incumbent');
   });
   it('the cluster designation outranks the org’s named model', async () => {
     await upsertStrategyConfig(db(), H(TOP), TOP);
@@ -80,5 +82,6 @@ describe('the baseline on a served request', () => {
     expect(await baselineFor(db(), ORG, 'code-gen', FRONTIER)).toEqual({ hash: H(TOP), basis: 'cluster-incumbent' });
     const r = await serve('write a function that reverses a list — baseline cluster');
     expect(r.baseline).toBeCloseTo((r.cost as number) * (4.0 / 0.2), 9);
+    expect(r.basis).toBe('cluster-incumbent');
   });
 });

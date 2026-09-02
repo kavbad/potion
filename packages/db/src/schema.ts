@@ -432,6 +432,13 @@ export const requestLogs = pgTable('request_logs', {
    * choosing between at the time.
    */
   baselineCostUsd: doublePrecision('baseline_cost_usd'),
+  /** WHICH comparator produced baselineCostUsd (0089, review P0 "savings
+   * baseline asymmetry"): 'cluster-incumbent' (G2.1 designation),
+   * 'org-incumbent' (onboarding-named model on this frontier), or
+   * 'best-of-frontier' (the silent fallback — highest-quality point).
+   * NULL = no baseline number on this row. A savings caption may only
+   * name the comparator this column proves. */
+  baselineBasis: text('baseline_basis'),
   /** S2 (migration 0060): the model that actually answered — stamped at
    * serve time from the resolved strategy; NULL on pre-0060 rows. */
   servedModel: text('served_model'),

@@ -226,6 +226,7 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
         latencyMs: r.latencyMs,
         costUsd: usage?.costUsd ?? null,
         baselineCostUsd: r.baselineCostUsd ?? null,
+        baselineBasis: r.baselineBasis ?? null,
         clusterId: t.clusterId,
         strategy: t.strategyHash8,
         frontierVersion: t.frontierVersion,
