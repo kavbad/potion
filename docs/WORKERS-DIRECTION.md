@@ -242,6 +242,34 @@ built at its ladder turn, unless the operator names it the distribution
 interleave (its R1 allows either, and either way it is built ON Workers,
 never beside them).
 
+## Live views (adopted 2026-09-02, operator-directed)
+
+Watching the work is part of the product's felt value. The rule: a live
+view is always a RENDERING OF THE DURABLE RECORD (or of the workspace
+that record governs) — never staged, never animated for show, so the
+pane can never claim progress the record does not hold.
+
+1. **The workbench — SHIPPED.** The run page's artifact pane: every
+   workspace file is a tab; xlsx renders as a real grid (sheet tabs),
+   csv as a grid, images inline, text as text; content-hash change
+   detection over the polling DTO flashes tabs and refetches the open
+   view (a size-equal rewrite still counts — the sandbox collection
+   lesson); a now-strip carries the newest narrated step with an
+   elapsed clock. Repo-scale runs (> 16 files) keep the tree card.
+2. **Live sandbox stdout — QUEUED.** Stream Python/shell output into
+   the now-strip while the call runs (today it lands as one block after
+   completion; a long computation reads as a hang). Needs incremental
+   output from the sandbox exec — record stays the completed step.
+3. **The browser view — QUEUED (the operator's "internet stuff").**
+   For browser-hand runs, show what the worker's browser sees: v1 is a
+   screenshot after every browser action rendered as a live filmstrip
+   tab on the workbench (one frame per act, from the same container the
+   hand drives); v2 graduates to a streamed screencast if the filmstrip
+   earns it. Frames are artifacts of the record like any file.
+4. **A cursor in real external apps** (e.g. a live Google Sheet) is NOT
+   this — that requires connector-side acts and stays out of scope
+   until the connector exists.
+
 ## Explicitly not now (§72, adopted + extended)
 
 No visual canvas. No integration breadth push (MCP covers it). No

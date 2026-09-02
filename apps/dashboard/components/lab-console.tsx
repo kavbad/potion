@@ -28,6 +28,7 @@ import {
   type RunDto,
 } from '@potion/lab-form';
 import { BriefView } from './lab-brief';
+import { BENCH_MAX_TABS, LabWorkbench } from './lab-workbench';
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
@@ -614,11 +615,29 @@ export function LabConsole({
         </section>
       ) : null}
 
-      {/* ================= X1/X7: the files, materializing live — tree-aware
-           (a fetched repo is hundreds of files; group by top directory,
-           lead with the run's own root artifacts, fold the deep trees) ==== */}
+      {/* ================= THE WORKBENCH (2026-09-02): the artifacts as a
+           live pane — the sheet as a grid, the chart as the image, tabs
+           flashing as content hashes move on the poll. Repo-scale runs
+           (hundreds of files) keep the tree-aware FilesCard instead. ==== */}
       {run?.files !== undefined && run.files.length > 0 ? (
-        <FilesCard files={run.files} runId={runId!} />
+        run.files.length <= BENCH_MAX_TABS ? (
+          <LabWorkbench
+            runId={runId!}
+            files={run.files}
+            live={!terminal}
+            nowTitle={(() => {
+              const visible = steps.filter((s) => s.hidden !== true);
+              const last = visible[visible.length - 1];
+              return !terminal && last?.title !== undefined ? last.title : null;
+            })()}
+            nowAt={(() => {
+              const visible = steps.filter((s) => s.hidden !== true);
+              return visible[visible.length - 1]?.at ?? null;
+            })()}
+          />
+        ) : (
+          <FilesCard files={run.files} runId={runId!} />
+        )
       ) : null}
 
       {/* ================= the work + the worker ================= */}
