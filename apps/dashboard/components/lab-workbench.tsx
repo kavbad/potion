@@ -165,6 +165,32 @@ export function LabWorkbench({
     return () => clearInterval(t);
   }, [live]);
 
+  // LIVE OUTPUT (Live views #2): while the run can still act, poll the
+  // in-flight sandbox tail — a 90-second computation reads as WORK, line
+  // by line, instead of silence then a wall. Ephemeral by design; the
+  // durable step record lands in the feed when the call completes.
+  const [liveOut, setLiveOut] = useState<{ toolName: string; tail: string } | null>(null);
+  useEffect(() => {
+    if (!live) {
+      setLiveOut(null);
+      return;
+    }
+    let stale = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/lab/runs/${runId}/live`);
+        if (!res.ok || stale) return;
+        const b = (await res.json()) as { idle?: boolean; toolName?: string; tail?: string };
+        setLiveOut(b.idle === true || b.toolName === undefined ? null : { toolName: b.toolName, tail: b.tail ?? '' });
+      } catch {
+        /* the live view is a convenience */
+      }
+    };
+    void poll();
+    const t = setInterval(() => void poll(), 1500);
+    return () => { stale = true; clearInterval(t); };
+  }, [live, runId]);
+
   const pick = useCallback((name: string) => {
     setActive(name);
     setView(null);
@@ -184,6 +210,17 @@ export function LabWorkbench({
           </div>
         ) : null}
       </div>
+
+      {liveOut !== null ? (
+        <div className="mt-3 border border-[#2c2c2a] bg-[#1b1b19] px-3 py-2" data-testid="live-output">
+          <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8a8a84]">
+            {liveOut.toolName} · live output
+          </div>
+          <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-[#d6d4cc]">
+            {liveOut.tail === '' ? '…' : liveOut.tail.split('\n').slice(-14).join('\n')}
+          </pre>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-1.5" role="tablist">
         {ordered.map((f) => {

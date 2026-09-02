@@ -8,6 +8,7 @@
 // multi-tenancy. `external: false` is truthful BECAUSE of the no-egress
 // law: executing code that cannot reach the world is thinking, not acting.
 import type { LabTool } from './loop.js';
+import { clearLiveOutput, setLiveOutput } from './live-output.js';
 
 export interface CodeWorkspace {
   list(): Promise<Array<{ name: string; size: number }>>;
@@ -20,6 +21,11 @@ export interface CodeToolDeps {
   workspace: CodeWorkspace;
   /** Injected for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /** LIVE OUTPUT (2026-09-02): when set, in-flight sandbox stdout/stderr
+   * is tailed into the live-output store under this run id so the run
+   * page's now-strip can show a long computation as work, not silence.
+   * The durable record is untouched — the completed step is the truth. */
+  liveRunId?: string;
 }
 
 export const CODE_LIMITS = {
@@ -66,50 +72,81 @@ export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
       const content = await deps.workspace.read(f.name);
       if (content !== null) files.push({ name: f.name, contentBase64: content.toString('base64') });
     }
-    let res: Response;
+    // LIVE OUTPUT: tail the in-flight exec into the store every second.
+    // Best-effort by design — a failed tail poll changes nothing about the
+    // call, and the store entry dies in the finally either way.
+    const execId = deps.liveRunId !== undefined ? `x${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}` : undefined;
+    let liveTimer: ReturnType<typeof setInterval> | undefined;
+    if (deps.liveRunId !== undefined && execId !== undefined) {
+      const runId = deps.liveRunId;
+      const startedAt = Date.now();
+      const toolName = mode === 'python' ? 'run_python' : 'run_shell';
+      setLiveOutput(runId, { toolName, startedAt, tail: '' });
+      liveTimer = setInterval(() => {
+        void (async () => {
+          try {
+            const r = await fetchFn(`${deps.sandboxUrl}/tail/${execId}`);
+            if (!r.ok) return;
+            const t = (await r.json()) as { stdout?: string; stderr?: string };
+            const tail = `${t.stdout ?? ''}${t.stderr ? `\n${t.stderr}` : ''}`.slice(-4000);
+            setLiveOutput(runId, { toolName, startedAt, tail: redactKeyShapes(tail) });
+          } catch {
+            /* the live view is a convenience; the call is the truth */
+          }
+        })();
+      }, 1000);
+    }
     try {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), CODE_LIMITS.EXEC_TIMEOUT_MS);
+      let res: Response;
       try {
-        res = await fetchFn(`${deps.sandboxUrl}/exec`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            mode,
-            code,
-            ...(typeof timeoutSeconds === 'number' ? { timeoutSeconds } : {}),
-            files,
-          }),
-          signal: ac.signal,
-        });
-      } finally {
-        clearTimeout(t);
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), CODE_LIMITS.EXEC_TIMEOUT_MS);
+        try {
+          res = await fetchFn(`${deps.sandboxUrl}/exec`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode,
+              code,
+              ...(typeof timeoutSeconds === 'number' ? { timeoutSeconds } : {}),
+              ...(execId !== undefined ? { execId } : {}),
+              files,
+            }),
+            signal: ac.signal,
+          });
+        } finally {
+          clearTimeout(t);
+        }
+      } catch (e) {
+        return { error: `sandbox unreachable: ${e instanceof Error ? e.message : String(e)}` };
       }
-    } catch (e) {
-      return { error: `sandbox unreachable: ${e instanceof Error ? e.message : String(e)}` };
-    }
-    const body = (await res.json().catch(() => null)) as SandboxResult | null;
-    if (body === null) return { error: `sandbox returned unparseable output (HTTP ${res.status})` };
-    if (body.error !== undefined) return { error: body.error };
+      const body = (await res.json().catch(() => null)) as SandboxResult | null;
+      if (body === null) return { error: `sandbox returned unparseable output (HTTP ${res.status})` };
+      if (body.error !== undefined) return { error: body.error };
 
-    const kept: Array<{ name: string; size: number }> = [];
-    const notes: string[] = [];
-    for (const f of body.files ?? []) {
-      const content = Buffer.from(f.contentBase64, 'base64');
-      const wrote = await deps.workspace.write(f.name, content);
-      if (wrote.ok) kept.push({ name: f.name, size: content.length });
-      else notes.push(`'${f.name}' not kept: ${wrote.reason}`);
+      const kept: Array<{ name: string; size: number }> = [];
+      const notes: string[] = [];
+      for (const f of body.files ?? []) {
+        const content = Buffer.from(f.contentBase64, 'base64');
+        const wrote = await deps.workspace.write(f.name, content);
+        if (wrote.ok) kept.push({ name: f.name, size: content.length });
+        else notes.push(`'${f.name}' not kept: ${wrote.reason}`);
+      }
+      const workspaceNow = await deps.workspace.list();
+      return {
+        exitCode: body.exitCode ?? -1,
+        timedOut: body.timedOut === true,
+        stdout: clip(redactKeyShapes(body.stdout ?? '')),
+        stderr: clip(redactKeyShapes(body.stderr ?? '')),
+        filesWritten: kept,
+        workspace: workspaceNow.map((w) => `${w.name} (${w.size} bytes)`),
+        ...(notes.length > 0 ? { notes } : {}),
+      };
+    } finally {
+      // The live view dies with the call, whatever the call became.
+      if (liveTimer !== undefined) clearInterval(liveTimer);
+      if (deps.liveRunId !== undefined) clearLiveOutput(deps.liveRunId);
     }
-    const workspaceNow = await deps.workspace.list();
-    return {
-      exitCode: body.exitCode ?? -1,
-      timedOut: body.timedOut === true,
-      stdout: clip(redactKeyShapes(body.stdout ?? '')),
-      stderr: clip(redactKeyShapes(body.stderr ?? '')),
-      filesWritten: kept,
-      workspace: workspaceNow.map((w) => `${w.name} (${w.size} bytes)`),
-      ...(notes.length > 0 ? { notes } : {}),
-    };
   };
   return [
     {

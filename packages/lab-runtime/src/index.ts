@@ -38,6 +38,7 @@ export * from './graduation.js';
 export * from './evidence.js';
 export * from './apply-graduation.js';
 export { buildCodeLabTools, redactKeyShapes, CODE_LIMITS, type CodeToolDeps, type CodeWorkspace } from './code-tools.js';
+export { getLiveOutput, setLiveOutput, clearLiveOutput, type LiveOutput } from './live-output.js';
 export { buildPlanTool, planFromSteps, renderPlanLedger, validatePlan, planLedgerMessage, PLAN_TOOL_NAME, PLAN_LIMITS, type PlanTask, type PlanStatus } from './plan.js';
 export { buildJudgeMessages, compileRubric, parseJudgment, JUDGE_LIMITS, type Judgment, type JudgeCriterion } from './judge.js';
 export { ceilingFor, constitutionTierOverrides, decideAction, type ConstitutionCeiling, type GateDecision, type GateSnapshot } from './gateway.js';

@@ -4545,6 +4545,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 tools.push(
                   ...buildCodeLabTools({
                     sandboxUrl,
+                    liveRunId: payload.runId,
                     workspace: {
                       list: async () => (await listLabRunFiles(ctx.db, payload.orgId, payload.runId)).map((f) => ({ name: f.name, size: f.size })),
                       read: async (name) => (await getLabRunFile(ctx.db, payload.orgId, payload.runId, name))?.content ?? null,
@@ -4691,6 +4692,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 } else {
                   tools.push(...buildCodeLabTools({
                     sandboxUrl,
+                    liveRunId: subId,
                     workspace: {
                       list: async () => (await listLabRunFiles(ctx.db, payload.orgId, subId)).map((f) => ({ name: f.name, size: f.size })),
                       read: async (name) => (await getLabRunFile(ctx.db, payload.orgId, subId, name))?.content ?? null,

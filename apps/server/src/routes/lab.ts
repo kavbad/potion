@@ -122,7 +122,7 @@ import {
   type FeltPositionRequest,
 } from '@potion/lab-dial';
 import { parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
-import { ServingClient, buildRunReport, planFromSteps, replayRun, type StepPayload } from '@potion/lab-runtime';
+import { ServingClient, buildRunReport, getLiveOutput, planFromSteps, replayRun, type StepPayload } from '@potion/lab-runtime';
 import {
   getLabGrant,
   grantConnectionStatus,
@@ -1308,6 +1308,22 @@ export function registerLabRoutes(
     const run = await getLabRun(db, id, org.orgId);
     if (run === null) return reply.code(404).send(notFound);
     return reply.send({ runId: id, files: await listLabRunFiles(db, org.orgId, id) });
+  });
+
+  // LIVE OUTPUT (2026-09-02, Live views #2): the in-flight sandbox tail
+  // for a RUNNING call — ephemeral, in-process, never part of the record.
+  // 204 when nothing is executing; the run page's now-strip polls this.
+  app.get('/api/lab/runs/:id/live', async (req: FastifyRequest, reply) => {
+    const org = req.potionOrg!;
+    const { id } = req.params as { id: string };
+    if (!RUN_ID_RE.test(id)) return reply.code(404).send(notFound);
+    const run = await getLabRun(db, id, org.orgId);
+    if (run === null) return reply.code(404).send(notFound);
+    const live = getLiveOutput(id);
+    // 200 either way — the dashboard proxy relays JSON bodies, and a 204
+    // with a body is a contradiction it would mangle.
+    if (live === null) return reply.send({ idle: true });
+    return reply.send(live);
   });
 
   app.get('/api/lab/runs/:id/files/:name', async (req: FastifyRequest, reply) => {

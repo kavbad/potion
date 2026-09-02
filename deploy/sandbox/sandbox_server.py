@@ -18,12 +18,23 @@ import base64
 import hashlib
 import json
 import os
+import re
 import resource
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# LIVE OUTPUT (2026-09-02, Live views #2): while an exec runs, its stdout/
+# stderr accumulate here under the caller-chosen execId so GET /tail/<id>
+# can show work in progress — a 90-second computation should read as work,
+# not a hang. The durable record stays the completed step; this is the
+# ephemeral now. Entries die with their exec.
+LIVE = {}
+LIVE_LOCK = threading.Lock()
+LIVE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 PORT = int(os.environ.get("SANDBOX_PORT", "8790"))
 DEFAULT_TIMEOUT_S = 30
@@ -177,23 +188,59 @@ def run_exec(payload):
             "OMP_NUM_THREADS": "1",
         }
         timed_out = False
+        exec_id = payload.get("execId")
+        live = None
+        if isinstance(exec_id, str) and LIVE_ID_RE.match(exec_id):
+            live = {"out": bytearray(), "err": bytearray(), "done": False}
+            with LIVE_LOCK:
+                LIVE[exec_id] = live
         try:
             argv = [sys.executable, "-I", script] if mode == "python" else ["bash", script]
-            proc = subprocess.run(
+            # Popen + reader threads instead of subprocess.run: the readers
+            # append into the LIVE buffers as bytes arrive, so /tail sees
+            # output mid-flight. The completed result reads the same buffers
+            # — one source of truth for both the live view and the record.
+            proc = subprocess.Popen(
                 argv,
                 cwd=workdir,
                 env=env,
-                capture_output=True,
-                timeout=timeout_s,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 preexec_fn=child_limits,
             )
-            exit_code = proc.returncode
-            out, err = proc.stdout, proc.stderr
-        except subprocess.TimeoutExpired as te:
-            timed_out = True
-            exit_code = -1
-            out = te.stdout or b""
-            err = (te.stderr or b"") + f"\n[potion sandbox] killed: wall clock exceeded {timeout_s}s".encode()
+            bufs = live if live is not None else {"out": bytearray(), "err": bytearray()}
+
+            def reader(pipe, key):
+                # read1: return WHATEVER is available (read(n) would block
+                # until n bytes or EOF — the live buffers stayed empty).
+                for chunk in iter(lambda: pipe.read1(4096), b""):
+                    with LIVE_LOCK:
+                        bufs[key] += chunk
+                pipe.close()
+
+            t_out = threading.Thread(target=reader, args=(proc.stdout, "out"), daemon=True)
+            t_err = threading.Thread(target=reader, args=(proc.stderr, "err"), daemon=True)
+            t_out.start()
+            t_err.start()
+            try:
+                exit_code = proc.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                exit_code = -1
+                proc.kill()
+                proc.wait()
+            t_out.join(timeout=5)
+            t_err.join(timeout=5)
+            with LIVE_LOCK:
+                out = bytes(bufs["out"])
+                err = bytes(bufs["err"])
+            if timed_out:
+                err += f"\n[potion sandbox] killed: wall clock exceeded {timeout_s}s".encode()
+        finally:
+            if live is not None:
+                with LIVE_LOCK:
+                    live["done"] = True
+                    LIVE.pop(exec_id, None)
 
         def clip(b):
             text = b.decode("utf-8", errors="replace")
@@ -241,7 +288,32 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # no per-request noise; errors go to stderr
         pass
 
+    def do_GET_tail(self):
+        exec_id = self.path[len("/tail/"):]
+        entry = None
+        if LIVE_ID_RE.match(exec_id):
+            with LIVE_LOCK:
+                e = LIVE.get(exec_id)
+                if e is not None:
+                    entry = {
+                        "stdout": bytes(e["out"]).decode("utf-8", errors="replace")[-MAX_STREAM_BYTES:],
+                        "stderr": bytes(e["err"]).decode("utf-8", errors="replace")[-MAX_STREAM_BYTES:],
+                        "done": e["done"],
+                    }
+        if entry is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+        body = json.dumps(entry).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        if self.path.startswith("/tail/"):
+            return self.do_GET_tail()
         if self.path == "/healthz":
             body = json.dumps({"ok": True, "python": sys.version.split()[0]}).encode()
             self.send_response(200)
