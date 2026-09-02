@@ -88,11 +88,16 @@ services:
       # rather than pinned to "": the value was hardcoded, so setting it in
       # the env file did nothing and the flag could not be tested on a real
       # deployment at all.
-      POTION_SELF_SERVE: ${POTION_SELF_SERVE:-}
-      # There is no SMTP. With self-serve ON this returns the magic link in
-      # the signup response so the flow can complete; without it the link
-      # only reaches the server log and nobody can sign in. Closed test
-      # deployments only — see apps/server/src/routes/auth.ts.
+      # 2026-09-02, operator order ("open it"): self-serve signup is ON —
+      # distribution started and the closed gate silently turned away the
+      # first real visitor (neutral "check your email", no email ever sent).
+      # Delivery is real (Resend); every run keeps its hard dollar cap.
+      POTION_SELF_SERVE: ${POTION_SELF_SERVE:-1}
+      # STAYS OFF in production (2026-09-02): delivery is real now (Resend),
+      # and with self-serve ON this would hand a session link to ANYONE who
+      # types an email address — account takeover by email knowledge. Only
+      # for closed test deployments with no transport — see
+      # apps/server/src/routes/auth.ts.
       POTION_MAGIC_LINK_IN_RESPONSE: ${POTION_MAGIC_LINK_IN_RESPONSE:-}
       # Import the live PLATFORM FRONTIER BASELINE on first boot (default ON
       # for deployments). Without it a fresh database has no live-provenance
