@@ -122,8 +122,17 @@ snapshot with medoid exemplars + cohesion on the router page; refreshed
 after each learning period). G2 rung 2 SHIPPED: per-workload
 measurement (0088 — each discovered workload's own suite measures the
 serving pick vs the incumbent on THAT work; eval rows at the workload-id
-coordinate, org-scoped). Next: adoption (explicit proposals → serve-path
-sub-assignment → per-workload org frontiers) → generations. Eval-quality queue (second
+coordinate, org-scoped). G2 rung 3 SHIPPED: workload adoption (0090 —
+adopt/retire routes turn a MEASURED workload into routing: adopt mints the
+workload-grain ORG frontier from its own measurement rows by the
+challenger-apply rule, and the serve path sub-assigns matching requests
+within the parent by the request's own classification vector against
+adopted centroids at the discovery-stored threshold; trace carries
+`;parent=`, hint path never sub-assigns, guard-blocked/empty workload
+frontiers fail OPEN to the parent; discovery snapshots preserve adopted
+rows and skip their territory; adopted assignments ride the router
+artifact + serve-time stamping; sampling stays parent-grain). Next:
+generations (shadow/canary/promote/rollback). Eval-quality queue (second
 external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
 aggregate + frontier evidence; qualityCi95 kept as the conservative

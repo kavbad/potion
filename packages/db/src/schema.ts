@@ -665,6 +665,10 @@ export const orgWorkloads = pgTable(
     /** Mean cosine similarity of members to the centroid — the honesty
      * metric a reader needs to weigh a discovered group. */
     cohesion: doublePrecision('cohesion').notNull(),
+    /** G2 rung 3 (0090): the cosine threshold that FORMED this group at
+     * discovery — the same gate serving's sub-assignment uses after
+     * adoption, so routing never re-derives it from a different config. */
+    threshold: doublePrecision('threshold').notNull().default(0.62),
     exemplarText: text('exemplar_text').notNull(),
     centroid: jsonb('centroid').notNull(),
     /** G2 rung 2 (0088): the member sample ids — the workload's suite IS

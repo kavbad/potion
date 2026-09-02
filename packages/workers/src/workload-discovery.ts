@@ -25,6 +25,7 @@ import {
   getOrgIncumbents,
   getPolicyById,
   learningSpendSince,
+  listAdoptedWorkloads,
   listOrgIdsWithSpans,
   loadDerivedSuite,
   pairedQualities,
@@ -156,6 +157,11 @@ export interface WorkloadsDiscoverResult {
   samplesSeen: number;
   discovered: number;
   noiseSamples: number;
+  /** G2 rung 3: adopted rows carried through the snapshot untouched, and
+   * fresh groups dropped because an adopted workload already owns that
+   * territory (centroid within the adopted row's own threshold). */
+  adoptedPreserved: number;
+  adoptedTwinsSkipped: number;
   /** G2 rung 2: workloads whose serving-vs-incumbent measurement landed. */
   measured: number;
   measurementSkipped: Array<{ id: string; why: string }>;
@@ -175,7 +181,7 @@ export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover'> = asy
   });
   const since = new Date(Date.now() - WORKLOAD_WINDOW_DAYS * 86_400_000);
   const orgIds = payload.orgId !== undefined ? [payload.orgId] : await listOrgIdsWithSpans(ctx.db, since);
-  const result: WorkloadsDiscoverResult = { orgs: 0, samplesSeen: 0, discovered: 0, noiseSamples: 0, measured: 0, measurementSkipped: [], spendUsd: 0, workloads: [] };
+  const result: WorkloadsDiscoverResult = { orgs: 0, samplesSeen: 0, discovered: 0, noiseSamples: 0, adoptedPreserved: 0, adoptedTwinsSkipped: 0, measured: 0, measurementSkipped: [], spendUsd: 0, workloads: [] };
 
   for (const orgId of orgIds) {
     await withDeliveryGuard('workloads:discover', ctx, orgId, async () => {
@@ -221,13 +227,33 @@ export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover'> = asy
       const { groups, noiseSamples } = discoverGroups(samples, vectors, threshold);
       result.noiseSamples += noiseSamples;
 
+      // G2 rung 3: ADOPTED workloads are routing state — the snapshot keeps
+      // them (replaceOrgWorkloads clears non-adopted only), fresh groups on
+      // their territory are dropped (the adopted row IS that structure,
+      // already routed on), and their ids stay reserved.
+      const adopted = await listAdoptedWorkloads(ctx.db, orgId);
+      result.adoptedPreserved += adopted.length;
+      const survivors = groups.filter((g) => {
+        const twin = adopted.find(
+          (a) => a.parentCluster === g.parentCluster && cosineSim(g.centroid, a.centroid as number[]) >= a.threshold,
+        );
+        if (twin !== undefined) result.adoptedTwinsSkipped += 1;
+        return twin === undefined;
+      });
+
       const safe = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const takenIds = new Set(adopted.map((a) => a.id));
       const perParentCount = new Map<string, number>();
-      const newRows: NewOrgWorkload[] = groups.map((g) => {
-        const n = (perParentCount.get(g.parentCluster) ?? 0) + 1;
+      const newRows: NewOrgWorkload[] = survivors.map((g) => {
+        let n = (perParentCount.get(g.parentCluster) ?? 0) + 1;
+        let id = `wl-${orgHashOf(orgId)}-${safe(g.parentCluster)}-${n}`;
+        while (takenIds.has(id)) {
+          n += 1;
+          id = `wl-${orgHashOf(orgId)}-${safe(g.parentCluster)}-${n}`;
+        }
         perParentCount.set(g.parentCluster, n);
         return {
-          id: `wl-${orgHashOf(orgId)}-${safe(g.parentCluster)}-${n}`,
+          id,
           orgId,
           parentCluster: g.parentCluster,
           sampleCount: g.members.length,
@@ -236,6 +262,7 @@ export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover'> = asy
           centroid: g.centroid,
           memberTraceIds: g.members.map((m) => samples[m]!.id),
           status: 'observed',
+          threshold,
           windowDays: WORKLOAD_WINDOW_DAYS,
         };
       });

@@ -267,6 +267,30 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
       'baseline is the false-live disease; fail closed, no swap, serving proceeds normally).',
   },
   {
+    file: 'apps/server/src/routing/workload-assignment.ts',
+    symbol: 'resolveWorkloadSubAssignment (guardFrontierProvenance)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/workload-adoption.test.ts',
+    notes:
+      'G2 rung 3 sub-assignment: before re-addressing a request to an adopted workload, the workload\'s org ' +
+      'frontier is loaded and run through the SAME provenance guard as serving — a mock-provenance workload ' +
+      'frontier under live providers fails OPEN to the parent cluster (no sub-assignment, parent serves as ' +
+      'before), never into the default strategy.',
+  },
+  {
+    file: 'apps/server/src/routes/discovery.ts',
+    symbol: 'adopt (aggregatesFromEvalResults + servingDecisionFor)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/workload-adoption.test.ts',
+    notes:
+      'G2 rung 3 adoption: mints the WORKLOAD-grain org frontier by the exact challenger-apply rule — ' +
+      'org-scoped, provenance-pure (strategiesMeasuredAt and the aggregation share the providerMode = this ' +
+      'server\'s mode gate), one instrument — and the post-adopt "now serves" readback runs the same ' +
+      'servingDecisionFor chain as serving.',
+  },
+  {
     file: 'apps/server/src/routes/challengers.ts',
     symbol: 'apply (aggregatesFromEvalResults + servingDecisionFor)',
     kind: 'alias-guard',

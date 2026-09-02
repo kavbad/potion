@@ -165,10 +165,12 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/api/learning/run', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'enqueues the learning period for the CALLER\'s org only — no parameter, nothing to cross' } },
   { method: 'POST', path: '/api/learning/proposals/:id/apply', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/learning/proposals/lp-x/apply', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'proposal', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/learning/proposals/apply-all', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'merges the CALLER\'s own open proposals into its own policy — no parameter, nothing to cross' } },
-  // G2 rung 1: discovered org workloads — observed structure only, org-scoped
-  // reads + an enqueue-only refresh; nothing routes by these rows.
+  // G2 rungs 1+3: discovered org workloads — org-scoped reads, an
+  // enqueue-only refresh, and the explicit adopt/retire routing flips.
   { method: 'GET', path: '/api/workloads/discovered', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "lists the CALLING org's own discovered workloads — no parameter, nothing to cross" } },
   { method: 'POST', path: '/api/workloads/discover', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "enqueues discovery for the CALLING org only — no parameter, nothing to cross" } },
+  { method: 'POST', path: '/api/workloads/:id/adopt', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/adopt', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: "org-scoped listOrgWorkloads lookup → a foreign org's id is a uniform 404 (pinned in workload-adoption.test.ts)" } },
+  { method: 'POST', path: '/api/workloads/:id/retire', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/retire', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: "org-scoped listOrgWorkloads lookup → a foreign org's id is a uniform 404 (pinned in workload-adoption.test.ts)" } },
   // G1 holdout settings: the CALLING org's own consent + rate; the serving
   // swap is chat.ts machinery, not a route.
   { method: 'GET', path: '/api/holdout', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "reads the CALLING org's own holdout config — no parameter, nothing to cross" } },

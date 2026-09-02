@@ -45,6 +45,7 @@ import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, in
 import { stampedRouterVersion } from '../routing/router-stamp.js';
 // G1 (0086): randomized incumbent holdout — appended import.
 import { resolveHoldout } from '../routing/holdout.js';
+import { resolveWorkloadSubAssignment } from '../routing/workload-assignment.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { bindServingDegeneracy, loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
@@ -795,6 +796,24 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
             ) ?? null);
       return { clusterId: cid, ...guarded, latency: bound, degenerateExcluded: degeneracy.excluded, op: point, served, servedInstrument: (loaded?.instrument ?? 'default') as 'default' | 'tools' | 'vision' | 'audio' };
     };
+    // ---- G2 rung 3: adopted-workload sub-assignment ----
+    // Within the parent the taxonomy picked, the request's OWN classification
+    // vector is compared against the org's ADOPTED workload centroids
+    // (routing/workload-assignment.ts) — a match re-addresses the request to
+    // the workload id, whose org frontier then serves it, and the trace
+    // names the parent (`;parent=`). Only explicit adoption puts a row in
+    // that set; everything ineligible (a hinted request with no vector,
+    // tools/vision/audio — the workload was measured on the default
+    // instrument only) or unresolvable fails OPEN to the parent.
+    let workloadParent: string | null = null;
+    if (body.tools === undefined && imageParts === 0 && audioParts === 0) {
+      const sub = await resolveWorkloadSubAssignment(ctx, auth.org.orgId, clusterId, ranked?.embedding);
+      if (sub !== null) {
+        workloadParent = clusterId;
+        clusterId = sub.workloadId;
+        logBase.clusterId = clusterId;
+      }
+    }
     let chosen = await resolveFor(clusterId);
     if (chosen === null) {
       await logRequest({ ...logBase, status: 'unsupported_content', latencyMs: elapsed() });
@@ -813,7 +832,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
     // Quality-safe tiebreak (routing/ambiguity.ts): a near-equal runner-up is
     // resolved too, and the pair is served under the higher measured quality.
-    const runnerUpId = ranked !== undefined ? ambiguousRunnerUp(ranked, ambiguityMargin()) : null;
+    // A sub-assigned request skips the tiebreak: the org explicitly adopted
+    // this workload and the request's own vector cleared its gate — a
+    // stronger claim than a near-equal taxonomy runner-up.
+    const runnerUpId = ranked !== undefined && workloadParent === null ? ambiguousRunnerUp(ranked, ambiguityMargin()) : null;
     if (runnerUpId !== null) {
       const other = await resolveFor(runnerUpId);
       if (other !== null) {
@@ -920,6 +942,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // Appended only on the sampled slice — ordinary traffic's trace stays
       // byte-identical.
       (heldOut !== null ? ';holdout=1' : '') +
+      // Appended only on sub-assigned requests: the cluster token names the
+      // WORKLOAD that served; this names the taxonomy parent it sits under.
+      (workloadParent !== null ? `;parent=${workloadParent}` : '') +
       (servedInstrument !== null ? `;instrument=${servedInstrument}` : '') +
       // Appended only when the org's own measured traffic excluded a
       // degenerate route — absent, the trace is byte-identical to before.
@@ -1052,7 +1077,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 24)}`;
     // The learning period's sampler (consent-gated, capped per kind of work,
     // PII-redacted; never throws into the served response). Called after a
-    // successful completion on every path, fire-and-forget.
+    // successful completion on every path, fire-and-forget. Sub-assigned
+    // requests sample under the PARENT cluster: discovery clusters within
+    // parents, and sampling at workload grain would fracture its input and
+    // re-discover an adopted structure from its own routed traffic.
     const keepSample = (text: string, cfg: { type: string; model?: string }, usage: { costUsd?: number } | undefined, cluster: string) => {
       // FULL-REQUEST CAPTURE (G1): the whole served conversation plus the
       // structural facts — the measured task must be the served task.
@@ -1202,7 +1230,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // defines it is still in hand. null = comparison undefined.
         ...baselineFields(sh, result.usage?.costUsd),
       });
-      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
+      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, workloadParent ?? clusterId);
       // ---- M3 #21 shadow (m3-shadow) ----
       // Stream fully ended above ([DONE] + end): the shadow run executes
       // strictly AFTER the primary response, fire-and-forget with a
@@ -1337,7 +1365,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // defines it is still in hand. null = comparison undefined.
         ...baselineFields(sh, result.usage?.costUsd),
       });
-      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
+      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, workloadParent ?? clusterId);
       return;
     }
     // ---- end M3 #23 composite (m3-composite) ----
@@ -1395,7 +1423,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // defines it is still in hand. null = comparison undefined.
         ...baselineFields(sh, result.usage?.costUsd),
       });
-      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, clusterId);
+      keepSample(result.text, op.config as { type: string; model?: string }, result.usage, workloadParent ?? clusterId);
       const sent = reply.send({
         id,
         object: 'chat.completion',

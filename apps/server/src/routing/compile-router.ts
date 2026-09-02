@@ -28,6 +28,7 @@ import {
   appendRouterVersion,
   getOrgById,
   getRouterInterpretation,
+  listAdoptedWorkloads,
   listClusters,
   listServingPolicies,
   listRequestLogs,
@@ -56,6 +57,9 @@ import { bustRouterStampCache } from './router-stamp.js';
 
 export interface RouterAssignment {
   clusterId: string;
+  /** G2 rung 3: present when this assignment is an ADOPTED WORKLOAD — the
+   * taxonomy cluster it sub-assigns within. Display + narration only. */
+  parentCluster?: string;
   frontierId: string;
   frontierVersion: number;
   provenance: 'live' | 'mock' | 'blocked';
@@ -315,6 +319,14 @@ export async function assignmentsUnderPolicy(
   for (const c of await listClusters(db, { orgId })) {
     if (!seen.has(c.id)) { seen.add(c.id); clusterIds.push(c.id); }
   }
+  // G2 rung 3: ADOPTED workloads are routing surface — their assignments
+  // belong in the artifact (adopt/retire narrates as newly/no-longer
+  // routed on the next compile), and they are what serve-time stamping
+  // matches a sub-assigned request against.
+  const parentOf = new Map<string, string>();
+  for (const w of await listAdoptedWorkloads(db, orgId)) {
+    if (!seen.has(w.id)) { seen.add(w.id); clusterIds.push(w.id); parentOf.set(w.id, w.parentCluster); }
+  }
   for (const cid of clusterIds.sort()) {
     const d = await servingDecisionFor(db, {
       orgId,
@@ -332,6 +344,7 @@ export async function assignmentsUnderPolicy(
     const cfg = op.config as StrategyConfig & { model?: string };
     assignments.push({
       clusterId: cid,
+      ...(parentOf.has(cid) ? { parentCluster: parentOf.get(cid)! } : {}),
       frontierId: d.loaded.id,
       frontierVersion: d.loaded.version,
       provenance: d.provenance,

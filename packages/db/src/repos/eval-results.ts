@@ -322,6 +322,33 @@ export async function singleModelLatencyP95(
  * Deterministic: the hash is computed from the canonical config, never
  * guessed from a name. Returns null when no live evidence exists — the
  * caller says "unmeasured", never invents. */
+/**
+ * G2 rung 3 (adoption): the distinct strategies with usable org rows at one
+ * cluster coordinate — the input list a per-workload org frontier aggregates
+ * over. Same purity gates as aggregatesFromEvalResults (org-scoped, one
+ * prices version, one provider mode, default instrument, non-stale), so the
+ * list and the aggregation cannot disagree about what "measured" means.
+ */
+export async function strategiesMeasuredAt(
+  db: PotionDb,
+  args: { clusterId: string; orgId: string; pricesVersion: string; providerMode: 'live' | 'mock' },
+): Promise<Array<{ strategyHash: string; strategyConfig: unknown }>> {
+  const rows = await db
+    .selectDistinct({ strategyHash: evalResults.strategyHash, strategyConfig: evalResults.strategyConfig })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.clusterId, args.clusterId),
+        eq(evalResults.orgId, args.orgId),
+        eq(evalResults.pricesVersion, args.pricesVersion),
+        eq(evalResults.providerMode, args.providerMode),
+        eq(evalResults.instrument, 'default'),
+        eq(evalResults.stale, false),
+      ),
+    );
+  return rows;
+}
+
 export async function measuredSinglePoint(
   db: PotionDb,
   clusterId: string,
