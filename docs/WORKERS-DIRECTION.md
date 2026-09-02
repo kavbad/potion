@@ -235,7 +235,12 @@ proposal → trust migration — proven end-to-end on the coding/data family
 > correctly determine which permissions survive the change.**
 
 Then W6 (organizations: persistent specialists, delegation evidence,
-manager workers) — after the milestone, not before.
+manager workers) — after the milestone, not before. **W6's chapter is
+written:** `docs/RESEARCH-FLEET.md` (2026-09-01) — the Potion Research
+fleet, adopted with six amendments as the W6 flagship. Direction now;
+built at its ladder turn, unless the operator names it the distribution
+interleave (its R1 allows either, and either way it is built ON Workers,
+never beside them).
 
 ## Explicitly not now (§72, adopted + extended)
 

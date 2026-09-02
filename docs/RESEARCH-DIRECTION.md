@@ -4,7 +4,9 @@
 The third leg of the platform, alongside the guarantee product and Potion
 Lab (`docs/LAB-DIRECTION.md`) — and the compounding one. Companion to
 `docs/INFERENCE-COMPILER.md` (the north star this laboratory serves) and
-`docs/MIXING-ROADMAP.md`.
+`docs/MIXING-ROADMAP.md`. The external publication institution this
+document deferred is now specified in `docs/RESEARCH-FLEET.md`
+(2026-09-01).
 
 ## What it is
 
