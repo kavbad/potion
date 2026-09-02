@@ -9,7 +9,7 @@
 //
 // Renderers stay lazy — SheetJS loads only when an xlsx tab is opened, so
 // runs without spreadsheets never pay for it.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CARD } from './lab-bench';
 import {
   diffBenchFiles,
@@ -39,38 +39,58 @@ type Rendered =
 
 const TEXT_CAP = 20_000;
 const GRID_ROW_CAP = 200;
+/** A wide export (the operator's first real file: 2,636 rows x 158
+ * columns) rendered whole is 31k table cells — enough to freeze the tab.
+ * The bench is a PREVIEW; download is the full artifact. */
+const GRID_COL_CAP = 24;
 
 async function renderFile(runId: string, f: BenchFile): Promise<Rendered> {
-  const kind = renderKindFor(f);
-  if (kind === 'binary') return { kind: 'binary' };
-  const res = await fetch(`/api/lab/runs/${runId}/files/${encodeURIComponent(f.name)}`);
-  if (!res.ok) return { kind: 'error', message: `could not load (${res.status})` };
-  if (kind === 'image') {
-    const blob = await res.blob();
-    return { kind: 'image', url: URL.createObjectURL(blob) };
+  // EVERYTHING here can throw (a 3MB styles-heavy export took the first
+  // real user file down) — and an unhandled rejection used to leave the
+  // pane saying "loading…" forever. One catch, an honest error card.
+  try {
+    const kind = renderKindFor(f);
+    if (kind === 'binary') return { kind: 'binary' };
+    const res = await fetch(`/api/lab/runs/${runId}/files/${encodeURIComponent(f.name)}`);
+    if (!res.ok) return { kind: 'error', message: `could not load (${res.status})` };
+    if (kind === 'image') {
+      const blob = await res.blob();
+      return { kind: 'image', url: URL.createObjectURL(blob) };
+    }
+    if (kind === 'sheet') {
+      const buf = await res.arrayBuffer();
+      const XLSX = await import('xlsx');
+      // sheetRows caps the PARSE, not just the render — a 2,636-row
+      // workbook parses ~10x faster and bounded when only the preview's
+      // rows are materialized.
+      const wb = XLSX.read(buf, { type: 'array', sheetRows: GRID_ROW_CAP + 1 });
+      const sheets = wb.SheetNames.map((name) => {
+        const ws = wb.Sheets[name]!;
+        const all = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '' }) as string[][];
+        return { name, rows: all.slice(0, GRID_ROW_CAP), truncated: all.length > GRID_ROW_CAP };
+      });
+      return { kind: 'sheet', grid: { sheets } };
+    }
+    const text = await res.text();
+    if (kind === 'csv') {
+      const { rows, truncated } = parseCsv(text, GRID_ROW_CAP);
+      return { kind: 'csv', rows, truncated };
+    }
+    return { kind: 'text', text: text.slice(0, TEXT_CAP), truncated: text.length > TEXT_CAP };
+  } catch (e) {
+    return { kind: 'error', message: `could not render ${f.name}: ${e instanceof Error ? e.message : 'parse failed'} — use download` };
   }
-  if (kind === 'sheet') {
-    const buf = await res.arrayBuffer();
-    const XLSX = await import('xlsx');
-    const wb = XLSX.read(buf, { type: 'array' });
-    const sheets = wb.SheetNames.map((name) => {
-      const ws = wb.Sheets[name]!;
-      const all = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '' }) as string[][];
-      return { name, rows: all.slice(0, GRID_ROW_CAP), truncated: all.length > GRID_ROW_CAP };
-    });
-    return { kind: 'sheet', grid: { sheets } };
-  }
-  const text = await res.text();
-  if (kind === 'csv') {
-    const { rows, truncated } = parseCsv(text, GRID_ROW_CAP);
-    return { kind: 'csv', rows, truncated };
-  }
-  return { kind: 'text', text: text.slice(0, TEXT_CAP), truncated: text.length > TEXT_CAP };
 }
 
-function Grid({ rows, truncated }: { rows: string[][]; truncated: boolean }) {
+const Grid = memo(function Grid({ rows, truncated }: { rows: string[][]; truncated: boolean }) {
   if (rows.length === 0) return <p className="py-4 font-mono text-[12px] text-faint">empty</p>;
-  const header = rows[0]!;
+  const wide = Math.max(...rows.map((r) => r.length)) > GRID_COL_CAP;
+  const shown = wide ? rows.map((r) => r.slice(0, GRID_COL_CAP)) : rows;
+  const header = shown[0]!;
+  const notes = [
+    ...(truncated ? [`first ${GRID_ROW_CAP} rows`] : []),
+    ...(wide ? [`first ${GRID_COL_CAP} columns`] : []),
+  ];
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse font-mono text-[12px]">
@@ -82,7 +102,7 @@ function Grid({ rows, truncated }: { rows: string[][]; truncated: boolean }) {
           </tr>
         </thead>
         <tbody>
-          {rows.slice(1).map((r, ri) => (
+          {shown.slice(1).map((r, ri) => (
             <tr key={ri}>
               {r.map((c, ci) => (
                 <td key={ci} className="border border-line px-2 py-1 text-ink">{c}</td>
@@ -91,10 +111,10 @@ function Grid({ rows, truncated }: { rows: string[][]; truncated: boolean }) {
           ))}
         </tbody>
       </table>
-      {truncated ? <p className="mt-1 font-mono text-[12px] text-faint">first {GRID_ROW_CAP} rows — download for the rest</p> : null}
+      {notes.length > 0 ? <p className="mt-1 font-mono text-[12px] text-faint">{notes.join(' · ')} — download for the rest</p> : null}
     </div>
   );
-}
+});
 
 export function LabWorkbench({
   runId,
