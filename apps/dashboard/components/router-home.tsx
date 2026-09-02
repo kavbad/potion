@@ -22,6 +22,7 @@ import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
 import { TodayPulse } from '@/components/today-pulse';
 import { BarProposal } from '@/components/bar-proposal';
 import { ChallengerProposal } from '@/components/challenger-proposal';
+import { DiscoveredWorkloads } from '@/components/discovered-workloads';
 import { WeeklyBrief } from '@/components/weekly-brief';
 import { RouterPriorities } from '@/components/router-priorities';
 import { RouterArc } from '@/components/router-arc';
@@ -402,6 +403,7 @@ export function RouterHome({
           )}
 
           {doc && <AssignmentsTable assignments={doc.assignments} />}
+          <DiscoveredWorkloads />
           {router && <Versions history={router.history} />}
 
           {/* ============ the quiet contract line ============ */}

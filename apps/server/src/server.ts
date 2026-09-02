@@ -80,6 +80,8 @@ import { registerAlertRoutes } from './routes/alerts.js';
 import { registerResearchRoutes } from './routes/research.js';
 // ---- M5 #36 agent workloads ----
 import { registerTraceRoutes } from './routes/traces.js';
+// G2 rung 1: discovered org workloads — appended import.
+import { registerDiscoveryRoutes } from './routes/discovery.js';
 import { registerRubricRoutes } from './routes/rubrics.js';
 import { registerCertificationRoutes } from './routes/certifications.js';
 import { registerLabRoutes } from './routes/lab.js';
@@ -407,6 +409,8 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // BEFORE the purge so retention-0 orgs still get clustered from payloads
   // that are about to be redacted (purge redacts, never blocks clustering).
   registerTraceRoutes(app, ctx, { queue });
+  // G2 rung 1: discovered org workloads — observed structure + refresh.
+  registerDiscoveryRoutes(app, ctx, { queue });
   // G1.5: per-cluster rubric review surface (generate/list/approve/reject).
   registerRubricRoutes(app, ctx, { queue });
   registerCertificationRoutes(app, ctx, { queue });

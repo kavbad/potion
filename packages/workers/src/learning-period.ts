@@ -98,7 +98,7 @@ function rubricFor(clusterId: string): string {
 
 /** A sampled span's messages array, strictly validated — anything else
  * falls back to the legacy last-user-turn capture. */
-function parseSampledMessages(v: unknown): ChatMessage[] | null {
+export function parseSampledMessages(v: unknown): ChatMessage[] | null {
   if (!Array.isArray(v) || v.length === 0) return null;
   const out: ChatMessage[] = [];
   for (const m of v) {
@@ -438,6 +438,9 @@ export const learningPeriodHandler: WorkerHandler<'learning:period'> = async (pa
   const reports: LearningPeriodOrgReport[] = [];
   for (const orgId of orgIds) {
     reports.push(await withDeliveryGuard('learning:period', ctx, orgId, () => runLearningPeriodForOrg(ctx, orgId)));
+    // G2 rung 1: the same fresh samples the period measured also refresh
+    // the org's discovered-structure snapshot (fire-and-forget).
+    void ctx.queue?.enqueue('workloads:discover', { orgId }).catch(() => undefined);
   }
   return { orgs: reports.length, reports };
 };

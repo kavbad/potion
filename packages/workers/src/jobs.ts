@@ -9,6 +9,7 @@ export type JobKind =
   | 'sweep:run'
   | 'staleness:scan'
   | 'shadow:judge'
+  | 'workloads:discover'
   | 'guarantee:evaluate'
   | 'alerts:dispatch'
   | 'budget:evaluate'
@@ -44,6 +45,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'sweep:run',
   'staleness:scan',
   'shadow:judge',
+  'workloads:discover',
   'guarantee:evaluate',
   'alerts:dispatch',
   'budget:evaluate',
@@ -129,6 +131,7 @@ export interface JobPayloads {
   // ---- M5 #36 agent workloads (SPEC §14) ----
   'traces:cluster': TracesClusterPayload;
   'traces:purge': TracesPurgePayload;
+  'workloads:discover': WorkloadsDiscoverPayload;
   'traces:redact': TracesRedactPayload;
   'rubric:generate': RubricGeneratePayload;
   'frontier:live-sweep': FrontierLiveSweepPayload;
@@ -171,6 +174,12 @@ export interface LearningProbePayload {
  * serve them, synthesize redacted replay suites, and run the first mock
  * sweep per new cluster. Nightly + on-demand (POST /api/traces/cluster).
  */
+/** G2 rung 1: discover the org's sub-workloads from its consented learning
+ * samples. Absent orgId → every org with samples. */
+export interface WorkloadsDiscoverPayload {
+  orgId?: string;
+}
+
 export interface TracesClusterPayload {
   /** Restrict to one org (default: all orgs with spans in the window). */
   orgId?: string;

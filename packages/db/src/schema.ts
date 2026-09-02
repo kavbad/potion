@@ -641,6 +641,34 @@ export const shadowResults = pgTable('shadow_results', {
  * org-suite paired measurement against the SERVING route. Applied by one
  * button; apply mints an org frontier (applied_frontier_id).
  */
+/**
+ * G2 rung 1 (migration 0087) — discovered org workloads: the sub-structure
+ * the org's consented samples reveal INSIDE each serving cluster. OBSERVED
+ * only; routing adoption is a later, explicit rung. Snapshot per discovery
+ * run; exemplar_text is the already-redacted medoid sample, never a
+ * fabricated name.
+ */
+export const orgWorkloads = pgTable(
+  'org_workloads',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+    parentCluster: text('parent_cluster').notNull(),
+    sampleCount: integer('sample_count').notNull(),
+    /** Mean cosine similarity of members to the centroid — the honesty
+     * metric a reader needs to weigh a discovered group. */
+    cohesion: doublePrecision('cohesion').notNull(),
+    exemplarText: text('exemplar_text').notNull(),
+    centroid: jsonb('centroid').notNull(),
+    status: text('status').notNull().default('observed'),
+    windowDays: integer('window_days').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('org_workloads_org_idx').on(t.orgId, t.parentCluster)],
+);
+export type OrgWorkloadRow = typeof orgWorkloads.$inferSelect;
+export type NewOrgWorkload = typeof orgWorkloads.$inferInsert;
+
 export const challengerProposals = pgTable(
   'challenger_proposals',
   {

@@ -64,6 +64,7 @@ import {
   researchCycles,
   sessions,
   challengerProposals,
+  orgWorkloads,
   outcomes,
   shadowResults,
   shareTokens,
@@ -309,6 +310,11 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count(
     'challenger_proposals',
     db.delete(challengerProposals).where(eq(challengerProposals.orgId, orgId)).returning({ id: challengerProposals.id }),
+  );
+  // G2 (0087): discovered workloads — same treatment.
+  await count(
+    'org_workloads',
+    db.delete(orgWorkloads).where(eq(orgWorkloads.orgId, orgId)).returning({ id: orgWorkloads.id }),
   );
   await count('incidents', db.delete(incidents).where(eq(incidents.orgId, orgId)).returning({ id: incidents.id }));
   await count(

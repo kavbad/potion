@@ -2184,7 +2184,7 @@ export function toolSignatureSlug(toolSequence: string[]): string {
 }
 
 /** Mirrors packages/cluster assigner's cosine (workers don't depend on it). */
-function cosineSim(a: number[], b: number[]): number {
+export function cosineSim(a: number[], b: number[]): number {
   let dot = 0;
   let na = 0;
   let nb = 0;
@@ -2199,7 +2199,7 @@ function cosineSim(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-function meanCentroid(vecs: number[][]): number[] {
+export function meanCentroid(vecs: number[][]): number[] {
   const dims = vecs[0]?.length ?? 0;
   const out = new Array<number>(dims).fill(0);
   for (const v of vecs) for (let i = 0; i < dims; i++) out[i]! += v[i]!;
@@ -6338,6 +6338,8 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'suite:certify': suiteCertifyHandler,
   // lazy: learning-period.ts imports from this module (the registry must not import it back)
   'learning:period': (payload, ctx) => import('./learning-period.js').then((m) => m.learningPeriodHandler(payload, ctx)),
+  // lazy for the same reason (workload-discovery imports handlers helpers).
+  'workloads:discover': (payload, ctx) => import('./workload-discovery.js').then((m) => m.workloadsDiscoverHandler(payload, ctx)),
   // ---- S7 L4: the autonomous probe ----
   'learning:probe': learningProbeHandler,
 };

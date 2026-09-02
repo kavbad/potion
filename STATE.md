@@ -116,8 +116,11 @@ labeled everywhere it lands; Savings' "Verified savings" block = the only
 savings share bills 25% of the holdout-verified LOWER bound only — the
 estimated counterfactual is labeled "projected, not billed" context; no
 live baseline → pure at-cost. The review ladder's engineering is DONE;
-charging turns on at the Stripe sitting and the first invoice is honest. G2 next: org workload discovery → customer-specific frontiers
-beyond the single-cluster promotion path. Eval-quality queue (second
+charging turns on at the Stripe sitting and the first invoice is honest. G2 rung 1 SHIPPED: org workload discovery (0087 —
+consented samples clustered within each serving cluster; observed-only
+snapshot with medoid exemplars + cohesion on the router page; refreshed
+after each learning period). Next G2 rungs: discovered-workload adoption
+(measure → propose → org frontiers per workload) → generations. Eval-quality queue (second
 external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
 aggregate + frontier evidence; qualityCi95 kept as the conservative
