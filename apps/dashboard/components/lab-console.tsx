@@ -29,6 +29,7 @@ import {
 } from '@potion/lab-form';
 import { BriefView } from './lab-brief';
 import { BENCH_MAX_TABS, LabWorkbench } from './lab-workbench';
+import { useTrialAttachments } from './trial-attachments';
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
@@ -253,8 +254,13 @@ export function LabConsole({
 
   // W-flagship: the operator's own data rides the trial — picked files are
   // base64'd client-side and seeded into the run workspace before the
-  // worker starts.
-  const [attachments, setAttachments] = useState<Array<{ name: string; contentBase64: string; size: number }>>([]);
+  // worker starts. Shared with the rail's trial button when the page
+  // provides the context (ONE ATTACH STATE, 2026-09-02) — before that, a
+  // file attached here silently never rode the rail-started trial.
+  const attachCtx = useTrialAttachments();
+  const [localAttachments, setLocalAttachments] = useState<Array<{ name: string; contentBase64: string; size: number }>>([]);
+  const attachments = attachCtx?.attachments ?? localAttachments;
+  const setAttachments = attachCtx?.setAttachments ?? setLocalAttachments;
   const onPickFiles = useCallback(async (list: FileList | null) => {
     if (list === null) return;
     const picked: Array<{ name: string; contentBase64: string; size: number }> = [];

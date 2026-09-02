@@ -13,6 +13,7 @@ import { BriefView as LatestBrief } from '@/components/lab-brief';
 import { ConnectorPanel } from '@/components/lab-actions';
 import { LabMachinery } from '@/components/lab-machinery';
 import { LabBenchRail } from '@/components/lab-bench-rail';
+import { TrialAttachmentsProvider } from '@/components/trial-attachments';
 import { MissionControl } from '@/components/lab-mission';
 import { LabPermissionLedger } from '@/components/lab-permission-ledger';
 import { BenchLabel, CARD, LabStage, SpecimenMark } from '@/components/lab-bench';
@@ -170,9 +171,11 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
           preserved; re-generate or edit from a valid row.
         </p>
       ) : (
-        <>
+        <TrialAttachmentsProvider>
           {/* ---- THE BENCH RAIL: every make-it-work control, at the top,
-               sticky — unmet things light up and fix in place ---- */}
+               sticky — unmet things light up and fix in place. The provider
+               spans rail + console so a file attached in the console rides
+               EITHER trial button (ONE ATTACH STATE, 2026-09-02). ---- */}
           <LabBenchRail harness={harness} role={me.role} />
 
           {/* ---- the clock: arm/pause a standing mission (detail) ---- */}
@@ -240,7 +243,7 @@ export default async function HarnessPage({ params }: { params: Promise<{ hash: 
               {openClawSnippet}
             </pre>
           </section>
-        </>
+        </TrialAttachmentsProvider>
       )}
     </LabStage>
   );

@@ -16,6 +16,7 @@
 // Every state is a real server value (harness.superpowers posture, the
 // mission row); nothing pulses unless something is truly unmet.
 import { useCallback, useEffect, useState } from 'react';
+import { useTrialAttachments } from './trial-attachments';
 import { useRouter } from 'next/navigation';
 import type { HarnessDto } from '@potion/lab-form';
 
@@ -102,6 +103,7 @@ export function LabBenchRail({
     [harness.harnessHash, router],
   );
 
+  const attachCtx = useTrialAttachments();
   const runTrial = useCallback(async () => {
     setBusyId('trial');
     setNote(null);
@@ -109,7 +111,15 @@ export function LabBenchRail({
       const res = await fetch('/api/lab/runs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ harnessHash: harness.harnessHash }),
+        // ONE ATTACH STATE (2026-09-02): files picked in the console ride
+        // THIS button too — they held separate state before, and a rail-
+        // started trial silently dropped the operator's attachment.
+        body: JSON.stringify({
+          harnessHash: harness.harnessHash,
+          ...(attachCtx !== null && attachCtx.attachments.length > 0
+            ? { attachments: attachCtx.attachments.map(({ name, contentBase64 }) => ({ name, contentBase64 })) }
+            : {}),
+        }),
       });
       const body = (await res.json().catch(() => null)) as { runId?: string; error?: { message?: string } } | null;
       if (res.status === 202 && body?.runId) router.push(`/lab/run/${body.runId}`);
@@ -117,7 +127,7 @@ export function LabBenchRail({
     } finally {
       setBusyId(null);
     }
-  }, [harness.harnessHash, router]);
+  }, [harness.harnessHash, router, attachCtx]);
 
   const chip = 'inline-flex items-center gap-1.5 border px-2.5 py-1.5 font-mono text-[12px] leading-none';
   const canAct = role === 'admin';
