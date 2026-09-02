@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDb, insertTraceSpans, listOrgWorkloads, migrate, orgs, type DbHandle } from '@potion/db';
+import { sha256, strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
+import { createDb, insertApiKey, insertPolicy, insertTraceSpans, listOrgWorkloads, migrate, orgs, type DbHandle } from '@potion/db';
+import { saveFrontier } from '@potion/pareto';
 import { LEARNING_SPAN_NAME } from './learning-period.js';
 import {
   WORKLOAD_MIN_SAMPLES,
@@ -85,8 +87,17 @@ describe('discoverGroups (pure)', () => {
   });
 });
 
+function point(cfg: StrategyConfig, quality: number, costPer1K: number): FrontierPoint {
+  return { clusterId: 'classification', strategyHash: strategyHash(cfg), strategyConfig: cfg, quality, costPer1K, latencyP95: 300, providerMode: 'mock' } as FrontierPoint;
+}
+
 describe('workloads:discover (handler)', () => {
-  it('discovers the org structure, snapshot-replaces on re-run, never leaks across orgs', async () => {
+  it('discovers AND measures the org structure, snapshot-replaces on re-run, never leaks across orgs', async () => {
+    // Serving context for the measurement leg: floor 0.7 → mock-cheap
+    // serves; the greenfield incumbent is the top single (mock-mid).
+    await insertPolicy(db.db, { id: 'pol-wd', orgId: 'org_wd', name: 'wd', config: { type: 'min_cost', qualityFloor: 0.7 } });
+    await insertApiKey(db.db, { id: 'key-wd', keyHash: sha256('pk_wd'), name: 'serve', orgId: 'org_wd', policyId: 'pol-wd' });
+    await saveFrontier(db.db, 'classification', [point({ type: 'single', model: 'mock-cheap' }, 0.8, 0.2), point({ type: 'single', model: 'mock-mid' }, 0.92, 1.0)], 'manual', 'test-prices');
     await insertTraceSpans(db.db, [
       ...Array.from({ length: 6 }, (_, i) => span('org_wd', `wd-inv${i}`, `invoice field ${i} please extract`)),
       ...Array.from({ length: 5 }, (_, i) => span('org_wd', `wd-poem${i}`, `write a short poem about ${i}`)),
@@ -94,11 +105,21 @@ describe('workloads:discover (handler)', () => {
       ...Array.from({ length: WORKLOAD_MIN_SAMPLES }, (_, i) => span('org_wd_b', `wdb-${i}`, `invoice ${i}`)),
     ]);
     const result = await workloadsDiscoverHandler({ orgId: 'org_wd' }, ctx());
-    expect(result).toMatchObject({ orgs: 1, samplesSeen: 12, discovered: 2, noiseSamples: 1 });
+    expect(result, JSON.stringify(result.measurementSkipped)).toMatchObject({ orgs: 1, samplesSeen: 12, discovered: 2, noiseSamples: 1, measured: 2 });
 
     const rows = await listOrgWorkloads(db.db, 'org_wd');
     expect(rows).toHaveLength(2);
-    expect(rows.every((r) => r.status === 'observed')).toBe(true); // never routed by discovery
+    // G2 rung 2: measured on the workload's OWN items — the per-workload
+    // verdict the aggregate bar hides. Still nothing routes by these rows.
+    expect(rows.every((r) => r.status === 'measured')).toBe(true);
+    for (const r of rows) {
+      const m = r.measurement as { servingModel: string; incumbentModel: string; retention: { mean: number; ci95: [number, number] }; items: number };
+      expect(m.servingModel).toBe('mock-cheap'); // what production serves the parent
+      expect(m.incumbentModel).toBe('mock-mid'); // greenfield: the premium single
+      expect(m.items).toBe(r.sampleCount);
+      expect(m.retention.ci95[0]).toBeLessThanOrEqual(m.retention.mean);
+      expect((r.memberTraceIds as string[]).length).toBe(r.sampleCount);
+    }
     expect(rows.every((r) => r.parentCluster === 'classification')).toBe(true);
     expect(rows.map((r) => r.sampleCount).sort()).toEqual([5, 6]);
     const exemplars = rows.map((r) => r.exemplarText).join(' ');

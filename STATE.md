@@ -119,8 +119,11 @@ live baseline → pure at-cost. The review ladder's engineering is DONE;
 charging turns on at the Stripe sitting and the first invoice is honest. G2 rung 1 SHIPPED: org workload discovery (0087 —
 consented samples clustered within each serving cluster; observed-only
 snapshot with medoid exemplars + cohesion on the router page; refreshed
-after each learning period). Next G2 rungs: discovered-workload adoption
-(measure → propose → org frontiers per workload) → generations. Eval-quality queue (second
+after each learning period). G2 rung 2 SHIPPED: per-workload
+measurement (0088 — each discovered workload's own suite measures the
+serving pick vs the incumbent on THAT work; eval rows at the workload-id
+coordinate, org-scoped). Next: adoption (explicit proposals → serve-path
+sub-assignment → per-workload org frontiers) → generations. Eval-quality queue (second
 external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
 aggregate + frontier evidence; qualityCi95 kept as the conservative

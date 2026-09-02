@@ -66,7 +66,8 @@ Proofs: 464 tests, walkthrough 10/10. See tasks/todo.md → M2 Gate Proofs.
 
 ### G2 — Customer frontiers 🚧
 - ✅ **Org workload discovery** (0087): the org's consented samples are clustered WITHIN each serving cluster (the traces:cluster recipe on the serve path's own classification text) into `org_workloads` — observed structure only, snapshot per run, medoid exemplars (never fabricated names), cohesion shown, refreshed after each learning period + on demand. Renders on the router page as "what your traffic actually is · not yet routed".
-- ⬜ Discovered-workload adoption: derived suites + measurement per discovered workload → explicit routing proposals (never silent) → org frontiers per adopted workload → router generations with shadow/canary/promote/rollback.
+- ✅ **Per-workload measurement** (0088): each discovered workload derives a suite from its own members (membership fixed at discovery; tools/attachments excluded with named reasons) and measures the PARENT's serving pick vs the incumbent on that work — the per-workload verdict the aggregate bar hides, rendered under each discovered row. Eval rows land at the WORKLOAD id coordinate (org-scoped), ready for per-workload org frontiers. Shares the learning period's daily cap; unmeasured stays NULL with a reason.
+- ⬜ Discovered-workload adoption: explicit routing proposals per workload (never silent) → serve-path sub-assignment within the parent (adopted centroids) → org frontiers per adopted workload → router generations with shadow/canary/promote/rollback.
 
 ---
 Spend discipline: all live calls budget-capped through the harness; ledger in tasks/todo.md. OpenRouter key in gitignored `.env` only; revoke after M1b.

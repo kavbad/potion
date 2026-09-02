@@ -15,6 +15,14 @@ interface DiscoveredWorkloadDto {
   exemplarText: string;
   status: string;
   windowDays: number;
+  measurement: {
+    servingModel: string;
+    servingQuality: number;
+    incumbentModel: string;
+    incumbentQuality: number;
+    retention: { mean: number; ci95?: [number, number] };
+    items: number;
+  } | null;
 }
 
 export function DiscoveredWorkloads() {
@@ -24,7 +32,7 @@ export function DiscoveredWorkloads() {
     const res = await fetch('/api/workloads/discovered', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
-    setRows(((res as { workloads?: DiscoveredWorkloadDto[] } | null)?.workloads ?? []).filter((w) => w.status === 'observed'));
+    setRows(((res as { workloads?: DiscoveredWorkloadDto[] } | null)?.workloads ?? []).filter((w) => w.status === 'observed' || w.status === 'measured'));
   }, []);
   useEffect(() => {
     void load();
@@ -41,10 +49,22 @@ export function DiscoveredWorkloads() {
       </div>
       <ul className="mt-2 space-y-1.5">
         {rows.map((w) => (
-          <li key={w.id} className="flex gap-3 font-mono text-[12.5px] leading-snug">
-            <span className="shrink-0 text-ink">{w.parentCluster}</span>
-            <span className="shrink-0 tabular-nums text-soft">{w.sampleCount} samples · cohesion {w.cohesion.toFixed(2)}</span>
-            <span className="truncate text-faint">&ldquo;{w.exemplarText}&rdquo;</span>
+          <li key={w.id} className="font-mono text-[12.5px] leading-snug">
+            <div className="flex gap-3">
+              <span className="shrink-0 text-ink">{w.parentCluster}</span>
+              <span className="shrink-0 tabular-nums text-soft">{w.sampleCount} samples · cohesion {w.cohesion.toFixed(2)}</span>
+              <span className="truncate text-faint">&ldquo;{w.exemplarText}&rdquo;</span>
+            </div>
+            {w.measurement !== null ? (
+              <div className="mt-0.5 pl-4 text-[12px] tabular-nums text-soft">
+                measured on {w.measurement.items} of these: serving ({w.measurement.servingModel}) retains{' '}
+                <span className="text-ink">{(w.measurement.retention.mean * 100).toFixed(1)}%</span>
+                {w.measurement.retention.ci95 ? (
+                  <span className="text-faint"> (95% CI {(w.measurement.retention.ci95[0] * 100).toFixed(1)}–{(w.measurement.retention.ci95[1] * 100).toFixed(1)}%)</span>
+                ) : null}{' '}
+                of {w.measurement.incumbentModel} on this work
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

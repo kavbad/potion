@@ -33,6 +33,10 @@ export function registerDiscoveryRoutes(
         exemplarText: w.exemplarText,
         status: w.status,
         windowDays: w.windowDays,
+        /** G2 rung 2: serving-vs-incumbent measured on THIS workload's own
+         * items; null until measured (and after re-discovery — the old
+         * measurement described the old grouping). */
+        measurement: w.measurement ?? null,
         createdAt: w.createdAt.toISOString(),
       })),
     });

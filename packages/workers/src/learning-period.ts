@@ -79,6 +79,24 @@ function pointLabel(p: FrontierPoint): string {
   return c.type === 'single' ? (c.model ?? 'single') : `combination (${c.type})`;
 }
 
+/** The eval provider mode + live judge both measurement legs share (the
+ * learning period and per-workload measurement) — one resolution, refusing
+ * BEFORE any spend when live has no reachable judge. */
+export function resolveEvalJudge(prices: { entries: Array<{ alias: string; provider: string }> }): {
+  providerMode: ProviderMode;
+  judgeModelOverride: string | undefined;
+} {
+  const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
+  let judgeModelOverride: string | undefined;
+  if (providerMode === 'live') {
+    const reachable = (p: string): boolean => p !== 'mock' && process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
+    const judge = classRepresentative(buildRegistry(prices as never).filter((e) => reachable(e.provider)), 'judge');
+    if (!judge) throw new Error('measurement refused: no reachable live judge — no spend occurred');
+    judgeModelOverride = judge.alias;
+  }
+  return { providerMode, judgeModelOverride };
+}
+
 export const LEARNING_SPAN_NAME = 'potion.learning.sample';
 export const LEARNING_SUITE_CAP = 40;
 
@@ -88,7 +106,7 @@ export function learningSuiteId(orgId: string, clusterId: string): string {
   return `learn-${safe(orgId)}-${safe(clusterId)}-v1`;
 }
 
-function rubricFor(clusterId: string): string {
+export function rubricFor(clusterId: string): string {
   return (
     `Score how well the ANSWER accomplishes the USER'S REQUEST for this kind of work (${clusterId}), using the REFERENCE as a guide to what a good answer contains. ` +
     'Reward correctness, completeness and following the request exactly; penalise errors, omissions and padding. ' +
@@ -203,14 +221,7 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   // THEIR prompts, so the proposal reads identically either way.
   const namedIncumbent = inc.models.find((m) => prices.entries.some((e) => e.alias === m));
 
-  const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
-  let judgeModelOverride: string | undefined;
-  if (providerMode === 'live') {
-    const reachable = (p: string): boolean => p !== 'mock' && process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
-    const judge = classRepresentative(buildRegistry(prices).filter((e) => reachable(e.provider)), 'judge');
-    if (!judge) throw new Error('learning period refused: no reachable live judge — no spend occurred');
-    judgeModelOverride = judge.alias;
-  }
+  const { providerMode, judgeModelOverride } = resolveEvalJudge(prices);
 
   // 1. suites from what was sampled, one per kind of work
   const { sizes, excluded } = await deriveLearningSuites(ctx, orgId, judgeModelOverride ?? 'mock-judge');

@@ -660,6 +660,14 @@ export const orgWorkloads = pgTable(
     cohesion: doublePrecision('cohesion').notNull(),
     exemplarText: text('exemplar_text').notNull(),
     centroid: jsonb('centroid').notNull(),
+    /** G2 rung 2 (0088): the member sample ids — the workload's suite IS
+     * its membership, fixed at discovery. */
+    memberTraceIds: jsonb('member_trace_ids').notNull().default([]),
+    /** G2 rung 2 (0088): the learning-period recipe at workload grain —
+     * {servingModel, servingQuality, incumbentModel, incumbentQuality,
+     * retention, items, spendUsd, measuredAt}. NULL until measured; wiped
+     * with the snapshot on re-discovery (it described the old grouping). */
+    measurement: jsonb('measurement'),
     status: text('status').notNull().default('observed'),
     windowDays: integer('window_days').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
