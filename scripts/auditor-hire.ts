@@ -25,7 +25,7 @@ const answers = {
     "checks (an array where every material claim in the draft appears as {claim: string, method: 'recomputed' | 'accepted-on-evidence' | 'not-recomputable', ok: boolean, note: string}),",
     'requiredChanges (each defect in plain words; empty when the verdict is pass).',
     'The verdict is fail if any check that matters to a reader has ok=false.',
-    'Close by stating the verdict and the count of checks in your final message.',
+    "Close by stating the verdict, the count of checks, and the exact words 'verdict.json is in the run files' in your final message.",
   ].join(' '),
   kind: 'task' as const,
   doneDefinition:
@@ -38,6 +38,7 @@ const answers = {
     "Recompute wherever the sandbox allows (method 'recomputed'); mark claims you can only compare textually as 'accepted-on-evidence'; mark claims the fact sheet cannot decide as 'not-recomputable' — never guess and never fill a gap with your own knowledge.",
     'The fact sheet is the only truth: a draft claim that is absent from facts.json and not derivable from it is a defect, even when plausible.',
     'Check the draft against itself too: a title, summary or FAQ that contradicts the body is a defect even when each half alone matches a fact.',
+    'Write verdict.json BEFORE composing your final message — a run that ends without verdict.json in the run files is a failed run, whatever the final message says.',
   ],
   qualityBar:
     'every numeric claim in the draft covered by a check naming the matching fact; no defect softened; pass only when a careful reader would find zero factual faults',

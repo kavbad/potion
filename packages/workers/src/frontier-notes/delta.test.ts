@@ -2,7 +2,7 @@
 // the note must ALWAYS publish, and every failure names the run it leaves
 // behind so the issue records what happened.
 import { describe, expect, it } from 'vitest';
-import { auditDraftCounts, deltaDraft } from './delta.js';
+import { auditDraftCounts, auditVagueRatios, deltaDraft } from './delta.js';
 import { deterministicDraft } from './write.js';
 import type { FactSheet } from './types.js';
 
@@ -200,6 +200,25 @@ describe('deltaDraft', () => {
     // run-25d69a3c: verdict-vocabulary mentions count nothing.
     const verdictTalk = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', frontierNote: 'No cluster was inconclusive this week, so every one of the ten clusters returned a clear held or drift verdict.' };
     expect(auditDraftCounts(verdictTalk, facts)).toBeNull();
+  });
+
+  it('the vague-ratio guard refuses a draft leaking an exact saving (run-ff6edfc4)', () => {
+    const facts: FactSheet = {
+      ...FACTS,
+      mixing: [
+        { family: 'code', kind: 'cheaper-and-as-good', meanQuality: 1, qualityDeltaVsBestSingle: 0, costSaving: 0.911, n: 90, vague: true, costBand: 'more than 8× cheaper' },
+        { clusterId: 'summarization', family: 'writing', kind: 'cheaper-and-as-good', meanQuality: 1, qualityDeltaVsBestSingle: 0.014, costSaving: 0.194, n: 14, vague: false, costBand: 'under 1.5× cheaper' },
+      ],
+    };
+    const leaking = { ...GOOD_DRAFT, mixingNote: 'On code work the saving was 0.911 across 90 items, in the more than 8× cheaper band.' };
+    expect(auditVagueRatios(leaking, facts)).toMatch(/vague code mixing entry.*0\.911.*band words only/);
+    const pctLeak = { ...GOOD_DRAFT, mixingNote: 'On code work the combination was 91% cheaper.' };
+    expect(auditVagueRatios(pctLeak, facts)).toMatch(/91%/);
+    const banded = { ...GOOD_DRAFT, mixingNote: 'On code work a combination of measured models was more than 8× cheaper at a mean quality of 1.' };
+    expect(auditVagueRatios(banded, facts)).toBeNull();
+    // Non-vague entries may state their numbers.
+    const nonVague = { ...GOOD_DRAFT, mixingNote: 'On summarization the combination saved 0.194 of the cost, under 1.5× cheaper.' };
+    expect(auditVagueRatios(nonVague, facts)).toBeNull();
   });
 
   it('deltaDraft falls back when the count audit refuses the draft', async () => {

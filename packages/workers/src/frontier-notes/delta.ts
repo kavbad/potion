@@ -141,6 +141,28 @@ export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null 
   return null;
 }
 
+/** THE VAGUE-RATIO GUARD (run-ff6edfc4: the draft printed cost savings
+ * 0.911/0.813/0.599 verbatim for VAGUE mixing entries — the disclosure
+ * rule is band words only, never the exact ratio, and neither Auditor
+ * roll flagged it). Deterministic: for every vague mixing fact, its exact
+ * costSaving — as a bare fraction ("0.911") or a percentage ("91%",
+ * "91.1%") — must not appear anywhere in the draft. meanQuality stays
+ * publishable; only the ratio is protected. */
+export function auditVagueRatios(draft: Draft, facts: FactSheet): string | null {
+  const text = [draft.title, draft.summary, draft.plain, draft.lede, draft.frontierNote, draft.auditionNote, draft.mixingNote, draft.takeaway, ...draft.faq.flatMap((f) => [f.q, f.a])].join(' ');
+  for (const m of facts.mixing) {
+    if (!m.vague) continue;
+    const pct = Math.round(m.costSaving * 100);
+    const forbidden = [m.costSaving.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''), String(m.costSaving), `${pct}%`, `${(m.costSaving * 100).toFixed(1).replace(/\.0$/, '')}%`];
+    for (const f of new Set(forbidden)) {
+      if (f.length >= 3 && text.includes(f)) {
+        return `vague ${m.family} mixing entry's exact cost saving ("${f}") appears in the draft — band words only`;
+      }
+    }
+  }
+  return null;
+}
+
 /** Delta's first live run (run-099975b9) wrote sentence ARRAYS for the prose
  * fields and {question, answer} FAQ keys — near-miss shapes a rule cannot
  * prevent. Coerce them deterministically before parsing; parseDraft stays
@@ -265,6 +287,10 @@ export async function deltaDraft(
   const styleViolation = lintDraft(parsed);
   if (styleViolation !== null) {
     return { draft: fallback, receipt: receiptOf(dto), fallback: `delta run ${runId} refused by the style lint: ${styleViolation}` };
+  }
+  const ratioLeak = auditVagueRatios(parsed, f);
+  if (ratioLeak !== null) {
+    return { draft: fallback, receipt: receiptOf(dto), fallback: `delta run ${runId} refused by the disclosure audit: ${ratioLeak}` };
   }
   return { draft: parsed, receipt: receiptOf(dto), fallback: null };
 }
