@@ -19,17 +19,21 @@
 // apples-to-apples. Cluster-scoped projection (candidate mean × requests
 // in the clusters it was sampled in) is a follow-up refinement.
 import type { FastifyInstance } from 'fastify';
-import type { StrategyConfig } from '@potion/core';
+import { BOOTSTRAP_RESAMPLES, bootstrapMeanCi, seedFromString, sha256, type StrategyConfig } from '@potion/core';
 import {
   certificationStateForCluster,
+  getOrgIncumbents,
   getStrategyConfigs,
+  holdoutWindowStats,
   isDayString,
   listShadowResults,
   liveUsageRollup,
   sumRollup,
+  type HoldoutWindowStats,
   type ShadowResultRow,
 } from '@potion/db';
 import { openAiError } from '../auth.js';
+import { eligibleIncumbent } from '../routing/holdout.js';
 import type { PotionContext } from '../context.js';
 
 // ---- report contract (SPEC §12.4) ----
@@ -51,6 +55,9 @@ export interface SavingsReport {
   from: string;
   to: string;
   actualSpendUsd: number;
+  /** G1 (0086): the randomized-holdout economics — the only block allowed
+   * to say "verified". */
+  verified: VerifiedSavings;
   alternatives: SavingsAlternative[];
   /**
    * Post-capstone item 3 (Decision 2, owner requirement): shadow samples
@@ -62,6 +69,79 @@ export interface SavingsReport {
    * cluster-scoping it is the named follow-up.
    */
   withheld: Array<{ clusterId: string; samples: number; reason: string }>;
+}
+
+/** Minimum holdout requests before a savings number may say "verified". */
+export const MIN_HOLDOUT_REQUESTS = 30;
+
+/**
+ * G1 VERIFIED SAVINGS (0086) — the randomized-holdout economics block.
+ *
+ * The claim covers ROUTED traffic only: withoutPotion = the holdout's mean
+ * measured incumbent cost × routed request count; actual = routed measured
+ * spend. Holdout requests sit on neither side — they cost incumbent price
+ * and bought the baseline, and folding them in would add zero savings by
+ * construction while blurring the claim. The billable number is the LOWER
+ * bound: a seeded bootstrap CI over the holdout's per-request costs, so
+ * "verified" means what the org's own randomized traffic proves, never the
+ * point estimate (the savings-baseline critique, closed).
+ */
+export interface VerifiedSavings {
+  status: 'off' | 'no-incumbent' | 'insufficient' | 'verified';
+  /** The consented slice — shown wherever this block renders. */
+  holdoutRate: number | null;
+  incumbentModel: string | null;
+  holdoutRequests: number;
+  minHoldoutRequests: number;
+  routedRequests: number;
+  routedSpendUsd: number;
+  meanIncumbentCostUsd: number | null;
+  meanCi95: [number, number] | null;
+  withoutPotionUsd: number | null;
+  verifiedSavingsUsd: number | null;
+  /** The conservative, billable bound: ci95[0] × routed − actual. */
+  verifiedSavingsLowerUsd: number | null;
+}
+
+/** Pure builder (unit-tested): config + window stats → the block. */
+export function buildVerifiedSavings(
+  cfg: { consent: boolean; rate: number; incumbentModel: string | null },
+  stats: HoldoutWindowStats,
+  seedKey: string,
+): VerifiedSavings {
+  const base: VerifiedSavings = {
+    status: 'off',
+    holdoutRate: cfg.consent ? cfg.rate : null,
+    incumbentModel: cfg.incumbentModel,
+    holdoutRequests: stats.holdout.requests,
+    minHoldoutRequests: MIN_HOLDOUT_REQUESTS,
+    routedRequests: stats.routed.requests,
+    routedSpendUsd: stats.routed.spendUsd,
+    meanIncumbentCostUsd: null,
+    meanCi95: null,
+    withoutPotionUsd: null,
+    verifiedSavingsUsd: null,
+    verifiedSavingsLowerUsd: null,
+  };
+  if (!cfg.consent) return base;
+  if (cfg.incumbentModel === null) return { ...base, status: 'no-incumbent' };
+  if (stats.holdout.costs.length < MIN_HOLDOUT_REQUESTS) return { ...base, status: 'insufficient' };
+  // Seed from the pair CONTENT (the computeRetention discipline): the same
+  // window and the same costs always report the same interval.
+  const costs = [...stats.holdout.costs].sort((a, b) => a - b);
+  const seed = seedFromString(`${seedKey}|${costs.length}|${sha256(costs.map((c) => c.toFixed(10)).join(','))}`);
+  const { mean, ci95 } = bootstrapMeanCi(costs, seed, BOOTSTRAP_RESAMPLES);
+  const withoutPotionUsd = mean * stats.routed.requests;
+  const lowerWithout = ci95[0] * stats.routed.requests;
+  return {
+    ...base,
+    status: 'verified',
+    meanIncumbentCostUsd: mean,
+    meanCi95: [ci95[0], ci95[1]],
+    withoutPotionUsd,
+    verifiedSavingsUsd: withoutPotionUsd - stats.routed.spendUsd,
+    verifiedSavingsLowerUsd: lowerWithout - stats.routed.spendUsd,
+  };
 }
 
 /** Confidence tier by sample size (SPEC §12.4): low <30, medium <200, high ≥200. */
@@ -108,6 +188,22 @@ export function describeStrategyBrief(config: StrategyConfig): string {
  * `configs` labels known hashes; unknown ones fall back to the recorded
  * candidate_model + short hash.
  */
+/** The absent block — holdout off (also the unit-test default). */
+export const VERIFIED_OFF: VerifiedSavings = {
+  status: 'off',
+  holdoutRate: null,
+  incumbentModel: null,
+  holdoutRequests: 0,
+  minHoldoutRequests: MIN_HOLDOUT_REQUESTS,
+  routedRequests: 0,
+  routedSpendUsd: 0,
+  meanIncumbentCostUsd: null,
+  meanCi95: null,
+  withoutPotionUsd: null,
+  verifiedSavingsUsd: null,
+  verifiedSavingsLowerUsd: null,
+};
+
 export function buildSavingsReport(
   scope: { orgId: string; fromDay: string; toDay: string },
   totals: { actualSpendUsd: number; requestCount: number },
@@ -116,6 +212,7 @@ export function buildSavingsReport(
   /** clusterId → reason for clusters whose samples must be withheld
    * (uncertified agentic suites). Empty map = nothing withheld. */
   withheldClusters: Map<string, string> = new Map(),
+  verified: VerifiedSavings = VERIFIED_OFF,
 ): SavingsReport {
   const withheldCount = new Map<string, number>();
   const usable = rows.filter((r) => {
@@ -157,6 +254,7 @@ export function buildSavingsReport(
     from: scope.fromDay,
     to: scope.toDay,
     actualSpendUsd: totals.actualSpendUsd,
+    verified,
     alternatives,
     withheld: [...withheldCount.entries()]
       .map(([clusterId, samples]) => ({
@@ -233,12 +331,28 @@ export async function loadReport(
       withheldClusters.set(clusterId, state.reason ?? 'suite not certified');
     }
   }
+  // G1 (0086): the randomized-holdout economics for the same window.
+  const inc = await getOrgIncumbents(ctx.db.db, orgId);
+  const from = new Date(`${range.fromDay}T00:00:00.000Z`);
+  const to = new Date(new Date(`${range.toDay}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000);
+  const stats = await holdoutWindowStats(ctx.db.db, orgId, { from, to });
+  const eligible = inc === null ? { model: null } : eligibleIncumbent(inc.models, ctx.prices, ctx.providerMode);
+  const verified = buildVerifiedSavings(
+    {
+      consent: inc?.holdoutConsent ?? false,
+      rate: inc?.holdoutRate ?? 0,
+      incumbentModel: eligible.model,
+    },
+    stats,
+    `holdout|${orgId}|${range.fromDay}|${range.toDay}`,
+  );
   return buildSavingsReport(
     { orgId, fromDay: range.fromDay, toDay: range.toDay },
     { actualSpendUsd: rollup.costUsd, requestCount: rollup.requests },
     rows,
     configs,
     withheldClusters,
+    verified,
   );
 }
 

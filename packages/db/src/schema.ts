@@ -394,6 +394,11 @@ export const requestLogs = pgTable('request_logs', {
    * served assignment when it served, or a pre-0082 row; receipts fall back
    * to read-time reconstruction for those. */
   routerVersion: integer('router_version'),
+  /** G1 holdout (0086): TRUE when this request was randomly served by the
+   * org's named incumbent under holdout consent — the live baseline. Such
+   * rows carry baseline NULL (they never claim savings; they ARE the
+   * baseline) and router_version NULL (the router did not decide them). */
+  holdout: boolean('holdout').notNull().default(false),
   policyType: text('policy_type'),
   /** M4 #30 (SPEC §13.1, migration 0009): the policy row that SERVED the
    * request — the api key's bound policy by default, or the X-Potion-Policy
@@ -2043,6 +2048,12 @@ export const orgIncumbents = pgTable('org_incumbents', {
   other: text('other'),
   samplingConsent: boolean('sampling_consent').notNull().default(false),
   sampleCapPerCluster: integer('sample_cap_per_cluster').notNull().default(40),
+  /** G1 holdout (0086): EXPLICIT consent to serve the named incumbent on a
+   * small randomized slice — the live verified-savings baseline. Off by
+   * default; the rate is capped at the route (≤0.05) and shown on the
+   * Savings page. */
+  holdoutConsent: boolean('holdout_consent').notNull().default(false),
+  holdoutRate: doublePrecision('holdout_rate').notNull().default(0.02),
   designatedAt: timestamp('designated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

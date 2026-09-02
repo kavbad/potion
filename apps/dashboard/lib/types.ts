@@ -259,11 +259,31 @@ export interface SavingsAlternativeDto {
   confidence: 'low' | 'medium' | 'high';
 }
 
+/** G1 (0086): the randomized-holdout economics — the only block allowed to
+ * say "verified". */
+export interface VerifiedSavingsDto {
+  status: 'off' | 'no-incumbent' | 'insufficient' | 'verified';
+  holdoutRate: number | null;
+  incumbentModel: string | null;
+  holdoutRequests: number;
+  minHoldoutRequests: number;
+  routedRequests: number;
+  routedSpendUsd: number;
+  meanIncumbentCostUsd: number | null;
+  meanCi95: [number, number] | null;
+  withoutPotionUsd: number | null;
+  verifiedSavingsUsd: number | null;
+  verifiedSavingsLowerUsd: number | null;
+}
+
 export interface SavingsReportDto {
   orgId: string;
   from: string;
   to: string;
   actualSpendUsd: number;
+  /** Absent on pre-0086 responses (shared snapshots, fixtures) — the page
+   * degrades to no block, never to invented zeros. */
+  verified?: VerifiedSavingsDto;
   alternatives: SavingsAlternativeDto[];
 }
 

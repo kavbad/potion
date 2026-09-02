@@ -21,6 +21,7 @@ import { buildServer } from '../src/server.js';
 // fixture header; that assumption is what hid tenancy defect D1).
 import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 import {
+  VERIFIED_OFF,
   buildSavingsReport,
   confidenceFor,
   describeStrategyBrief,
@@ -101,7 +102,7 @@ describe('buildSavingsReport (hand-computed to the cent)', () => {
       [],
       new Map(),
     );
-    expect(report).toEqual({ orgId: 'org_x', from: '2026-08-02', to: '2026-08-03', actualSpendUsd: 0, alternatives: [], withheld: [] });
+    expect(report).toEqual({ orgId: 'org_x', from: '2026-08-02', to: '2026-08-03', actualSpendUsd: 0, verified: VERIFIED_OFF, alternatives: [], withheld: [] });
   });
 
   it('WITHHELD SEAM (post-capstone item 3): uncertified-cluster samples are excluded AND reported — never silently blended', () => {
@@ -265,6 +266,9 @@ describe('GET /api/reports/savings', () => {
       from: '2020-01-01',
       to: '2020-01-02',
       actualSpendUsd: 0,
+      // G1 (0086): the holdout block rides every report — 'off' here (the
+      // fixture org never consented), never invented zeros dressed as proof.
+      verified: VERIFIED_OFF,
       alternatives: [],
       withheld: [],
     });

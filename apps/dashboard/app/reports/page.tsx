@@ -3,6 +3,7 @@
 // spend bar chart (SSR SVG), per-alternative table with confidence badges,
 // CSV export. Reads /api/reports/savings from apps/server.
 import { BudgetCard } from '@/components/budget-card';
+import { HoldoutCard } from '@/components/holdout-card';
 import { IncidentsTable } from '@/components/incidents-table';
 import { SavingsChart } from '@/components/savings-chart';
 import { SharePanel } from '@/components/share-panel';
@@ -124,6 +125,10 @@ export default async function ReportsPage({
           scores are drill-down). Advisory tripwires banner + designation
           empty-state (visible rigor, never a silent default). */}
       {guaranteeReport && <RetentionSection report={guaranteeReport} />}
+
+      {/* G1 (0086): the verified-savings block — the only place the product
+          says "verified", with the consented slice always visible. */}
+      {report.verified ? <HoldoutCard verified={report.verified} /> : null}
 
       {/* headline cards */}
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3">

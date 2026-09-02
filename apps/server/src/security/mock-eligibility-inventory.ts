@@ -256,6 +256,17 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
       'mislabelled; tightening explicit mock judges under live is filed for G2.6.',
   },
   {
+    file: 'apps/server/src/routing/holdout.ts',
+    symbol: 'eligibleIncumbent (mock exclusion under live)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/holdout.test.ts',
+    notes:
+      'G1 holdout: the randomized baseline serves the org\'s NAMED incumbent — under LIVE providers an ' +
+      'incumbent alias that resolves to the mock provider is refused as the baseline (a mock answer as a live ' +
+      'baseline is the false-live disease; fail closed, no swap, serving proceeds normally).',
+  },
+  {
     file: 'apps/server/src/routes/challengers.ts',
     symbol: 'apply (aggregatesFromEvalResults + servingDecisionFor)',
     kind: 'alias-guard',

@@ -43,6 +43,8 @@ import {
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
 // G0 (0082): serve-time router-version stamping — appended import.
 import { stampedRouterVersion } from '../routing/router-stamp.js';
+// G1 (0086): randomized incumbent holdout — appended import.
+import { resolveHoldout } from '../routing/holdout.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { bindServingDegeneracy, loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
@@ -860,6 +862,21 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // skip, policy) outranks an explicit pin. fallback=0: this IS the ask.
       op = { ...op, config: { type: 'single', model: pinnedModel }, fallback: 0 as const };
     }
+    // G1 RANDOMIZED HOLDOUT (0086, consent-gated + capped + labeled): a
+    // small slice of eligible traffic serves the org's NAMED incumbent —
+    // the live baseline verified savings are measured against, and the
+    // causal instrument outcome optimization needs. A pin outranks it;
+    // non-default instruments are ineligible; holdout rows never claim
+    // savings (baseline NULL — they ARE the baseline) and carry no router
+    // version (the router did not decide them). See routing/holdout.ts.
+    const heldOut = await resolveHoldout(ctx, auth.org.orgId, {
+      pinned: pinnedModel !== null,
+      instrument: chosen.servedInstrument,
+    });
+    if (heldOut !== null) {
+      op = { ...op, config: { type: 'single', model: heldOut.model }, fallback: 0 as const };
+      logBase.holdout = true;
+    }
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
     // S2 (0060): the ledger's "served by" — stamped once here, rides every
@@ -867,13 +884,14 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     logBase.servedModel = strategyModelLabel(op.config as { type: string; model?: string });
     const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
     if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
-    const baseline = await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
+    const baseline = heldOut !== null ? null : await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     logBase.frontierVersion = op.frontierVersion;
     // G0 (0082): the receipt names the version that served — decided NOW
     // against the latest minted artifact, stamped only on exact assignment
     // match. No match is an honest null; read-time reconstruction remains
-    // the backfill for unstamped rows.
-    const routerVersion = await stampedRouterVersion(ctx.db.db, auth.org.orgId, {
+    // the backfill for unstamped rows. Holdout rows skip the lookup: the
+    // router did not decide them.
+    const routerVersion = heldOut !== null ? null : await stampedRouterVersion(ctx.db.db, auth.org.orgId, {
       clusterId,
       strategyHash: sh,
       frontierVersion: op.frontierVersion,
@@ -892,6 +910,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // Appended only when a minted version matched, so unstamped traffic's
       // trace is byte-identical to before this change.
       (routerVersion !== null ? `;router=v${routerVersion}` : '') +
+      // Appended only on the sampled slice — ordinary traffic's trace stays
+      // byte-identical.
+      (heldOut !== null ? ';holdout=1' : '') +
       (servedInstrument !== null ? `;instrument=${servedInstrument}` : '') +
       // Appended only when the org's own measured traffic excluded a
       // degenerate route — absent, the trace is byte-identical to before.

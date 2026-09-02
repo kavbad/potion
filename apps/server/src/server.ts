@@ -50,6 +50,8 @@ import { registerGuaranteeReportRoutes } from './routes/guarantee-report.js';
 import { registerOutcomeRoutes } from './routes/outcomes.js';
 // G1 challenger promotion — appended import.
 import { registerChallengerRoutes } from './routes/challengers.js';
+// G1 randomized incumbent holdout — appended import.
+import { registerHoldoutRoutes } from './routes/holdout.js';
 // ---- M3 #22 guarantee (m3-guarantee) — appended imports ----
 import { createAlertsDispatchHandler, createGuaranteeEvaluateHandler } from '@potion/workers';
 import { registerGuaranteeRoutes } from './routes/guarantee.js';
@@ -343,6 +345,9 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // G1 challenger promotion: proposals list + one-button apply (mints the
   // org frontier from the same-suite measurements — never routes by fiat).
   registerChallengerRoutes(app, ctx);
+  // G1 randomized incumbent holdout: consent-gated settings; the serving
+  // swap itself lives in routes/chat.ts + routing/holdout.ts.
+  registerHoldoutRoutes(app, ctx);
 
   // ---- M4 #31 share (m4-playground) ----
   // Playground + share links (SPEC §13.3): POST/GET /api/share + admin

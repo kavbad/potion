@@ -90,6 +90,52 @@ export async function servedClusterCostSince(
   );
 }
 
+export interface HoldoutWindowStats {
+  holdout: {
+    requests: number;
+    /** Per-request actual costs, newest first, capped at `costCap` — the
+     * bootstrap input. `requests` counts ALL rows; when it exceeds the cap
+     * the CI runs on the newest slice (the report says so). */
+    costs: number[];
+  };
+  routed: { requests: number; spendUsd: number };
+}
+
+/**
+ * G1 verified savings (0086): the window's two populations, both status='ok'
+ * with a recorded cost — holdout rows (the randomized incumbent baseline)
+ * and routed rows (what Potion actually served). Same window, same org,
+ * same cost basis: measured actuals on both sides of the compare.
+ */
+export async function holdoutWindowStats(
+  db: PotionDb,
+  orgId: string,
+  window: { from: Date; to: Date },
+  costCap = 2000,
+): Promise<HoldoutWindowStats> {
+  const base = sql`FROM request_logs
+        WHERE org_id = ${orgId}
+          AND status = 'ok'
+          AND usage->>'costUsd' IS NOT NULL
+          AND ts >= ${window.from.toISOString()}::timestamptz
+          AND ts < ${window.to.toISOString()}::timestamptz`;
+  const holdoutCount = await db.execute(sql`SELECT count(*)::int AS n ${base} AND holdout`);
+  const holdoutCosts = await db.execute(
+    sql`SELECT (usage->>'costUsd')::float AS cost ${base} AND holdout ORDER BY id DESC LIMIT ${costCap}`,
+  );
+  const routed = await db.execute(
+    sql`SELECT count(*)::int AS n, coalesce(sum((usage->>'costUsd')::float), 0) AS spend ${base} AND NOT holdout`,
+  );
+  const routedRow = (routed.rows as Array<{ n: number; spend: number | string }>)[0];
+  return {
+    holdout: {
+      requests: Number((holdoutCount.rows as Array<{ n: number }>)[0]?.n ?? 0),
+      costs: (holdoutCosts.rows as Array<{ cost: number | string }>).map((r) => Number(r.cost)),
+    },
+    routed: { requests: Number(routedRow?.n ?? 0), spendUsd: Number(routedRow?.spend ?? 0) },
+  };
+}
+
 /**
  * Serving-grade p95 latency per strategy (G2.6).
  *

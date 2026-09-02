@@ -110,10 +110,13 @@ challenger promotion SHIPPED (shadow-qualified challenger measured beside
 serving on the org's own suite; retention-lower-bound gate mints the
 proposal; apply mints the ORG frontier — the first customer-specific
 serving frontier — and selection's lower-bound law still decides) ·
-randomized incumbent holdout (the verified-
-savings basis pricing v2 bills against — lower-bound savings, and the
-causal prerequisite for outcome-driven optimization) · then org workload
-discovery → customer-specific frontiers. Eval-quality queue (second
+randomized incumbent holdout SHIPPED (0086: consent-gated ≤5% slice,
+labeled everywhere it lands; Savings' "Verified savings" block = the only
+"verified" in the product, lower-bound billable). G1 COMPLETE — the last
+review-ladder integration left is swapping the INVOICE basis to
+verifiedSavingsLowerUsd before charging turns on (pairs with the Stripe
+sitting). G2 next: org workload discovery → customer-specific frontiers
+beyond the single-cluster promotion path. Eval-quality queue (second
 external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
 aggregate + frontier evidence; qualityCi95 kept as the conservative

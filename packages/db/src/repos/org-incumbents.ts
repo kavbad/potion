@@ -10,6 +10,10 @@ export interface OrgIncumbents {
   other: string | null;
   samplingConsent: boolean;
   sampleCapPerCluster: number;
+  /** G1 holdout (0086): explicit consent + capped slice for the randomized
+   * incumbent baseline. Off by default, always visible where it acts. */
+  holdoutConsent: boolean;
+  holdoutRate: number;
   designatedAt: Date;
 }
 
@@ -23,8 +27,26 @@ export async function getOrgIncumbents(db: PotionDb, orgId: string): Promise<Org
     other: r.other,
     samplingConsent: r.samplingConsent,
     sampleCapPerCluster: r.sampleCapPerCluster,
+    holdoutConsent: r.holdoutConsent,
+    holdoutRate: r.holdoutRate,
     designatedAt: r.designatedAt,
   };
+}
+
+/** G1 holdout config write (settings route). UPDATE-only by design: holdout
+ * requires a designated incumbent row to exist — no incumbent, no baseline.
+ * Returns false when the org never designated one (the route 409s). */
+export async function setHoldoutConfig(
+  db: PotionDb,
+  orgId: string,
+  cfg: { consent: boolean; rate: number },
+): Promise<boolean> {
+  const rows = await db
+    .update(orgIncumbents)
+    .set({ holdoutConsent: cfg.consent, holdoutRate: cfg.rate, updatedAt: new Date() })
+    .where(eq(orgIncumbents.orgId, orgId))
+    .returning({ orgId: orgIncumbents.orgId });
+  return rows.length > 0;
 }
 
 export async function upsertOrgIncumbents(
