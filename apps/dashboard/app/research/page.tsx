@@ -83,7 +83,7 @@ export default async function ResearchIndex() {
                 <>
                   <span>{latest.facts.numbers.canaries} canaries</span>
                   <span className="text-kept">{latest.facts.numbers.clustersHeld} held</span>
-                  <span>{latest.facts.numbers.clustersMoved} moved</span>
+                  <span>{latest.facts.numbers.clustersMoved} drifted</span>
                   <span>{latest.facts.numbers.candidatesMeasured} new models measured</span>
                 </>
               ) : (

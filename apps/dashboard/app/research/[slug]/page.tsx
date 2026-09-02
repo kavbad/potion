@@ -22,7 +22,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 const q3 = (x: number) => x.toFixed(3);
-const verdictWord = (v: string) => (v === 'ok' ? 'held' : v === 'drift' ? 'moved' : 'inconclusive');
+// 'drifted', never 'moved': drift = the canary left its stored interval;
+// the routed pick did NOT change (the verdict-semantics law, 2026-09-02).
+const verdictWord = (v: string) => (v === 'ok' ? 'held' : v === 'drift' ? 'drifted' : 'inconclusive');
 
 export default async function IssuePage({ params }: Params) {
   const { slug } = await params;
@@ -222,7 +224,7 @@ export default async function IssuePage({ params }: Params) {
           {[
             [String(f.numbers.canaries), 'canaries run'],
             [String(f.numbers.clustersHeld), 'frontiers held'],
-            [String(f.numbers.clustersMoved), 'frontiers moved'],
+            [String(f.numbers.clustersMoved), 'frontiers drifted'],
             [String(f.numbers.itemsGraded), 'items graded'],
             [String(f.numbers.candidatesScreened), 'listings screened'],
             [String(f.numbers.candidatesMeasured), 'new models measured'],
@@ -250,6 +252,21 @@ export default async function IssuePage({ params }: Params) {
           <span className="font-medium text-ink">Glossary.</span> A <em>frontier</em> is the short list of models that are the best deal at their level of quality: nothing else is both better and cheaper. A <em>floor</em> is the lowest exam score you are willing to accept. A <em>margin</em> (or interval) is how far the true score could sit from the measured one, because an exam is a sample. A <em>canary</em> is a small weekly re-check. See the <Link href="/docs" className="text-accent underline">docs</Link> and the <Link href="/home#evidence" className="text-accent underline">evidence</Link>.
         </p>
 
+        {/* F0 (docs/RESEARCH-FLEET.md R2): a Delta-written issue shows the
+            RUN that backs the byline — credits derive from records. */}
+        {i.writer?.runId && (
+          <div className="mt-10 border border-dashed border-[#b8b3a6] bg-[#fbfaf7] px-5 py-4">
+            <div className="flex items-baseline justify-between font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
+              <span>{i.byline} · run record</span>
+              <span className="border border-kept px-1.5 py-px text-kept">recorded</span>
+            </div>
+            <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
+              This issue was written by <span className="font-medium text-ink">{i.byline}</span>, a persistent Potion worker, in a recorded run —{' '}
+              <span className="font-mono text-ink">{i.writer.runId}</span>, ${i.writer.costUsd.toFixed(4)} metered. The byline is a provenance claim the record backs: the draft, every
+              tool step, and the judge&apos;s verdict are on the run. We use what we sell.
+            </p>
+          </div>
+        )}
         {i.writer?.receipt && (
           <div className="mt-10 border border-dashed border-[#b8b3a6] bg-[#fbfaf7] px-5 py-4">
             <div className="flex items-baseline justify-between font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
