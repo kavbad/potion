@@ -25,6 +25,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'entering'>('idle');
   const [devLink, setDevLink] = useState<string | null>(null);
+  const [inviteOnly, setInviteOnly] = useState(false);
   // The type-able path (2026-08-28): the email carries an 8-digit code for
   // signing in on a different device than the inbox — nobody should ever
   // transcribe a 51-character link by hand.
@@ -42,7 +43,7 @@ function LoginForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const body = (await res.json().catch(() => null)) as { devLink?: string; error?: { message?: string } } | null;
+      const body = (await res.json().catch(() => null)) as { devLink?: string; selfServe?: boolean; error?: { message?: string } } | null;
       if (!res.ok) {
         setFormError(body?.error?.message ?? `sign-in failed (HTTP ${res.status})`);
         setState('idle');
@@ -58,6 +59,7 @@ function LoginForm() {
         return;
       }
       setDevLink(null);
+      setInviteOnly(body?.selfServe === false);
       setState('sent');
     } catch {
       setFormError('the Potion API is unreachable — start apps/server first.');
@@ -115,6 +117,16 @@ function LoginForm() {
                 Continue
               </a>
             )}
+          </div>
+        ) : state === 'sent' && inviteOnly ? (
+          <div className="space-y-3" data-testid="invite-only-note">
+            <p className="text-sm font-medium text-ink">Potion is invite-only right now</p>
+            <p className="text-sm leading-relaxed text-soft">
+              A sign-in email goes out only to invited addresses. If{' '}
+              <span className="font-medium text-ink">{email}</span> has an invite, the link is on
+              its way; otherwise ask the person who showed you Potion to invite you from
+              Settings → Team.
+            </p>
           </div>
         ) : state === 'sent' ? (
           <div className="space-y-3">

@@ -355,14 +355,18 @@ export function registerAuthRoutes(
         // converts it into the membership. Without one, silent ok as before.
         const invite = await openInviteForEmail(db, email);
         if (invite === null) {
-          return reply.send({ ok: true, email });
+          // HONEST CLOSED DOOR (2026-09-02): selfServe is deployment-static
+          // (identical for every email — no enumeration change). The login
+          // page uses it to say "invite-only" instead of promising an email
+          // that was deliberately never sent (the lie cost a live demo).
+          return reply.send({ ok: true, email, selfServe: false });
         }
         if (existing === null) {
           await createUser(db, { id: `usr-${randomUUID().slice(0, 8)}`, email, name: userNameFromEmail(email) });
         }
         const link = await deliverMagicLink(email, invite.orgId, baseUrlOf(req, opts.publicBaseUrl));
         const dev = devAuthBypassEnabled() || magicLinkInResponseEnabled() ? { devLink: link } : {};
-        return reply.send({ ok: true, email, ...dev });
+        return reply.send({ ok: true, email, selfServe: false, ...dev });
       }
     }
     const { orgId } = await provision(email);
@@ -373,7 +377,7 @@ export function registerAuthRoutes(
     // which is the only way a self-serve signup can complete without SMTP.
     const dev =
       devAuthBypassEnabled() || magicLinkInResponseEnabled() ? { devLink: link } : {};
-    return reply.send({ ok: true, email, ...dev });
+    return reply.send({ ok: true, email, selfServe: selfServeEnabled(), ...dev });
   });
 
   // ---------- GET /auth/verify ----------
