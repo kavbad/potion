@@ -19,7 +19,7 @@
 // blocked; the byline just falls back to the writer that cannot lie.
 import type { FactSheet } from './types.js';
 import type { Draft } from './write.js';
-import type { DeltaWriterOptions } from './delta.js';
+import { redactFactsForWriter, type DeltaWriterOptions } from './delta.js';
 
 export interface AuditorCheck {
   claim: string;
@@ -109,8 +109,12 @@ export async function auditorVerify(
       headers,
       body: JSON.stringify({
         harnessHash: o.harnessHash,
+        // The auditor receives the SAME redacted sheet the writer saw
+        // (vague costSaving removed) — it verifies against what the
+        // writer was allowed to say; the vague-ratio guard runs with the
+        // real facts before this call.
         attachments: [
-          { name: 'facts.json', contentBase64: Buffer.from(JSON.stringify(facts, null, 1)).toString('base64') },
+          { name: 'facts.json', contentBase64: Buffer.from(JSON.stringify(redactFactsForWriter(facts), null, 1)).toString('base64') },
           { name: 'draft.json', contentBase64: Buffer.from(JSON.stringify(draft, null, 1)).toString('base64') },
         ],
       }),

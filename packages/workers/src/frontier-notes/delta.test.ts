@@ -78,6 +78,28 @@ describe('deltaDraft', () => {
     expect(calls.at(-1)?.url).toBe('https://api.test/api/lab/runs/run-d1/files/draft.json');
   });
 
+  it('redacts vague mixing costSaving from the attached fact sheet', async () => {
+    const facts: FactSheet = {
+      ...FACTS,
+      mixing: [
+        { family: 'code', kind: 'cheaper-and-as-good', meanQuality: 1, qualityDeltaVsBestSingle: 0, costSaving: 0.911, n: 90, vague: true, costBand: 'more than 8× cheaper' },
+        { clusterId: 'summarization', family: 'writing', kind: 'cheaper-and-as-good', meanQuality: 1, qualityDeltaVsBestSingle: 0.014, costSaving: 0.194, n: 14, vague: false, costBand: 'under 1.5× cheaper' },
+      ],
+    };
+    let attached = '';
+    const fetchImpl = (async (_: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { attachments: Array<{ contentBase64: string }> };
+        attached = Buffer.from(body.attachments[0]!.contentBase64, 'base64').toString('utf8');
+      }
+      return { ok: false, status: 500, json: async () => ({}), text: async () => 'x' } as Response;
+    }) as typeof fetch;
+    await deltaDraft(facts, { ...OPTS, fetchImpl });
+    expect(attached).not.toContain('0.911');
+    expect(attached).toContain('more than 8× cheaper');
+    expect(attached).toContain('0.194');
+  });
+
   it('attaches the fact sheet to the run it creates', async () => {
     let body: { attachments?: Array<{ name: string; contentBase64: string }> } = {};
     const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -197,6 +219,10 @@ describe('deltaDraft', () => {
     // ten routes held" must consume, never read as "ten routes held".
     const demonstrative = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', lede: 'This week eight of those ten routes held, meaning their fresh scores landed inside the range.' };
     expect(auditDraftCounts(demonstrative, facts)).toBeNull();
+    // run-8f414c4e: the partitive must bind the FIRST noun, never skip
+    // across the other clause's count.
+    const twoClause = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', lede: 'We graded 40 items, and held 8 of 10 clusters while 2 clusters drifted and 0 were inconclusive.' };
+    expect(auditDraftCounts(twoClause, facts)).toBeNull();
     // run-25d69a3c: verdict-vocabulary mentions count nothing.
     const verdictTalk = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', frontierNote: 'No cluster was inconclusive this week, so every one of the ten clusters returned a clear held or drift verdict.' };
     expect(auditDraftCounts(verdictTalk, facts)).toBeNull();

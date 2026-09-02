@@ -105,8 +105,11 @@ export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null 
     // about verdicts returned, not a one-held claim. And "(?!\\s+or\\b)"
     // on the verb: "held or drift verdict" names the vocabulary, it does
     // not count anything.
+    // The denominator→noun segment is TEMPERED too: "8 of 10 clusters
+    // while 2 clusters drifted" (run-8f414c4e, TRUE) must bind the first
+    // "clusters", never lazily skip across "while 2" to the second.
     scan = scan.replace(
-      new RegExp(`(?<!\\bevery\\s)(?<!\\beach\\s)\\b${NUM_RE}\\s+of\\s+(?:(?:the|those|these|its|our)\\s+)?${NUM_RE}\\b[^.;,]{0,30}?\\b${noun}\\b${gap}{0,20}?\\b${verb}\\b(?!\\s+or\\b)`, 'gi'),
+      new RegExp(`(?<!\\bevery\\s)(?<!\\beach\\s)\\b${NUM_RE}\\s+of\\s+(?:(?:the|those|these|its|our)\\s+)?${NUM_RE}\\b${gap}{0,30}?\\b${noun}\\b${gap}{0,20}?\\b${verb}\\b(?!\\s+or\\b)`, 'gi'),
       (m, g1: string, g2: string) => {
         claims.push(resolve(g1.toLowerCase()));
         // A wrong denominator ("eight of nine routes held" on a ten-cluster
@@ -139,6 +142,23 @@ export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null 
     }
   }
   return null;
+}
+
+/** THE ATTACHMENT REDACTION (run-5fcbdd44 + run-c472bbf4: models WILL
+ * quote a number that sits in their input — three drafts leaked 0.911
+ * despite an explicit band-words-only rule). A vague mixing entry's exact
+ * costSaving is simply removed from the fact sheet the WORKERS receive;
+ * the band string carries everything they are allowed to say. The real
+ * FactSheet — and the deterministic guards that read it — are untouched. */
+export function redactFactsForWriter(f: FactSheet): unknown {
+  return {
+    ...f,
+    mixing: f.mixing.map((m) => {
+      if (!m.vague) return m;
+      const { costSaving: _hidden, ...rest } = m;
+      return rest;
+    }),
+  };
 }
 
 /** THE VAGUE-RATIO GUARD (run-ff6edfc4: the draft printed cost savings
@@ -215,7 +235,7 @@ export async function deltaDraft(
       headers,
       body: JSON.stringify({
         harnessHash: o.harnessHash,
-        attachments: [{ name: 'facts.json', contentBase64: Buffer.from(JSON.stringify(f, null, 1)).toString('base64') }],
+        attachments: [{ name: 'facts.json', contentBase64: Buffer.from(JSON.stringify(redactFactsForWriter(f), null, 1)).toString('base64') }],
       }),
     });
     if (!res.ok) {
