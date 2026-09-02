@@ -6,6 +6,8 @@
 // full-replace upsert) → generateInvoice → renderInvoiceHtml → backend
 // save → print the invoice JSON to stdout and the written paths to stderr.
 import { createDb, migrate, aggregateUsage, periodFromDay, periodToDay, isPeriodString } from '@potion/db';
+import { ENV_VAR_BY_PROVIDER, loadPrices } from '@potion/providers';
+import { DEFAULT_PRICES_PATH } from '../context.js';
 import { generateInvoice } from './invoice.js';
 import { renderInvoiceHtml } from './render-html.js';
 import { resolveBillingBackend } from './backend.js';
@@ -48,10 +50,17 @@ async function main(): Promise<void> {
     const rolled = await aggregateUsage(db.db, range);
     console.error(`usage rollup refreshed (${rolled.length} org/day/cluster rows for ${range.fromDay}..${range.toDay})`);
 
+    // The verified-savings basis (0086) — the context's own rule: live when
+    // any provider key is present in the environment.
+    const { table: prices } = loadPrices(process.env.POTION_PRICES_PATH ?? DEFAULT_PRICES_PATH);
+    const providerMode = Object.values(ENV_VAR_BY_PROVIDER).some((v) => process.env[v] !== undefined)
+      ? ('live' as const)
+      : ('mock' as const);
     const invoice = await generateInvoice(
       db.db,
       org,
       period,
+      { prices, providerMode },
       marginPct !== undefined ? { marginPct } : {},
     );
     const html = renderInvoiceHtml(invoice);

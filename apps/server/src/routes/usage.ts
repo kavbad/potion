@@ -274,6 +274,7 @@ export function registerUsageRoutes(app: FastifyInstance, ctx: PotionContext): v
         db(),
         org.orgId,
         period,
+        { prices: ctx.prices, providerMode: ctx.providerMode },
         parsed.data.margin_pct !== undefined ? { marginPct: parsed.data.margin_pct } : {},
       );
       if (format === 'html') {

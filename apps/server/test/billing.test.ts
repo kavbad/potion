@@ -54,9 +54,14 @@ afterAll(async () => {
   await app.close();
 });
 
+// 0086: every invoice states its verified-savings basis. These fixtures
+// have no incumbents/holdout, so the block is honestly 'off'/'no-incumbent'
+// and every cent matches the pre-0086 hand math.
+const BASIS = { prices: { version: 'test', updatedAt: '', entries: [] }, providerMode: 'mock' as const };
+
 describe('generateInvoice (hand-computed to the cent)', () => {
   it('default margin 0: pass-through, line items per cluster, exact totals', async () => {
-    const inv = await generateInvoice(db(), ORG_A, '2026-08');
+    const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS);
     expect(inv).toMatchObject({
       id: 'inv_org_demo_2026-08',
       object: 'potion.invoice',
@@ -87,7 +92,7 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     expect(inv.totals).toEqual({
       requests: 7, inputTokens: 550, outputTokens: 275,
       platformCostUsd: 0.23, marginUsd: 0,
-      verifiedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0.23,
+      projectedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0.23,
     });
   });
 
@@ -95,7 +100,7 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     // hand math: code-gen platform 15c → margin round(1.5)=2c → 17c
     //            extraction platform 8c → margin round(0.8)=1c → 9c
     //            totals: platform 23c, margin 3c, total 26c
-    const inv = await generateInvoice(db(), ORG_A, '2026-08', { marginPct: 10 });
+    const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS, { marginPct: 10 });
     expect(inv.marginPct).toBe(10);
     const [cg, ex] = inv.lineItems;
     expect(cg).toMatchObject({ platformCostUsd: 0.15, marginUsd: 0.02, totalUsd: 0.17 });
@@ -113,7 +118,7 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     await db()
       .insert(usageDaily)
       .values([{ orgId: ORG_A, day: '2026-09-02', clusterId: 'agent-x-billing', requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0.5, platformCostUsd: 0.5 }]);
-    const inv = await generateInvoice(db(), ORG_A, '2026-09');
+    const inv = await generateInvoice(db(), ORG_A, '2026-09', BASIS);
     const costOnly = inv.lineItems.find((l) => l.clusterId === 'agent-x-billing')!;
     expect(costOnly.description).toContain('Potion scoring & evaluation services');
     expect(costOnly.description).not.toContain('routed requests');
@@ -122,15 +127,15 @@ describe('generateInvoice (hand-computed to the cent)', () => {
   });
 
   it('rejects unknown orgs and malformed periods', async () => {
-    await expect(generateInvoice(db(), 'org_nope', '2026-08')).rejects.toThrow("unknown org");
-    await expect(generateInvoice(db(), ORG_A, '2026-13')).rejects.toThrow();
-    await expect(generateInvoice(db(), ORG_A, '2026/08')).rejects.toThrow();
+    await expect(generateInvoice(db(), 'org_nope', '2026-08', BASIS)).rejects.toThrow("unknown org");
+    await expect(generateInvoice(db(), ORG_A, '2026-13', BASIS)).rejects.toThrow();
+    await expect(generateInvoice(db(), ORG_A, '2026/08', BASIS)).rejects.toThrow();
   });
 });
 
 describe('renderInvoiceHtml', () => {
   it('renders a print-friendly standalone HTML invoice', async () => {
-    const inv = await generateInvoice(db(), ORG_A, '2026-08', { marginPct: 10 });
+    const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS, { marginPct: 10 });
     const html = renderInvoiceHtml(inv);
     expect(html).toContain('<!doctype html>');
     expect(html).toContain('Invoice inv_org_demo_2026-08');
@@ -147,7 +152,7 @@ describe('BillingBackend', () => {
   it('json-file backend writes invoice .json + .html', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'potion-invoices-'));
     try {
-      const inv = await generateInvoice(db(), ORG_A, '2026-08');
+      const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS);
       const html = renderInvoiceHtml(inv);
       const { ref } = await new JsonFileBillingBackend(dir).saveInvoice(inv, html);
       expect(ref).toBe(join(dir, 'inv_org_demo_2026-08.json'));

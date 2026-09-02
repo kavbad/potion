@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/server.js';
-import { createOrg, usageDaily } from '@potion/db';
+import { createOrg, insertRequestLog, setHoldoutConfig, upsertOrgIncumbents, usageDaily } from '@potion/db';
 import { generateInvoice } from '../src/billing/invoice.js';
 import { baselineCostUsd } from '../src/routes/chat.js';
 import type { Frontier, FrontierPoint } from '@potion/core';
@@ -187,9 +187,16 @@ describe('every served request records WHAT FUNDED IT and WHAT IT SAVED', () => 
   }, 60_000);
 });
 
-// ---- pricing v2 (operator decision 2026-08-25): verified-savings share ----
-describe('pricing v2: at cost plus a share of verified savings', () => {
-  it('the share is computed from the recorded counterfactual, and the customer always nets positive', async () => {
+// ---- pricing v2 (operator decision 2026-08-25; BASIS SWAPPED 2026-09-01,
+// 0086): the share bills ONLY the randomized-holdout LOWER bound — the
+// serve-time estimated counterfactual stays as labeled, unbilled context. ----
+const BASIS = {
+  prices: { version: 'test', updatedAt: '', entries: [{ alias: 'mock-frontier', provider: 'mock' as const, model: 'mock-frontier', inputPer1M: 1, outputPer1M: 1 }] },
+  providerMode: 'mock' as const,
+};
+
+describe('pricing v2: at cost plus a share of VERIFIED savings', () => {
+  it('the estimated counterfactual is shown as PROJECTED context and bills NOTHING', async () => {
     const db = app.potion.db.db;
     await createOrg(db, { id: 'org-v2price', name: 'V2 Price Co' });
     // A rolled-up day where routing verifiably saved money: baseline $10, cost $2.
@@ -204,19 +211,64 @@ describe('pricing v2: at cost plus a share of verified savings', () => {
       requests: 10, inputTokens: 100, outputTokens: 200,
       costUsd: 1, platformCostUsd: 1, baselineCostUsd: 0,
     });
-    const inv = await generateInvoice(db, 'org-v2price', '2026-08');
+    const inv = await generateInvoice(db, 'org-v2price', '2026-08', BASIS);
     expect(inv.pricingModel).toBe('at-cost-plus-verified-savings-share');
     expect(inv.savingsSharePct).toBe(25);
     expect(inv.totals.platformCostUsd).toBe(3);
-    expect(inv.totals.verifiedSavedUsd).toBe(8); // max(0, 10-2) + max(0, 0-1)
-    expect(inv.totals.savingsShareUsd).toBe(2); // 25% of 8
-    expect(inv.totals.totalUsd).toBe(5); // cost 3 + share 2
-    // The alignment property: what the customer pays is always less than
-    // cost-without-Potion (baseline) on covered traffic.
-    expect(inv.totals.totalUsd).toBeLessThan(10 + 1);
+    expect(inv.totals.projectedSavedUsd).toBe(8); // max(0, 10-2) + max(0, 0-1) — context
+    // THE SWAP (0086): no live baseline (never consented) → NOTHING billed
+    // against projections.
+    expect(inv.verified.status).toBe('off');
+    expect(inv.savingsShareLine).toBeNull();
+    expect(inv.totals.savingsShareUsd).toBe(0);
+    expect(inv.totals.totalUsd).toBe(3); // pure at-cost
     // share=0 degrades to v1 pass-through exactly.
-    const v1 = await generateInvoice(db, 'org-v2price', '2026-08', { savingsSharePct: 0 });
+    const v1 = await generateInvoice(db, 'org-v2price', '2026-08', BASIS, { savingsSharePct: 0 });
     expect(v1.pricingModel).toBe('pass-through-plus-margin');
     expect(v1.totals.totalUsd).toBe(3);
+  });
+
+  it('the share bills 25% of the HOLDOUT-VERIFIED lower bound — hand-computed to the cent', async () => {
+    const db = app.potion.db.db;
+    await createOrg(db, { id: 'org-v2holdout', name: 'V2 Holdout Co' });
+    await db.insert(usageDaily).values({
+      orgId: 'org-v2holdout', day: '2026-08-05', clusterId: 'code-gen',
+      requests: 100, inputTokens: 1000, outputTokens: 2000,
+      costUsd: 0.2, platformCostUsd: 0.2, baselineCostUsd: 1,
+    });
+    await upsertOrgIncumbents(db, { orgId: 'org-v2holdout', models: ['mock-frontier'], other: null, samplingConsent: true });
+    await setHoldoutConfig(db, 'org-v2holdout', { consent: true, rate: 0.03 });
+    const ts = new Date('2026-08-10T12:00:00Z');
+    // 35 randomized incumbent requests at a CONSTANT $0.01 → mean 0.01,
+    // degenerate CI [0.01, 0.01] — the lower bound is exact by construction.
+    for (let i = 0; i < 35; i += 1) {
+      await insertRequestLog(db, {
+        orgId: 'org-v2holdout', clusterId: 'code-gen', strategyHash: 'h-incumbent', model: 'mock-frontier',
+        status: 'ok', usage: { costUsd: 0.01 }, latencyMs: 300, holdout: true, ts,
+      } as never);
+    }
+    // 100 routed requests, $0.002 each → routed spend $0.2.
+    for (let i = 0; i < 100; i += 1) {
+      await insertRequestLog(db, {
+        orgId: 'org-v2holdout', clusterId: 'code-gen', strategyHash: 'h-routed', model: 'mock-cheap',
+        status: 'ok', usage: { costUsd: 0.002 }, latencyMs: 200, ts,
+      } as never);
+    }
+    const inv = await generateInvoice(db, 'org-v2holdout', '2026-08', BASIS);
+    // without-Potion = 0.01 × 100 routed = $1.00 (lower bound identical:
+    // constant costs) → verified savings = 1.00 − 0.20 = $0.80 → share
+    // 25% = 20 cents.
+    expect(inv.verified.status).toBe('verified');
+    expect(inv.verified.verifiedSavingsLowerUsd).toBeCloseTo(0.8, 8);
+    expect(inv.savingsShareLine).not.toBeNull();
+    expect(inv.savingsShareLine!.basisUsd).toBeCloseTo(0.8, 8);
+    expect(inv.savingsShareLine!.amountCents).toBe(20);
+    expect(inv.savingsShareLine!.description).toContain('lower bound');
+    expect(inv.totals.savingsShareUsd).toBe(0.2);
+    expect(inv.totals.totalUsd).toBe(0.4); // platform 0.2 + share 0.2
+    // The alignment property, now against the MEASURED counterfactual:
+    // what the customer pays is less than their own incumbent's measured
+    // cost for the routed traffic.
+    expect(inv.totals.totalUsd).toBeLessThan(1.0);
   });
 });

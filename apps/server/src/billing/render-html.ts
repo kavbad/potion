@@ -31,16 +31,29 @@ export function renderInvoiceHtml(invoice: Invoice): string {
         <td class="num">${int(l.inputTokens)}</td>
         <td class="num">${int(l.outputTokens)}</td>
         <td class="num">${usd(l.platformCostUsd)}</td>
-        <td class="num">${usd(l.verifiedSavedUsd)}</td>
-        <td class="num">${usd(l.savingsShareUsd)}</td>
+        <td class="num">${usd(l.projectedSavedUsd)}</td>
         <td class="num">${usd(l.totalUsd)}</td>
       </tr>`,
     )
     .join('');
 
   const empty = invoice.lineItems.length === 0
-    ? `\n      <tr><td colspan="8" class="empty">No metered usage in this period.</td></tr>`
+    ? `\n      <tr><td colspan="7" class="empty">No metered usage in this period.</td></tr>`
     : '';
+
+  // THE BASIS (0086): the share bills the verified LOWER bound or nothing;
+  // absent states say why in words, never a zero dressed as proof.
+  const v = invoice.verified;
+  const basisRow =
+    v.status === 'verified'
+      ? `<div class="row"><span>Verified savings, live baseline (${int(v.holdoutRequests)} randomized requests · lower bound)</span><span>${usd(Math.max(0, v.verifiedSavingsLowerUsd ?? 0))}</span></div>`
+      : `<div class="row"><span>Verified savings</span><span>${esc(
+          v.status === 'off'
+            ? 'live baseline off — no savings share billed'
+            : v.status === 'no-incumbent'
+              ? 'no servable incumbent — no savings share billed'
+              : `baseline measuring (${v.holdoutRequests} of ${v.minHoldoutRequests}) — no savings share billed`,
+        )}</span></div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -110,8 +123,7 @@ export function renderInvoiceHtml(invoice: Invoice): string {
         <th class="num">Input tokens</th>
         <th class="num">Output tokens</th>
         <th class="num">Platform cost</th>
-        <th class="num">Verified savings</th>
-        <th class="num">Savings share</th>
+        <th class="num">Projected savings (not billed)</th>
         <th class="num">Total</th>
       </tr>
     </thead>
@@ -123,16 +135,18 @@ export function renderInvoiceHtml(invoice: Invoice): string {
     <div class="row"><span>Requests</span><span>${int(invoice.totals.requests)}</span></div>
     <div class="row"><span>Tokens (in / out)</span><span>${int(invoice.totals.inputTokens)} / ${int(invoice.totals.outputTokens)}</span></div>
     <div class="row"><span>Model cost, at cost</span><span>${usd(invoice.totals.platformCostUsd)}</span></div>
-    <div class="row"><span>Verified savings this period</span><span>${usd(invoice.totals.verifiedSavedUsd)}</span></div>
-    <div class="row"><span>Savings share (${invoice.savingsSharePct}% of verified savings)</span><span>${usd(invoice.totals.savingsShareUsd)}</span></div>
+    <div class="row"><span>Projected savings this period (context, not billed)</span><span>${usd(invoice.totals.projectedSavedUsd)}</span></div>
+    ${basisRow}
+    <div class="row"><span>Savings share (${invoice.savingsSharePct}% of the verified lower bound)</span><span>${usd(invoice.totals.savingsShareUsd)}</span></div>
     ${invoice.totals.marginUsd > 0 ? `<div class="row"><span>Margin (${invoice.marginPct}%)</span><span>${usd(invoice.totals.marginUsd)}</span></div>` : ''}
     <div class="row grand"><span>Total due</span><span>${usd(invoice.totals.totalUsd)}</span></div>
   </div>
 
   <div class="foot">
-    <p>Pricing model v1: pass-through of metered platform cost plus a configurable margin
-    (margin_pct, default 0). Platform cost is the price-table cost of served usage as
-    recorded in request_logs and rolled up daily (usage_daily, UTC days).</p>
+    <p>Model cost passes through at cost (price-table cost of served usage, rolled up daily,
+    UTC days). The savings share bills only VERIFIED savings: the conservative lower bound
+    measured by the randomized live baseline your org consented to — never a projection.
+    Projected savings appear for context and are not billed.</p>
     <p>This invoice was generated offline (json-file billing backend). Live Stripe
     invoicing ships once an operator business entity exists — the JSON form of this
     invoice is Stripe-ready.</p>

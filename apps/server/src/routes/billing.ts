@@ -38,7 +38,7 @@ function currentPeriod(now = new Date()): string {
 /** Refresh the idempotent rollup for the period, then build the invoice. */
 async function invoiceFor(ctx: PotionContext, orgId: string, period: string): Promise<Invoice> {
   await aggregateUsage(ctx.db.db, { fromDay: periodFromDay(period), toDay: periodToDay(period) });
-  return generateInvoice(ctx.db.db, orgId, period);
+  return generateInvoice(ctx.db.db, orgId, period, { prices: ctx.prices, providerMode: ctx.providerMode });
 }
 
 export function registerBillingRoutes(

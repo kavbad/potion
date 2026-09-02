@@ -112,10 +112,11 @@ proposal; apply mints the ORG frontier — the first customer-specific
 serving frontier — and selection's lower-bound law still decides) ·
 randomized incumbent holdout SHIPPED (0086: consent-gated ≤5% slice,
 labeled everywhere it lands; Savings' "Verified savings" block = the only
-"verified" in the product, lower-bound billable). G1 COMPLETE — the last
-review-ladder integration left is swapping the INVOICE basis to
-verifiedSavingsLowerUsd before charging turns on (pairs with the Stripe
-sitting). G2 next: org workload discovery → customer-specific frontiers
+"verified" in the product, lower-bound billable). G1 COMPLETE, and the INVOICE BASIS IS SWAPPED (0086 follow-through): the
+savings share bills 25% of the holdout-verified LOWER bound only — the
+estimated counterfactual is labeled "projected, not billed" context; no
+live baseline → pure at-cost. The review ladder's engineering is DONE;
+charging turns on at the Stripe sitting and the first invoice is honest. G2 next: org workload discovery → customer-specific frontiers
 beyond the single-cluster promotion path. Eval-quality queue (second
 external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every

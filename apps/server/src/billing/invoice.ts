@@ -18,17 +18,31 @@
 // is Stripe-ready (per-line quantity/unit_amount/amount in cents, currency,
 // customer = org) so the stub's future implementation is a field mapping,
 // not a redesign.
-import { listUsageDaily, periodFromDay, periodToDay, isPeriodString, type PotionDb } from '@potion/db';
-import { getOrgById } from '@potion/db';
+import {
+  getOrgIncumbents,
+  getOrgById,
+  holdoutWindowStats,
+  isPeriodString,
+  listUsageDaily,
+  periodFromDay,
+  periodToDay,
+  type PotionDb,
+} from '@potion/db';
+import type { PriceTable } from '@potion/core';
+import { eligibleIncumbent } from '../routing/holdout.js';
+import { buildVerifiedSavings, type VerifiedSavings } from '../verified-savings.js';
 
 export const DEFAULT_MARGIN_PCT = 0;
 export const PRICING_MODEL_V1 = 'pass-through-plus-margin' as const;
 /** Pricing v2 (operator decision, 2026-08-25, from the external review's
  * alignment finding): model cost passes through AT COST, and Potion's
- * revenue is a share of the VERIFIED savings — the per-request counterfactual
- * recorded at serve time (usage_daily.baseline_cost_usd). The better Potion
- * routes, the more both sides make; save nothing, and Potion earns nothing
- * above cost. The receipt system IS the billing system. */
+ * revenue is a share of the VERIFIED savings. THE BASIS SWAPPED 2026-09-01
+ * (0086): "verified" now means the randomized-holdout LOWER BOUND — the
+ * org's own incumbent, measured live on a consented slice — never the
+ * serve-time estimated counterfactual, which stays on the invoice as
+ * labeled CONTEXT (projected, not billed). No live baseline → no savings
+ * share: save nothing PROVABLY, and Potion earns nothing above cost. The
+ * better Potion routes, the more both sides make. */
 export const PRICING_MODEL_V2 = 'at-cost-plus-verified-savings-share' as const;
 export const DEFAULT_SAVINGS_SHARE_PCT = 25;
 
@@ -44,13 +58,11 @@ export interface InvoiceLineItem {
   /** [●] pricing decision: margin over platform cost (default 0). */
   marginPct: number;
   marginUsd: number;
-  /** Verified savings on this line: recorded baseline minus platform cost,
-   * floored at 0. Partial baseline coverage under-reports savings, which
-   * favors the customer by construction. */
-  verifiedSavedUsd: number;
-  savingsSharePct: number;
-  savingsShareUsd: number;
-  /** What the customer pays for this line (= platform + margin + share). */
+  /** PROJECTED savings on this line (serve-time estimated counterfactual
+   * minus platform cost, floored at 0) — CONTEXT, never billed. The
+   * billable savings number is the invoice-level verified lower bound. */
+  projectedSavedUsd: number;
+  /** What the customer pays for this line (= platform + margin). */
   totalUsd: number;
   /** Stripe-ready mapping (Stripe amounts are integer cents). */
   stripe: {
@@ -78,13 +90,21 @@ export interface Invoice {
   marginPct: number;
   savingsSharePct: number;
   lineItems: InvoiceLineItem[];
+  /** THE BASIS (0086): what the org's own randomized traffic proved this
+   * period. status !== 'verified' → the share line is null and the invoice
+   * says why — never a zero dressed as proof. */
+  verified: VerifiedSavings;
+  /** The one billable savings line: share % × the verified LOWER bound.
+   * null when there is nothing verified to share. */
+  savingsShareLine: { description: string; basisUsd: number; amountCents: number } | null;
   totals: {
     requests: number;
     inputTokens: number;
     outputTokens: number;
     platformCostUsd: number;
     marginUsd: number;
-    verifiedSavedUsd: number;
+    /** Context, never billed. */
+    projectedSavedUsd: number;
     savingsShareUsd: number;
     totalUsd: number;
   };
@@ -112,6 +132,10 @@ export async function generateInvoice(
   db: PotionDb,
   orgId: string,
   period: string,
+  /** REQUIRED (0086): the verified-savings basis inputs. Making this a
+   * parameter a caller could omit would quietly zero the share — the drift
+   * disease; every caller states its provider mode and price table. */
+  basis: { prices: PriceTable; providerMode: 'mock' | 'live' },
   opts: { marginPct?: number; savingsSharePct?: number } = {},
 ): Promise<Invoice> {
   if (!isPeriodString(period)) {
@@ -152,15 +176,28 @@ export async function generateInvoice(
     byCluster.set(r.clusterId, acc);
   }
 
+  // THE VERIFIED BASIS (0086): the period's randomized-holdout economics,
+  // the same one-implementation math the Savings report renders.
+  const inc = await getOrgIncumbents(db, orgId);
+  const stats = await holdoutWindowStats(db, orgId, {
+    from: new Date(`${range.fromDay}T00:00:00.000Z`),
+    to: new Date(new Date(`${range.toDay}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000),
+  });
+  const eligible = inc === null ? { model: null as string | null } : eligibleIncumbent(inc.models, basis.prices, basis.providerMode);
+  const verified = buildVerifiedSavings(
+    { consent: inc?.holdoutConsent ?? false, rate: inc?.holdoutRate ?? 0, incumbentModel: eligible.model },
+    stats,
+    `invoice|${orgId}|${period}`,
+  );
+
   const lineItems: InvoiceLineItem[] = [...byCluster.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([clusterId, acc]) => {
       // Integer-cent math at line granularity — see file header.
       const platformCents = toCents(acc.platformCostUsd);
       const marginCents = Math.round((platformCents * marginPct) / 100);
-      const savedCents = Math.max(0, toCents(acc.baselineCostUsd) - platformCents);
-      const shareCents = Math.round((savedCents * savingsSharePct) / 100);
-      const totalCents = platformCents + marginCents + shareCents;
+      const projectedCents = Math.max(0, toCents(acc.baselineCostUsd) - platformCents);
+      const totalCents = platformCents + marginCents;
       return {
         clusterId,
         // G2.1 relabel: a cost-only line (0 served requests — guarantee
@@ -176,9 +213,7 @@ export async function generateInvoice(
         platformCostUsd: centsToUsd(platformCents),
         marginPct,
         marginUsd: centsToUsd(marginCents),
-        verifiedSavedUsd: centsToUsd(savedCents),
-        savingsSharePct,
-        savingsShareUsd: centsToUsd(shareCents),
+        projectedSavedUsd: centsToUsd(projectedCents),
         totalUsd: centsToUsd(totalCents),
         stripe: {
           currency: 'usd' as const,
@@ -189,19 +224,42 @@ export async function generateInvoice(
       };
     });
 
-  const totals = lineItems.reduce(
+  const lineTotals = lineItems.reduce(
     (acc, l) => ({
       requests: acc.requests + l.requests,
       inputTokens: acc.inputTokens + l.inputTokens,
       outputTokens: acc.outputTokens + l.outputTokens,
       platformCostUsd: centsToUsd(toCents(acc.platformCostUsd) + toCents(l.platformCostUsd)),
       marginUsd: centsToUsd(toCents(acc.marginUsd) + toCents(l.marginUsd)),
-      verifiedSavedUsd: centsToUsd(toCents(acc.verifiedSavedUsd) + toCents(l.verifiedSavedUsd)),
-      savingsShareUsd: centsToUsd(toCents(acc.savingsShareUsd) + toCents(l.savingsShareUsd)),
+      projectedSavedUsd: centsToUsd(toCents(acc.projectedSavedUsd) + toCents(l.projectedSavedUsd)),
       totalUsd: centsToUsd(toCents(acc.totalUsd) + toCents(l.totalUsd)),
     }),
-    { requests: 0, inputTokens: 0, outputTokens: 0, platformCostUsd: 0, marginUsd: 0, verifiedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0 },
+    { requests: 0, inputTokens: 0, outputTokens: 0, platformCostUsd: 0, marginUsd: 0, projectedSavedUsd: 0, totalUsd: 0 },
   );
+
+  // The one billable savings line: share % of the verified LOWER bound,
+  // floored at 0 (a negative bound bills nothing — it never charges the
+  // customer for uncertainty).
+  const lowerCents =
+    verified.status === 'verified' && verified.verifiedSavingsLowerUsd !== null
+      ? Math.max(0, toCents(verified.verifiedSavingsLowerUsd))
+      : 0;
+  const shareCents = Math.round((lowerCents * savingsSharePct) / 100);
+  const savingsShareLine =
+    shareCents > 0
+      ? {
+          description:
+            `Verified savings share — ${savingsSharePct}% of the live-baseline lower bound ` +
+            `(${verified.holdoutRequests} randomized requests vs ${verified.routedRequests} routed, ${period})`,
+          basisUsd: centsToUsd(lowerCents),
+          amountCents: shareCents,
+        }
+      : null;
+  const totals = {
+    ...lineTotals,
+    savingsShareUsd: centsToUsd(shareCents),
+    totalUsd: centsToUsd(toCents(lineTotals.totalUsd) + shareCents),
+  };
 
   return {
     id: `inv_${orgId}_${period}`,
@@ -216,6 +274,8 @@ export async function generateInvoice(
     marginPct,
     savingsSharePct,
     lineItems,
+    verified,
+    savingsShareLine,
     totals,
     generatedAt: new Date().toISOString(),
   };
