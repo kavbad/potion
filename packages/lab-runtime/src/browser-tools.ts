@@ -28,6 +28,12 @@ export interface BrowserToolDeps {
    * what the human was shown, or the act refuses typed and the model must
    * re-read (the pore then re-asks on the fresh state). */
   restore?: { url: string; controls: Record<string, string> };
+  /** LIVE SCREEN (2026-09-02, Live views #3): when set, a JPEG of the
+   * page is captured after every successful open/act and handed here (the
+   * handler writes it to the run workspace as browser/screen.jpg — the
+   * workbench's content-hash detection makes the tab live). Best-effort:
+   * a failed capture never touches the tool result. */
+  capture?: (frame: Buffer) => Promise<void>;
 }
 
 export const BROWSER_LIMITS = {
@@ -77,6 +83,21 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
   const seen = (state: PageState): PageState => {
     if (state.error === undefined) lastSeen = state;
     return state;
+  };
+
+  // Best-effort screen capture — a read of our own browser's viewport,
+  // never an act. Failures are swallowed: the live view is a convenience.
+  const captureFrame = async (): Promise<void> => {
+    if (deps.capture === undefined || sessionId === null) return;
+    try {
+      const res = await fetchFn(`${deps.browserUrl}/session/${sessionId}/screenshot`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return;
+      await deps.capture(Buffer.from(await res.arrayBuffer()));
+    } catch {
+      /* the record never depends on the live view */
+    }
   };
 
   const call = async (path: string, init?: RequestInit): Promise<PageState> => {
@@ -135,11 +156,13 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
         const sid = await ensureSession();
         if (typeof sid !== 'string') return sid;
         restoredPending = false; // an explicit open IS fresh state
-        return seen(clipState(await call(`/session/${sid}/goto`, {
+        const opened = seen(clipState(await call(`/session/${sid}/goto`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url: url.trim() }),
         })));
+        await captureFrame();
+        return opened;
       },
     },
     {
@@ -218,11 +241,13 @@ export function buildBrowserLabTools(deps: BrowserToolDeps): BrowserLegSetup {
           }
           restoredPending = false;
         }
-        return seen(clipState(await call(`/session/${sid}/act`, {
+        const acted = seen(clipState(await call(`/session/${sid}/act`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ref: i.ref, kind: i.kind, ...(typeof i.text === 'string' ? { text: i.text } : {}) }),
         })));
+        await captureFrame();
+        return acted;
       },
     },
   ];

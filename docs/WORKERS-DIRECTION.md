@@ -260,12 +260,15 @@ pane can never claim progress the record does not hold.
    the now-strip while the call runs (today it lands as one block after
    completion; a long computation reads as a hang). Needs incremental
    output from the sandbox exec — record stays the completed step.
-3. **The browser view — QUEUED (the operator's "internet stuff").**
-   For browser-hand runs, show what the worker's browser sees: v1 is a
-   screenshot after every browser action rendered as a live filmstrip
-   tab on the workbench (one frame per act, from the same container the
-   hand drives); v2 graduates to a streamed screencast if the filmstrip
-   earns it. Frames are artifacts of the record like any file.
+3. **The browser view — v1 SHIPPED (the operator's "internet stuff").**
+   For browser-hand runs, what the worker's browser sees: after every
+   successful open/act the service frames the page (JPEG, from the same
+   Chromium the hand drives) into the workspace as browser/screen.jpg —
+   ONE overwritten file, so the workbench's content-hash detection makes
+   the tab live with zero new UI. Best-effort by law: a failed capture
+   never touches the tool result, and no capture dep means no screenshot
+   requests at all. Later: frame history / streamed screencast if the
+   live screen earns it.
 4. **A cursor in real external apps** (e.g. a live Google Sheet) is NOT
    this — that requires connector-side acts and stays out of scope
    until the connector exists.

@@ -258,6 +258,18 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && parts[2] === 'state') {
         return send(res, 200, await pageState(s.page));
       }
+      // LIVE SCREEN (2026-09-02, Live views #3): what the worker's browser
+      // sees right now, as JPEG bytes. A read of OUR OWN browser's viewport
+      // — no new page interaction, so it is never an act.
+      if (req.method === 'GET' && parts[2] === 'screenshot') {
+        try {
+          const buf = await s.page.screenshot({ type: 'jpeg', quality: 60, timeout: 8000 });
+          res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': buf.length });
+          return res.end(buf);
+        } catch (e) {
+          return send(res, 422, { error: `screenshot failed: ${String(e.message ?? e).slice(0, 120)}` });
+        }
+      }
       if (req.method === 'POST' && parts[2] === 'act') {
         if (++s.acts > LIMITS.MAX_ACTS_PER_SESSION) {
           return send(res, 429, { error: `act cap reached (${LIMITS.MAX_ACTS_PER_SESSION} per session)` });

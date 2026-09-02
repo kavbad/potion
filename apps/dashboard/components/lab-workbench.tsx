@@ -238,7 +238,7 @@ export function LabWorkbench({
               } ${flashing ? 'border-accent text-accent' : ''}`}
               data-testid={`bench-tab-${f.name}`}
             >
-              {f.name.replace(/^deliverables\//, '')}
+              {f.name === 'browser/screen.jpg' ? 'browser screen' : f.name.replace(/^deliverables\//, '')}
               {v > 1 ? <span className="ml-1.5 text-accent">v{v}</span> : null}
             </button>
           );

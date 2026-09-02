@@ -31,6 +31,9 @@ function scriptedService(pages: Record<string, unknown>): { fetchImpl: typeof fe
     if (path.endsWith('/state')) {
       return new Response(JSON.stringify({ url: 'https://app.example/x', title: 'X', text: 'state', interactables: [] }), { status: 200 });
     }
+    if (path.endsWith('/screenshot')) {
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    }
     if (init?.method === 'DELETE') {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
@@ -199,5 +202,47 @@ describe('the resume guard fails closed on UNRECORDED refs (final-pass fix)', ()
     const res = (await act.run({ ref: 'p9', kind: 'click' })) as { error?: string; text?: string };
     expect(res.error).toContain('was not on the page the approval was given for');
     expect(res.text).toBeUndefined();
+  });
+});
+
+describe('the live screen (Live views #3)', () => {
+  const PAGE = { url: 'https://app.example/', title: 'Home', text: 'hello', interactables: [{ ref: 'p1', label: 'Go', tag: 'button' }] };
+
+  it('a frame is captured after open and after an act; the tool results are untouched', async () => {
+    const { fetchImpl } = scriptedService({ 'https://app.example/': PAGE });
+    const frames: Buffer[] = [];
+    const setup = buildBrowserLabTools({
+      browserUrl: 'http://browser.test',
+      fetchImpl,
+      capture: async (f) => { frames.push(f); },
+    });
+    const byName = new Map(setup.tools.map((t) => [t.name, t]));
+    const opened = (await byName.get('browser_open')!.run({ url: 'https://app.example/' })) as { title?: string };
+    expect(opened.title).toBe('Home');
+    expect(frames.length).toBe(1);
+    const acted = (await byName.get('browser_act')!.run({ ref: 'p1', kind: 'click' })) as { title?: string };
+    expect(acted.title).toBe('After');
+    expect(frames.length).toBe(2);
+    expect(frames[0]![0]).toBe(0xff); // real bytes, not JSON
+  });
+
+  it('a failing capture never touches the result — the record does not depend on the live view', async () => {
+    const { fetchImpl } = scriptedService({ 'https://app.example/': PAGE });
+    const setup = buildBrowserLabTools({
+      browserUrl: 'http://browser.test',
+      fetchImpl,
+      capture: async () => { throw new Error('disk full'); },
+    });
+    const byName = new Map(setup.tools.map((t) => [t.name, t]));
+    const opened = (await byName.get('browser_open')!.run({ url: 'https://app.example/' })) as { title?: string };
+    expect(opened.title).toBe('Home');
+  });
+
+  it('no capture dep → no screenshot requests at all', async () => {
+    const { fetchImpl, calls } = scriptedService({ 'https://app.example/': PAGE });
+    const setup = buildBrowserLabTools({ browserUrl: 'http://browser.test', fetchImpl });
+    const byName = new Map(setup.tools.map((t) => [t.name, t]));
+    await byName.get('browser_open')!.run({ url: 'https://app.example/' });
+    expect(calls.some((c) => c.path.endsWith('/screenshot'))).toBe(false);
   });
 });

@@ -4622,6 +4622,12 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
                 }
                 const setup = buildBrowserLabTools({
                   browserUrl,
+                  // LIVE SCREEN (Live views #3): every open/act frames the
+                  // page into the workspace — one overwritten file, so the
+                  // workbench's sha-diff makes the tab live.
+                  capture: async (frame) => {
+                    await upsertLabRunFile(ctx.db, { orgId: payload.orgId, runId: payload.runId, name: 'browser/screen.jpg', content: frame });
+                  },
                   ...(deps.browserToolDeps?.fetchImpl !== undefined ? { fetchImpl: deps.browserToolDeps.fetchImpl } : {}),
                   ...(restore !== undefined ? { restore } : {}),
                 });
