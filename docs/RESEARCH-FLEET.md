@@ -11,6 +11,10 @@ built as the W6 flagship when its turn on the ladder comes or when the
 operator names it the distribution interleave (A5 allows either; the doc
 does not decide sequencing by itself).
 
+Its writing layer — voice,
+article construction, and the editorial clock — is specified in
+`docs/RESEARCH-WRITING.md` (adopted with amendments E1–E7).
+
 The operator's core design is correct and is adopted: a deliberately small
 fleet of eight persistent agents — five researchers with public authorship,
 three institutional operators — with everything else a tool, workflow, or
@@ -256,7 +260,9 @@ agent" renders from it.
 (R2). Humans can investigate a disagreement; nothing can skip the layer.
 Auditor receives no byline. Auditor's own eval runs on planted-error
 articles — adversarial test pieces with deliberate mistakes, scored on
-detection, false approval, false rejection, and leak detection.
+detection, false approval, false rejection, and leak detection. The
+language-level checklist (flag words that exceed evidence) is
+`docs/RESEARCH-WRITING.md` §24.
 
 ## Scribe — Research Editor
 
@@ -274,7 +280,9 @@ eval measures factual preservation, headline fidelity, and accidental
 overstatement.
 
 Per R5, Scribe is the first planned split; until then Delta edits and
-Auditor checks distortion.
+Auditor checks distortion. Scribe executes the editorial standard in
+`docs/RESEARCH-WRITING.md` (checklist §23; deterministic style lints run
+in the workflow per its E4, never as Scribe judgment calls).
 
 ## Signal — Distribution & Audience Agent
 
