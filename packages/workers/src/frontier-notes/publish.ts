@@ -122,6 +122,14 @@ export function renderMarkdown(i: Issue): string {
     '',
     ...f.caveats.map((c) => `- ${c}`),
     '',
+    ...(i.writer?.runId
+      ? [
+          '---',
+          '',
+          `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}), $${i.writer.costUsd.toFixed(4)} metered.*`,
+          '',
+        ]
+      : []),
     ...(i.writer?.receipt
       ? [
           '---',

@@ -37,8 +37,20 @@ const writer = key
   : undefined;
 
 const potion = process.env.POTION_SELF_KEY ? { url: process.env.POTION_API_URL ?? 'https://api.withpotion.com', apiKey: process.env.POTION_SELF_KEY, policy: process.env.FRONTIER_NOTES_POLICY ?? 'frontier-notes-writer', cluster: process.env.FRONTIER_NOTES_CLUSTER ?? 'creative' } : undefined;
+// F0 (docs/RESEARCH-FLEET.md): Delta, the persistent Worker writer — set
+// DELTA_HARNESS (from scripts/delta-hire.ts) + POTION_LAB_SESSION to draft
+// through a recorded run; every failure falls back down the chain below.
+const delta = process.env.DELTA_HARNESS && process.env.POTION_LAB_SESSION
+  ? {
+      url: process.env.POTION_LAB_URL ?? 'https://api.withpotion.com',
+      session: process.env.POTION_LAB_SESSION,
+      harnessHash: process.env.DELTA_HARNESS,
+      ...(process.env.DELTA_TIMEOUT_MS ? { timeoutMs: Number(process.env.DELTA_TIMEOUT_MS) } : {}),
+    }
+  : undefined;
 const { issue, files, digest } = await runFrontierNotes({
   run,
+  ...(delta ? { delta } : {}),
   ...(potion ? { potion } : {}),
   db: handle.db as never,
   pricesVersion: process.env.PRICES_VERSION ?? prices.version,

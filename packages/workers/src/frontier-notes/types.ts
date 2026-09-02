@@ -88,7 +88,10 @@ export interface Issue {
   facts: FactSheet;
   status: 'published' | 'held';
   heldReason?: string;
-  writer: { model: string; costUsd: number; receipt?: WriterReceipt } | null;
+  /** `runId` (F0, docs/RESEARCH-FLEET.md R2): when a Delta worker run wrote
+   * the draft, the recorded run that backs the byline — credits derive from
+   * records, never captions. */
+  writer: { model: string; costUsd: number; receipt?: WriterReceipt; runId?: string } | null;
 }
 
 /** What Potion's own API said about the request that wrote the issue — the dogfood receipt. */

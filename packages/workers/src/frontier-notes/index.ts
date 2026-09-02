@@ -5,3 +5,4 @@ export * from './write.js';
 export * from './publish.js';
 export * from './replay-source.js';
 export * from './run.js';
+export * from './delta.js';
