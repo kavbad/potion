@@ -129,7 +129,9 @@ export function renderMarkdown(i: Issue): string {
       ? [
           '---',
           '',
-          `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}), $${i.writer.costUsd.toFixed(4)} metered.*`,
+          `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}), $${i.writer.costUsd.toFixed(4)} metered.${
+            i.writer.verifiedBy ? ` Verified by Auditor, a Potion research-integrity worker, in a recorded run (${i.writer.verifiedBy.runId}).` : ''
+          }*`,
           '',
         ]
       : []),

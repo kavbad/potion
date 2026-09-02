@@ -6,3 +6,5 @@ export * from './publish.js';
 export * from './replay-source.js';
 export * from './run.js';
 export * from './delta.js';
+export * from './auditor.js';
+export * from './lint.js';

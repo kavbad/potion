@@ -263,7 +263,14 @@ export default async function IssuePage({ params }: Params) {
             <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
               This issue was written by <span className="font-medium text-ink">{i.byline}</span>, a persistent Potion worker, in a recorded run —{' '}
               <span className="font-mono text-ink">{i.writer.runId}</span>, ${i.writer.costUsd.toFixed(4)} metered. The byline is a provenance claim the record backs: the draft, every
-              tool step, and the judge&apos;s verdict are on the run. We use what we sell.
+              tool step, and the judge&apos;s verdict are on the run.
+              {i.writer.verifiedBy && (
+                <>
+                  {' '}Verified by <span className="font-medium text-ink">Auditor</span>, a Potion research-integrity worker, in a recorded run —{' '}
+                  <span className="font-mono text-ink">{i.writer.verifiedBy.runId}</span>: the draft published only after its claims were independently recomputed against the fact sheet.
+                </>
+              )}{' '}
+              We use what we sell.
             </p>
           </div>
         )}

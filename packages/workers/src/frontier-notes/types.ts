@@ -90,8 +90,10 @@ export interface Issue {
   heldReason?: string;
   /** `runId` (F0, docs/RESEARCH-FLEET.md R2): when a Delta worker run wrote
    * the draft, the recorded run that backs the byline — credits derive from
-   * records, never captions. */
-  writer: { model: string; costUsd: number; receipt?: WriterReceipt; runId?: string } | null;
+   * records, never captions. `verifiedBy` (F1): the Auditor run whose PASS
+   * verdict let the model-written draft publish — the "Verified by Auditor"
+   * line's evidence. */
+  writer: { model: string; costUsd: number; receipt?: WriterReceipt; runId?: string; verifiedBy?: { runId: string; costUsd: number } } | null;
 }
 
 /** What Potion's own API said about the request that wrote the issue — the dogfood receipt. */

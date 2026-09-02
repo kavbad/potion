@@ -3,6 +3,7 @@
 // writes the files, returns the issue and a one-line digest.
 import type { Provider } from '@potion/providers';
 import type { ObservatoryRun } from '../observatory.js';
+import { auditorVerify } from './auditor.js';
 import { composeFactSheet } from './compose.js';
 import { deltaDraft, type DeltaWriterOptions } from './delta.js';
 import { assembleIssue, writeIssue } from './publish.js';
@@ -24,6 +25,11 @@ export interface FrontierNotesOptions {
    * recorded lab run drafts the issue. Tried FIRST; potion → writer →
    * deterministic remain the fallback chain, so the note always publishes. */
   delta?: DeltaWriterOptions;
+  /** F1 (fleet R2): Auditor, the independent verifier. When set, Delta's
+   * prose ships ONLY with a PASS verification record from an Auditor run —
+   * no verdict (failed, parked, timed out, unparseable) is a fail for the
+   * model-written draft, and the deterministic draft publishes instead. */
+  auditor?: DeltaWriterOptions;
   byline?: string;
   gate?: boolean;
   extraNeverName?: readonly string[];
@@ -43,6 +49,29 @@ export async function runFrontierNotes(o: FrontierNotesOptions): Promise<{ issue
       draft = r.draft;
       writer = { model: `delta:${o.delta.harnessHash.slice(0, 8)}`, costUsd: r.receipt.meteredUsd, runId: r.receipt.runId };
       deltaWrote = true;
+    }
+  }
+  // F1 (fleet R2): publish is gated on pass evidence. The typed verdict
+  // outranks everything; no verdict at all is a fail for the model-written
+  // draft. The deterministic draft is composed from the facts by code and
+  // needs no verifier, so the note itself is never blocked.
+  if (deltaWrote && o.auditor) {
+    const v = await auditorVerify(facts, draft, o.auditor);
+    if (v.verdict !== null && v.verdict.verdict === 'pass') {
+      writer = { ...writer!, verifiedBy: { runId: v.verdict.runId, costUsd: v.verdict.meteredUsd } };
+    } else {
+      const why =
+        v.verdict !== null
+          ? `auditor run ${v.verdict.runId} FAILED the draft: ${
+              v.verdict.requiredChanges.slice(0, 2).join('; ') ||
+              v.verdict.checks.filter((c) => !c.ok).slice(0, 2).map((c) => c.claim).join('; ') ||
+              'see the verification record'
+            }`
+          : (v.fallback ?? 'auditor produced no verdict');
+      draft = deterministicDraft(facts);
+      writer = null;
+      deltaWrote = false;
+      fallbackNote = fallbackNote ? `${fallbackNote}; ${why}` : why;
     }
   }
   if (!writer && o.potion) {
@@ -70,6 +99,6 @@ export async function runFrontierNotes(o: FrontierNotesOptions): Promise<{ issue
     ...(o.extraNeverName !== undefined ? { extraNeverName: o.extraNeverName } : {}),
   });
   const files = writeIssue(o.notesDir, issue);
-  const digest = `frontier notes ${issue.week}: ${issue.status.toUpperCase()} — "${issue.title}"${issue.status === 'held' ? ` (${issue.heldReason?.split('\n')[0]})` : ''}${writer ? ` · writer ${writer.model} $${writer.costUsd.toFixed(3)}` : ''}${writer?.runId ? ` · run ${writer.runId}` : ''}${fallbackNote ? ` · fallback: ${fallbackNote}` : ''}`;
+  const digest = `frontier notes ${issue.week}: ${issue.status.toUpperCase()} — "${issue.title}"${issue.status === 'held' ? ` (${issue.heldReason?.split('\n')[0]})` : ''}${writer ? ` · writer ${writer.model} $${writer.costUsd.toFixed(3)}` : ''}${writer?.runId ? ` · run ${writer.runId}` : ''}${writer?.verifiedBy ? ` · verified ${writer.verifiedBy.runId}` : ''}${fallbackNote ? ` · fallback: ${fallbackNote}` : ''}`;
   return { issue, files, digest };
 }

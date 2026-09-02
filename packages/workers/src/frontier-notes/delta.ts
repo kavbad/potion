@@ -19,6 +19,7 @@
 // (potion → model → deterministic). A parked or still-running run is left
 // alone — the operator answers it or the reaper reaps it — and the receipt
 // still points at it so the issue records what happened.
+import { lintDraft } from './lint.js';
 import type { FactSheet } from './types.js';
 import { deterministicDraft, parseDraft, type Draft } from './write.js';
 
@@ -99,8 +100,13 @@ export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null 
     // roster size, and the whole span is consumed so the generic patterns
     // below never read the inner "ten routes held" as a ten-claim.
     let scan = text;
+    // "(?<!every )(?<!each )": "every one of the ten clusters returned a
+    // clear held or drift verdict" (run-25d69a3c, TRUE) is a statement
+    // about verdicts returned, not a one-held claim. And "(?!\\s+or\\b)"
+    // on the verb: "held or drift verdict" names the vocabulary, it does
+    // not count anything.
     scan = scan.replace(
-      new RegExp(`\\b${NUM_RE}\\s+of\\s+(?:(?:the|those|these|its|our)\\s+)?${NUM_RE}\\b[^.;,]{0,30}?\\b${noun}\\b${gap}{0,20}?\\b${verb}`, 'gi'),
+      new RegExp(`(?<!\\bevery\\s)(?<!\\beach\\s)\\b${NUM_RE}\\s+of\\s+(?:(?:the|those|these|its|our)\\s+)?${NUM_RE}\\b[^.;,]{0,30}?\\b${noun}\\b${gap}{0,20}?\\b${verb}\\b(?!\\s+or\\b)`, 'gi'),
       (m, g1: string, g2: string) => {
         claims.push(resolve(g1.toLowerCase()));
         // A wrong denominator ("eight of nine routes held" on a ten-cluster
@@ -113,10 +119,11 @@ export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null 
     for (const re of [
       // "two clusters ... moved" — the count precedes the noun and verb.
       // The verb is boundary-anchored on BOTH sides: "name withheld" must
-      // never match "held" (run-d4d73505's false refusal).
-      new RegExp(`\\b${NUM_RE}\\b${gap}{0,60}?\\b${noun}\\b${gap}{0,60}?\\b${verb}\\b`, 'gi'),
+      // never match "held" (run-d4d73505's false refusal). "(?!\\s+or\\b)":
+      // "held or drift verdict" names the vocabulary, it counts nothing.
+      new RegExp(`\\b${NUM_RE}\\b${gap}{0,60}?\\b${noun}\\b${gap}{0,60}?\\b${verb}\\b(?!\\s+or\\b)`, 'gi'),
       // "moved two clusters".
-      new RegExp(`\\b${verb}\\b${gap}{0,30}?\\b${NUM_RE}\\b${gap}{0,40}?\\b${noun}`, 'gi'),
+      new RegExp(`\\b${verb}\\b(?!\\s+or\\b)${gap}{0,30}?\\b${NUM_RE}\\b${gap}{0,40}?\\b${noun}`, 'gi'),
     ]) {
       // Universal quantifiers are count claims too (run-b5a5d340 headlined
       // "Every frontier held" over an 8-of-10 week): every/all/each asserts
@@ -254,6 +261,10 @@ export async function deltaDraft(
   const violation = auditDraftCounts(parsed, f);
   if (violation !== null) {
     return { draft: fallback, receipt: receiptOf(dto), fallback: `delta run ${runId} refused by the count audit: ${violation}` };
+  }
+  const styleViolation = lintDraft(parsed);
+  if (styleViolation !== null) {
+    return { draft: fallback, receipt: receiptOf(dto), fallback: `delta run ${runId} refused by the style lint: ${styleViolation}` };
   }
   return { draft: parsed, receipt: receiptOf(dto), fallback: null };
 }

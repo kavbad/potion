@@ -48,9 +48,15 @@ const delta = process.env.DELTA_HARNESS && process.env.POTION_LAB_SESSION
       ...(process.env.DELTA_TIMEOUT_MS ? { timeoutMs: Number(process.env.DELTA_TIMEOUT_MS) } : {}),
     }
   : undefined;
+// F1: AUDITOR_HARNESS (from scripts/auditor-hire.ts) gates Delta's prose
+// on a PASS verification record from an independent Auditor run.
+const auditor = process.env.AUDITOR_HARNESS && delta
+  ? { ...delta, harnessHash: process.env.AUDITOR_HARNESS }
+  : undefined;
 const { issue, files, digest } = await runFrontierNotes({
   run,
   ...(delta ? { delta } : {}),
+  ...(auditor ? { auditor } : {}),
   ...(potion ? { potion } : {}),
   db: handle.db as never,
   pricesVersion: process.env.PRICES_VERSION ?? prices.version,

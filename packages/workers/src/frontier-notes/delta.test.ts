@@ -197,6 +197,9 @@ describe('deltaDraft', () => {
     // ten routes held" must consume, never read as "ten routes held".
     const demonstrative = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', lede: 'This week eight of those ten routes held, meaning their fresh scores landed inside the range.' };
     expect(auditDraftCounts(demonstrative, facts)).toBeNull();
+    // run-25d69a3c: verdict-vocabulary mentions count nothing.
+    const verdictTalk = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', frontierNote: 'No cluster was inconclusive this week, so every one of the ten clusters returned a clear held or drift verdict.' };
+    expect(auditDraftCounts(verdictTalk, facts)).toBeNull();
   });
 
   it('deltaDraft falls back when the count audit refuses the draft', async () => {
