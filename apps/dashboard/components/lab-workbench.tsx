@@ -226,7 +226,9 @@ export function LabWorkbench({
           <div className="flex items-center gap-2 font-mono text-[12px] text-soft" data-testid="now-strip">
             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
             {nowTitle}
-            {nowAt !== null ? <span className="text-faint">· {elapsedLabel(nowAt, nowTick)}</span> : null}
+            {/* elapsed since a live step — SSR's clock reading differs from
+                hydration's; the 1s tick corrects it right after mount. */}
+            {nowAt !== null ? <span className="text-faint" suppressHydrationWarning>{`· ${elapsedLabel(nowAt, nowTick)}`}</span> : null}
           </div>
         ) : null}
       </div>
@@ -307,7 +309,7 @@ export function LabWorkbench({
       {activeFile !== null ? (
         <div className="mt-2 flex items-center justify-between font-mono text-[12px] text-faint">
           <span>
-            {activeFile.name} · {activeFile.size.toLocaleString()} bytes
+            {activeFile.name} · {activeFile.size.toLocaleString('en-US')} bytes
             {(versions.get(activeFile.name) ?? 1) > 1 ? ` · rewritten ${(versions.get(activeFile.name) ?? 1) - 1}× while you watched` : ''}
           </span>
           <a

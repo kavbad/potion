@@ -41,7 +41,9 @@ function EvidenceLine({ e }: { e: GrantEvidence }) {
       {e.rejected > 0 ? ` · ${e.rejected} rejected` : ''}
       {/* breadth, not just volume — narrow records earn slowly by design */}
       {e.situations !== undefined && e.situations > 0 ? ` · ${e.situations} distinct situation${e.situations === 1 ? '' : 's'}` : ''}
-      {e.lastAt ? ` · last ${new Date(e.lastAt).toLocaleDateString()}` : ''}
+      {/* viewer-timezone date of a fixed instant — SSR renders the server's
+          calendar day, which can differ near midnight UTC */}
+      {e.lastAt ? <span suppressHydrationWarning>{` · last ${new Date(e.lastAt).toLocaleDateString()}`}</span> : ''}
     </span>
   );
 }

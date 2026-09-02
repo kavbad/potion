@@ -69,14 +69,29 @@ function SimBadge() {
   return <span className={`${CHIP} border-warn text-warn`}>simulated</span>;
 }
 
+/** True only after mount — the SSR pass must never render viewer-timezone
+ * text (the server clock sits in UTC in prod; hydration would fail on the
+ * mismatch, React #418, seen live on every /lab run page 2026-09-02). */
+function useMounted(): boolean {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
+
 /** One row of the work feed — a step from the durable record, in plain
  * words. Nothing streams, nothing is invented: this is the checkpoint row. */
 function FeedRow({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
+  const mounted = useMounted();
   // THE NARRATOR (2026-09-01): rows render the human translation — a
   // no-information step (hidden) renders nothing at all.
   if (step.hidden === true) return null;
+  // Wall-clock in the VIEWER's timezone — gated on mount so the server
+  // never commits a timezone-dependent reading to the HTML (the placeholder
+  // is the same width in tabular-nums, so nothing shifts).
   const t = new Date(step.at);
-  const hh = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+  const hh = mounted
+    ? `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`
+    : '--:--:--';
   const kindLabel = step.kind === 'model' ? 'thought' : step.kind === 'tool' ? 'action' : 'asked you';
   const kindCls =
     step.kind === 'check-in' ? 'border-warn text-warn' : step.kind === 'tool' ? 'border-accent text-accent' : 'border-[#c4bfb2] text-faint';
@@ -808,7 +823,7 @@ function FilesCard({ files, runId }: { files: Array<{ name: string; size: number
       download
       className="text-accent underline"
     >
-      {f.name} <span className="text-faint no-underline">({f.size.toLocaleString()} B)</span>
+      {f.name} <span className="text-faint no-underline">({f.size.toLocaleString('en-US')} B)</span>
     </a>
   );
   return (
@@ -820,7 +835,7 @@ function FilesCard({ files, runId }: { files: Array<{ name: string; size: number
       {[...byDir.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([dir, list]) => (
         <details key={dir} className="mt-1.5" data-testid={`files-dir-${dir}`}>
           <summary className="cursor-pointer font-mono text-[12px] text-soft hover:text-accent">
-            {dir}/ · {list.length} file{list.length === 1 ? '' : 's'} · {list.reduce((a, f) => a + f.size, 0).toLocaleString()} B
+            {dir}/ · {list.length} file{list.length === 1 ? '' : 's'} · {list.reduce((a, f) => a + f.size, 0).toLocaleString('en-US')} B
           </summary>
           <div className="mt-1 flex max-h-56 flex-wrap gap-x-4 gap-y-1 overflow-y-auto pl-3 font-mono text-[12px]">
             {list.slice(0, 200).map(link)}
