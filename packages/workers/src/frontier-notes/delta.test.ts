@@ -2,7 +2,7 @@
 // the note must ALWAYS publish, and every failure names the run it leaves
 // behind so the issue records what happened.
 import { describe, expect, it } from 'vitest';
-import { deltaDraft } from './delta.js';
+import { auditDraftCounts, deltaDraft } from './delta.js';
 import { deterministicDraft } from './write.js';
 import type { FactSheet } from './types.js';
 
@@ -143,6 +143,104 @@ describe('deltaDraft', () => {
     });
     expect(r.fallback).toMatch(/draft\.json is not in the run files \(HTTP 404\)/);
     expect(r.receipt?.state).toBe('completed');
+  });
+
+  it('the count audit refuses the run-f1164fc6 headline (claims one drifted, facts say two)', () => {
+    const facts: FactSheet = {
+      ...FACTS,
+      frontier: [
+        ...Array.from({ length: 8 }, (_, i) => ({ ...FACTS.frontier[0]!, clusterId: `c${i}`, verdict: 'ok' as const })),
+        { ...FACTS.frontier[0]!, clusterId: 'classification', verdict: 'drift' as const },
+        { ...FACTS.frontier[0]!, clusterId: 'extraction', verdict: 'drift' as const },
+      ],
+    };
+    const bad = { ...GOOD_DRAFT, title: 'One cluster drifted while eight frontier picks held this week.' };
+    expect(auditDraftCounts(bad, facts)).toMatch(/claims 1 .*but the fact sheet counts 2/);
+    const good = { ...GOOD_DRAFT, title: 'Two clusters drifted while eight frontier picks held this week.' };
+    expect(auditDraftCounts(good, facts)).toBeNull();
+    const decimals = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', lede: 'Quality held at 0.886 across the eight clusters that held; two clusters moved to 0.750.' };
+    expect(auditDraftCounts(decimals, facts)).toBeNull();
+    // run-b5a5d340: "Every frontier held" over an 8-of-10 week.
+    const universal = { ...GOOD_DRAFT, title: 'Every frontier held this week; two clusters drifted downward.' };
+    expect(auditDraftCounts(universal, facts)).toMatch(/claims 10 held but the fact sheet counts 8/);
+    const noneMoved = { ...GOOD_DRAFT, title: 'No frontier moved this week.' };
+    expect(auditDraftCounts(noneMoved, facts)).toMatch(/claims 0 .*counts 2/);
+    // run-721941f5: a TRUE sentence with an intervening number must not bind
+    // "10" to "held" across the "8".
+    const trueSentence = { ...GOOD_DRAFT, title: 'This week 8 frontier clusters held and 2 clusters moved.', lede: 'Of 10 canaries across 10 clusters, 8 held and 2 moved.' };
+    expect(auditDraftCounts(trueSentence, facts)).toBeNull();
+    // run-0eb4bca7: a TRUE partitive — the first number is the claim, and
+    // the inner "ten routes held" must not read as a ten-claim.
+    const partitive = { ...GOOD_DRAFT, title: 'Eight of ten routes held this week; two structured-output clusters moved to a new pick.', lede: 'Eight of the ten measurement clusters held their stored quality.' };
+    expect(auditDraftCounts(partitive, facts)).toBeNull();
+    const wrongPartitive = { ...GOOD_DRAFT, title: 'Seven of ten routes held this week.' };
+    expect(auditDraftCounts(wrongPartitive, facts)).toMatch(/claims 7 held but the fact sheet counts 8/);
+    // run-d4d73505: "withheld" must never match "held", and "drift" (not
+    // just "drifted") must break the gap.
+    const withheld = { ...GOOD_DRAFT, title: 'Week 2026-W36: 8 of 10 frontier clusters held, 2 drifted.', lede: 'The two drift verdicts are on clusters routed to a name withheld pick.' };
+    expect(auditDraftCounts(withheld, facts)).toBeNull();
+    // run-d4d73505's internal contradiction: "One new small model was
+    // auditioned" while the auditions section correctly said three.
+    const audFacts: FactSheet = {
+      ...facts,
+      auditions: [
+        { alias: 'a', clusterId: 'classification', lane: 'small/cheap', outcome: 'did not beat the incumbent' },
+        { alias: 'b', clusterId: 'classification', lane: 'small/cheap', outcome: 'did not beat the incumbent' },
+        { alias: 'c', clusterId: 'classification', lane: 'small/cheap', outcome: 'did not beat the incumbent' },
+      ],
+    };
+    const oneModel = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', plain: 'One new small model was auditioned in the classification lane and did not beat the incumbent.' };
+    expect(auditDraftCounts(oneModel, audFacts)).toMatch(/claims 1 .*counts 3/);
+    const threeModels = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', plain: 'Three new models were measured and 322 listings were screened; none beat the incumbent.' };
+    expect(auditDraftCounts(threeModels, audFacts)).toBeNull();
+    // run-aefb6628: the partitive with a demonstrative — "eight of those
+    // ten routes held" must consume, never read as "ten routes held".
+    const demonstrative = { ...GOOD_DRAFT, title: 'Two clusters drifted this week.', lede: 'This week eight of those ten routes held, meaning their fresh scores landed inside the range.' };
+    expect(auditDraftCounts(demonstrative, facts)).toBeNull();
+  });
+
+  it('deltaDraft falls back when the count audit refuses the draft', async () => {
+    const facts: FactSheet = {
+      ...FACTS,
+      frontier: [
+        { ...FACTS.frontier[0]!, clusterId: 'a', verdict: 'ok' as const },
+        { ...FACTS.frontier[0]!, clusterId: 'b', verdict: 'drift' as const },
+      ],
+    };
+    const contradicting = { ...GOOD_DRAFT, title: 'Three clusters drifted this week.' };
+    const r = await deltaDraft(facts, {
+      ...OPTS,
+      fetchImpl: fakeFetch([
+        { status: 202, json: { runId: 'run-d9' } },
+        { json: { state: 'completed', cost: { meteredUsd: 0.01 } } },
+        { text: JSON.stringify(contradicting) },
+      ]),
+    });
+    expect(r.fallback).toMatch(/count audit: draft claims 3 .*counts 1/);
+    expect(r.receipt?.runId).toBe('run-d9');
+  });
+
+  it('normalizes sentence-array prose fields and {question, answer} FAQ keys (run-099975b9 shape)', async () => {
+    const drift = {
+      ...GOOD_DRAFT,
+      plain: GOOD_DRAFT.plain.split('. ').map((s, i, a) => (i < a.length - 1 ? `${s}.` : s)),
+      lede: [GOOD_DRAFT.lede],
+      takeaway: [GOOD_DRAFT.takeaway],
+      faq: GOOD_DRAFT.faq.map((f) => ({ question: f.q, answer: f.a })),
+    };
+    const r = await deltaDraft(FACTS, {
+      ...OPTS,
+      fetchImpl: fakeFetch([
+        { status: 202, json: { runId: 'run-d8' } },
+        { json: { state: 'completed', cost: { meteredUsd: 0.01 } } },
+        { text: JSON.stringify(drift) },
+      ]),
+    });
+    expect(r.fallback).toBeNull();
+    expect(r.draft.lede).toBe(GOOD_DRAFT.lede);
+    expect(r.draft.takeaway).toBe(GOOD_DRAFT.takeaway);
+    expect(r.draft.plain).toContain('Potion re-checked its scoreboard.');
+    expect(r.draft.faq).toEqual(GOOD_DRAFT.faq);
   });
 
   it('falls back when draft.json does not parse as a draft', async () => {

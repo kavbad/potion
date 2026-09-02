@@ -60,6 +60,8 @@ describe('frontier-notes compose', () => {
     expect(su.vague).toBe(false);
     expect(isLargeFinding({ cheaperAndAsGood: true, costSavingVsBestSingle: 0.1, qualityDeltaVsBestSingle: 0.01 })).toBe(false);
     expect(costBand(0.9)).toBe('more than 8× cheaper');
+    // A negative saving is dearer, never "under 1.5× cheaper" (run-09f256be).
+    expect(costBand(-0.805)).toBe('more expensive than the best single model');
   });
 
   it('never carries component models, params or hashes into the fact sheet', () => {

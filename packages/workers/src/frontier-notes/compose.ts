@@ -55,6 +55,11 @@ export function isLargeFinding(r: Pick<Recipe, 'cheaperAndAsGood' | 'costSavingV
 }
 
 export function costBand(saving: number): string {
+  // A negative saving is a combination that costs MORE than the best
+  // single — calling it "under 1.5× cheaper" was a lying caption (found
+  // live 2026-09-02: run-09f256be faithfully echoed it into a published
+  // contradiction).
+  if (saving < 0) return 'more expensive than the best single model';
   const ratio = 1 / Math.max(1e-6, 1 - saving);
   if (ratio < 1.5) return 'under 1.5× cheaper';
   if (ratio < 2) return 'between 1.5× and 2× cheaper';

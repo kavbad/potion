@@ -73,8 +73,11 @@ export function publishableText(i: Omit<Issue, 'status' | 'heldReason'>): string
 export function renderMarkdown(i: Issue): string {
   const f = i.facts;
   const q = (x: number) => x.toFixed(3);
+  // 'drifted', never 'moved': a drift verdict means the canary left its
+  // interval — the routed pick did NOT change (the v3 verdict semantics;
+  // 'moved' implied a reroute that never happened).
   const rows = f.frontier.map(
-    (c) => `| ${c.clusterId} | ${c.verdict === 'ok' ? 'held' : c.verdict === 'drift' ? 'moved' : 'inconclusive'} | ${c.pick} | ${q(c.storedQuality)} ± ${q(c.storedCi95)} | ${c.observedMean === null ? '—' : q(c.observedMean)} (n=${c.n}) |`,
+    (c) => `| ${c.clusterId} | ${c.verdict === 'ok' ? 'held' : c.verdict === 'drift' ? 'drifted' : 'inconclusive'} | ${c.pick} | ${q(c.storedQuality)} ± ${q(c.storedCi95)} | ${c.observedMean === null ? '—' : q(c.observedMean)} (n=${c.n}) |`,
   );
   const lines = [
     `# ${i.title}`,
@@ -113,7 +116,7 @@ export function renderMarkdown(i: Issue): string {
     '',
     '## Numbers',
     '',
-    `${f.numbers.canaries} canaries · ${f.numbers.clustersHeld} held · ${f.numbers.clustersMoved} moved · ${f.numbers.inconclusive} inconclusive · ${f.numbers.itemsGraded} items graded · ${f.numbers.candidatesScreened} listings screened · ${f.numbers.candidatesMeasured} measured · $${f.numbers.spendUsd.toFixed(2)}`,
+    `${f.numbers.canaries} canaries · ${f.numbers.clustersHeld} held · ${f.numbers.clustersMoved} drifted · ${f.numbers.inconclusive} inconclusive · ${f.numbers.itemsGraded} items graded · ${f.numbers.candidatesScreened} listings screened · ${f.numbers.candidatesMeasured} measured · $${f.numbers.spendUsd.toFixed(2)}`,
     '',
     '## Questions',
     '',

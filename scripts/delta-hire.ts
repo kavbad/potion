@@ -33,6 +33,7 @@ const answers = {
     'mixingNote (2 to 3 sentences on the combination findings),',
     'takeaway (2 or 3 sentences on what this means for someone paying for AI by the request),',
     'faq (exactly 3 question/answer objects, questions a buyer would type into a search engine, answered from this week\'s numbers).',
+    'Work in this order: FIRST read numbers.clustersHeld, numbers.clustersMoved and the frontier table and write the body sections from them; write the title LAST, deriving its counts from numbers.clustersHeld and numbers.clustersMoved exactly.',
     'Close by stating the headline finding in your final message.',
   ].join(' '),
   kind: 'task' as const,
@@ -46,6 +47,9 @@ const answers = {
     "Never describe how models are combined: no mechanism names, no component names, no thresholds, no order of calls — say 'a combination of measured models'. Where a mixing fact has vague=true, name only the family ('code work') and use the costBand words, never an exact ratio and never a specific kind of work.",
     "Use every number exactly as the fact sheet gives it, and give the margin of error with every quality figure, written like '0.979, give or take 0.020'.",
     'House style: short sentences, concrete nouns, one idea per sentence; explain each technical term in plain words on first use; no em dashes, no headings, no bullet lists, no superlatives the numbers do not support, no marketing. A quiet week is reported calmly as a quiet week — the absence of change is itself a finding.',
+    "Count claims are sacred: the title and every sentence state held/moved counts exactly as numbers.clustersHeld and numbers.clustersMoved give them. Never write 'every', 'all' or 'none' about clusters, frontiers or routes unless the corresponding count is the full roster or exactly zero.",
+    "Verdict semantics: 'ok' means the routed pick reproduced its stored quality inside the 95% interval (say it held); 'drift' means the observed canary mean fell OUTSIDE the stored interval — the routed pick did NOT change and nothing was rerouted, so never say a cluster 'moved to a different model'; 'inconclusive' means the canary could not decide.",
+    'A held cluster’s observed mean may sit slightly below its stored quality and still hold — inside the interval is held, so never claim that held clusters scored at or above their stored quality.',
   ],
   qualityBar:
     'every number in the draft traceable to facts.json with its margin attached; a smart reader who has never read a machine-learning paper understands every sentence',

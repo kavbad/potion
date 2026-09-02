@@ -60,6 +60,108 @@ const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operat
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+const WORD_NUMS: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+// Digit counts are guarded against decimals/percents/ratios on both sides:
+// "0.886" must never read as a count of 0, "8×" never as a count of 8.
+const NUM_RE = '(?<![.\\d])(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|every|all|each|none|no|\\d{1,2})(?![.\\d%×x])';
+
+/** THE COUNT AUDIT (found live, night one: run-f1164fc6 headlined "One
+ * cluster drifted" against facts saying two; run-099975b9 miscounted the
+ * mixing tally) — a draft that contradicts the fact sheet's held/moved
+ * counts is REFUSED, deterministically. Both directions are scanned
+ * ("two clusters moved" / "moved two clusters"); an unparseable or
+ * unmentioned count is not a violation — this audit only catches stated
+ * contradictions. Returns the violation, or null. */
+export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null {
+  const text = [draft.title, draft.summary, draft.plain, draft.lede, draft.frontierNote, draft.auditionNote].join(' ');
+  const clusterNoun = '(?:clusters?|routes?|frontiers?|picks?)';
+  const expected: Array<{ verb: string; noun: string; count: number }> = [
+    { verb: '(?:moved|drifted)', noun: clusterNoun, count: facts.frontier.filter((c) => c.verdict === 'drift').length },
+    { verb: 'held', noun: clusterNoun, count: facts.frontier.filter((c) => c.verdict === 'ok').length },
+    // run-d4d73505's plain said "One new small model was auditioned" while
+    // its own auditions section correctly said three. 'screened' stays out:
+    // "322 listings screened" is a DIFFERENT true count.
+    { verb: '(?:auditioned|measured|tested)', noun: '(?:models?|candidates?)', count: facts.auditions.length },
+  ];
+  // A TEMPERED gap: free text that can never cross another counted verb, a
+  // conjunction, or ANOTHER NUMBER — so "Two clusters drifted while eight
+  // picks held" cannot read as "two … held", and "Of 10 canaries across 10
+  // clusters, 8 held" (run-721941f5, a TRUE sentence) cannot bind 10 to
+  // "held" across the intervening 8.
+  const gap = '(?:(?!\\b(?:held|moved|drift\\w*|audition\\w*|measured|tested|screened|while|and|but|though|\\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|every|all|none)\\b)[^.;,])';
+  const roster = facts.frontier.length;
+  const resolve = (raw: string): number =>
+    ['every', 'all', 'each'].includes(raw) ? roster : ['none', 'no'].includes(raw) ? 0 : (WORD_NUMS[raw] ?? Number(raw));
+  for (const { verb, noun, count } of expected) {
+    const claims: number[] = [];
+    // Partitive claims FIRST — "eight of ten routes held" (run-0eb4bca7, a
+    // TRUE sentence): the first number is the claim, the second must be the
+    // roster size, and the whole span is consumed so the generic patterns
+    // below never read the inner "ten routes held" as a ten-claim.
+    let scan = text;
+    scan = scan.replace(
+      new RegExp(`\\b${NUM_RE}\\s+of\\s+(?:(?:the|those|these|its|our)\\s+)?${NUM_RE}\\b[^.;,]{0,30}?\\b${noun}\\b${gap}{0,20}?\\b${verb}`, 'gi'),
+      (m, g1: string, g2: string) => {
+        claims.push(resolve(g1.toLowerCase()));
+        // A wrong denominator ("eight of nine routes held" on a ten-cluster
+        // roster) is a count error too.
+        const denom = resolve(g2.toLowerCase());
+        if (!Number.isNaN(denom) && denom !== roster) claims.push(denom);
+        return ' ';
+      },
+    );
+    for (const re of [
+      // "two clusters ... moved" — the count precedes the noun and verb.
+      // The verb is boundary-anchored on BOTH sides: "name withheld" must
+      // never match "held" (run-d4d73505's false refusal).
+      new RegExp(`\\b${NUM_RE}\\b${gap}{0,60}?\\b${noun}\\b${gap}{0,60}?\\b${verb}\\b`, 'gi'),
+      // "moved two clusters".
+      new RegExp(`\\b${verb}\\b${gap}{0,30}?\\b${NUM_RE}\\b${gap}{0,40}?\\b${noun}`, 'gi'),
+    ]) {
+      // Universal quantifiers are count claims too (run-b5a5d340 headlined
+      // "Every frontier held" over an 8-of-10 week): every/all/each asserts
+      // the full roster; none/no asserts zero.
+      for (const m of scan.matchAll(re)) {
+        claims.push(resolve(m[1]!.toLowerCase()));
+      }
+    }
+    for (const c of claims) {
+      if (!Number.isNaN(c) && c !== count) {
+        return `draft claims ${c} ${verb.replaceAll(/[()?:|]/g, '')} but the fact sheet counts ${count}`;
+      }
+    }
+  }
+  return null;
+}
+
+/** Delta's first live run (run-099975b9) wrote sentence ARRAYS for the prose
+ * fields and {question, answer} FAQ keys — near-miss shapes a rule cannot
+ * prevent. Coerce them deterministically before parsing; parseDraft stays
+ * the backstop for everything else. */
+export function normalizeDraftText(text: string): string {
+  try {
+    const o = JSON.parse(text) as Record<string, unknown>;
+    for (const k of ['title', 'summary', 'plain', 'lede', 'frontierNote', 'auditionNote', 'mixingNote', 'takeaway']) {
+      const v = o[k];
+      if (Array.isArray(v) && v.every((x): x is string => typeof x === 'string')) o[k] = v.join(' ');
+    }
+    if (Array.isArray(o.faq)) {
+      o.faq = o.faq.map((f) => {
+        if (f && typeof f === 'object') {
+          const r = f as Record<string, unknown>;
+          const q = r.q ?? r.question;
+          const a = r.a ?? r.answer;
+          if (typeof q === 'string' && typeof a === 'string') return { q, a };
+        }
+        return f;
+      });
+    }
+    return JSON.stringify(o);
+  } catch {
+    return text;
+  }
+}
+
 /**
  * Draft this week's issue through a recorded Delta run. On success the
  * draft came from the run's draft.json; on any failure the deterministic
@@ -145,9 +247,13 @@ export async function deltaDraft(
     return { draft: fallback, receipt: receiptOf(dto), fallback: `delta draft.json read failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) };
   }
 
-  const parsed = parseDraft(text, fallback);
+  const parsed = parseDraft(normalizeDraftText(text), fallback);
   if (!parsed) {
     return { draft: fallback, receipt: receiptOf(dto), fallback: `delta run ${runId} wrote draft.json but it did not parse as a draft` };
+  }
+  const violation = auditDraftCounts(parsed, f);
+  if (violation !== null) {
+    return { draft: fallback, receipt: receiptOf(dto), fallback: `delta run ${runId} refused by the count audit: ${violation}` };
   }
   return { draft: parsed, receipt: receiptOf(dto), fallback: null };
 }
