@@ -15,4 +15,9 @@ export default defineConfig({
     // React 19 automatic JSX runtime (the dashboard never imports React).
     jsx: 'automatic',
   },
+  test: {
+    // Same prices.json write tripwire the root config carries — this config
+    // shadows the root one, so the guard must ride along explicitly.
+    globalSetup: [fileURLToPath(new URL('../../vitest.prices-guard.ts', import.meta.url))],
+  },
 });
