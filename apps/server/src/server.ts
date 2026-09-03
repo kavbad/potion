@@ -78,6 +78,7 @@ import { registerAuditRoutes } from './routes/audit.js';
 // ---- M4 #33/#35 alerts + budget (m4-alerts-budget) — appended imports ----
 import { registerAlertRoutes } from './routes/alerts.js';
 import { registerResearchRoutes } from './routes/research.js';
+import { registerFrontierNotesClock } from './research-clock.js';
 // ---- M5 #36 agent workloads ----
 import { registerTraceRoutes } from './routes/traces.js';
 // G2 rung 1: discovered org workloads — appended import.
@@ -270,6 +271,11 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   const worker = await runWorker({
     queue,
     db: ctx.db,
+    // The worker holds the SAME prices path the context resolved — never its
+    // own env/default fallback. A diverging worker is how the pre-S5 scan
+    // writer (alive in any stale @potion/workers dist) reached the repo
+    // prices.json while the context sat safely on a tmp copy.
+    pricesPath: ctx.pricesPath,
     ...(artifacts !== undefined ? { artifacts } : {}),
     // M5 #36: traces:cluster embeds first-user-messages with the platform's
     // dimension-guarded embedder (mock by default, OpenAI post-M1b).
@@ -392,6 +398,11 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // state pre-M1b). The nightly scan below drives new-model detection; the
   // scan handler fans out research:cycle jobs per new alias.
   registerResearchRoutes(app, ctx, { queue });
+  // F4 (docs/RESEARCH-OPS.md): the Frontier Notes clock — the Tuesday
+  // draft→verify→gate→publish chain as a 60s in-process tick (the reaper's
+  // pattern; the single-worker queue must never be awaited from a job).
+  // Armed only when POTION_RESEARCH_* env is set.
+  registerFrontierNotesClock(app, ctx, { queue });
   const researchScan = setInterval(() => {
     queue.enqueue('research:scan', {}).catch((err: unknown) => {
       app.log.warn(err, 'research scan enqueue failed — swallowed');

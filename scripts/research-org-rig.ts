@@ -5,7 +5,13 @@
 // export it as POTION_LAB_SESSION for delta-hire and the weekly script.
 //   DATABASE_URL=... npx tsx scripts/research-org-rig.ts
 import { createHash, randomBytes } from 'node:crypto';
-import pg from 'pg';
+import { createRequire } from 'node:module';
+
+// pg is not hoisted at the repo root (pnpm strict layout) — resolve it
+// through @potion/db, which depends on it.
+const require_ = createRequire(new URL('../packages/db/package.json', import.meta.url));
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pg = require_('pg') as typeof import('pg');
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 const url = process.env.DATABASE_URL;

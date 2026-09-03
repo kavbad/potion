@@ -85,11 +85,33 @@ run-record box, and the verification line.
 - CTAs: `apps/dashboard/lib/research-ctas.ts` — a CTA resolves to a LIVE
   surface or it does not exist (E7).
 
+## The clock (F4 — live)
+
+The Tuesday chain runs INSIDE the server: a 60-second tick
+(`apps/server/src/research-clock.ts` wiring
+`frontierNotesTick`/`clock.ts` in @potion/workers) that, from Tuesday
+06:00 PT, watches for `artifacts/runs/<week>.json` and drives
+draft → guards → verify → gate → land, one small durable step per tick
+(state in `artifacts/fnotes-state/<week>.json`). Bounded draft attempts;
+on exhaustion the deterministic draft ships through the same gate — the
+note always lands, model prose never lands unverified. A gate-held issue
+self-releases when the operator's recorded approval appears (or the
+grant is autonomous). Armed by four env vars in `.env.prod`
+(`POTION_RESEARCH_DIR=/research`, `POTION_RESEARCH_ORG=org-research`,
+`POTION_RESEARCH_DELTA_HARNESS`, `POTION_RESEARCH_AUDITOR_HARNESS`) +
+the `/opt/potion/research:/research` rw mount (compose). Manual trigger
+and status: `POST/GET /api/research/frontier-notes` (admin; POST takes
+`{week?, dir?}` — a `dir` under the mount runs a full REHEARSAL chain
+without touching the public notes). The tick never blocks the queue (one
+worker, concurrency 1 — a waiting job would deadlock it; the clock is an
+in-process tick like the reaper). Update the harness env vars when a new
+generation is promoted.
+
 ## Filed follow-ups
 
-- **Server-side weekly job**: the Tuesday chain as a queue job +
-  scheduler cron so no operator machine is in the loop (the prod host has
-  no node; today's clock is this runbook).
+- **Monday observatory automation** — the clock starts only when the
+  measurement half has landed `runs/<week>.json`; that half is still
+  hand-run.
 - **runx- sessions on the dashboard run route**: the gate session's
   recorded resolutions are read via `DATABASE_URL` by the release script
   because `GET /api/lab/runs/:id` rejects the id shape; serve them.
@@ -98,7 +120,5 @@ run-record box, and the verification line.
 - **Done-verifier hollow class**: run-8a3ec460 completed on a mid-thought
   message with its doneDefinition unmet — a runtime bug the client-side
   laws cannot reach.
-- **Observatory Monday automation** — the measurement half is still
-  hand-run.
 - Stray pre-fix W36 copies sit in the unused `/opt/potion/research/notes/`
   — remove at leisure.

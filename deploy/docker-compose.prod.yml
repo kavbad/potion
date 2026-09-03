@@ -150,6 +150,18 @@ services:
       # 13a spec §1.6: error reporting. Unset → the init is a no-op.
       SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: "3000"
+      # F4 (docs/RESEARCH-OPS.md): the Frontier Notes clock — the Tuesday
+      # draft→verify→gate→publish chain as an in-server tick. Disarmed when
+      # any of the four is unset. Harness hashes are the DIALED generations
+      # (re-hire + re-dial writes new ones; update .env.prod to promote).
+      POTION_RESEARCH_DIR: ${POTION_RESEARCH_DIR:-}
+      POTION_RESEARCH_ORG: ${POTION_RESEARCH_ORG:-}
+      POTION_RESEARCH_DELTA_HARNESS: ${POTION_RESEARCH_DELTA_HARNESS:-}
+      POTION_RESEARCH_AUDITOR_HARNESS: ${POTION_RESEARCH_AUDITOR_HARNESS:-}
+    # F4: the research mount (rw — the clock writes notes + its state files;
+    # the dashboard keeps its own ro mount of artifacts/notes).
+    volumes:
+      - /opt/potion/research:/research
     # NOTE: no `ports:` — the server is reachable ONLY through Caddy. This is
     # what makes /metrics network-restricted in fact rather than by assertion
     # (route-inventory.ts classifies it public with exactly that justification).
