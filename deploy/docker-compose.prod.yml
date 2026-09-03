@@ -151,13 +151,17 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: "3000"
       # F4 (docs/RESEARCH-OPS.md): the Frontier Notes clock — the Tuesday
-      # draft→verify→gate→publish chain as an in-server tick. Disarmed when
-      # any of the four is unset. Harness hashes are the DIALED generations
-      # (re-hire + re-dial writes new ones; update .env.prod to promote).
-      POTION_RESEARCH_DIR: ${POTION_RESEARCH_DIR:-}
-      POTION_RESEARCH_ORG: ${POTION_RESEARCH_ORG:-}
-      POTION_RESEARCH_DELTA_HARNESS: ${POTION_RESEARCH_DELTA_HARNESS:-}
-      POTION_RESEARCH_AUDITOR_HARNESS: ${POTION_RESEARCH_AUDITOR_HARNESS:-}
+      # draft→verify→gate→publish chain as an in-server tick. The defaults
+      # below ARM it (they are content-addressed worker ids and a mount
+      # path, not secrets) so an .env.prod reset can never silently disarm
+      # the institution — found live 2026-09-03 when an alignment deploy
+      # replaced the env file and the clock went dark. Promote a new
+      # generation by updating the committed default (or overriding in
+      # .env.prod); set POTION_RESEARCH_DIR empty to disarm deliberately.
+      POTION_RESEARCH_DIR: ${POTION_RESEARCH_DIR:-/research}
+      POTION_RESEARCH_ORG: ${POTION_RESEARCH_ORG:-org-research}
+      POTION_RESEARCH_DELTA_HARNESS: ${POTION_RESEARCH_DELTA_HARNESS:-8aec3d6c5a07825815f9057c9987072397dd188cef9187347e6157f0b83429b9}
+      POTION_RESEARCH_AUDITOR_HARNESS: ${POTION_RESEARCH_AUDITOR_HARNESS:-03ba206596c75edfcc888f5a093c0214428141fdfdff2a8893f4fe98757cc06a}
     # F4: the research mount (rw — the clock writes notes + its state files;
     # the dashboard keeps its own ro mount of artifacts/notes).
     volumes:
