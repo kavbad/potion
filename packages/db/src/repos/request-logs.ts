@@ -215,10 +215,21 @@ export async function servingDegenerateCounts(
   // and the Usage type spell it {promptTokens, completionTokens}. Read both
   // — filtering on one spelling silently nulled out every production row
   // (found live: the first rollup returned [] over six recorded empties).
+  // A row whose own answer_shape recorded characters is NEVER empty: zero
+  // recorded tokens against a text-bearing answer is a metering failure
+  // (the transport labels those usageEstimated), and excluding a working
+  // route over lost usage would be the guard firing on its own
+  // instrumentation. Rows without answer_shape keep the token-only read.
+  // (hungry-turing's guard, applied to BOTH rollups — the platform view
+  // must judge emptiness by the same law as the org view.)
   const res = await db.execute(sql`
     SELECT strategy_hash AS strategy_hash,
            count(*) AS total,
-           count(*) FILTER (WHERE coalesce(usage->>'outputTokens', usage->>'completionTokens')::float = 0) AS empty
+           count(*) FILTER (
+             WHERE coalesce(usage->>'outputTokens', usage->>'completionTokens')::float = 0
+               AND coalesce((answer_shape->>'chars')::float, 0) = 0
+               AND coalesce((answer_shape->>'toolCallsN')::float, 0) = 0
+           ) AS empty
       FROM request_logs
      WHERE org_id = ${orgId}
        AND cluster_id = ${clusterId}
@@ -262,7 +273,11 @@ export async function servingDegenerateCountsPlatform(
   const res = await db.execute(sql`
     SELECT strategy_hash AS strategy_hash,
            count(*) AS total,
-           count(*) FILTER (WHERE coalesce(usage->>'outputTokens', usage->>'completionTokens')::float = 0) AS empty
+           count(*) FILTER (
+             WHERE coalesce(usage->>'outputTokens', usage->>'completionTokens')::float = 0
+               AND coalesce((answer_shape->>'chars')::float, 0) = 0
+               AND coalesce((answer_shape->>'toolCallsN')::float, 0) = 0
+           ) AS empty
       FROM request_logs
      WHERE cluster_id = ${clusterId}
        AND status = 'ok'
