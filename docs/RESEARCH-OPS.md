@@ -119,6 +119,10 @@ generation is promoted.
   the v1 record collapses to pass/fail.
 - **Done-verifier hollow class**: run-8a3ec460 completed on a mid-thought
   message with its doneDefinition unmet — a runtime bug the client-side
-  laws cannot reach.
+  laws cannot reach (it also cost the F4 rehearsal two of its four draft
+  attempts via verdict-less Auditor completions).
+- **deterministicDraft still says 'moved'** (write.ts) — the fallback
+  writer predates the verdict-semantics law; its title/prose should say
+  'drifted' like everything else (seen live in the F4 rehearsal issue).
 - Stray pre-fix W36 copies sit in the unused `/opt/potion/research/notes/`
   — remove at leisure.
