@@ -249,7 +249,7 @@ export function FirstRunGate() {
               />
               <span className="text-[13px] leading-relaxed text-soft">
                 <span className="font-medium text-ink">Measure my workloads.</span> Potion keeps a small,
-                redacted sample of your requests (capped per kind of work) for one purpose: measuring
+                sample of your requests — credentials and number runs stripped, capped per kind of work — for one purpose: measuring
                 quality on your actual work, so your routing improves with evidence. Turn it off anytime;
                 deleting your organization deletes the samples.
               </span>
@@ -348,7 +348,7 @@ export function FirstRunGate() {
                 {consent ? (
                   <ol className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-soft">
                     <li><span className="font-medium text-ink">Today · provisional.</span> Built from Potion&rsquo;s live platform measurements at your described mix — it works from the first request.</li>
-                    <li><span className="font-medium text-ink">This week · measured on YOUR work.</span> Potion samples your real prompts (small, redacted, capped) and scores quality per kind of work — on your traffic, not a benchmark.</li>
+                    <li><span className="font-medium text-ink">This week · measured on YOUR work.</span> Potion samples your real prompts (small, capped, credentials and numbers stripped) and scores quality per kind of work — on your traffic, not a benchmark.</li>
                     <li><span className="font-medium text-ink">Then, always · personalized.</span> When the evidence shows a better point, an upgrade proposal appears — one click mints the next router version, with the change and the saving written on it. Never silently.</li>
                   </ol>
                 ) : (
@@ -428,7 +428,7 @@ export function FirstRunGate() {
               <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">how this works</div>
               <ol className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-soft">
                 <li><span className="font-medium text-ink">It works today.</span> v1 routes every request on Potion&rsquo;s live measurements, under your bar — nothing to wait for.</li>
-                <li><span className="font-medium text-ink">Weeks 1–2: Potion reads your traffic.</span> A small, redacted, capped sample of your requests is measured to learn what <em>your</em> work is and which models are good enough at it.
+                <li><span className="font-medium text-ink">Weeks 1–2: Potion reads your traffic.</span> A small, capped sample of your requests — credentials and number runs stripped — is measured to learn what <em>your</em> work is and which models are good enough at it.
                   {choice === 'scratch' ? ' Starting from scratch, there’s no old model to beat — your work is measured against a strong default bar; the arc is the same.' : ''}</li>
                 <li><span className="font-medium text-ink">Then it becomes yours.</span> Potion proposes your own quality bar per kind of work — you accept or ignore, nothing changes silently — and your router recompiles as a new version with the change written on it.</li>
               </ol>

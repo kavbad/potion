@@ -122,8 +122,8 @@ export function Landing() {
             </span>
           </h1>
           <p className="mt-6 text-[1.45rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.75rem]">
-            Potion builds around your actual workload, quality bar, and economics — and cuts your
-            AI bill in half.
+            Potion builds around your actual workload, quality bar, and economics — and serves
+            every request at the lowest price the evidence allows.
           </p>
 
           <div className="mt-8">
@@ -137,7 +137,7 @@ export function Landing() {
 
           <ul className="mx-auto mt-9 max-w-md space-y-2 text-left">
             {[
-              '49% lower bills. Each request goes to the cheapest model measured good enough.',
+              'Lower bills, measured not promised. Each request goes to the cheapest model measured good enough.',
               'Your rule: cost, quality, or speed. Picked from the measured Pareto frontier.',
               'New models earn their place. Measured against your bar before they ever serve.',
               'One line of code. A receipt with every answer.',

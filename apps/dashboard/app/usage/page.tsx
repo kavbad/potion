@@ -217,7 +217,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
       <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Savings</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
         What you spent, what you would have spent, and what you kept — per kind of work, per day,
-        verified receipt by receipt.
+        counted receipt by receipt.
       </p>
       <FrontierStatus />
       {children}

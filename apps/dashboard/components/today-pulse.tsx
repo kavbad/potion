@@ -202,7 +202,7 @@ export function TodayPulse() {
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-soft">
         {hasBaseline && actualSpend > 0 ? (
-          <>the price of the best scorer on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, verified receipt by receipt</>
+          <>the price of the best scorer on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, counted receipt by receipt</>
         ) : hasBaseline ? (
           <>measured against the best scorer on your own requests — <span className="text-ink">{moneyCeil(spentWithout)}</span> of counterfactual, nothing spent yet</>
         ) : hasTraffic ? (
