@@ -4207,6 +4207,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,
         // Observatory canary: salt forces fresh cells (see harness cacheKeyOf).
         ...(payload.cacheSalt !== undefined ? { cacheSalt: payload.cacheSalt } : {}),
+        ...(payload.cacheSaltStrategies !== undefined ? { cacheSaltStrategies: payload.cacheSaltStrategies } : {}),
         ...(payload.sampleN !== undefined ? { itemSampleN: payload.sampleN } : {}),
       },
       { db: ctx.dbHandle, pricesPath: ctx.pricesPath,

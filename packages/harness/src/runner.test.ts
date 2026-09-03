@@ -315,6 +315,41 @@ describe('runEval', () => {
     expect(second.aggregates[0]!.latencyP50).toBe(first.aggregates[0]!.latencyP50);
   });
 
+  it('cacheSaltStrategies scopes the salt: listed strategies re-execute, others keep their $0 resume', async () => {
+    // The 2026-09-02 retire-leg lesson: an unscoped salt invalidated the
+    // SURVIVORS' cache keys and carry-forward silently re-measured them all.
+    // The scope is the pin — salt one strategy, resume the other.
+    const salted = { type: 'single', model: 'mock-mid' } as const;
+    const resumed = { type: 'single', model: 'mock-cheap' } as const;
+    const strategies = [salted, resumed];
+    const first = await runEval(
+      { suiteIds: ['extraction'], strategies, budgetCapUsd: 25 },
+      deps(),
+    );
+    expect(first.executed).toBe(4);
+    const second = await runEval(
+      {
+        suiteIds: ['extraction'],
+        strategies,
+        budgetCapUsd: 25,
+        resume: true,
+        cacheSalt: 'retire:mock-mid',
+        cacheSaltStrategies: [strategyHash(salted)],
+      },
+      deps(),
+    );
+    // mock-mid's 2 cells are fresh under the salt; mock-cheap's 2 resume.
+    expect(second.executed).toBe(2);
+    expect(second.cacheHits).toBe(2);
+    // And an UNSCOPED salt still salts everything (Observatory semantics).
+    const third = await runEval(
+      { suiteIds: ['extraction'], strategies, budgetCapUsd: 25, resume: true, cacheSalt: 'unscoped' },
+      deps(),
+    );
+    expect(third.executed).toBe(4);
+    expect(third.cacheHits).toBe(0);
+  });
+
   it('is deterministic: a fresh db reproduces identical qualities', async () => {
     const fresh = await createDb('pglite://');
     try {

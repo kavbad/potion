@@ -477,6 +477,9 @@ export interface FrontierPlatformSweepPayload {
   publish?: boolean;
   /** Observatory canary: salt the eval cache key so cells re-execute. */
   cacheSalt?: string;
+  /** Scope cacheSalt to these strategy hashes only (see harness runner.ts —
+   *  a surgical audition must not invalidate the survivors' resume). */
+  cacheSaltStrategies?: string[];
   /** Per-attempt provider timeout (ms). Absent → PLATFORM_SWEEP_TIMEOUT_MS. */
   providerTimeoutMs?: number;
   /** Retry attempts past the first. Absent → PLATFORM_SWEEP_MAX_RETRIES. */

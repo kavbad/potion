@@ -102,6 +102,17 @@ try {
       // from cache at $0 with its full original evidence; the dead alias is
       // re-measured (and fails) so its removal rests on a fresh live verdict.
       auditionModels: [deadAlias],
+      // Salt ONLY the dead alias's cells. Without a salt the warm store
+      // answers the audition with the alias's healthy pre-death rows and the
+      // leg can never contain it (observed 2026-09-02: 0 executed / 168
+      // cached, "NOT contained this run"). And without the SCOPE the salt
+      // invalidates the survivors' cache keys too — carry-forward re-measured
+      // all nine extraction survivors live (360 executed / 0 cached) and
+      // drifted their quality, the opposite of surgical (also observed
+      // 2026-09-02, caught at export by the survivors-verbatim check).
+      // Deterministic so the DRY and PUBLISH runs share cells.
+      cacheSalt: `retire:${deadAlias}`,
+      cacheSaltStrategies: [deadHash],
       // Acknowledge the contained drop. The guard still refuses if the alias
       // is NOT contained this run (recovered, or delisted so it never became a
       // candidate) — this leg cannot silently drop a healthy point.
@@ -116,6 +127,11 @@ try {
   const contained = result.failedCandidates.find((f) => f.strategyHash === deadHash);
   if (dropped) {
     console.log(`✓ ${deadAlias} classified CONTAINED and deliberately dropped (${dropped.error})`);
+  } else if (contained && !PUBLISH) {
+    // publish:false skips the regression guard entirely (nothing is saved, so
+    // there is nothing to protect) — deliberatelyDropped is only populated on
+    // a publishing run. Containment is the whole DRY verdict.
+    console.log(`✓ ${deadAlias} CONTAINED on a fresh live call (${contained.error ?? 'error'}) — the ack is exercised at RETIRE_PUBLISH=1`);
   } else if (contained) {
     console.log(`⚠ ${deadAlias} was contained but NOT in the drop set — nothing was retired`);
   } else {

@@ -95,6 +95,17 @@ export interface RunOptions {
    *  (see cacheKeyOf). Unset = normal content-addressed resume. */
   cacheSalt?: string;
   /**
+   * Scope the salt to these strategy hashes ONLY. The 2026-09-02 retire leg
+   * proved why an unscoped salt is a trap for surgical runs: carry-forward
+   * looks incumbents up through the run's cache keys, so salting every cell
+   * silently re-measured all nine extraction survivors live (360 executed /
+   * 0 cached) and drifted their published quality — the exact opposite of
+   * "survivors carry forward verbatim". With this set, listed strategies get
+   * fresh cells; every other strategy keeps its unsalted key and its $0
+   * resume. Unset = the salt applies to all (Observatory canary semantics).
+   */
+  cacheSaltStrategies?: string[];
+  /**
    * Retry attempts after the first, for THIS run. Absent → the provider
    * default (3).
    *
@@ -576,9 +587,12 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
       const modelVersions = modelVersionsFor(strategy, prices);
       const strategyStartIdx = results.length;
       for (const item of runItems) {
+        const saltApplies =
+          opts.cacheSalt !== undefined &&
+          (opts.cacheSaltStrategies === undefined || opts.cacheSaltStrategies.includes(sh));
         const cacheKey = cacheKeyOf(sh, item, item.scoring, prices, {
           ...(opts.orgId !== undefined ? { orgId: opts.orgId } : {}),
-          ...(opts.cacheSalt !== undefined ? { cacheSalt: opts.cacheSalt } : {}),
+          ...(saltApplies ? { cacheSalt: opts.cacheSalt } : {}),
           providerMode,
         });
         // Content-addressed cache: resume reuses hits; without resume we
