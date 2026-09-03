@@ -245,6 +245,43 @@ export interface ServingDegeneracyRow {
 }
 
 /**
+ * PLATFORM-WIDE degenerate-serving counts (2026-09-02, the cold-start
+ * hole): the org-scoped guard cannot protect an org with no traffic — the
+ * first real signup's first worker run would ride a route the platform
+ * already measured as broken. Route health is PLATFORM truth, not tenant
+ * data: this rollup carries counts per strategy only — no org ids, no
+ * content — so consulting it across tenants leaks nothing.
+ */
+export async function servingDegenerateCountsPlatform(
+  db: PotionDb,
+  clusterId: string,
+  windowMin: number,
+  now: Date = new Date(),
+): Promise<ServingDegeneracyRow[]> {
+  const since = new Date(now.getTime() - windowMin * 60_000);
+  const res = await db.execute(sql`
+    SELECT strategy_hash AS strategy_hash,
+           count(*) AS total,
+           count(*) FILTER (WHERE coalesce(usage->>'outputTokens', usage->>'completionTokens')::float = 0) AS empty
+      FROM request_logs
+     WHERE cluster_id = ${clusterId}
+       AND status = 'ok'
+       AND strategy_hash IS NOT NULL
+       AND coalesce(usage->>'outputTokens', usage->>'completionTokens') IS NOT NULL
+       AND ts >= ${since.toISOString()}
+     GROUP BY strategy_hash
+  `);
+  const out: ServingDegeneracyRow[] = [];
+  for (const r of res.rows as Array<Record<string, unknown>>) {
+    const total = Number(r.total);
+    const empty = Number(r.empty);
+    if (!Number.isFinite(total) || total <= 0) continue;
+    out.push({ strategyHash: String(r.strategy_hash), total, empty });
+  }
+  return out;
+}
+
+/**
  * Realized served volume and spend per (policy, cluster) over a day range
  * (G2.6) — the denominator of the guarantee report's REALIZED latency
  * premium. The DTO answers "what is the bound costing per 1K"; the report

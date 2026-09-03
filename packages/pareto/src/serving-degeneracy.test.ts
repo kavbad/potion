@@ -5,8 +5,11 @@
 // traffic must overrule the suite at serve time, exactly as the
 // serving-measured latency substitution (G2.6) already does. The bar:
 // ≥4 empties AND ≥50% of that strategy's window servings, org+cluster
-// scoped over a 7-DAY memory (the 60-min version sawtoothed live),
-// fail-open when exclusion would empty the frontier.
+// scoped over a 7-DAY memory (the 60-min version sawtoothed live), with
+// the COLD-START RULE: an org with no reading on a strategy inherits the
+// platform's (route health is platform truth — counts only, no content);
+// its own readings outrank the platform once they exist. Fail-open when
+// exclusion would empty the frontier.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { strategyHash, type Frontier, type FrontierPoint } from '@potion/core';
 import { createDb, insertRequestLog, migrate, seedIsolationOrgs, ORG_A, ORG_B, type DbHandle } from '@potion/db';
@@ -118,13 +121,28 @@ describe('bindServingDegeneracy', () => {
     expect(bound.frontier?.points).toHaveLength(2);
   });
 
-  it('the evidence is org- and cluster-scoped, window-bound, and ok-status only', async () => {
-    // Another org's empties, another cluster's empties, stale empties, and
-    // errored rows: none of them speak for THIS org+cluster now.
-    for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, orgId: ORG_B });
+  it('cluster-scoped, window-bound, ok-status only — those scopes never leak', async () => {
+    // Another cluster's empties, stale empties, and errored rows: none of
+    // them speak for THIS cluster now.
     for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, clusterId: 'code-gen' });
     for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, ts: minsAgo(8 * 24 * 60) });
     for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, status: 'error' });
+    const bound = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
+    expect(bound.excluded).toEqual([]);
+  });
+
+  it('THE COLD-START RULE: a fresh org inherits the platform reading — the first real signup must not rediscover a failure the platform already paid for', async () => {
+    // ORG_B measured the burst; ORG_A has never served this strategy.
+    for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, orgId: ORG_B });
+    const bound = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
+    expect(bound.excluded).toEqual([P_BROKEN.strategyHash]);
+  });
+
+  it("an org's OWN healthy reading outranks the platform view for that org", async () => {
+    // ORG_B's burst says broken; ORG_A's own traffic says the route works
+    // for ITS workload — the org's measurement decides for the org.
+    for (let i = 0; i < 6; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, orgId: ORG_B });
+    for (let i = 0; i < 8; i++) await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 200, orgId: ORG_A });
     const bound = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
     expect(bound.excluded).toEqual([]);
   });

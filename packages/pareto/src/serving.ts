@@ -34,7 +34,7 @@ import {
   type ServingLatencySample,
   type StrategyConfig,
 } from '@potion/core';
-import { servingDegenerateCounts, servingLatencyP95, type PotionDb } from '@potion/db';
+import { servingDegenerateCounts, servingDegenerateCountsPlatform, servingLatencyP95, type PotionDb } from '@potion/db';
 import { strategyCapabilities } from '@potion/strategies';
 import { loadCurrentFrontier } from './persistence.js';
 
@@ -391,7 +391,17 @@ export async function bindServingDegeneracy(
     if (hit && now.getTime() - hit.at < SERVING_LATENCY_CACHE_TTL_MS) {
       rows = hit.rows;
     } else {
-      rows = await servingDegenerateCounts(db, orgId, clusterId, DEGENERACY_WINDOW_MIN, now);
+      // THE COLD-START RULE (2026-09-02, the first real signup): the org's
+      // own measurement decides first, but an org with NO reading on a
+      // strategy inherits the PLATFORM's — route health is platform truth
+      // (counts per strategy, no org ids, no content), and a brand-new
+      // org's first run must not rediscover a failure the platform
+      // already paid for. An org's own healthy readings still outrank the
+      // platform view for THAT org (its traffic may genuinely differ).
+      const own = await servingDegenerateCounts(db, orgId, clusterId, DEGENERACY_WINDOW_MIN, now);
+      const platform = await servingDegenerateCountsPlatform(db, clusterId, DEGENERACY_WINDOW_MIN, now);
+      const ownByHash = new Map(own.map((r) => [r.strategyHash, r]));
+      rows = [...own, ...platform.filter((r) => !ownByHash.has(r.strategyHash))];
       degeneracyCache.set(key, { at: now.getTime(), rows });
     }
   } catch (err) {
