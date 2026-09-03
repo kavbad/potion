@@ -145,3 +145,31 @@ describe('aggregateResults — latency provenance (G2.6)', () => {
     expect(agg.evidence).toBeUndefined();
   });
 });
+
+describe('evidence.toolsMeasured derivation (MIXING M3, instrument-keyed 2026-09-01)', () => {
+  const withMeta = (over: Partial<EvalResult>): EvalResult => ({ ...fakeResult(1, 0.001, 300), ...over });
+
+  it('a tools-instrument run with MIXED scorers (tool-call + field-contains) still marks toolsMeasured', () => {
+    const agg = aggregateResults('agentic-tool-use', 'sh', { type: 'single', model: 'mock-cheap' }, [
+      withMeta({ scorer: 'tool-call', instrument: 'tools' }),
+      withMeta({ scorer: 'field-contains', instrument: 'tools' }),
+    ], 'v1');
+    expect(agg.evidence?.toolsMeasured).toBe(true);
+  });
+
+  it('legacy rows without an instrument keep the scorer derivation: all tool-call ⇒ tools', () => {
+    const agg = aggregateResults('agentic-tool-use', 'sh', { type: 'single', model: 'mock-cheap' }, [
+      withMeta({ scorer: 'tool-call' }),
+      withMeta({ scorer: 'tool-call' }),
+    ], 'v1');
+    expect(agg.evidence?.toolsMeasured).toBe(true);
+  });
+
+  it('a default-instrument cell in the mix withholds the mark — evidence from another instrument never buys tool capability', () => {
+    const agg = aggregateResults('agentic-tool-use', 'sh', { type: 'single', model: 'mock-cheap' }, [
+      withMeta({ scorer: 'tool-call', instrument: 'tools' }),
+      withMeta({ scorer: 'field-contains' }), // no instrument, non-tool scorer ⇒ default
+    ], 'v1');
+    expect(agg.evidence?.toolsMeasured).toBeUndefined();
+  });
+});

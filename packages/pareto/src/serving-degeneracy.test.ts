@@ -63,6 +63,7 @@ async function serve(over: {
   clusterId?: string;
   ts?: Date;
   status?: string;
+  answerShape?: Record<string, unknown>;
 }): Promise<void> {
   await insertRequestLog(h.db, {
     ts: over.ts ?? minsAgo(5),
@@ -76,6 +77,7 @@ async function serve(over: {
     usage: (over.completionTokens % 2 === 0
       ? ({ inputTokens: 100, outputTokens: over.completionTokens } as never)
       : { promptTokens: 100, completionTokens: over.completionTokens, totalTokens: 100 + over.completionTokens }),
+    ...(over.answerShape !== undefined ? { answerShape: over.answerShape } : {}),
   });
 }
 
@@ -119,6 +121,25 @@ describe('bindServingDegeneracy', () => {
     const bound = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
     expect(bound.excluded).toEqual([]);
     expect(bound.frontier?.points).toHaveLength(2);
+  });
+
+  it("a row whose own answer_shape shows content is never 'empty' — zero tokens against a text-bearing answer is a metering failure, not degeneracy", async () => {
+    // Six rows shaped like the usage-loss incident: text (or a tool call)
+    // came back but the recorded tokens are 0. Excluding a working route
+    // over lost usage would be the guard firing on its own instrumentation.
+    for (let i = 0; i < 4; i++)
+      await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, answerShape: { v: 1, chars: 66, toolCallsN: 0 } });
+    for (let i = 0; i < 2; i++)
+      await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, answerShape: { v: 1, chars: 0, toolCallsN: 1 } });
+    const bound = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
+    expect(bound.excluded).toEqual([]);
+    clearServingLatencyCache();
+    // And the true incident shape still trips: zero tokens AND an
+    // answer_shape that recorded nothing.
+    for (let i = 0; i < 6; i++)
+      await serve({ strategyHash: P_BROKEN.strategyHash, completionTokens: 0, answerShape: { v: 1, chars: 0, toolCallsN: 0 } });
+    const tripped = await bindServingDegeneracy(h.db, frontier([P_BROKEN, P_GOOD]), ORG_A, CLUSTER, () => {}, NOW);
+    expect(tripped.excluded).toEqual([P_BROKEN.strategyHash]);
   });
 
   it('cluster-scoped, window-bound, ok-status only — those scopes never leak', async () => {
