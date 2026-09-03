@@ -3,6 +3,18 @@
 Stand up Potion for one partner, hand them a URL, and know how to take it
 down cleanly (that part is [ROLLBACK-RUNBOOK.md](ROLLBACK-RUNBOOK.md)).
 
+> ## ⛔ NEVER rsync `.env*` to the host
+>
+> The host's `/opt/potion/app/.env.prod` is the RUNTIME TRUTH for secrets
+> and operator-appended keys (Stripe, OAuth, provider keys). A full-tree
+> `rsync --delete` that includes a checkout's stale `.env.prod` silently
+> wipes host appends — it darked the research clock on 2026-09-03 (four
+> appended vars gone; found by potion-d9, fixed by committing arming
+> defaults into the compose file). Every deploy rsync MUST carry
+> `--exclude ".env*"`. Values that must survive env churn belong as
+> committed compose defaults (`${VAR:-default}`) when they are not
+> secrets; secrets stay host-only.
+
 > ## ⛔ STOP — DO NOT RUN MORE THAN ONE SERVER REPLICA
 >
 > **F18 is CLOSED.** `InMemoryRateLimiterStore` used to be the only
