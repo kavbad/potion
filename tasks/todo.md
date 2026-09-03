@@ -3757,3 +3757,18 @@ Expected spend ≈ **$0**: survivors are cache hits, the dead alias fails pre-sp
 
 ### Follow-up recorded (NOT in this change; separate item)
 - [ ] Serve-path resilience: today a served point whose provider throws → HTTP 503, no fallback (`failoverChain` unwired; `nextPointExcluding` fires only on empty answers). Wire next-best-point fallback on THROWN provider errors so a future model death degrades to the next frontier point instead of 503. This is the systemic fix; the deliberate-drop path only removes the KNOWN dead point.
+
+RESULT (2026-09-02 evening, potion via Opus): the deliberate-drop set landed on
+the deploy branch (d6a452d + bdc8b4f) and the retire legs RAN — code-review v6
+(5 pts) + extraction v6 (9 pts) minted in the step5 store, kat-coder contained
+live at 0 cells both times, baseline re-exported committed with landing copies
+recomputed (1d0689c). Two scaffolding traps found by driving and fixed with
+pins: unscoped cacheSalt re-measured the survivors (cacheSaltStrategies now
+scopes it; runner.test.ts pin), and the first "fixed" rerun ran stale harness
+dist (lessons.md). Survivor evidence is POOLED with the fresh cells (n up, CIs
+re-honest); total spend ≈ $2.40 of the $60 belt. Runbook steps 1–4 DONE, step 6
+local halves DONE (db 218, workers 311, dashboard 78 + build). Step 5 BLOCKED
+from the agent session (prod DB writes denied by the permission layer) — the
+two import commands + files are staged in the session scratchpad; operator runs
+them from the main checkout, then verifies a code-review/extraction serve no
+longer 503s.
