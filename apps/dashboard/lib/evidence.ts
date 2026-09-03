@@ -25,11 +25,11 @@ export const EVIDENCE = {
   /** Taxonomy clusters with a published platform frontier. */
   workloadTypes: 10,
   /** Points that survived three-dimensional domination across all clusters. */
-  measuredStrategies: 74,
+  measuredStrategies: 72,
   /** Distinct models appearing on at least one frontier. */
-  routableModels: 23,
+  routableModels: 22,
   /** Graded item-level evaluations behind those points. */
-  gradedEvaluations: 3229,
+  gradedEvaluations: 4936,
   /** Source of every number above. */
   source: 'packages/db/baseline/platform-frontiers.json',
 } as const;
@@ -110,8 +110,8 @@ export const ROUTE_DEMO = [
     cluster: 'code-gen', label: 'or-████████████', hash8: '220a2558', costPer1K: 0.0231, p95Ms: 15351, quality: 0.9785,
     note: "99% of the top model's quality at 1/270th the price. The name is the product." },
   { prompt: 'Extract invoice number, total, due date and line items from this document.',
-    cluster: 'extraction', label: 'or-deepseek', hash8: '6efe8a56', costPer1K: 0.2019, p95Ms: 13033, quality: 0.9612,
-    note: 'a third the cost of the premium pick, inside its error bars' },
+    cluster: 'extraction', label: 'or-deepseek', hash8: '6efe8a56', costPer1K: 0.1846, p95Ms: 11344, quality: 0.9504,
+    note: 'a twentieth the cost of the premium pick, inside its error bars' },
   { prompt: 'Using the attached support articles, can a Pro license transfer between workspaces?',
     cluster: 'rag-answer', label: 'or-ling-3.0-flash', hash8: 'e4263e18', costPer1K: 0.008, p95Ms: 1660, quality: 0.96,
     note: 'good enough here costs under a cent per thousand requests' },
@@ -143,16 +143,15 @@ export const FIELD: Record<string, LandingPoint[]> = {
     { label: 'or-grok-4.6', hash8: 'e0a2f554', quality: 1, ci: 0, costPer1K: 6.2568, p95Ms: 44582 },
   ],
   'extraction': [
-    { label: 'or-████████', hash8: '220a2558', quality: 0.9595, ci: 0, costPer1K: 0.0237, p95Ms: 14119 },
-    { label: 'or-deepseek', hash8: '6efe8a56', quality: 0.9612, ci: 0, costPer1K: 0.2019, p95Ms: 13033 },
-    { label: 'or-gpt-mini', hash8: '4e2fc860', quality: 0.956, ci: 0, costPer1K: 0.286, p95Ms: 2528 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.9595, ci: 0, costPer1K: 0.3722, p95Ms: 1076 },
-    { label: 'or-inkling-small', hash8: '07c9d6a7', quality: 0.9841, ci: 0, costPer1K: 0.5785, p95Ms: 14867 },
-    { label: 'or-gpt-full', hash8: '819f1ab8', quality: 0.9611, ci: 0, costPer1K: 1.4358, p95Ms: 2225 },
-    { label: 'or-kat-coder-pro-v2.5', hash8: '1afeece2', quality: 0.9729, ci: 0, costPer1K: 1.4644, p95Ms: 7707 },
-    { label: 'or-gemini-3.7-flash', hash8: 'ffe46bc9', quality: 0.9778, ci: 0, costPer1K: 1.5836, p95Ms: 8790 },
-    { label: 'or-inkling', hash8: '8ad63a4e', quality: 0.9841, ci: 0, costPer1K: 1.7698, p95Ms: 4636 },
-    { label: 'or-opus', hash8: '10b2d052', quality: 0.9778, ci: 0, costPer1K: 4.0693, p95Ms: 2919 },
+    { label: 'or-████████', hash8: '220a2558', quality: 0.9497, ci: 0, costPer1K: 0.0216, p95Ms: 11097 },
+    { label: 'or-deepseek', hash8: '6efe8a56', quality: 0.9504, ci: 0, costPer1K: 0.1846, p95Ms: 11344 },
+    { label: 'or-gpt-mini', hash8: '4e2fc860', quality: 0.9454, ci: 0, costPer1K: 0.2537, p95Ms: 2990 },
+    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.947, ci: 0, costPer1K: 0.3343, p95Ms: 1379 },
+    { label: 'or-inkling-small', hash8: '07c9d6a7', quality: 0.9733, ci: 0, costPer1K: 0.5931, p95Ms: 14420 },
+    { label: 'or-gpt-full', hash8: '819f1ab8', quality: 0.9486, ci: 0, costPer1K: 1.2921, p95Ms: 2536 },
+    { label: 'or-gemini-3.7-flash', hash8: 'ffe46bc9', quality: 0.9587, ci: 0, costPer1K: 1.6493, p95Ms: 10919 },
+    { label: 'or-inkling', hash8: '8ad63a4e', quality: 0.9771, ci: 0, costPer1K: 1.7633, p95Ms: 6668 },
+    { label: 'or-opus', hash8: '10b2d052', quality: 0.9782, ci: 0, costPer1K: 3.6813, p95Ms: 3214 },
   ],
   'rag-answer': [
     { label: 'or-████████', hash8: '220a2558', quality: 0.92, ci: 0, costPer1K: 0.0059, p95Ms: 4864 },

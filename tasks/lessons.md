@@ -462,3 +462,21 @@ build that path with the same rigor as the check — tightly scoped so it can
 only ever excuse the exact case it names (here: a re-measured, thrown failure),
 never a silent drop of a healthy or un-measured point. Bypassing the guard
 would have solved today's case and left the next one unprotected.
+
+## 2026-09-02 — the surgical leg that quietly re-measured everything (two traps, one export check)
+
+Driving the retire leg live surfaced two independent traps that composed:
+(1) an UNSCOPED cacheSalt invalidates the survivors' cache keys too, so
+"carry forward from cache at $0" silently became "re-measure every survivor
+live" (360 executed / 0 cached) and drifted published quality —
+code-review's top point fell 0.969→0.953, enough to flip a 0.96-floor
+policy to infeasible; (2) after the scoped-salt fix, the re-run STILL
+matched the drifted values byte-for-byte because workers scripts load
+@potion/harness from dist/ and the fix only existed in src/ — the stale-dist
+class from the prices.json postmortem, recurred.
+
+**Pattern**: after any surgical re-publish, diff the export against the
+committed baseline and assert survivors verbatim BEFORE promoting — that
+one check caught both traps. And when a "fixed" run reproduces the broken
+numbers EXACTLY, suspect the fix never executed (stale dist, wrong entry
+point) before suspecting the fix is wrong.
