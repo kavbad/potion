@@ -512,6 +512,26 @@ export interface FrontierPlatformSweepPayload {
    * (the historical behavior).
    */
   p95CapMs?: number;
+  /**
+   * Operator acknowledgement that a specific incumbent may leave the frontier
+   * even though this run did not dominate it — the backing the regression
+   * guard's own "or decide deliberately that the drop is intended" advice
+   * previously lacked.
+   *
+   * TIGHT BY CONSTRUCTION, so it can never become a silent-drop backdoor: a
+   * hash here is honoured ONLY when this run classified that incumbent as
+   * `contained` — i.e. it was carried into the candidate pool, put in front of
+   * the provider, and threw on every attempt. A healthy point (never dropped),
+   * a `not-a-candidate` (never re-measured — the fix for that is still to
+   * carry it into the pool), or a `no-evidence` drop is NOT excused by listing
+   * it here; the guard still refuses. The use case is a genuinely dead
+   * upstream (e.g. a delisted model that returns a hard 4xx on every call):
+   * the sweep re-measures it, containment records the failure honestly, and
+   * this ack lets the new version publish WITHOUT it. The containment evidence
+   * (error text, 0 completed cells) is the drop's honest record; the result's
+   * `deliberatelyDropped` names exactly what left and why.
+   */
+  deliberateDrops?: string[];
 }
 
 /**

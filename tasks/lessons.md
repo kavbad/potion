@@ -423,3 +423,42 @@ file. Rules: prefer linear string logic to clever regex anywhere on the boot
 path, treat "no output" as a symptom with a cause rather than a slow test,
 and remember that an instrument sharing the thing it measures (a JS timer
 watching a JS-blocking loop) measures nothing.
+
+## 2026-09-02 — a ledgered "it failed" is a claim to re-verify, not a fact to act on
+
+A task handed me a premise: `or-kat-coder-pro-v2.5` AND `or-gpt-5.6-terra-pro`
+both delisted upstream, failing every live call, so re-sweep 4 clusters. A
+capped live probe (the task authorized "one call each") showed the premise was
+HALF WRONG: kat-coder 400s deterministically (sole OpenRouter endpoint down),
+but terra-pro returns 200 and answers fine — its earlier failure was
+tools-INSTRUMENT-specific (already contained on the separate tools frontier),
+not a delisting. Acting on the stated premise would have needlessly re-swept two
+healthy clusters and could have disturbed live terra-pro points. Two probe
+sub-lessons: (a) OpenRouter's model-endpoints `status` field is NOT a health
+signal — `status=0` is the default across live and dead models alike; only a
+real chat call discriminates; (b) rule out request-shape (retest the failure at
+a normal `max_tokens`) before calling a model dead.
+
+**Pattern**: a failure recorded in a ledger/memory/handoff note is a claim
+about a moment in time, especially for external state (a provider, an upstream
+model). Before acting on it — and always before a fix whose blast radius scales
+with how many things you believe are broken — reproduce it yourself with the
+cheapest authoritative check. The correction to the count (4 clusters → 1
+model, 2 clusters) came only from looking.
+
+## 2026-09-02 — a guard's advice with no mechanism is a gap to close, not to route around
+
+The frontier regression guard refuses to drop an incumbent it did not
+re-measure, and its own message said "or decide deliberately that the drop is
+intended" — but no payload flag backed that sentence. A genuinely dead upstream
+(throws every call) is classified `contained`, which the guard refuses, so a
+plain re-sweep could NOT retire it. The fix was to add the missing backing
+(`deliberateDrops`, honoured ONLY for a `contained` incumbent this run
+re-measured) rather than hand-mint a frontier out-of-band or loosen the guard.
+
+**Pattern**: when a safety check tells the operator what they "could
+deliberately do" but offers no supported way to do it, the elegant fix is to
+build that path with the same rigor as the check — tightly scoped so it can
+only ever excuse the exact case it names (here: a re-measured, thrown failure),
+never a silent drop of a healthy or un-measured point. Bypassing the guard
+would have solved today's case and left the next one unprotected.

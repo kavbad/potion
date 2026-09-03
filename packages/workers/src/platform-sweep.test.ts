@@ -502,6 +502,132 @@ describe('the three fixes the tranche campaign paid for', () => {
   });
 });
 
+describe('deliberate-drop — an operator may retire a re-measured-and-dead incumbent', () => {
+  // The 2026-09-02 case: or-kat-coder-pro-v2.5 is on code-review + extraction
+  // and now 400s on every OpenRouter call (sole endpoint down). It is still
+  // priced, so carry-forward re-measures it; containment records the throw
+  // (0 cells); the new frontier omits it. Without an ack the guard REFUSES
+  // (contained == evidence loss). deliberateDrops is the backing the guard's
+  // own "decide deliberately that the drop is intended" advice needed.
+  const DEAD = SINGLE('or-kat-coder-pro-v2.5');
+  const SURVIVOR = SINGLE('or-deepseek');
+  const NEWCOMER = SINGLE('or-newcomer');
+
+  /** The exact drop set the handler builds: DEAD carried forward, put in
+   *  front of the provider, thrown after 0 cells. */
+  const droppedWithDeadContained = (): ReturnType<typeof classifyDroppedIncumbents> =>
+    classifyDroppedIncumbents({
+      previous: [pt(SURVIVOR), pt(DEAD)],
+      computed: [pt(SURVIVOR), pt(NEWCOMER)],
+      candidates: [hash(SURVIVOR), hash(DEAD), hash(NEWCOMER)],
+      measured: [hash(SURVIVOR), hash(NEWCOMER)],
+      failed: [{ strategyHash: hash(DEAD), error: 'provider returned error (400)', completedCells: 0 }],
+    });
+
+  it('WITHOUT the ack, a contained dead incumbent still refuses (unchanged)', () => {
+    const dropped = droppedWithDeadContained();
+    expect(dropped.map((d) => [d.label, d.cause])).toEqual([['single(or-kat-coder-pro-v2.5)', 'contained']]);
+    expect(
+      frontierRegressionRefusal({ previousVersion: 3, pricesVersion: 'p', dropped })?.reason,
+    ).toBe('frontier-regression');
+  });
+
+  it('WITH the ack, the same contained drop publishes (returns null)', () => {
+    const dropped = droppedWithDeadContained();
+    expect(
+      frontierRegressionRefusal({
+        previousVersion: 3,
+        pricesVersion: 'p',
+        dropped,
+        deliberateDrops: new Set([hash(DEAD)]),
+      }),
+    ).toBeNull();
+  });
+
+  it('the ack is CONTAINED-only: it cannot excuse a not-a-candidate drop', () => {
+    // DEAD is NOT in this run's pool at all (e.g. delisted from prices) — it
+    // was never re-measured, so acking it must NOT publish. The honest fix is
+    // carry-forward, not an override; the guard holds.
+    const dropped = classifyDroppedIncumbents({
+      previous: [pt(SURVIVOR), pt(DEAD)],
+      computed: [pt(SURVIVOR), pt(NEWCOMER)],
+      candidates: [hash(SURVIVOR), hash(NEWCOMER)],
+      measured: [hash(SURVIVOR), hash(NEWCOMER)],
+      failed: [],
+    });
+    expect(dropped.map((d) => d.cause)).toEqual(['not-a-candidate']);
+    expect(
+      frontierRegressionRefusal({
+        previousVersion: 3,
+        pricesVersion: 'p',
+        dropped,
+        deliberateDrops: new Set([hash(DEAD)]),
+      })?.reason,
+    ).toBe('frontier-regression');
+  });
+
+  it('the ack is CONTAINED-only: it cannot excuse a no-evidence drop', () => {
+    // A candidate that ran but produced no aggregable rows (all stale) — not a
+    // throw, so not containment. Acking it must not publish.
+    const dropped = classifyDroppedIncumbents({
+      previous: [pt(SURVIVOR), pt(DEAD)],
+      computed: [pt(SURVIVOR), pt(NEWCOMER)],
+      candidates: [hash(SURVIVOR), hash(DEAD), hash(NEWCOMER)],
+      measured: [hash(SURVIVOR), hash(NEWCOMER)],
+      failed: [],
+    });
+    expect(dropped.map((d) => d.cause)).toEqual(['no-evidence']);
+    expect(
+      frontierRegressionRefusal({
+        previousVersion: 3,
+        pricesVersion: 'p',
+        dropped,
+        deliberateDrops: new Set([hash(DEAD)]),
+      })?.reason,
+    ).toBe('frontier-regression');
+  });
+
+  it('an ack does not leak to OTHER contained drops in the same run', () => {
+    // Two dead incumbents contained; the operator acks only one. The other
+    // still refuses — an ack is per-point, never a blanket "publish anyway".
+    const OTHER = SINGLE('or-also-dead');
+    const dropped = classifyDroppedIncumbents({
+      previous: [pt(SURVIVOR), pt(DEAD), pt(OTHER)],
+      computed: [pt(SURVIVOR)],
+      candidates: [hash(SURVIVOR), hash(DEAD), hash(OTHER)],
+      measured: [hash(SURVIVOR)],
+      failed: [
+        { strategyHash: hash(DEAD), error: '400', completedCells: 0 },
+        { strategyHash: hash(OTHER), error: '400', completedCells: 0 },
+      ],
+    });
+    const refusal = frontierRegressionRefusal({
+      previousVersion: 3,
+      pricesVersion: 'p',
+      dropped,
+      deliberateDrops: new Set([hash(DEAD)]),
+    });
+    expect(refusal?.reason).toBe('frontier-regression');
+    // names the un-acked one, not the acked one
+    expect(refusal?.message).toContain('or-also-dead');
+    expect(refusal?.message).not.toContain('or-kat-coder-pro-v2.5');
+  });
+
+  it('a dominated incumbent needs no ack (ack is irrelevant to it)', () => {
+    // Sanity: the ack only ever REMOVES a refusal; a legitimately dominated
+    // drop already publishes, ack or not.
+    const dropped = classifyDroppedIncumbents({
+      previous: [pt(SURVIVOR), pt(DEAD)],
+      computed: [pt(SURVIVOR)],
+      candidates: [hash(SURVIVOR), hash(DEAD)],
+      measured: [hash(SURVIVOR), hash(DEAD)], // DEAD re-measured and lost
+      failed: [],
+    });
+    expect(dropped.map((d) => d.cause)).toEqual(['dominated']);
+    expect(frontierRegressionRefusal({ previousVersion: 3, pricesVersion: 'p', dropped })).toBeNull();
+  });
+});
+
 describe('frontier-regression — the code-gen v3 blind spot, by strategy hash', () => {
   const CLUSTER = 'code-gen';
   /** The cascade committed on code-gen v2 — the point that actually vanished. */

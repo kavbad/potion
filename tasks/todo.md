@@ -3706,3 +3706,54 @@ browser on ANY day (the locale leg made this a every-load crash for non-English
 viewers, not a dawn-window one). Dashboard 78/78, tsc clean, next build green
 (lab-form cascade in the fresh worktree resolved by pnpm build first).
 
+
+---
+
+## FRONTIER DEAD-POINT AUDIT — `or-kat-coder-pro-v2.5` unservable (2026-09-02; code shipped, live re-sweep is an operator step)
+
+- 2026-09-02 · DEAD-POINT VERIFICATION (5 capped OpenRouter chat calls + 1 model-endpoints GET; key read from main-checkout `.env`, never persisted to worktree). PREMISE ON RECORD (from the tools-instrument re-sweep note + auto-memory): both `or-kat-coder-pro-v2.5` AND `or-gpt-5.6-terra-pro` delisted upstream, failing every live call; 8 refs in `packages/db/baseline/platform-frontiers.json`. VERIFIED — the premise is HALF WRONG: (a) `kwaipilot/kat-coder-pro-v2.5` → HTTP **400 "Provider returned error"** (sole OpenRouter endpoint = AtlasCloud, `status=0`), DETERMINISTIC across 3 calls incl. `max_tokens=16` (rules out request-shape) — genuinely **unservable**, $0.00 (pre-spend errors); (b) `openai/gpt-5.6-terra-pro` → HTTP **200**, returned "pong"/"ok" on 2 calls, **$0.00354 each — ALIVE** on the default text path. terra-pro's 2026-08-23 failure was **tools-instrument-specific** (already contained on the separate `tools` frontier) and does NOT mean it is delisted. CORRECTION: only kat-coder is dead → only **2** default frontiers carry a live dead point (**code-review v3** pt#2 $3.80 q0.9548, **extraction v3** pt#6 $1.46 q0.9729), NOT 4. terra-pro's points (agentic-tool-use v3 pt#5, summarization v3 pt#9) are fine and MUST NOT be touched. | ≤$0.05 | **$0.0071** |
+- 2026-09-02 · FULL SERVING-FRONTIER HEALTH PROBE (operator "yes" to Decision C) — real capped `max_tokens=1` chat call to all **23** distinct OpenRouter models on serving frontiers, cheapest-first, ~$0.0078. RESULT: **`or-kat-coder-pro-v2.5` is the ONLY dead model** (HTTP 400, deterministic). All 22 others returned HTTP 200. Notes: `or-nemotron-3.5-lightning` hit a transient 429 on the first call but returned 200 twice on retry (multi-provider, alive); `or-claude-opus-5-fast` returned 200 despite an empty OpenRouter endpoints listing (listing was stale, model is servable); `or-grok-4.6` returned an empty-200 at `max_tokens=1` (alive, empty-answer path). The OpenRouter model-endpoints `status` field is NOT a health signal — `status=0` is its default across live and dead models alike; only a real call discriminates. | ≤$0.10 | **$0.0078** |
+- DECISIONS (operator, 2026-09-02): **A = add deliberate-drop path to `frontier:platform-sweep`** (recommended); **B = leave kat-coder in the catalog** (no pricesVersion churn); **C = health probe = yes** (done, above). Cumulative live spend this audit: **~$0.015**.
+
+### Audit — every place the dead alias lives (`or-kat-coder-pro-v2.5`)
+- **Serving seed** `packages/db/baseline/platform-frontiers.json`: code-review v3 (`fr-436eed9b`) pt#2 + extraction v3 (`fr-78561241`) pt#6, each in BOTH representations (`frontier.points[i].strategyConfig.model` camelCase snapshot AND `points[i].strategy_config.model` snake-case rows). `type:single`.
+- **Live prod DB** (`frontiers`/`frontier_points`, Neon): holds the same points, seeded from the baseline at first boot. CRITICAL: `importPlatformBaseline` **never clobbers** an existing platform frontier (`packages/db/src/repos/platform-baseline.ts:135-143`), so **editing the JSON is a no-op for a already-booted prod DB** — the live serving frontier must be replaced via a new version through `saveFrontier`.
+- **Leg captures / fixtures** `.tranche/legs/code-review.json` + `.tranche/legs/extraction.json` (`failedCandidates:[]` today; also consumed by `scripts/tranche-ingest.ts` and `packages/workers/src/platform-sweep.test.ts`).
+- **Customer-facing** `apps/dashboard/lib/evidence.ts:152` (hardcoded extraction evidence row for kat-coder) + `economics.ts` derives from it (manual recompute per the file header).
+- **Catalog** `prices.json` + `.tranche/prices.json` line 293 (alias→`kwaipilot/kat-coder-pro-v2.5`); seeds the `models` table (also never-clobber).
+- LEAVE ALONE (honest historical records): `docs/research/m3-tools-leg-2026-08-23.md`, `docs/research/r4-pair-mixing-2026-08-24.md`.
+
+### The blocker the "just re-sweep it" plan misses (regression guard)
+`frontierRegressionRefusal` (`packages/workers/src/handlers.ts:3839-3875`) permits removing an incumbent point ONLY with cause `dominated` (re-measured this run AND produced aggregable rows, then lost). kat-coder **throws** (HTTP 400) → the harness `containStrategyFailures` catches it → `FailedStrategy` (0 cells) → cause `contained` → **the guard REFUSES the publish, post-spend** ("contained after 0 cells … evidence LOSS, not a domination decision"). There is **no `force`/`excludeStrategies`/deliberate-drop flag** in `FrontierPlatformSweepPayload`, and `carryForwardIncumbents` "leaves out a delisted-model incumbent" so delisting-then-sweeping yields `not-a-candidate` → also REFUSES. Net: a plain re-sweep CANNOT remove kat-coder. A code change or an out-of-band hand-mint is required.
+
+### Serve-path risk today (why this matters, not cosmetic)
+A selected point whose provider errors → **HTTP 503** `service_unavailable`, **NO fallback** to the next-best point (`failoverChain` exists but is unwired; `nextPointExcluding` fires only on empty answers, not thrown errors; a 400 is `client_4xx` — not retried, not breaker-counted, not degeneracy-excluded). extraction/code-review under a `min_cost(floor≈0.9)` policy plausibly select the cheap dead point → **live 503s with no auto-recovery** until an operator changes the frontier.
+
+### Fix — status (Decisions A/B/C all resolved 2026-09-02)
+- [x] **Decision A — removal mechanism = deliberate-drop path** (operator, recommended). SHIPPED in this worktree:
+  - `packages/workers/src/jobs.ts` — `FrontierPlatformSweepPayload.deliberateDrops?: string[]` (tightly scoped doc).
+  - `packages/workers/src/handlers.ts` — `frontierRegressionRefusal` takes `deliberateDrops`; excuses a dropped incumbent from the refusal ONLY when its cause is `contained` (re-measured this run and threw) AND its hash is acked. Call site computes the excused set, warns on any acked hash that matched no contained drop (can never excuse a healthy/`not-a-candidate`/`no-evidence` point), and records them in the new result field `deliberatelyDropped`.
+  - `packages/workers/scripts/retire-dead-point.ts` — operator leg: auditions ONLY the dead alias (survivors carry forward from cache at $0 with full original evidence), passes `deliberateDrops`, publish gated behind `RETIRE_PUBLISH=1`. Same canonical-DB + belt guards as `step5-platform-sweep.ts`.
+  - Tests: 6 new cases in `platform-sweep.test.ts` (contained-ack publishes; no-ack still refuses; ack is contained-ONLY so it cannot excuse `not-a-candidate`/`no-evidence`; no cross-leak between contained drops; dominated needs no ack). **Workers suite 291/291 green; workers typecheck clean.**
+- [x] **Decision B — leave kat-coder in the catalog** (operator). No `prices.json`/`models` change — and this is REQUIRED for A: leaving it priced is what lets carry-forward re-measure it, contain it, and drop it honestly. Delisting would make it `not-a-candidate`, which the guard (correctly) refuses even with an ack.
+- [x] **Decision C — health probe** (operator, done above): only `or-kat-coder-pro-v2.5` is dead.
+
+### OPERATOR RUNBOOK — the live/prod steps (need OpenRouter key + the warm `.pglite/platform-sweep-step5` store; RUN FROM THE MAIN CHECKOUT, not this worktree)
+Expected spend ≈ **$0**: survivors are cache hits, the dead alias fails pre-spend. `capUsd 1` is a belt, not a budget. `strategyHash({type:'single',model:'or-kat-coder-pro-v2.5'})` = `1afeece2dc9358093be0ea5753505f8d8a9b3127d1830c1f33ce42e9841abeaf` (both clusters share it).
+- [ ] 1. DRY (publish OFF) — read the numbers first, per cluster:
+  ```
+  set -a && source .env && set +a
+  unset OPENAI_API_KEY ANTHROPIC_API_KEY GOOGLE_API_KEY
+  POTION_EVAL_PROVIDER=live DATABASE_URL=pglite://$PWD/.pglite/platform-sweep-step5 \
+    pnpm --filter @potion/workers exec tsx scripts/retire-dead-point.ts code-review or-kat-coder-pro-v2.5
+  # then: ... extraction or-kat-coder-pro-v2.5
+  ```
+  CONFIRM in the output: kat-coder is `contained` (0 cells, the 400), the survivors are unchanged, `deliberatelyDropped` names the kat-coder hash. (Without publish nothing is minted.)
+- [ ] 2. PUBLISH — re-run each with `RETIRE_PUBLISH=1` → mints code-review v4 + extraction v4 in the step5 store WITHOUT kat-coder. Copy each `LEDGER |` line into this file.
+- [ ] 3. Re-export the committed baseline: `pnpm --filter @potion/workers exec tsx scripts/export-baseline.mts` (writes `packages/db/baseline/platform-frontiers.json`). Verify: `git grep -c or-kat-coder-pro-v2.5 packages/db/baseline/platform-frontiers.json` → 0; `.tranche/legs/{code-review,extraction}.json` regenerate the same way if that campaign export is re-run (never hand-edit measurement records).
+- [ ] 4. Recompute the landing-page copies from the new baseline: run the python in the `apps/dashboard/lib/evidence.ts` header (counts drop by ~1 model / 2 strategies / kat-coder's n) and update `EVIDENCE` + the row at `evidence.ts:152` + `economics.ts`.
+- [ ] 5. PROMOTE TO PROD: the running prod DB already holds the dead points and `importPlatformBaseline` never clobbers, so a fresh-deploy re-seed does NOT fix it. The corrected v4 frontiers must reach the prod DB via the promotion hop (`saveFrontier` in the server container — the same hop the boot import makes on an EMPTY cluster). Confirm the deploy's promotion path and run it against the prod `DATABASE_URL`; verify `getServingFrontier('code-review')` / `('extraction')` return v4 with no kat-coder.
+- [ ] 6. Verify end-to-end: `platform-baseline.test.ts` + `platform-sweep.test.ts` green; a served code-review/extraction request no longer 503s.
+
+### Follow-up recorded (NOT in this change; separate item)
+- [ ] Serve-path resilience: today a served point whose provider throws → HTTP 503, no fallback (`failoverChain` unwired; `nextPointExcluding` fires only on empty answers). Wire next-best-point fallback on THROWN provider errors so a future model death degrades to the next frontier point instead of 503. This is the systemic fix; the deliberate-drop path only removes the KNOWN dead point.

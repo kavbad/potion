@@ -3678,6 +3678,20 @@ export interface FrontierPlatformSweepResult {
     error: string;
     completedCells: number;
   }>;
+  /**
+   * Incumbents the operator explicitly acknowledged dropping
+   * (payload.deliberateDrops) AND that this run classified as `contained` —
+   * re-measured, threw on every attempt, intentionally removed. Empty on every
+   * normal run. Its presence is what makes a deliberate drop legible in the
+   * leg record rather than looking like a silent regression; the error/cells
+   * are the containment evidence that the removal is honest.
+   */
+  deliberatelyDropped: Array<{
+    strategyHash: string;
+    label: string;
+    error: string;
+    completedCells: number;
+  }>;
   /** Spend burned on contained failures — in spendUsd, itemised here. */
   abandonedSpendUsd: number;
   spendUsd: number;
@@ -3840,8 +3854,21 @@ export function frontierRegressionRefusal(args: {
   previousVersion: number;
   pricesVersion: string;
   dropped: ReadonlyArray<DroppedIncumbent>;
+  /**
+   * Operator-acknowledged drops (payload.deliberateDrops). Honoured ONLY for
+   * a `contained` incumbent — one this run re-measured and that threw on every
+   * attempt. This is deliberately the single cause we let an ack excuse: a
+   * `not-a-candidate` was never put in front of a provider (its fix is
+   * carry-forward, not an override), and `no-evidence` means the rows are
+   * stale. Excusing only `contained` keeps the invariant "the frontier never
+   * drops a point it did not re-measure" — a dead upstream IS re-measured, it
+   * just fails, and the containment record is the honest verdict.
+   */
+  deliberateDrops?: ReadonlySet<string>;
 }): PlatformSweepRefusalError | null {
-  const lost = args.dropped.filter((d) => d.cause !== 'dominated');
+  const excused = (d: DroppedIncumbent): boolean =>
+    d.cause === 'contained' && (args.deliberateDrops?.has(d.strategyHash) ?? false);
+  const lost = args.dropped.filter((d) => d.cause !== 'dominated' && !excused(d));
   if (lost.length === 0) return null;
   const dominated = args.dropped.filter((d) => d.cause === 'dominated');
   const them = lost.length === 1 ? 'it' : 'them';
@@ -4250,6 +4277,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     let frontierId: string | null = null;
     let frontierVersion: number | null = null;
     let frontierPoints: FrontierPoint[] = [];
+    let deliberatelyDropped: FrontierPlatformSweepResult['deliberatelyDropped'] = [];
     if (aggregates.length > 0) {
       const computed = computeFrontier(aggregates);
       // The regression guard protects PUBLISHING: it refuses to save a
@@ -4261,16 +4289,40 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
       // never-re-measured is evidence loss; only the second refuses, and
       // only where a save would make the loss real.
       if (payload.publish !== false && previous !== null && previous.points.length > 0) {
+        const dropped = classifyDroppedIncumbents({
+          previous: previous.points,
+          computed,
+          candidates: byHash.keys(),
+          measured: aggregates.map((a) => a.strategyHash),
+          failed: summary.failedStrategies,
+        });
+        const deliberateDropSet = new Set(payload.deliberateDrops ?? []);
+        deliberatelyDropped = dropped
+          .filter((d) => d.cause === 'contained' && deliberateDropSet.has(d.strategyHash))
+          .map((d) => ({
+            strategyHash: d.strategyHash,
+            label: d.label,
+            error: d.error ?? 'no error recorded',
+            completedCells: d.completedCells ?? 0,
+          }));
+        // A listed hash that matched no contained drop is a no-op for the
+        // guard — it can never excuse a healthy or un-measured point — but it
+        // almost always means a stale/typo'd hash or an incumbent that
+        // recovered. Say so, rather than let the operator believe a drop was
+        // honoured when the guard ignored it.
+        const unmatched = [...deliberateDropSet].filter(
+          (h) => !deliberatelyDropped.some((d) => d.strategyHash === h),
+        );
+        if (unmatched.length > 0) {
+          console.warn(
+            `[potion] deliberateDrops ignored (no contained incumbent this run): ${unmatched.join(', ')}`,
+          );
+        }
         const refusal = frontierRegressionRefusal({
           previousVersion: previous.version,
           pricesVersion: prices.version,
-          dropped: classifyDroppedIncumbents({
-            previous: previous.points,
-            computed,
-            candidates: byHash.keys(),
-            measured: aggregates.map((a) => a.strategyHash),
-            failed: summary.failedStrategies,
-          }),
+          dropped,
+          deliberateDrops: deliberateDropSet,
         });
         if (refusal !== null) throw refusal;
       }
@@ -4339,6 +4391,10 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
           completedCells: f.completedCells,
         };
       }),
+      // Operator-acknowledged, guard-excused drops (contained-only). Empty
+      // unless payload.deliberateDrops named a point this run re-measured and
+      // that failed — the honest record of an intentional removal.
+      deliberatelyDropped,
       abandonedSpendUsd: summary.abandonedSpendUsd,
       singlesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type === 'single').length,
       compositesOnFrontier: frontierPoints.filter((p) => p.strategyConfig.type !== 'single').length,
