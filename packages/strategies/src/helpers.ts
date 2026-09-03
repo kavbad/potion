@@ -18,6 +18,7 @@ export function addUsage(acc: Usage, u: Usage): Usage {
   acc.outputTokens += u.outputTokens;
   acc.costUsd = roundCost(acc.costUsd + u.costUsd);
   acc.latencyMs += u.latencyMs;
+  if (u.usageEstimated) acc.usageEstimated = true;
   return acc;
 }
 
@@ -27,6 +28,7 @@ export function addUsageParallel(acc: Usage, u: Usage): Usage {
   acc.outputTokens += u.outputTokens;
   acc.costUsd = roundCost(acc.costUsd + u.costUsd);
   acc.latencyMs = Math.max(acc.latencyMs, u.latencyMs);
+  if (u.usageEstimated) acc.usageEstimated = true;
   return acc;
 }
 
@@ -97,6 +99,7 @@ export async function callModel(
     outputTokens: response.usage.outputTokens,
     costUsd: roundCost(costUsd(response.usage, entry)),
     latencyMs: response.latencyMs,
+    ...(response.usage.usageEstimated ? { usageEstimated: true as const } : {}),
   };
   return {
     text: response.text,

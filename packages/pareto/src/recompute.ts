@@ -254,6 +254,11 @@ export async function aggregatesFromEvalResults(
           strategyConfig: r.strategyConfig,
           quality: r.quality,
           scorer: r.scorer,
+          // The cell's instrument rides into the aggregate: toolsMeasured
+          // derives from it (2026-09-01 — a tools suite may mix scorers).
+          ...(r.instrument === 'default' || r.instrument === 'tools' || r.instrument === 'vision' || r.instrument === 'audio'
+            ? { instrument: r.instrument }
+            : {}),
           ...(r.judgeAgreement !== null ? { judgeAgreement: r.judgeAgreement } : {}),
           usage: r.usage,
           latencyMs: r.latencyMs,

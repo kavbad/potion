@@ -86,7 +86,10 @@ export const CLUSTER_ALLOWED_SCORING: Readonly<Record<string, readonly ScoringKi
   'rewrite-edit': ['llm-judge', 'exact'],
   'rag-answer': ['llm-judge', 'field-match'],
   'multi-step-reasoning': ['exact', 'llm-judge'],
-  'agentic-tool-use': ['llm-judge', 'field-match', 'tool-call'],
+  // field-contains added 2026-09-01: the tools instrument's multi-turn
+  // continuation items (answer AFTER a tool result) score deterministically
+  // on grounded JSON — the journey precedent applied to the tools leg.
+  'agentic-tool-use': ['llm-judge', 'field-match', 'tool-call', 'field-contains'],
 };
 
 export function scoringAllowedForCluster(clusterId: string, kind: ScoringKind): boolean {

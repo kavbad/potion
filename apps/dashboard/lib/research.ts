@@ -23,6 +23,7 @@ export interface Issue {
   plain: string; lede: string; frontierNote: string; auditionNote: string; mixingNote: string; takeaway: string; method: string;
   faq: IssueFaq[]; facts: FactSheet | null; status: 'published' | 'held'; heldReason?: string;
   writer: { model: string; costUsd: number; receipt?: { cluster: string; strategy8: string; policy: string; provenance: string; promptTokens: number; completionTokens: number }; runId?: string; verifiedBy?: { runId: string; costUsd: number } } | null;
+  publishGate?: { decision: 'allow' | 'hold' | 'blocked'; audit?: boolean; runId: string; actionId: string; argsHash: string; priorResolution?: boolean };
 }
 
 function dirs(): string[] {

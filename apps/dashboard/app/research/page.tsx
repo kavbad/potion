@@ -53,6 +53,7 @@ export default async function ResearchIndex() {
           <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[12px] text-faint">
             <Link href="/answers" className="text-accent underline underline-offset-2">the measured answers</Link>
             <Link href="/research/methodology" className="text-accent underline underline-offset-2">methodology</Link>
+            <Link href="/research/glossary" className="text-accent underline underline-offset-2">glossary</Link>
             <Link href="/research/feed.xml" className="text-accent underline underline-offset-2">rss</Link>
           </div>
           <div className="mt-6 border-t border-ink" />

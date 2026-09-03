@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteShell } from '@/components/site-header';
 import { getIssue, listIssues, RESEARCH_TITLE, siteOrigin } from '@/lib/research';
+import { authorSlugForByline } from '@/lib/research-authors';
+import { DEFAULT_ISSUE_CTA } from '@/lib/research-ctas';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,9 +137,15 @@ export default async function IssuePage({ params }: Params) {
         </header>
         <h1 className="mt-6 text-[2.1rem] font-semibold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[2.9rem]">{i.title}</h1>
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12px] text-faint">
-          <span>{i.byline}</span>
+          {authorSlugForByline(i.byline) ? (
+            <Link href={`/research/authors/${authorSlugForByline(i.byline)}`} className="text-ink underline underline-offset-2 hover:text-accent">{i.byline}</Link>
+          ) : (
+            <span>{i.byline}</span>
+          )}
           <span>·</span>
           <Link href="/research/methodology" className="text-accent underline underline-offset-2">method</Link>
+          <span>·</span>
+          <Link href="/research/glossary" className="text-accent underline underline-offset-2">glossary</Link>
           <span>·</span>
           <Link href="/answers" className="text-accent underline underline-offset-2">the measured answers</Link>
         </div>
@@ -287,6 +295,15 @@ export default async function IssuePage({ params }: Params) {
             </p>
           </div>
         )}
+
+        {/* E7: the CTA answers the reader's natural next question and
+            resolves to a LIVE surface from the registry — never invented. */}
+        <div className="mt-12 border-t border-line pt-8">
+          <p className="font-mono text-[12px] uppercase tracking-[0.13em] text-faint">{DEFAULT_ISSUE_CTA.question}</p>
+          <Link href={DEFAULT_ISSUE_CTA.href} className="mt-2 inline-block text-[17px] font-medium text-accent underline underline-offset-4 hover:text-ink">
+            {DEFAULT_ISSUE_CTA.label}
+          </Link>
+        </div>
 
         <nav className="mt-14 flex justify-between border-t border-line pt-6 font-mono text-[12px]">
           <span>{older ? <Link href={`/research/${older.slug}`} className="text-accent hover:underline">← {older.week}</Link> : null}</span>

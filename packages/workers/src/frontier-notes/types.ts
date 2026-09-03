@@ -88,6 +88,20 @@ export interface Issue {
   facts: FactSheet;
   status: 'published' | 'held';
   heldReason?: string;
+  /** F2 (docs/RESEARCH-FLEET.md R3): the Action Gateway's decision on the
+   * publish act — recorded on the issue, fingerprint-bound to its content.
+   * 'allow' published it (audit = standing sampled audit; priorResolution
+   * = an operator's allow-once on this exact draft); 'hold'/'blocked' kept
+   * it held. Absent = published before the gate existed, or gate not
+   * configured. */
+  publishGate?: {
+    decision: 'allow' | 'hold' | 'blocked';
+    audit?: boolean;
+    runId: string;
+    actionId: string;
+    argsHash: string;
+    priorResolution?: boolean;
+  };
   /** `runId` (F0, docs/RESEARCH-FLEET.md R2): when a Delta worker run wrote
    * the draft, the recorded run that backs the byline — credits derive from
    * records, never captions. `verifiedBy` (F1): the Auditor run whose PASS

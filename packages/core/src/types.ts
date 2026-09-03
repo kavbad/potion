@@ -22,6 +22,12 @@ export interface Usage {
   outputTokens: number;
   costUsd: number;
   latencyMs: number;
+  /** TRUE when a transport had to REPLACE missing/contradicted provider
+   * usage with a labeled chars/4 estimate (2026-09-01 or-gemini-flash
+   * incident: text returned with completion_tokens 0). Never silently
+   * fabricated zeros; costUsd is then the modelled price on the estimate.
+   * Sums/aggregates carry it when ANY component was estimated. */
+  usageEstimated?: true;
 }
 
 // ---- clustering ----

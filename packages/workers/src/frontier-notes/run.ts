@@ -6,6 +6,7 @@ import type { ObservatoryRun } from '../observatory.js';
 import { auditorVerify } from './auditor.js';
 import { composeFactSheet } from './compose.js';
 import { deltaDraft, type DeltaWriterOptions } from './delta.js';
+import { publishGateDecision, reportPublishOutcome, type PublishGateOptions } from './publisher.js';
 import { assembleIssue, writeIssue } from './publish.js';
 import { loadReplaysFromStore, type StoreLike } from './replay-source.js';
 import type { Issue } from './types.js';
@@ -30,6 +31,11 @@ export interface FrontierNotesOptions {
    * no verdict (failed, parked, timed out, unparseable) is a fail for the
    * model-written draft, and the deterministic draft publishes instead. */
   auditor?: DeltaWriterOptions;
+  /** F2 (fleet R3): the publish gate. When set, a would-be-published issue
+   * asks the Action Gateway first — born supervised, so early issues HOLD
+   * for the operator; a graduated grant publishes autonomously with the
+   * standing sampled audit. An unreachable gate holds (fail closed). */
+  publishGate?: PublishGateOptions;
   byline?: string;
   gate?: boolean;
   extraNeverName?: readonly string[];
@@ -91,14 +97,45 @@ export async function runFrontierNotes(o: FrontierNotesOptions): Promise<{ issue
   // The byline is a provenance claim: 'Delta' only when Delta's run wrote
   // the draft (the writer.runId is its evidence) — never on a fallback.
   const byline = o.byline ?? (deltaWrote ? 'Delta' : undefined);
-  const issue = assembleIssue(facts, draft, {
+  let issue = assembleIssue(facts, draft, {
     publishedAt: o.now.toISOString(),
     writer,
     gate: o.gate ?? false,
     ...(byline !== undefined ? { byline } : {}),
     ...(o.extraNeverName !== undefined ? { extraNeverName: o.extraNeverName } : {}),
   });
+  // F2 (fleet R3): a would-be-published issue passes the Action Gateway.
+  // The approval binds to this exact draft's fingerprint; a held issue is
+  // released by frontier-notes-release on the SAME content, never re-drafted.
+  let gateAllowed = false;
+  if (issue.status === 'published' && o.publishGate) {
+    const g = await publishGateDecision(facts.week, draft, o.publishGate);
+    if (g.decision === 'allow') {
+      gateAllowed = true;
+      issue = {
+        ...issue,
+        publishGate: {
+          decision: 'allow',
+          runId: g.runId,
+          actionId: g.actionId,
+          argsHash: g.argsHash,
+          ...(g.audit !== undefined ? { audit: g.audit } : {}),
+          ...(g.priorResolution !== undefined ? { priorResolution: g.priorResolution } : {}),
+        },
+      };
+    } else {
+      issue = {
+        ...issue,
+        status: 'held',
+        heldReason: `publish gate ${g.decision}: ${g.question ?? g.error ?? 'awaiting operator'} — approve on the gate session (${g.runId || 'unreachable'}), then run scripts/frontier-notes-release.ts`,
+        publishGate: { decision: g.decision, runId: g.runId, actionId: g.actionId, argsHash: g.argsHash },
+      };
+    }
+  }
   const files = writeIssue(o.notesDir, issue);
-  const digest = `frontier notes ${issue.week}: ${issue.status.toUpperCase()} — "${issue.title}"${issue.status === 'held' ? ` (${issue.heldReason?.split('\n')[0]})` : ''}${writer ? ` · writer ${writer.model} $${writer.costUsd.toFixed(3)}` : ''}${writer?.runId ? ` · run ${writer.runId}` : ''}${writer?.verifiedBy ? ` · verified ${writer.verifiedBy.runId}` : ''}${fallbackNote ? ` · fallback: ${fallbackNote}` : ''}`;
+  if (issue.status === 'published' && o.publishGate && gateAllowed && issue.publishGate) {
+    await reportPublishOutcome(issue.publishGate, true, o.publishGate);
+  }
+  const digest = `frontier notes ${issue.week}: ${issue.status.toUpperCase()} — "${issue.title}"${issue.status === 'held' ? ` (${issue.heldReason?.split('\n')[0]})` : ''}${writer ? ` · writer ${writer.model} $${writer.costUsd.toFixed(3)}` : ''}${writer?.runId ? ` · run ${writer.runId}` : ''}${writer?.verifiedBy ? ` · verified ${writer.verifiedBy.runId}` : ''}${issue.publishGate ? ` · gate ${issue.publishGate.decision}${issue.publishGate.audit ? '+audit' : ''}${issue.publishGate.priorResolution ? ' (operator allow-once)' : ''}` : ''}${fallbackNote ? ` · fallback: ${fallbackNote}` : ''}`;
   return { issue, files, digest };
 }

@@ -1,16 +1,17 @@
 {
   "suiteId": "agentic-tool-use-tools-v1",
   "clusterId": "agentic-tool-use",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": {
     "kind": "authored",
-    "name": "Potion-authored function-calling (24 items): 12 tool pairs where one tool is the obvious neighbour of the right one (weather vs forecast, create vs list, send vs search, query vs describe, read vs write, get vs refund); every item expects ONE call with a deterministic argument subset; dates resolve against a fixed 'today'",
+    "name": "Potion-authored function-calling + continuation (36 items): att-01..24 single-turn \u2014 12 tool pairs where one tool is the obvious neighbour of the right one, every item expects ONE call with a deterministic argument subset; att-25..36 MULTI-TURN (added 1.1.0, 2026-09-01, after the or-gemini-flash empty-stop incident) \u2014 the transcript already holds a tool call and its result, and the model must CONTINUE: 6 chain items expect the next tool call (tool-call), 6 conclude items expect a grounded JSON answer from the result (field-contains); an empty stop after a tool result scores 0. Dates resolve against a fixed 'today'",
     "license": "Proprietary (Potion-authored)"
   },
   "items": "items.jsonl",
   "scoring": {
     "allowed": [
-      "tool-call"
+      "tool-call",
+      "field-contains"
     ]
   },
   "createdAt": "2026-08-23T06:00:00.000Z"

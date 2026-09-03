@@ -54,6 +54,16 @@ export interface CompleteResponse {
      */
     cachedInputTokens?: number;
     reasoningTokens?: number;
+    /**
+     * TRUE when the transport REPLACED the provider's usage with a chars/4
+     * estimate because the usage block was missing, or claimed
+     * completion_tokens 0 against a non-empty payload (text or tool calls
+     * came back) — the 2026-09-01 or-gemini-flash incident shape. A
+     * transport must never fabricate silent zeros: zeros bill real spend at
+     * $0 and make the serving degeneracy rollup read a text-bearing answer
+     * as an empty completion. Absent = the provider's own numbers.
+     */
+    usageEstimated?: true;
   };
   latencyMs: number;
   logprobConfidence?: number; // mean token logprob → exp, when provider exposes it

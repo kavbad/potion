@@ -95,9 +95,18 @@ export function aggregateResults(
             latencyN: n,
             latencyP95Ci95: latencyCi!.ci95,
             latencySeed,
-            // MIXING M3: every cell was scored as a tool call → the point was
-            // measured on items that carried tools.
-            ...(results.every((r) => r.scorer === 'tool-call') ? { toolsMeasured: true } : {}),
+            // MIXING M3: every cell is TOOLS-instrument evidence → the point
+            // was measured on items that carried tools. Keyed on the cell's
+            // effective instrument, not its scorer (2026-09-01): the tools
+            // suite now mixes tool-call items with grounded-continuation
+            // items scored field-contains, and both kinds carry tools. Rows
+            // without an instrument keep the legacy scorer derivation
+            // (tool-call ⇒ tools), matching the db-boundary fallback.
+            ...(results.every(
+              (r) => (r.instrument ?? (r.scorer === 'tool-call' ? 'tools' : 'default')) === 'tools',
+            )
+              ? { toolsMeasured: true }
+              : {}),
           },
         }
       : {}),

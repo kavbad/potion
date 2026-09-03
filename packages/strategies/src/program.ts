@@ -67,6 +67,7 @@ export async function runProgram(
       outputTokens: response.usage.outputTokens,
       costUsd: roundCost(costUsd(response.usage, entry)),
       latencyMs: response.latencyMs,
+      ...(response.usage.usageEstimated ? { usageEstimated: true as const } : {}),
     };
     const trace: StageTrace = {
       stage,

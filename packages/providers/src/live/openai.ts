@@ -106,20 +106,7 @@ export async function openAiCompatibleComplete(
 
   return {
     text: choice?.message?.content ?? '',
-    usage: {
-      inputTokens: json.usage?.prompt_tokens ?? 0,
-      outputTokens: json.usage?.completion_tokens ?? 0,
-      // Only set when the provider actually reported it — absent must stay
-      // absent so costUsd() falls back to the modelled price rather than
-      // billing a fabricated zero.
-      ...(typeof json.usage?.cost === 'number' ? { providerCostUsd: json.usage.cost } : {}),
-      ...(typeof json.usage?.prompt_tokens_details?.cached_tokens === 'number'
-        ? { cachedInputTokens: json.usage.prompt_tokens_details.cached_tokens }
-        : {}),
-      ...(typeof json.usage?.completion_tokens_details?.reasoning_tokens === 'number'
-        ? { reasoningTokens: json.usage.completion_tokens_details.reasoning_tokens }
-        : {}),
-    },
+    usage: honestUsage(json.usage, choice?.message?.content ?? '', toolCalls, req.messages),
     latencyMs: Date.now() - started,
     // exactOptionalPropertyTypes: only present when the provider returned logprobs.
     ...(logprobConfidence !== undefined ? { logprobConfidence } : {}),
@@ -147,6 +134,61 @@ interface OpenAiStreamChunk {
  * One attempt, no retry (a stream cannot be replayed); the caller's signal
  * and the transport timeout (to first byte, then per read) both abort it.
  */
+/** chars/4 — the platform's blunt token estimate (estimate.ts convention). */
+function estTokens(chars: number): number {
+  return Math.ceil(chars / 4);
+}
+
+/**
+ * Usage honesty (2026-09-01, the or-gemini-flash incident): a transport must
+ * never fabricate silent zeros. When the provider omitted the usage block, or
+ * claimed completion_tokens 0 against a non-empty payload (text or tool calls
+ * came back), the reported numbers contradict the payload in hand — so the
+ * token counts are replaced with labeled chars/4 estimates
+ * (usageEstimated: true). A $0 billed cost is part of the same contradiction
+ * and is dropped (costUsd() then falls back to the modelled price on the
+ * estimate); a POSITIVE billed cost is the provider's own ledger and is kept
+ * even when its token counts are garbage.
+ */
+function honestUsage(
+  usage: OpenAiChatResponse['usage'],
+  text: string,
+  toolCalls: ToolCall[] | undefined,
+  messages: CompleteRequest['messages'],
+): CompleteResponse['usage'] {
+  const outChars = text.length + (toolCalls && toolCalls.length > 0 ? JSON.stringify(toolCalls).length : 0);
+  const contradicted = outChars > 0 && (usage?.completion_tokens ?? 0) === 0;
+  if (usage !== undefined && !contradicted) {
+    return {
+      inputTokens: usage.prompt_tokens ?? 0,
+      outputTokens: usage.completion_tokens ?? 0,
+      // Only set when the provider actually reported it — absent must stay
+      // absent so costUsd() falls back to the modelled price rather than
+      // billing a fabricated zero.
+      ...(typeof usage.cost === 'number' ? { providerCostUsd: usage.cost } : {}),
+      ...(typeof usage.prompt_tokens_details?.cached_tokens === 'number'
+        ? { cachedInputTokens: usage.prompt_tokens_details.cached_tokens }
+        : {}),
+      ...(typeof usage.completion_tokens_details?.reasoning_tokens === 'number'
+        ? { reasoningTokens: usage.completion_tokens_details.reasoning_tokens }
+        : {}),
+    };
+  }
+  const reportedInput = usage?.prompt_tokens ?? 0;
+  return {
+    inputTokens: reportedInput > 0 ? reportedInput : estTokens(JSON.stringify(messages).length),
+    outputTokens: estTokens(outChars),
+    ...(typeof usage?.cost === 'number' && usage.cost > 0 ? { providerCostUsd: usage.cost } : {}),
+    ...(typeof usage?.prompt_tokens_details?.cached_tokens === 'number'
+      ? { cachedInputTokens: usage.prompt_tokens_details.cached_tokens }
+      : {}),
+    ...(typeof usage?.completion_tokens_details?.reasoning_tokens === 'number'
+      ? { reasoningTokens: usage.completion_tokens_details.reasoning_tokens }
+      : {}),
+    usageEstimated: true,
+  };
+}
+
 /** Normalize a provider finish reason to the OpenAI vocabulary. */
 function finishReasonOf(raw: string | null | undefined): CompleteResponse['finishReason'] | undefined {
   if (raw === 'stop' || raw === 'length' || raw === 'tool_calls' || raw === 'content_filter') return raw;
@@ -231,6 +273,32 @@ export async function openAiCompatibleCompleteStream(
     let usage: OpenAiChatResponse['usage'];
     const calls = new Map<number, { id: string; type: string; function: { name: string; arguments: string } }>();
     let finish: string | undefined;
+    const handleLine = (raw: string): void => {
+      const line = raw.trim();
+      if (!line.startsWith('data:')) return;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') return;
+      let chunk: OpenAiStreamChunk;
+      try { chunk = JSON.parse(payload) as OpenAiStreamChunk; } catch { return; }
+      if (chunk.model) model = chunk.model;
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (typeof delta === 'string' && delta.length > 0) { text += delta; onToken(delta); }
+      // Tool-call fragments (2026-08-22): OpenAI streams each call as an
+      // index-keyed series — id/name once, arguments in pieces. Assembled
+      // here and returned whole on the response, the same shape the
+      // non-streaming path preserves verbatim.
+      for (const frag of chunk.choices?.[0]?.delta?.tool_calls ?? []) {
+        const cur = calls.get(frag.index) ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
+        if (frag.id) cur.id = frag.id;
+        if (frag.type) cur.type = frag.type;
+        if (frag.function?.name) cur.function.name += frag.function.name;
+        if (frag.function?.arguments) cur.function.arguments += frag.function.arguments;
+        calls.set(frag.index, cur);
+      }
+      const fr = chunk.choices?.[0]?.finish_reason;
+      if (typeof fr === 'string') finish = fr;
+      if (chunk.usage) usage = chunk.usage;
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -238,46 +306,24 @@ export async function openAiCompatibleCompleteStream(
       buf += decoder.decode(value, { stream: true });
       let idx: number;
       while ((idx = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, idx).trim();
+        const line = buf.slice(0, idx);
         buf = buf.slice(idx + 1);
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        let chunk: OpenAiStreamChunk;
-        try { chunk = JSON.parse(payload) as OpenAiStreamChunk; } catch { continue; }
-        if (chunk.model) model = chunk.model;
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (typeof delta === 'string' && delta.length > 0) { text += delta; onToken(delta); }
-        // Tool-call fragments (2026-08-22): OpenAI streams each call as an
-        // index-keyed series — id/name once, arguments in pieces. Assembled
-        // here and returned whole on the response, the same shape the
-        // non-streaming path preserves verbatim.
-        for (const frag of chunk.choices?.[0]?.delta?.tool_calls ?? []) {
-          const cur = calls.get(frag.index) ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
-          if (frag.id) cur.id = frag.id;
-          if (frag.type) cur.type = frag.type;
-          if (frag.function?.name) cur.function.name += frag.function.name;
-          if (frag.function?.arguments) cur.function.arguments += frag.function.arguments;
-          calls.set(frag.index, cur);
-        }
-        const fr = chunk.choices?.[0]?.finish_reason;
-        if (typeof fr === 'string') finish = fr;
-        if (chunk.usage) usage = chunk.usage;
+        handleLine(line);
       }
     }
+    // Tail flush (2026-09-01): a stream that closes without a trailing
+    // newline leaves its final event — often the usage-only chunk — sitting
+    // in the buffer, which used to be discarded and turned a fully-billed
+    // completion into fabricated zero usage.
+    buf += decoder.decode();
+    for (const line of buf.split('\n')) handleLine(line);
     const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c) as ToolCall[];
     const streamFinish = finishReasonOf(finish);
     return {
       text,
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
       ...(streamFinish !== undefined ? { finishReason: streamFinish } : {}),
-      usage: {
-        inputTokens: usage?.prompt_tokens ?? 0,
-        outputTokens: usage?.completion_tokens ?? 0,
-        ...(typeof usage?.cost === 'number' ? { providerCostUsd: usage.cost } : {}),
-        ...(typeof usage?.prompt_tokens_details?.cached_tokens === 'number' ? { cachedInputTokens: usage.prompt_tokens_details.cached_tokens } : {}),
-        ...(typeof usage?.completion_tokens_details?.reasoning_tokens === 'number' ? { reasoningTokens: usage.completion_tokens_details.reasoning_tokens } : {}),
-      },
+      usage: honestUsage(usage, text, toolCalls.length > 0 ? toolCalls : undefined, req.messages),
       latencyMs: Date.now() - started,
       modelVersion: model ?? native,
     };

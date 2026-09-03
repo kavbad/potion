@@ -53,10 +53,22 @@ const delta = process.env.DELTA_HARNESS && process.env.POTION_LAB_SESSION
 const auditor = process.env.AUDITOR_HARNESS && delta
   ? { ...delta, harnessHash: process.env.AUDITOR_HARNESS }
   : undefined;
+// F2: POTION_RESEARCH_KEY routes the publish act through the Action
+// Gateway on Delta's harness — born supervised; a held issue is released
+// with scripts/frontier-notes-release.ts after the operator approves.
+const publishGate = process.env.POTION_RESEARCH_KEY && delta
+  ? {
+      url: process.env.POTION_LAB_URL ?? 'https://api.withpotion.com',
+      apiKey: process.env.POTION_RESEARCH_KEY,
+      harnessHash: delta.harnessHash,
+      session: delta.session,
+    }
+  : undefined;
 const { issue, files, digest } = await runFrontierNotes({
   run,
   ...(delta ? { delta } : {}),
   ...(auditor ? { auditor } : {}),
+  ...(publishGate ? { publishGate } : {}),
   ...(potion ? { potion } : {}),
   db: handle.db as never,
   pricesVersion: process.env.PRICES_VERSION ?? prices.version,
