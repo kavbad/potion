@@ -43,18 +43,36 @@ export function LabCompose() {
   const [advanced, setAdvanced] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<Array<{ connectorId: string; displayName: string }>>([]);
+  const [catalog, setCatalog] = useState<Array<{ connectorId: string; displayName: string; connectStatus?: string }>>([]);
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     fetch('/api/lab/connectors', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
-        const list = (b as { connectors?: Array<{ connectorId: string; displayName: string }> } | null)?.connectors;
-        if (list) setCatalog(list.map((c) => ({ connectorId: c.connectorId, displayName: c.displayName })));
+        const list = (b as { connectors?: Array<{ connectorId: string; displayName: string; connectStatus?: string }> } | null)?.connectors;
+        if (list) setCatalog(list.map((c) => ({ connectorId: c.connectorId, displayName: c.displayName, connectStatus: c.connectStatus })));
       })
       .catch(() => null);
   }, []);
+
+  /** CONNECTABLE ONLY (2026-09-04, from the teardown): auto-attaching a
+   * power that cannot connect is how four production workers ended up
+   * declaring Gmail. The worker is then born brain-only and parks asking
+   * for a channel it can never have. Detection runs against what can
+   * actually connect; anything else is SAID at hire time instead. */
+  const connectable = useMemo(
+    () => catalog.filter((c) => c.connectStatus === 'ready' || c.connectStatus === 'builtin'),
+    [catalog],
+  );
+  const unreachable = useMemo(
+    () => catalog.filter((c) => c.connectStatus !== 'ready' && c.connectStatus !== 'builtin'),
+    [catalog],
+  );
+  const mentionedButUnreachable = useMemo(
+    () => (goal.trim().length < 8 ? [] : detectAccounts(goal, unreachable)),
+    [goal, unreachable],
+  );
 
   const examples = useMemo(
     () => FEATURED.map((id) => GALLERY.find((g) => g.id === id)).filter((g): g is (typeof GALLERY)[number] => g !== undefined),
@@ -80,7 +98,7 @@ export function LabCompose() {
               // Derived, not asked: the job's own language says whether this
               // is a standing responsibility or a one-off piece of work.
               kind: STANDING_HINT.test(job) ? 'standing' : 'task',
-              accounts: detectAccounts(job, catalog),
+              accounts: detectAccounts(job, connectable),
               worthUsd: 1,
               whenUnsure: 'ask-first',
               ...(cluster !== undefined ? { clusterChoice: cluster } : {}),
@@ -100,7 +118,7 @@ export function LabCompose() {
         setBusy(false);
       }
     },
-    [goal, species, catalog, router],
+    [goal, species, connectable, router],
   );
 
   /** Advanced opens the full form, carrying what has been typed so far —
@@ -118,7 +136,7 @@ export function LabCompose() {
         : {
             goal,
             kind: STANDING_HINT.test(goal) ? 'standing' : 'task',
-            accounts: detectAccounts(goal, catalog).join(', '),
+            accounts: detectAccounts(goal, connectable).join(', '),
             worth: '1',
             qualityBar: '',
             produces: '',
@@ -127,7 +145,7 @@ export function LabCompose() {
           },
     );
     setAdvanced(true);
-  }, [goal, species, catalog]);
+  }, [goal, species, connectable]);
 
   useEffect(() => {
     if (!advanced || pendingPrefill === null) return;
@@ -219,6 +237,19 @@ export function LabCompose() {
           </button>
         ))}
       </div>
+
+      {mentionedButUnreachable.length > 0 ? (
+        <p className="mt-3 border-l-2 border-warn pl-3 text-[13px] leading-relaxed text-soft" data-testid="compose-unreachable">
+          This job mentions{' '}
+          <span className="font-medium text-ink">
+            {mentionedButUnreachable
+              .map((id) => unreachable.find((c) => c.connectorId === id)?.displayName ?? id)
+              .join(', ')}
+          </span>
+          , which Potion can&rsquo;t connect to live yet. The worker will still reason, draft and
+          compute — it just won&rsquo;t touch that account.
+        </p>
+      ) : null}
 
       <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
         born supervised · hard budget · it asks before every external action
