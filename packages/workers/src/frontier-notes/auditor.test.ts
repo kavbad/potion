@@ -67,11 +67,16 @@ describe('parseVerdict', () => {
     expect(v?.checks).toHaveLength(2);
   });
 
-  it('a pass with a failed check or required changes is a fail — the record outranks the word', () => {
+  it('a pass with a failed check is a fail — the record outranks the word', () => {
     const withFailedCheck = { ...PASS_VERDICT, checks: [...PASS_VERDICT.checks, { claim: 'x', method: 'recomputed', ok: false }] };
     expect(parseVerdict(JSON.stringify(withFailedCheck))?.verdict).toBe('fail');
+  });
+
+  it('a pass whose only defect is required changes is the MIDDLE state, not a fail', () => {
     const withChanges = { ...PASS_VERDICT, requiredChanges: ['fix the title count'] };
-    expect(parseVerdict(JSON.stringify(withChanges))?.verdict).toBe('fail');
+    const v = parseVerdict(JSON.stringify(withChanges));
+    expect(v?.verdict).toBe('pass-with-changes');
+    expect(v?.requiredChanges).toEqual(['fix the title count']);
   });
 
   it('tolerates case and drops malformed check rows, but never invents a verdict', () => {

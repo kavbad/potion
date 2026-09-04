@@ -42,7 +42,7 @@ export function deterministicDraft(f: FactSheet): Draft {
   titleParts.push(
     moved.length === 0
       ? `All ${f.frontier.length} routing frontiers held this week`
-      : `${moved.length} of ${f.frontier.length} routing frontiers moved this week`,
+      : `${moved.length} of ${f.frontier.length} routing frontiers drifted this week`,
   );
   if (mix) {
     titleParts.push(
@@ -59,7 +59,7 @@ export function deterministicDraft(f: FactSheet): Draft {
     `Week ${f.week.split('-W')[1]} of ${f.week.split('-W')[0]}: ${f.numbers.canaries} drift canaries re-checked every routing frontier, ${f.numbers.candidatesScreened} new catalogue listings were screened and ${f.numbers.candidatesMeasured} were measured.`,
     moved.length === 0
       ? `No frontier moved${incon.length ? ` (${incon.length} check${incon.length > 1 ? 's' : ''} inconclusive)` : ''}.`
-      : `${moved.map((m) => m.clusterId).join(', ')} moved and will be re-measured in full.`,
+      : `${moved.map((m) => m.clusterId).join(', ')} drifted and will be re-measured in full; the routed picks did not change.`,
     mix
       ? mix.vague
         ? `The notable result is from the mixing lane: on ${mix.family} work, a combination of measured models matched the best single model's quality and came in ${mix.costBand}.`
@@ -74,7 +74,7 @@ export function deterministicDraft(f: FactSheet): Draft {
           .slice(0, 3)
           .map((c) => `${c.clusterId}: ${q(c.observedMean!)} observed against ${q(c.storedQuality)} ± ${q(c.storedCi95)} stored`)
           .join('; ')}.`
-      : `${held.length} frontiers held, ${moved.length} moved${incon.length ? `, ${incon.length} inconclusive` : ''}. ${moved
+      : `${held.length} frontiers held, ${moved.length} drifted${incon.length ? `, ${incon.length} inconclusive` : ''}. ${moved
           .map((c) => `${c.clusterId} fell to ${c.observedMean === null ? 'no reading' : q(c.observedMean)} against ${q(c.storedQuality)} ± ${q(c.storedCi95)}`)
           .join('; ')}.`;
 

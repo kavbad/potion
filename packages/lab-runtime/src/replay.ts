@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, contractRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, doneFileRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
 import { decideAction } from './gateway.js';
 import { planLedgerMessage } from './plan.js';
@@ -202,6 +202,14 @@ export function replayRun(
       // THE EMPTY-STOP LAW (2026-09-01, mirrored same commit): a stamped
       // report-less stop did NOT complete — the loop pushed one repair
       // round and continued the mission.
+      // THE DONE-DEFINITION LAW (2026-09-03, mirrored same commit): a
+      // stamped step did NOT complete — the mission's done-definition
+      // named files the run did not hold; re-derive the same repair.
+      const doneFiles = (p as { doneFileRepair?: string[] }).doneFileRepair;
+      if (doneFiles !== undefined) {
+        messages.push(doneFileRepairMessage(doneFiles));
+        if (expectWrapUp) expectWrapUp = false;
+      }
       const emptyStopStamp = (p as { emptyStopRepair?: boolean }).emptyStopRepair;
       if (emptyStopStamp === true) {
         messages.push(emptyStopRepairMessage());

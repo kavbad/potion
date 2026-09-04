@@ -1,29 +1,72 @@
-// FRONTIER NOTES — the publication front page (redesigned 2026-08-25, the
-// answer-engine build). One masthead over three editions: the weekly issue
-// (featured + archive), the daily notes (same archive as they land), and
-// the measured-answers reference section. Lab-journal identity: double-rule
-// masthead, mono metadata, ledger dividers — the receipts aesthetic, public.
+// FRONTIER NOTES — the publication front page (F7, redesigned 2026-09-03).
+//
+// Editorial magazine STRUCTURE, borrowed from the target the operator named
+// (review.firstround.com): a dominant featured piece, a live rail beside it,
+// a browsable archive grid with kind tags, and a band that says why this is
+// worth reading. STRUCTURE ONLY — the standing design law binds: no serif,
+// mono labels ≥12px with tracking pulled in, no floating tiles, the ledger
+// identity (double-rule masthead, ledger dividers, receipts aesthetic) is
+// Potion's own and stays.
+//
+// Two editions now share the page (F6): the WEEKLY issue is the feature;
+// the DAILY ledger is the rail — a line a day, published whether or not
+// anything moved, because a quiet day measured is itself a result.
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteShell } from '@/components/site-header';
 import { ANSWER_PAGES, fetchPublicAnswers } from '@/lib/answers';
-import { listIssues, RESEARCH_TAGLINE, RESEARCH_TITLE, siteOrigin } from '@/lib/research';
+import { listIssues, RESEARCH_TAGLINE, RESEARCH_TITLE, siteOrigin, type Issue } from '@/lib/research';
+import { authorSlugForByline } from '@/lib/research-authors';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: `${RESEARCH_TITLE} — weekly measured model routing research · Potion`,
+  title: `${RESEARCH_TITLE} — measured model routing research, daily · Potion`,
   description: RESEARCH_TAGLINE,
   alternates: { canonical: '/research', types: { 'application/rss+xml': '/research/feed.xml' } },
   openGraph: { title: RESEARCH_TITLE, description: RESEARCH_TAGLINE, type: 'website', url: '/research' },
 };
+
+const isDaily = (i: Issue) => i.kind === 'daily';
+
+function KindTag({ i }: { i: Issue }) {
+  const daily = isDaily(i);
+  return (
+    <span
+      className={`border px-1.5 py-px font-mono text-[12px] uppercase tracking-[0.1em] ${
+        daily ? 'border-[#c4bfb2] text-faint' : 'border-accent/50 text-accent'
+      }`}
+    >
+      {daily ? 'daily ledger' : 'weekly issue'}
+    </span>
+  );
+}
+
+/** The byline links to the author's page when the author is a fleet worker. */
+function Byline({ byline }: { byline: string }) {
+  const slug = authorSlugForByline(byline);
+  return slug ? (
+    <Link href={`/research/authors/${slug}`} className="text-ink underline underline-offset-2 hover:text-accent">
+      {byline}
+    </Link>
+  ) : (
+    <span>{byline}</span>
+  );
+}
 
 export default async function ResearchIndex() {
   const issues = listIssues();
   const origin = siteOrigin();
   const answers = await fetchPublicAnswers();
   const measured = ANSWER_PAGES.filter((p) => answers?.clusters.some((c) => c.clusterId === p.clusterId));
-  const [latest, ...rest] = issues;
+
+  const weeklies = issues.filter((i) => !isDaily(i));
+  const dailies = issues.filter(isDaily);
+  // The feature is the newest weekly; if only dailies exist, the newest of those.
+  const feature = weeklies[0] ?? issues[0];
+  const archive = issues.filter((i) => i.slug !== feature?.slug);
+  const verified = issues.filter((i) => i.writer?.verifiedBy).length;
+
   const ld = {
     '@context': 'https://schema.org',
     '@type': 'Blog',
@@ -37,74 +80,155 @@ export default async function ResearchIndex() {
   return (
     <SiteShell current="research">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
-      <main className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
-        {/* ---- the masthead: double rule, the name, the contract ---- */}
+      <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">
+        {/* ══ masthead ══ */}
         <header>
           <div className="border-t-2 border-ink" />
           <div className="mt-[3px] border-t border-ink" />
           <div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
             <span>by Potion Research</span>
-            <span>weekly · negatives included</span>
+            <span>daily ledger · weekly issue · negatives included</span>
           </div>
-          <h1 className="mt-3 text-[3rem] font-semibold leading-[0.98] tracking-[-0.03em] text-ink sm:text-[4.2rem]">
+          <h1 className="mt-3 text-[3rem] font-semibold leading-[0.98] tracking-[-0.03em] text-ink sm:text-[4.6rem]">
             Frontier Notes
           </h1>
           <p className="mt-4 max-w-2xl text-[17px] leading-relaxed text-soft">{RESEARCH_TAGLINE}</p>
-          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[12px] text-faint">
-            <Link href="/answers" className="text-accent underline underline-offset-2">the measured answers</Link>
+          <nav className="mt-5 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[12px] uppercase tracking-[0.1em]">
+            <Link href="/answers" className="text-accent underline underline-offset-2">measured answers</Link>
             <Link href="/research/methodology" className="text-accent underline underline-offset-2">methodology</Link>
             <Link href="/research/glossary" className="text-accent underline underline-offset-2">glossary</Link>
+            <Link href="/research/authors/delta" className="text-accent underline underline-offset-2">authors</Link>
             <Link href="/research/feed.xml" className="text-accent underline underline-offset-2">rss</Link>
-          </div>
+          </nav>
           <div className="mt-6 border-t border-ink" />
           <div className="mt-[3px] border-t-2 border-ink" />
         </header>
 
-        <p className="mt-8 max-w-2xl text-[13.5px] leading-relaxed text-soft">
-          Every number here is produced by the same measurements that route production traffic:
-          weekly drift checks on every routing frontier, auditions of newly listed models, and
-          replayed combinations. Numbers carry dates, sample sizes, and intervals. Names that are
-          part of the product are withheld; their numbers are not. When a hypothesis fails, the
-          failure is published.
-        </p>
+        {/* ══ the feature + the daily rail ══ */}
+        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <section>
+            {feature ? (
+              <article>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <KindTag i={feature} />
+                  <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-faint">
+                    {feature.week} · {feature.publishedAt.slice(0, 10)}
+                  </span>
+                </div>
+                <h2 className="mt-4 text-[2.1rem] font-semibold leading-[1.06] tracking-[-0.028em] text-ink sm:text-[2.9rem]">
+                  <Link href={`/research/${feature.slug}`} className="hover:text-accent">{feature.title}</Link>
+                </h2>
+                <p className="mt-4 max-w-2xl text-[17px] leading-relaxed text-soft">{feature.summary}</p>
+                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[12px] text-faint">
+                  <Byline byline={feature.byline} />
+                  {feature.facts && (
+                    <>
+                      <span>{feature.facts.numbers.canaries} canaries</span>
+                      <span className="text-kept">{feature.facts.numbers.clustersHeld} held</span>
+                      <span>{feature.facts.numbers.clustersMoved} drifted</span>
+                      <span>{feature.facts.numbers.candidatesMeasured} measured</span>
+                    </>
+                  )}
+                  {feature.writer?.verifiedBy && <span className="text-kept">independently verified</span>}
+                </div>
+                <Link
+                  href={`/research/${feature.slug}`}
+                  className="mt-6 inline-block border-b-2 border-accent pb-0.5 font-mono text-[13px] uppercase tracking-[0.12em] text-accent hover:text-ink"
+                >
+                  Read the {isDaily(feature) ? 'ledger' : 'issue'} →
+                </Link>
+              </article>
+            ) : (
+              <p className="border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
+                The first issue publishes after the next measurement run. The feed at{' '}
+                <Link href="/research/feed.xml" className="text-accent underline">/research/feed.xml</Link> will carry it.
+              </p>
+            )}
+          </section>
 
-        {/* ---- featured latest issue ---- */}
-        {latest ? (
-          <article className="mt-10 border border-[#c4bfb2] bg-[#fbfaf7] px-7 py-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
-              <span className="text-accent">{latest.kind === 'daily' ? 'daily note' : 'latest issue'} · {latest.week}</span>
-              <span>{latest.publishedAt.slice(0, 10)}</span>
+          {/* the daily rail — the thing that changes every day */}
+          <aside className="lg:border-l lg:border-[#e2ded4] lg:pl-8">
+            <div className="border-b border-ink pb-2 font-mono text-[12px] uppercase tracking-[0.13em] text-ink">
+              The daily ledger
             </div>
-            <h2 className="mt-3 text-[1.7rem] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">
-              <Link href={`/research/${latest.slug}`} className="hover:text-accent">{latest.title}</Link>
-            </h2>
-            <p className="mt-3 text-[15px] leading-relaxed text-soft">{latest.summary}</p>
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-dashed border-[#d9d5cb] pt-3 font-mono text-[12px] text-faint">
-              {latest.facts ? (
-                <>
-                  <span>{latest.facts.numbers.canaries} canaries</span>
-                  <span className="text-kept">{latest.facts.numbers.clustersHeld} held</span>
-                  <span>{latest.facts.numbers.clustersMoved} drifted</span>
-                  <span>{latest.facts.numbers.candidatesMeasured} new models measured</span>
-                </>
-              ) : (
-                <span>a short note — published because the measured truth changed</span>
+            <p className="mt-3 text-[13.5px] leading-relaxed text-soft">
+              What the instruments did in the last 24 hours — published every day, including the quiet ones.
+            </p>
+            <ul className="mt-4">
+              {dailies.slice(0, 7).map((d) => (
+                <li key={d.slug} className="border-b border-dashed border-[#d9d5cb] py-3">
+                  <div className="font-mono text-[12px] text-faint">{d.week}</div>
+                  <Link href={`/research/${d.slug}`} className="mt-0.5 block text-[14px] font-medium leading-snug text-ink hover:text-accent">
+                    {d.title}
+                  </Link>
+                </li>
+              ))}
+              {dailies.length === 0 && (
+                <li className="py-3 text-[13.5px] leading-relaxed text-faint">
+                  The first daily ledger publishes on the next tick.
+                </li>
               )}
-              <Link href={`/research/${latest.slug}`} className="ml-auto text-accent">read {latest.kind === 'daily' ? 'the note' : 'the issue'} →</Link>
+            </ul>
+          </aside>
+        </div>
+
+        {/* ══ why this is worth reading — the institution's own claim ══ */}
+        <section className="mt-16 border-y border-ink py-8">
+          <div className="font-mono text-[12px] uppercase tracking-[0.13em] text-faint">
+            Why these numbers are different
+          </div>
+          <div className="mt-5 grid gap-8 sm:grid-cols-3">
+            <div>
+              <h3 className="text-[16px] font-semibold text-ink">Measured, not surveyed</h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
+                Every figure comes from the same measurements that route production traffic. Numbers carry dates, sample sizes and intervals.
+              </p>
             </div>
-          </article>
-        ) : (
-          <p className="mt-10 border border-[#d9d5cb] bg-[#fbfaf7] p-6 text-sm text-soft">
-            The first issue publishes after the next weekly run. The feed at{' '}
-            <Link href="/research/feed.xml" className="text-accent underline">/research/feed.xml</Link> will carry it.
-          </p>
+            <div>
+              <h3 className="text-[16px] font-semibold text-ink">Written by agents, verified by another</h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
+                A research worker drafts each piece in a recorded run; a separate integrity worker recomputes its claims before it can publish.{' '}
+                {verified > 0 && <>{verified} {verified === 1 ? 'piece has' : 'pieces have'} that record.</>}
+              </p>
+            </div>
+            <div>
+              <h3 className="text-[16px] font-semibold text-ink">Negatives included</h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
+                When a hypothesis fails, the failure is published. A week where nothing moved is reported as a week where nothing moved.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ══ the archive grid ══ */}
+        {archive.length > 0 && (
+          <section className="mt-14">
+            <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[12px] uppercase tracking-[0.13em] text-faint">
+              <span>The archive</span>
+              <span>{weeklies.length} weekly · {dailies.length} daily</span>
+            </div>
+            <div className="grid gap-x-10 sm:grid-cols-2">
+              {archive.map((i) => (
+                <article key={i.slug} className="border-b border-dashed border-[#d9d5cb] py-5">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <KindTag i={i} />
+                    <span className="font-mono text-[12px] text-faint">{i.publishedAt.slice(0, 10)}</span>
+                  </div>
+                  <h3 className="mt-2 text-[17px] font-semibold leading-snug tracking-[-0.01em] text-ink">
+                    <Link href={`/research/${i.slug}`} className="hover:text-accent">{i.title}</Link>
+                  </h3>
+                  <p className="mt-1.5 text-[13.5px] leading-relaxed text-soft">{i.summary}</p>
+                </article>
+              ))}
+            </div>
+          </section>
         )}
 
-        {/* ---- the measured answers rail ---- */}
+        {/* ══ the reference section ══ */}
         {measured.length > 0 && (
-          <section className="mt-12">
-            <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
-              <span>The measured answers · the reference section</span>
+          <section className="mt-14">
+            <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[12px] uppercase tracking-[0.13em] text-faint">
+              <span>The measured answers · reference</span>
               <Link href="/answers" className="text-accent">all →</Link>
             </div>
             <ul className="mt-1">
@@ -121,30 +245,12 @@ export default async function ResearchIndex() {
           </section>
         )}
 
-        {/* ---- archive ---- */}
-        {rest.length > 0 && (
-          <section className="mt-12">
-            <div className="border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
-              Earlier issues
-            </div>
-            {rest.map((i) => (
-              <article key={i.slug} className="border-b border-dashed border-[#d9d5cb] py-4">
-                <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-                  {i.week} · {i.publishedAt.slice(0, 10)}{i.kind === 'daily' ? ' · daily note' : ''}
-                </div>
-                <h3 className="mt-1 text-[17px] font-semibold leading-snug tracking-tight text-ink">
-                  <Link href={`/research/${i.slug}`} className="hover:text-accent">{i.title}</Link>
-                </h3>
-                <p className="mt-1 text-[13.5px] leading-relaxed text-soft">{i.summary}</p>
-              </article>
-            ))}
-          </section>
-        )}
-
-        <p className="mt-14 font-mono text-[12px] leading-relaxed text-faint">
-          Frontier Notes is written by Potion&apos;s own measurement engine and drafted through
-          Potion&apos;s own API — each issue carries its receipt. Method:{' '}
-          <Link href="/research/methodology" className="text-accent underline">how the numbers are made</Link>.
+        <p className="mt-14 max-w-3xl font-mono text-[12px] leading-relaxed text-faint">
+          Frontier Notes is produced by Potion Research, a fleet of persistent agents operated on Potion&apos;s own platform: they draft in
+          recorded runs, verify each other independently, and publish through the same permission gateway every Potion worker answers to. Each
+          piece carries its records. Method:{' '}
+          <Link href="/research/methodology" className="text-accent underline">how the numbers are made</Link> ·{' '}
+          <Link href="/research/glossary" className="text-accent underline">glossary</Link>.
         </p>
       </main>
     </SiteShell>

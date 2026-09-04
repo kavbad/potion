@@ -69,7 +69,15 @@ export interface IssueFaq {
 
 export interface Issue {
   slug: string;
+  /** The issue's address: an ISO week ('2026-W36') for a weekly, a UTC day
+   * ('2026-09-03') for a daily ledger (F6). */
   week: string;
+  /** F6: 'daily' is the ledger note — body paragraphs, no FactSheet.
+   * Absent = the weekly issue, byte-identical to every prior record. */
+  kind?: 'weekly' | 'daily';
+  /** F6: the daily ledger's paragraphs, '\n\n'-joined — the shape the
+   * issue page has rendered dailies from since C3. */
+  body?: string;
   title: string;
   /** One-paragraph summary (meta description, RSS, index card). */
   summary: string;
@@ -85,7 +93,9 @@ export interface Issue {
   takeaway: string;
   method: string;
   faq: IssueFaq[];
-  facts: FactSheet;
+  /** null on a daily ledger (F6): the day's numbers live in `body`, and a
+   * daily has no weekly frontier table. */
+  facts: FactSheet | null;
   status: 'published' | 'held';
   heldReason?: string;
   /** F2 (docs/RESEARCH-FLEET.md R3): the Action Gateway's decision on the

@@ -96,6 +96,12 @@ export interface StepPayload {
    * text named these files while the run did not hold them — the loop
    * pushed one repair round instead of completing; replay re-derives. */
   fileClaimRepair?: string[];
+  /** THE DONE-DEFINITION LAW (2026-09-03): set on a would-be completion
+   * whose MISSION done-definition names these files while the run did not
+   * hold them — the loop pushed one repair round instead of completing
+   * (this is the law that catches a stop naming nothing); replay
+   * re-derives. */
+  doneFileRepair?: string[];
   /** THE EMPTY-STOP LAW (2026-09-01): set on a task stop whose text was
    * EMPTY — a stop that says nothing is not a completion; the loop pushed
    * one repair round instead; replay re-derives. */

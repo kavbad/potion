@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ObservatoryRun } from '../observatory.js';
 import { composeFactSheet } from './compose.js';
+import { assembleDailyIssue, auditDailyNumbers, deterministicDailyDraft, type DailyFacts } from './daily.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
 import { lintDraft } from './lint.js';
@@ -34,6 +35,75 @@ import type { FactSheet, Issue } from './types.js';
 import { deterministicDraft, parseDraft, type Draft } from './write.js';
 
 export type ClockPhase = 'delta' | 'auditor' | 'gate-held' | 'done' | 'skipped';
+
+/** F6: the DAILY tick — a ledger of what the instruments did in the last 24
+ * hours, published every day. Deterministic by construction (the numbers are
+ * code-composed from the day's rows); the model writes only the framing and
+ * THE NUMBER LAW refuses any figure that is not in the ledger. A quiet day
+ * publishes a short quiet ledger — the calendar never invents a finding. */
+export interface DailyIo {
+  now(): Date;
+  /** Today's rows, already fetched. */
+  dailyFacts(): Promise<DailyFacts>;
+  readIssue(day: string): Issue | null;
+  writeIssueFiles(issue: Issue): void;
+  startWorkerRun(harnessHash: string, attachment: { name: string; content: string }, extra?: { name: string; content: string }): Promise<string>;
+  runTerminalState(runId: string): Promise<string | null>;
+  readRunFile(runId: string, name: string): Promise<string | null>;
+  readState(week: string): ClockState | null;
+  writeState(state: ClockState, opts?: { exclusive?: boolean }): boolean;
+  deltaHarness: string;
+  log(line: string): void;
+}
+
+/** One daily tick. Same shape as the weekly machine but shorter: the ledger
+ * is always publishable, so the model draft is an IMPROVEMENT attempt, never
+ * a gate — one attempt per tick, and the deterministic ledger ships if it
+ * does not pass. Publishing a daily needs no gate ask: the content is
+ * code-composed and the weekly's publish grant covers the class. */
+export async function dailyLedgerTick(io: DailyIo): Promise<string | null> {
+  const facts = await io.dailyFacts();
+  const day = facts.day;
+  if (io.readIssue(day) !== null) return null; // today is filed
+  const state = io.readState(day);
+
+  // Start: one Delta framing attempt, once per day.
+  if (state === null) {
+    if (!io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1 }, { exclusive: true })) return null;
+    const runId = await io.startWorkerRun(io.deltaHarness, { name: 'ledger.json', content: JSON.stringify(facts, null, 1) });
+    io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId });
+    io.log(`fnotes daily ${day}: Delta framing in ${runId}`);
+    return `daily-delta:${runId}`;
+  }
+  if (state.phase === 'done') return null;
+
+  let draft = deterministicDailyDraft(facts);
+  let writer: Issue['writer'] = null;
+  let note = 'deterministic ledger';
+  if (state.deltaRunId) {
+    const terminal = await io.runTerminalState(state.deltaRunId);
+    if (terminal === null) return null; // still framing
+    const text = terminal === 'completed' ? await io.readRunFile(state.deltaRunId, 'daily.json') : null;
+    const parsed = text !== null ? parseDraft(normalizeDraftText(text), draft) : null;
+    const violation = parsed === null ? 'no daily.json' : auditDailyNumbers(parsed, facts);
+    if (parsed !== null && violation === null) {
+      draft = { ...parsed, faq: [] };
+      writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };
+      note = `framed by Delta (${state.deltaRunId})`;
+    } else {
+      io.log(`fnotes daily ${day}: framing refused (${violation}) — the ledger publishes as composed`);
+    }
+  }
+  const issue = assembleDailyIssue(facts, draft, {
+    publishedAt: io.now().toISOString(),
+    writer,
+    ...(writer !== null ? { byline: 'Delta' } : {}),
+  });
+  io.writeIssueFiles(issue);
+  io.writeState({ ...state, phase: 'done', note });
+  io.log(`fnotes daily ${day}: ${issue.status.toUpperCase()} — "${issue.title}" (${note})`);
+  return 'daily-published';
+}
 
 export interface ClockState {
   week: string;

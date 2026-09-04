@@ -27,13 +27,15 @@ import {
   holdExternalSession,
   listActionGrants,
   listLabSteps,
+  listRecentlyPromoted,
+  listResearchCycles,
   migrate,
   upsertLabRunFile,
 } from '@potion/db';
 import { buildStepPayload, ceilingFor, decideAction } from '@potion/lab-runtime';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import type { PotionQueue } from '@potion/queue';
-import { clockFsIo, frontierNotesTick, isoWeekOf, PUBLISH_ACTION_CLASS, type ClockIO } from '@potion/workers';
+import { clockFsIo, composeDailyFacts, dailyLedgerTick, frontierNotesTick, isoWeekOf, PUBLISH_ACTION_CLASS, type ClockIO, type DailyFacts } from '@potion/workers';
 import type { PotionContext } from './context.js';
 import { requireRole } from './auth.js';
 
@@ -163,6 +165,28 @@ export function registerFrontierNotesClock(
     };
   }
 
+  // F6: the day's facts, composed from the instruments' own rows.
+  const dailyFacts = async (): Promise<DailyFacts> => {
+    const cycles = await listResearchCycles(db, 200);
+    const promoted = await listRecentlyPromoted(db, 1, 100);
+    const now = new Date();
+    const since = now.getTime() - 24 * 60 * 60 * 1000;
+    return composeDailyFacts({
+      now,
+      cycles: cycles.map((c) => ({
+        focusAlias: c.focusAlias,
+        status: c.status,
+        provenance: c.provenance,
+        candidates: (c.candidates ?? []).length,
+        spendUsd: c.spendUsd,
+        createdAt: c.createdAt,
+      })),
+      promoted: promoted.filter((p) => new Date(p.updatedAt).getTime() >= since).length,
+      registrySize: Object.keys(ctx.prices.entries ?? {}).length,
+      pricesVersion: ctx.prices.version,
+    });
+  };
+
   // ---- the tick ----
   const tick = async (): Promise<void> => {
     for (const dir of dirs) {
@@ -170,6 +194,27 @@ export function registerFrontierNotesClock(
         await frontierNotesTick(buildIo(dir));
       } catch (err) {
         app.log.warn({ err, dir }, 'frontier-notes tick failed — swallowed');
+      }
+    }
+    // F6: the daily ledger — every day, on the primary dir only.
+    if (armed) {
+      try {
+        const io = buildIo(envDir!);
+        await dailyLedgerTick({
+          now: io.now,
+          dailyFacts,
+          readIssue: io.readIssue,
+          writeIssueFiles: io.writeIssueFiles,
+          startWorkerRun: io.startWorkerRun,
+          runTerminalState: io.runTerminalState,
+          readRunFile: io.readRunFile,
+          readState: io.readState,
+          writeState: io.writeState,
+          deltaHarness: io.deltaHarness,
+          log: io.log,
+        });
+      } catch (err) {
+        app.log.warn({ err }, 'frontier-notes daily tick failed — swallowed');
       }
     }
   };

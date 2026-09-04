@@ -29,7 +29,11 @@ export interface AuditorCheck {
 }
 
 export interface AuditorVerdict {
-  verdict: 'pass' | 'fail';
+  /** 'pass-with-changes' (fleet doc's PASS WITH REQUIRED CHANGES): the
+   * facts hold but the record asks for edits — the draft does not ship as
+   * written, and the caller redrafts with the changes in hand rather than
+   * discarding a factually sound draft over one sentence. */
+  verdict: 'pass' | 'pass-with-changes' | 'fail';
   checks: AuditorCheck[];
   requiredChanges: string[];
   /** The run that produced this verdict — the "Verified by Auditor" line's evidence. */
@@ -76,9 +80,17 @@ export function parseVerdict(text: string): Omit<AuditorVerdict, 'runId' | 'mete
       ? o.requiredChanges.filter((x): x is string => typeof x === 'string' && x.trim() !== '')
       : [];
     // A pass with failed material checks is not a pass — the typed record
-    // outranks the one-word verdict.
+    // outranks the one-word verdict. A pass whose ONLY defect is a list of
+    // required changes is the fleet doc's middle state: the facts hold,
+    // the prose needs edits (2026-09-03 — the v1 record collapsed this to
+    // 'fail' and discarded factually sound drafts over one sentence).
     const failedChecks = checks.filter((c) => !c.ok).length;
-    const verdict: 'pass' | 'fail' = v === 'pass' && failedChecks === 0 && requiredChanges.length === 0 ? 'pass' : 'fail';
+    const verdict: AuditorVerdict['verdict'] =
+      v === 'pass' && failedChecks === 0
+        ? requiredChanges.length === 0
+          ? 'pass'
+          : 'pass-with-changes'
+        : 'fail';
     return { verdict, checks, requiredChanges };
   } catch {
     return null;

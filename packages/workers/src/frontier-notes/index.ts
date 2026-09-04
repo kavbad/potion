@@ -9,4 +9,5 @@ export * from './delta.js';
 export * from './auditor.js';
 export * from './lint.js';
 export * from './publisher.js';
+export * from './daily.js';
 export * from './clock.js';

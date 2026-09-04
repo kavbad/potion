@@ -64,13 +64,40 @@ export function publishableText(i: Omit<Issue, 'status' | 'heldReason'>): string
   return [
     i.title, i.summary, i.plain, i.lede, i.frontierNote, i.auditionNote, i.mixingNote, i.takeaway, i.method,
     ...i.faq.flatMap((x) => [x.q, x.a]),
-    ...f.frontier.map((c) => `${c.clusterId} ${c.pick}`),
-    ...f.auditions.map((a) => `${a.alias} ${a.lane} ${a.clusterId} ${a.outcome}`),
-    ...f.caveats,
+    // F6: a daily ledger's paragraphs go through the SAME redaction pass.
+    ...(i.body !== undefined ? [i.body] : []),
+    ...(f?.frontier ?? []).map((c) => `${c.clusterId} ${c.pick}`),
+    ...(f?.auditions ?? []).map((a) => `${a.alias} ${a.lane} ${a.clusterId} ${a.outcome}`),
+    ...(f?.caveats ?? []),
+  ].join('\n');
+}
+
+/** F6: the daily ledger renders as prose — no frontier table, no FAQ. */
+function renderDailyMarkdown(i: Issue): string {
+  return [
+    `# ${i.title}`,
+    '',
+    `*Frontier Notes · daily · ${i.week} · ${i.byline}*${i.status === 'held' ? `\n\n> HELD: ${i.heldReason}` : ''}`,
+    '',
+    '## In plain words',
+    '',
+    i.plain,
+    '',
+    '## The ledger',
+    '',
+    ...(i.body ?? i.lede).split('\n\n').flatMap((p) => [p, '']),
+    '## What it means for you',
+    '',
+    i.takeaway,
+    '',
+    ...(i.writer?.runId
+      ? ['---', '', `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}), $${i.writer.costUsd.toFixed(4)} metered.${i.writer.verifiedBy ? ` Verified by Auditor, a Potion research-integrity worker, in a recorded run (${i.writer.verifiedBy.runId}).` : ''}*`, '']
+      : []),
   ].join('\n');
 }
 
 export function renderMarkdown(i: Issue): string {
+  if (i.kind === 'daily' || i.facts === null) return renderDailyMarkdown(i);
   const f = i.facts;
   const q = (x: number) => x.toFixed(3);
   // 'drifted', never 'moved': a drift verdict means the canary left its

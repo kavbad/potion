@@ -346,6 +346,23 @@ export function missingClaimedFiles(text: string, existing: readonly string[]): 
     .slice(0, 8);
 }
 
+/** THE DONE-DEFINITION LAW (2026-09-03, run-8a3ec460 and the F4 rehearsal,
+ * where it cost two of four draft attempts): the file-claims law reads the
+ * REPORT for filenames, so a run that stops mid-thought — "Now let me read
+ * both fully" — names no file, claims nothing, and completes with its
+ * deliverable missing. But the mission's OWN done-definition is a standing
+ * claim: when it names a deliverable file and the run does not hold that
+ * file, the task is not done, whatever the text says. One repair round per
+ * run, stamped before recording, replay-mirrored. */
+export const DONE_FILE_REPAIR_PREFIX = 'Your done-definition requires files this run does not hold:';
+
+export function doneFileRepairMessage(missing: readonly string[]): ChatMessage {
+  return {
+    role: 'user',
+    content: `${DONE_FILE_REPAIR_PREFIX} ${missing.join(', ')}. The task is not complete until they exist in the working directory (only files written there persist). Produce them now, then report. If you cannot, say exactly what stopped you — never stop mid-thought.`,
+  };
+}
+
 /** THE EMPTY-STOP LAW (2026-09-01, runs 32b24af3 + 4638e4a1): twice in one
  * day a cheap route returned a ZERO-TOKEN stop mid-mission and the grammar
  * read it as "task complete" — no report, so no judge (extractReport needs
@@ -458,6 +475,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // mission. The law fires only on work-free stops.
     let sawToolStep = priorSteps.some((x) => x.kind === 'tool');
     let fileClaimFiredThisLeg = false;
+    let doneFileFiredThisLeg = false;
     let emptyStopFiredThisLeg = false;
     const askedBefore = priorSteps.some(
       (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
@@ -756,16 +774,22 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       // step records so the stamp rides the payload and replay re-derives
       // the non-completion from the record alone. One round per run.
       let fileClaimMissing: string[] = [];
-      if (
-        opts.spec.mission.kind === 'task' &&
-        result.finishReason === 'stop' &&
-        result.toolCalls.length === 0 &&
-        (result.text ?? '').trim().length >= 40 &&
-        !priorSteps.some((x) => (x.payload as StepPayload).fileClaimRepair !== undefined) &&
-        !fileClaimFiredThisLeg
-      ) {
-        const filesNow = await listLabRunFiles(opts.db, opts.orgId, opts.runId);
-        fileClaimMissing = missingClaimedFiles(result.text ?? '', filesNow.map((f) => f.name));
+      let doneFileMissing: string[] = [];
+      if (opts.spec.mission.kind === 'task' && result.finishReason === 'stop' && result.toolCalls.length === 0) {
+        const wantFileClaim =
+          (result.text ?? '').trim().length >= 40 &&
+          !priorSteps.some((x) => (x.payload as StepPayload).fileClaimRepair !== undefined) &&
+          !fileClaimFiredThisLeg;
+        // THE DONE-DEFINITION LAW: the mission's own done-definition is a
+        // standing file claim — checked at ANY text length, because the
+        // hollow case ("Now let me read both fully") names nothing at all.
+        const wantDoneFile =
+          !priorSteps.some((x) => (x.payload as StepPayload).doneFileRepair !== undefined) && !doneFileFiredThisLeg;
+        if (wantFileClaim || wantDoneFile) {
+          const names = (await listLabRunFiles(opts.db, opts.orgId, opts.runId)).map((f) => f.name);
+          if (wantFileClaim) fileClaimMissing = missingClaimedFiles(result.text ?? '', names);
+          if (wantDoneFile) doneFileMissing = missingClaimedFiles(opts.spec.mission.doneDefinition, names);
+        }
       }
       // THE EMPTY-STOP LAW: a task stop that says NOTHING cannot be a
       // completion — there is no report, hence no judge, hence a
@@ -799,6 +823,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {}),
           ...(steerTexts !== undefined ? { steers: steerTexts } : {}),
           ...(fileClaimMissing.length > 0 ? { fileClaimRepair: fileClaimMissing } : {}),
+          ...(doneFileMissing.length > 0 ? { doneFileRepair: doneFileMissing } : {}),
           ...(emptyStopRepair ? { emptyStopRepair: true } : {}),
         }),
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
@@ -1014,6 +1039,15 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         if (fileClaimMissing.length > 0) {
           fileClaimFiredThisLeg = true;
           messages.push(fileClaimRepairMessage(fileClaimMissing));
+          continue;
+        }
+        // THE DONE-DEFINITION LAW (stamped above): the mission's own
+        // done-definition names deliverables the run does not hold — one
+        // repair round. This is the law the hollow mid-thought stop needs:
+        // it claims nothing, so the file-claims law never sees it.
+        if (doneFileMissing.length > 0) {
+          doneFileFiredThisLeg = true;
+          messages.push(doneFileRepairMessage(doneFileMissing));
           continue;
         }
         // THE EMPTY-STOP LAW (stamped above): no report means no completion
