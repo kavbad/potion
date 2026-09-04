@@ -878,14 +878,20 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
     const { fileURLToPath } = await import('node:url');
     const serverPath = fileURLToPath(new URL('../../../deploy/sandbox/sandbox_server.py', import.meta.url));
     const port = 19000 + Math.floor(Math.random() * 200);
-    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: 'ignore' });
+    // stderr CAPTURED, not discarded: a sandbox integration test that cannot say
+    // WHY the sandbox failed can only be debugged by hypothesis, and this one
+    // cost two wrong ones (2026-09-04). Both the server's stderr and the
+    // shell's own output are surfaced in the assertion below.
+    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: ['ignore', 'ignore', 'pipe'] });
+    let sandboxErr = '';
+    proc.stderr?.on('data', (d: Buffer) => { sandboxErr += d.toString(); });
     try {
       let up = false;
       for (let i = 0; i < 40 && !up; i++) {
         await new Promise((r) => setTimeout(r, 150));
         up = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok).catch(() => false);
       }
-      expect(up, 'sandbox failed to start').toBe(true);
+      expect(up, `sandbox failed to start. stderr:\n${sandboxErr}`).toBe(true);
 
       const s = spec({
         name: 'dev hands harness',
@@ -935,8 +941,17 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
 
       const files = await listLabRunFiles(db.db, ORG, runId);
       const names = files.map((f) => f.name);
-      expect(names).toContain('repo/src/lib.js');
-      expect(names).toContain('out/report/result.txt');
+      // What the shell ITSELF reported — exit code, stdout, stderr — so a
+      // failure names its cause instead of only its symptom.
+      const { listLabSteps: _steps } = await import('@potion/db');
+      const shellStep = (await _steps(db.db, runId, ORG)).find(
+        (st) => JSON.stringify(st.payload).includes('run_shell'),
+      );
+      const shellSays =
+        `\n--- run_shell recorded:\n${JSON.stringify(shellStep?.payload ?? null, null, 2).slice(0, 4000)}` +
+        `\n--- sandbox stderr:\n${sandboxErr.slice(0, 4000) || '(empty)'}`;
+      expect(names, shellSays).toContain('repo/src/lib.js');
+      expect(names, shellSays).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.
       expect(names.some((n) => n.includes('.git/'))).toBe(false);
       const { getLabRunFile } = await import('@potion/db');
