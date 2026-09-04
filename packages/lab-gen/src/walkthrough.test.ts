@@ -15,7 +15,6 @@
 // assembly + lab-spec parse, then startRun executes the GENERATED spec
 // against the real server to completion.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
 import {
   createDb,
@@ -41,7 +40,9 @@ const ORG = 'org_lab_gen_wt';
 const RAW_KEY = 'pk_lab_gen_walkthrough_01';
 
 let h: DbHandle;
-let app: FastifyInstance;
+// The server's own instance type — fastify is @potion/server's dependency,
+// not this package's, so the type is derived from buildServer.
+let app: Awaited<ReturnType<typeof buildServer>>;
 let client: ServingClient;
 
 const ANSWERS: InterviewAnswers = {

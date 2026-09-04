@@ -71,7 +71,11 @@ describe('the R/M/K 3-axis pins', () => {
     expect(v.feasible).toBe(false);
     if (!v.feasible) {
       expect(v.gap.code).toBe('position-infeasible');
-      expect(v.gap.relaxHintMs).toBe(900); // K.latencyP95, a frontier-row value
+      // Narrow the two-code gap union; the assertion above IS the check —
+      // a different code fails the test before this guard is reached.
+      if (v.gap.code === 'position-infeasible') {
+        expect(v.gap.relaxHintMs).toBe(900); // K.latencyP95, a frontier-row value
+      }
     }
   });
 });

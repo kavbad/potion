@@ -11,6 +11,7 @@
 // its own readings outrank the platform once they exist. Fail-open when
 // exclusion would empty the frontier.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { strategyHash, type Frontier, type FrontierPoint } from '@potion/core';
 import { createDb, insertRequestLog, migrate, seedIsolationOrgs, ORG_A, ORG_B, type DbHandle } from '@potion/db';
 import {
@@ -65,20 +66,37 @@ async function serve(over: {
   status?: string;
   answerShape?: Record<string, unknown>;
 }): Promise<void> {
-  await insertRequestLog(h.db, {
+  // Alternate rows between the two usage spellings that live in the column —
+  // the serve path writes the current Usage shape {inputTokens, outputTokens},
+  // while rows written before the rename spell it
+  // {promptTokens, completionTokens} and do NOT conform to the Usage type
+  // request_logs.usage is declared with, so the legacy blob is stamped onto
+  // the row's jsonb directly. servingDegenerateCounts must read both.
+  const legacySpelling = over.completionTokens % 2 !== 0;
+  const id = await insertRequestLog(h.db, {
     ts: over.ts ?? minsAgo(5),
     orgId: over.orgId ?? ORG_A,
     clusterId: over.clusterId ?? CLUSTER,
     strategyHash: over.strategyHash,
     status: over.status ?? 'ok',
-    // Alternate rows between the two live usage spellings — the serve path
-    // writes {inputTokens, outputTokens}; the Usage type says
-    // {promptTokens, completionTokens}. The rollup must read both.
-    usage: (over.completionTokens % 2 === 0
-      ? ({ inputTokens: 100, outputTokens: over.completionTokens } as never)
-      : { promptTokens: 100, completionTokens: over.completionTokens, totalTokens: 100 + over.completionTokens }),
+    usage: {
+      inputTokens: 100,
+      outputTokens: over.completionTokens,
+      costUsd: 0.001,
+      latencyMs: 700,
+    },
     ...(over.answerShape !== undefined ? { answerShape: over.answerShape } : {}),
   });
+  if (legacySpelling) {
+    const legacyUsage = JSON.stringify({
+      promptTokens: 100,
+      completionTokens: over.completionTokens,
+      totalTokens: 100 + over.completionTokens,
+    });
+    await h.db.execute(
+      sql`UPDATE request_logs SET usage = ${legacyUsage}::jsonb WHERE id = ${String(id)}`,
+    );
+  }
 }
 
 beforeEach(async () => {

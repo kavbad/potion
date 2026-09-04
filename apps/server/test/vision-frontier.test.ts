@@ -51,8 +51,8 @@ describe('vision serving', () => {
     expect(res.headers['x-potion-model']).toBe('mock-mid');
     expect(String(res.headers['x-frontier-trace'])).toContain('instrument=vision');
     const msgs = seen[0] as { parts?: unknown[]; content: string }[];
-    expect(msgs[0].parts).toHaveLength(2);
-    expect(msgs[0].content).toBe('Read the invoice total.');
+    expect(msgs[0]!.parts).toHaveLength(2);
+    expect(msgs[0]!.content).toBe('Read the invoice total.');
   });
   it('an image request on a cluster WITHOUT one is refused, naming the cluster', async () => {
     const res = await post('code-gen', [{ type: 'text', text: 'What is in this screenshot?' }, IMG]);
@@ -83,6 +83,6 @@ describe('audio serving (G, same gate as vision)', () => {
     expect(res.statusCode).toBe(200);
     expect(String(res.headers['x-frontier-trace'])).toContain('instrument=audio');
     const msgs = seen.at(-1) as { parts?: { type: string }[] }[];
-    expect(msgs[0].parts?.some((p) => p.type === 'input_audio')).toBe(true);
+    expect(msgs[0]!.parts?.some((p) => p.type === 'input_audio')).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NoopMetrics, PromMetrics, createMetrics, orgLabel } from './index.js';
+import { NoopMetrics, PromMetrics, createMetrics, orgLabel, type Metrics } from './index.js';
 
 describe('PromMetrics', () => {
   it('moves request counter + histogram and renders Prometheus text', async () => {
@@ -115,13 +115,17 @@ describe('PromMetrics', () => {
 
 describe('NoopMetrics', () => {
   it('implements the contract without throwing and renders empty', async () => {
-    const m = new NoopMetrics();
+    const noop = new NoopMetrics();
+    // Exercised through the CONTRACT, not the class: NoopMetrics declares its
+    // no-op methods with zero parameters, so only the Metrics view of it
+    // checks the arguments callers actually pass.
+    const m: Metrics = noop;
     m.incRequest('/x', 500, 1);
     m.observeProviderCall({ provider: 'p', model: 'm', durationMs: 1, costUsd: 1 });
     m.observeFrontierDecision({ clusterId: 'c', strategyHash: 's', fallback: true, provenance: 'mock' });
     m.setBreakerState('k', 'open');
     m.observeShadow?.({ clusterId: 'c', sampled: true });
     m.observeGuaranteeBreach?.({ orgId: 'o', action: 'rollback' });
-    expect(await m.render()).toBe('');
+    expect(await noop.render()).toBe('');
   });
 });

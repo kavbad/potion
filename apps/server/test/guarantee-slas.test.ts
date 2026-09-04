@@ -120,7 +120,9 @@ describe('in-process breach parity (G2.2)', () => {
         clusterId: CLUSTER,
       });
     }
-    const noQueueCtx = { ...app.potion, queue: undefined } as typeof app.potion;
+    // `queue` is an OPTIONAL property, so under exactOptionalPropertyTypes it
+    // must be ABSENT rather than explicitly undefined.
+    const { queue: _queue, ...noQueueCtx } = app.potion;
     const evaluation = await runGuaranteeSample(
       noQueueCtx,
       {

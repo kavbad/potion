@@ -154,21 +154,18 @@ beforeAll(async () => {
 
   // ---- one of each org-owned resource, in ORG_A ----
   seeded.apiKey = `key-${ORG_A}`; // NOTE: contains the org id by construction
-  const pk = await insertProviderKey(db(), {
+  await insertProviderKey(db(), {
     id: 'pk-sweep-a',
     orgId: ORG_A,
     name: 'sweep-a-key',
     provider: 'openai',
-    keyCiphertext: Buffer.from('ct'),
-    keyIv: Buffer.from('iv'),
-    keyTag: Buffer.from('tag'),
-    dataKeyCiphertext: Buffer.from('dk'),
-    dataKeyIv: Buffer.from('dkiv'),
-    dataKeyTag: Buffer.from('dktag'),
+    // Envelope ciphertext is ONE opaque text column (schema.ts providerKeys /
+    // migration 0005), not the six-buffer shape this fixture used to claim.
+    ciphertext: 'ct',
     maskedKey: 'sk-…aaaa',
     keyHash: sha256('sweep-a-provider-key'),
   });
-  seeded.providerKey = pk?.id ?? 'pk-sweep-a';
+  seeded.providerKey = 'pk-sweep-a';
 
   seeded.cluster = 'agent-sweepa-billing';
   await db()

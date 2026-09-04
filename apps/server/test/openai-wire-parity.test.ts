@@ -2,7 +2,7 @@
 // 'tool' results), content-part arrays, honest image refusal, and caller
 // sampling/format parameters reaching the provider.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, InjectOptions } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
 import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
@@ -34,7 +34,7 @@ afterAll(async () => {
   await app.close();
 });
 
-const post = (payload: unknown) =>
+const post = (payload: NonNullable<InjectOptions['payload']>) =>
   app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}`, 'x-potion-cluster': 'code-gen' }, payload });
 
 describe('agentic turns', () => {
@@ -61,7 +61,7 @@ describe('content parts', () => {
     seen.length = 0;
     const res = await post({ model: 'potion-auto', messages: [{ role: 'user', content: [{ type: 'text', text: 'Write a function that' }, { type: 'text', text: 'reverses a list.' }] }] });
     expect(res.statusCode).toBe(200);
-    expect((seen[0] as { messages: { content: string }[] }).messages[0].content).toBe('Write a function that\nreverses a list.');
+    expect((seen[0] as { messages: { content: string }[] }).messages[0]!.content).toBe('Write a function that\nreverses a list.');
   });
   it('an image part is refused with a precise code, not silently dropped', async () => {
     const res = await post({ model: 'potion-auto', messages: [{ role: 'user', content: [{ type: 'text', text: 'What is in this picture?' }, { type: 'image_url', image_url: { url: 'https://example.com/x.png' } }] }] });

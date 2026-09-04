@@ -22,7 +22,7 @@
 // anything.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
+import { sha256, strategyHash, type Frontier, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import { insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
@@ -30,11 +30,16 @@ import { resolveOperatingPoint } from '../src/routes/chat.js';
 import { ORG_A, seedIsolationOrgs } from './fixtures/orgs.js';
 
 const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
-const CFG_CASCADE = {
+// This fixture used to read `{ models: [...], confidenceThreshold: 0.7 }`,
+// which is not a `cascade` StrategyConfig at all: `runCascade` rejects it as
+// "no stages field — malformed config", so every request the frontier routed
+// here 503'd. Selection-only assertions hid it. The real shape is
+// `stages` + `confidenceMethod`.
+const CFG_CASCADE: StrategyConfig = {
   type: 'cascade',
-  models: ['mock-cheap', 'mock-frontier'],
-  confidenceThreshold: 0.7,
-} as const;
+  stages: [{ model: 'mock-cheap', escalateIf: { confidenceBelow: 0.7 } }, { model: 'mock-frontier' }],
+  confidenceMethod: 'self-report-calibrated',
+};
 const CFG_STRONG = { type: 'single', model: 'mock-frontier' } as const;
 
 const H_CASCADE = strategyHash(CFG_CASCADE);
@@ -105,6 +110,17 @@ function trace(res: { headers: Record<string, unknown> }): Record<string, string
 
 const MIN_COST: Policy = { type: 'min_cost', qualityFloor: 0.8 };
 
+const frontierOf = (points: FrontierPoint[]): Frontier => ({
+  id: 'f1',
+  clusterId: 'code-gen',
+  version: 2,
+  parentId: null,
+  trigger: 'manual',
+  points,
+  pricesVersion: 'test-prices',
+  createdAt: new Date().toISOString(),
+});
+
 beforeAll(async () => {
   app = await buildServer({ seed: false });
   await seedIsolationOrgs(db());
@@ -125,12 +141,13 @@ afterAll(async () => {
 
 describe('tools narrow selection instead of failing the request', () => {
   it('without tools the policy still picks the cheapest point, cascade included', async () => {
-    // Asserted on the TRACE, not the status: the trace is written before
-    // execution, and a mock cascade does not complete in this harness (the
-    // G2.6 suite asserts the same case the same way). Selection is the
-    // subject here — this is the control proving the frontier really does
-    // prefer the cascade, so the tools case below is exercising something.
-    const t = trace(await chat({}));
+    // Selection is the subject here — this is the control proving the
+    // frontier really does prefer the cascade, so the tools case below is
+    // exercising something. It also SERVES: the cascade used to die in this
+    // harness only because CFG_CASCADE was malformed (see its definition).
+    const res = await chat({});
+    expect(res.statusCode).toBe(200);
+    const t = trace(res);
     expect(t.strategy).toBe(H_CASCADE.slice(0, 8));
     // Ordinary traffic's trace must be byte-identical to before this change.
     expect(t.constrained).toBeUndefined();
@@ -154,14 +171,7 @@ describe('tools narrow selection instead of failing the request', () => {
   });
 
   it('records what it would have served, so the substitution is auditable', () => {
-    const frontier = {
-      id: 'f1',
-      clusterId: 'code-gen',
-      version: 2,
-      parentId: null,
-      points: POINTS,
-      createdAt: new Date().toISOString(),
-    } as never;
+    const frontier = frontierOf(POINTS);
     const op = resolveOperatingPoint(MIN_COST, frontier, CFG_CHEAP, { toolCapableOnly: true });
     expect(op.config).toEqual(CFG_STRONG);
     expect(op.toolConstraint?.wouldHaveServedType).toBe('cascade');
@@ -169,14 +179,7 @@ describe('tools narrow selection instead of failing the request', () => {
   });
 
   it('does not label a request whose optimum was already single', () => {
-    const frontier = {
-      id: 'f1',
-      clusterId: 'code-gen',
-      version: 2,
-      parentId: null,
-      points: POINTS,
-      createdAt: new Date().toISOString(),
-    } as never;
+    const frontier = frontierOf(POINTS);
     // A cost ceiling that admits only the cheap single point.
     const op = resolveOperatingPoint(
       { type: 'max_quality', costCeilingPer1K: 0.5 },
@@ -189,14 +192,7 @@ describe('tools narrow selection instead of failing the request', () => {
   });
 
   it('THE POLICY BOUND STILL HOLDS: narrowing never serves below the quality floor', () => {
-    const frontier = {
-      id: 'f1',
-      clusterId: 'code-gen',
-      version: 2,
-      parentId: null,
-      points: POINTS,
-      createdAt: new Date().toISOString(),
-    } as never;
+    const frontier = frontierOf(POINTS);
     const op = resolveOperatingPoint(MIN_COST, frontier, CFG_CHEAP, { toolCapableOnly: true });
     const served = POINTS.find((p) => p.strategyHash === strategyHash(op.config!))!;
     expect(served.quality).toBeGreaterThanOrEqual(0.8);
@@ -206,14 +202,7 @@ describe('tools narrow selection instead of failing the request', () => {
     // Only a cascade clears the floor — nothing single can satisfy the policy,
     // so the last-resort fallback (single by construction) serves.
     const cascadeOnly = [point(CFG_CHEAP, 0.5, 0.4, 300), point(CFG_CASCADE, 0.88, 0.9, 2100)];
-    const frontier = {
-      id: 'f1',
-      clusterId: 'code-gen',
-      version: 2,
-      parentId: null,
-      points: cascadeOnly,
-      createdAt: new Date().toISOString(),
-    } as never;
+    const frontier = frontierOf(cascadeOnly);
     const op = resolveOperatingPoint(MIN_COST, frontier, CFG_CHEAP, { toolCapableOnly: true });
     expect(op.config?.type).toBe('single'); // never a cascade under tools
     expect(op.toolConstraint).toBeDefined();

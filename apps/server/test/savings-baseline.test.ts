@@ -54,7 +54,7 @@ async function serve(prompt: string) {
     payload: { model: 'potion-auto', messages: [{ role: 'user', content: prompt }] },
   });
   const [row] = await db().select().from(requestLogs).orderBy(desc(requestLogs.id)).limit(1);
-  return { status: res.statusCode, model: res.headers['x-potion-model'], cost: row?.costUsd ?? null, baseline: row?.baselineCostUsd ?? null, basis: row?.baselineBasis ?? null };
+  return { status: res.statusCode, model: res.headers['x-potion-model'], cost: row?.usage?.costUsd ?? null, baseline: row?.baselineCostUsd ?? null, basis: row?.baselineBasis ?? null };
 }
 
 describe('the baseline on a served request', () => {

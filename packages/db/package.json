@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "inspect-attribution": "tsx src/inspect-attribution.ts",
     "rehearse-postgres": "tsx src/rehearse-postgres.ts"
   },

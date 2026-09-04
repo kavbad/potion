@@ -1,6 +1,7 @@
 // KNOWN DEFECTS — filed, reproduced, not yet fixed. See the header of
 // packages/db/src/known-defects.test.ts for why these are `it.fails` markers.
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ProviderId } from '@potion/core';
 import { ProviderError } from './errors.js';
 import { breakerStates, DEFAULT_BREAKER, resetBreakers, resilient } from './resilience.js';
 import type { CompleteRequest, CompleteResponse, Provider } from './types.js';
@@ -8,7 +9,7 @@ import type { CompleteRequest, CompleteResponse, Provider } from './types.js';
 beforeEach(() => resetBreakers());
 
 /** Always fails with a RETRYABLE kind — the shape a real 5xx outage takes. */
-function outageProvider(id = 'openai'): Provider {
+function outageProvider(id: ProviderId = 'openai'): Provider {
   return {
     id,
     async complete(_req: CompleteRequest): Promise<CompleteResponse> {

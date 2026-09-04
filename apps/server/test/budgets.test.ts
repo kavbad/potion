@@ -68,7 +68,10 @@ function serve(route: string, key = KEY_A) {
   });
 }
 
-function putBudget(payload: unknown, headers: Record<string, string> = {}) {
+// `unknown` here defeated app.inject's overload resolution, so every caller's
+// `.statusCode` / `.json()` became a type error on a `void & Promise & Chain`
+// union. The payloads are all JSON objects.
+function putBudget(payload: Record<string, unknown>, headers: Record<string, string> = {}) {
   return app.inject({ method: 'PUT', url: '/api/budgets', payload, headers });
 }
 

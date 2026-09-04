@@ -3,7 +3,6 @@
 // lives in packages/workers/src/org-delete.test.ts.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createOrg } from './repos/orgs.js';
 import { upsertStrategyConfig } from './repos/shadow.js';
 import { designateIncumbent } from './repos/cluster-incumbents.js';
 import { insertGuaranteeVerdict } from './repos/verdicts.js';

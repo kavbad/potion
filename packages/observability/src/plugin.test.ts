@@ -1,7 +1,8 @@
 // observabilityPlugin contract tests (SPEC §12.3): request counting,
 // duration histogram, GET /metrics in Prometheus text format, and the
 // x-request-id echo (inbound preserved, absent → uuid generated + echoed).
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import type { Logger } from 'pino';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createLoggerOptions,
@@ -21,6 +22,13 @@ async function build(opts: { metrics?: boolean } = {}): Promise<FastifyInstance>
   observabilityPlugin(app, { handle, ...(opts.metrics !== undefined ? { metrics: opts.metrics } : {}) });
   app.addHook('onClose', async () => handle.shutdown());
   return app;
+}
+
+/** Fastify types `req.log` as FastifyBaseLogger — a narrow Pick of pino's
+ * logger that omits bindings(). createLoggerOptions builds a real pino
+ * logger, so prove that at runtime instead of asserting it. */
+function hasPinoBindings(log: FastifyBaseLogger): log is FastifyBaseLogger & Pick<Logger, 'bindings'> {
+  return 'bindings' in log && typeof log.bindings === 'function';
 }
 
 let app: FastifyInstance | undefined;
@@ -92,6 +100,7 @@ describe('createLoggerOptions + Fastify', () => {
     });
     let seenId: string | undefined;
     app.get('/ping', async (req) => {
+      if (!hasPinoBindings(req.log)) throw new Error('expected a pino request logger');
       seenId = req.log.bindings().reqId as string;
       return { ok: true };
     });

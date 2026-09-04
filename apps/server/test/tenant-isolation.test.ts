@@ -115,8 +115,8 @@ beforeAll(async () => {
   expect(bKey.statusCode).toBe(201);
 
   // Usage evidence for both orgs (live usage rollup reads request_logs).
-  await insertRequestLog(db(), { orgId: ORG_A, apiKeyId: 'key-iso-a', model: 'mock-mid', usage: { inputTokens: 100, outputTokens: 50, costUsd: 1.5 } });
-  await insertRequestLog(db(), { orgId: ORG_B, apiKeyId: 'key-iso-b', model: 'mock-mid', usage: { inputTokens: 777, outputTokens: 777, costUsd: 77.7 } });
+  await insertRequestLog(db(), { orgId: ORG_A, apiKeyId: 'key-iso-a', model: 'mock-mid', usage: { inputTokens: 100, outputTokens: 50, costUsd: 1.5, latencyMs: 100 } });
+  await insertRequestLog(db(), { orgId: ORG_B, apiKeyId: 'key-iso-b', model: 'mock-mid', usage: { inputTokens: 777, outputTokens: 777, costUsd: 77.7, latencyMs: 777 } });
   // Shadow evidence for org B only.
   await insertShadowResult(db(), {
     orgId: ORG_B,

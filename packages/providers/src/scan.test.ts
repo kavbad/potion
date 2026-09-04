@@ -48,9 +48,9 @@ describe('fetchOpenRouterModels', () => {
         { noId: true },
       ],
     };
-    const fetchImpl = async () =>
-      new Response(JSON.stringify(payload), { status: 200 }) as ReturnType<typeof fetch>;
-    const listings = await fetchOpenRouterModels({ apiKey: 'sk-or-test', fetchImpl: fetchImpl as never });
+    const fetchImpl = async (): Promise<Response> =>
+      new Response(JSON.stringify(payload), { status: 200 });
+    const listings = await fetchOpenRouterModels({ apiKey: 'sk-or-test', fetchImpl });
     expect(listings.length).toBe(2);
     expect(listings[0]).toMatchObject({
       id: 'anthropic/claude-fable-5',
@@ -63,9 +63,9 @@ describe('fetchOpenRouterModels', () => {
   });
 
   it('throws on non-200', async () => {
-    const fetchImpl = async () => new Response('nope', { status: 503 });
+    const fetchImpl = async (): Promise<Response> => new Response('nope', { status: 503 });
     await expect(
-      fetchOpenRouterModels({ apiKey: 'k', fetchImpl: fetchImpl as never }),
+      fetchOpenRouterModels({ apiKey: 'k', fetchImpl }),
     ).rejects.toThrow('HTTP 503');
   });
 });

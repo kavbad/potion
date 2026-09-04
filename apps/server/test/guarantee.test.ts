@@ -221,7 +221,9 @@ describe('runGuaranteeSample', () => {
   it('judge-scores, inserts evidence-rich sample + guarantee_judge meter row, evaluates in-process without a queue', async () => {
     const before = (await listQualitySamples(db(), ORG_B)).length;
     // Strip the queue to exercise the in-process evaluation branch.
-    const noQueueCtx = { ...app.potion, queue: undefined } as typeof app.potion;
+    // `queue` is an OPTIONAL property, so under exactOptionalPropertyTypes it
+    // must be ABSENT rather than explicitly undefined.
+    const { queue: _queue, ...noQueueCtx } = app.potion;
     const evaluation = await runGuaranteeSample(
       noQueueCtx,
       {

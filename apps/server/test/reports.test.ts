@@ -307,6 +307,7 @@ describe('GET /api/reports/savings.csv', () => {
       from: '2026-08-02',
       to: '2026-08-03',
       actualSpendUsd: 1,
+      verified: VERIFIED_OFF,
       alternatives: [
         {
           strategyHash: 'h',

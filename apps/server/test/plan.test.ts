@@ -11,7 +11,7 @@
 // runner-up, hide the infeasible option, present platform numbers as if they
 // were the customer's own.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildServer } from '../src/server.js';
 import {
   assignmentMargin,
@@ -34,7 +34,7 @@ function pt(over: Partial<FrontierPoint>): FrontierPoint {
     latencyP95: 800,
     providerMode: 'live',
     ...over,
-  } as FrontierPoint;
+  };
 }
 
 describe('policyOptionsFor — every option carries the point it would really select', () => {
@@ -269,7 +269,7 @@ afterAll(async () => {
   }
 });
 
-async function plan(payload: unknown) {
+async function plan(payload: NonNullable<InjectOptions['payload']>) {
   return app.inject({
     method: 'POST',
     url: '/api/plan',

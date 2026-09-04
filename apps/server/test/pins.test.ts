@@ -34,7 +34,7 @@ beforeAll(async () => {
   await insertApiKey(db, { id: 'key-pins-admin', keyHash: sha256(ADMIN_KEY), name: 'admin', orgId: ORG, scopes: 'serve+admin' });
   await insertApiKey(db, { id: 'key-pins-serve', keyHash: sha256(SERVE_KEY), name: 'serve', orgId: ORG, scopes: 'serve' });
   // v1: the version the org will pin.
-  await saveFrontier(db, CLUSTER, [point('model-a', 0.90, 1.0)], 'import', 'v-test', { orgId: ORG });
+  await saveFrontier(db, CLUSTER, [point('model-a', 0.90, 1.0)], 'manual', 'v-test', { orgId: ORG });
 });
 afterAll(async () => {
   await app.close();

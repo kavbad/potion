@@ -28,7 +28,7 @@ function fakeApi() {
 /** A scripted gate server: responds per path, records every request. */
 function fakeFetch(script: (path: string, body: Record<string, unknown>) => unknown) {
   const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
-  const impl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+  const impl = (async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const path = new URL(String(url)).pathname;
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
     calls.push({ path, body });

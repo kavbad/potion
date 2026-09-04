@@ -23,7 +23,9 @@ function pt(hash: string, quality: number, costPer1K: number, over: Partial<Fron
   };
 }
 
-function evidenceOf(over: Partial<NonNullable<FrontierPoint['evidence']>>): FrontierPoint['evidence'] {
+function evidenceOf(
+  over: Partial<NonNullable<FrontierPoint['evidence']>>,
+): NonNullable<FrontierPoint['evidence']> {
   return {
     cacheKeys: ['ck-lb'],
     runIds: ['run-lb'],

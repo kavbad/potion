@@ -184,9 +184,9 @@ describe('a REAL signed webhook survives the raw-body path', () => {
 // payment_method (which hunts the legacy default_source Checkout never
 // creates). Pinned here against a scripted fetch so they stay fixed.
 describe('stripe transport sends what the live API actually needs', () => {
-  function scripted(responses: Array<{ ok: boolean; body: unknown }>): { fetch: typeof fetch; calls: Array<{ url: string; init?: RequestInit }> } {
-    const calls: Array<{ url: string; init?: RequestInit }> = [];
-    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+  function scripted(responses: Array<{ ok: boolean; body: unknown }>): { fetch: typeof fetch; calls: Array<{ url: string; init?: RequestInit | undefined }> } {
+    const calls: Array<{ url: string; init?: RequestInit | undefined }> = [];
+    const fetchImpl = (async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
       calls.push({ url: String(url), init });
       const r = responses.shift() ?? { ok: true, body: {} };
       return { ok: r.ok, status: r.ok ? 200 : 402, json: async () => r.body } as Response;

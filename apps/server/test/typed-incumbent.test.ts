@@ -1,7 +1,7 @@
 // A typed "other" model that is on the measured roster becomes a real
 // incumbent; one that is not stays 'other' (routes/learning.ts PUT).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, InjectOptions } from 'fastify';
 import { sha256 } from '@potion/core';
 import { createOrg, insertApiKey } from '@potion/db';
 import { buildServer } from '../src/server.js';
@@ -20,7 +20,7 @@ afterAll(async () => {
   await app.close();
 });
 
-const put = (body: unknown) =>
+const put = (body: NonNullable<InjectOptions['payload']>) =>
   app.inject({ method: 'PUT', url: '/api/incumbents', headers: { authorization: `Bearer ${ADMIN}` }, payload: body });
 
 describe('typed incumbents', () => {

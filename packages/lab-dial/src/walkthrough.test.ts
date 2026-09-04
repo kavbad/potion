@@ -10,7 +10,6 @@
 //   Leg 4 — partition under motion: a tool-bearing harness's full sweep
 //           never touches the composite; serving's 400 is never triggered.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash } from '@potion/core';
 import type { Frontier, FrontierPoint } from '@potion/core';
 import {
@@ -42,7 +41,9 @@ const ORG = 'org_lab_dial_wt';
 const RAW_KEY = 'pk_lab_dial_walkthrough_1';
 
 let h: DbHandle;
-let app: FastifyInstance;
+// The server's own instance type — fastify is @potion/server's dependency,
+// not this package's, so the type is derived from buildServer.
+let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 
 // Fixture points are SELF-CONSISTENT: strategyHash = core's
@@ -263,7 +264,13 @@ describe('Leg 3 — the R/M/K flip, measured through the route', () => {
     // The infeasible edge: tolerance 30 → typed gap, evidence-sourced hint.
     const infeasible = viewPosition(domain, { qualityIndex: topRung, toleranceMs: 30 });
     expect(infeasible.feasible).toBe(false);
-    if (!infeasible.feasible) expect(infeasible.gap.relaxHintMs).toBe(900);
+    if (!infeasible.feasible) {
+      expect(infeasible.gap.code).toBe('position-infeasible');
+      // Narrow the two-code gap union; the assertion above IS the check.
+      if (infeasible.gap.code === 'position-infeasible') {
+        expect(infeasible.gap.relaxHintMs).toBe(900);
+      }
+    }
   }, 120_000);
 });
 
@@ -382,7 +389,7 @@ describe('Leg 5 — serving-measured latency substitution (the review scenario, 
       await insertRequestLog(h.db, {
         orgId: ORG, clusterId: 'rewrite-edit', strategyHash: P_R.strategyHash,
         status: 'ok', latencyMs: 2100,
-        usage: { inputTokens: 10, outputTokens: 10, costUsd: 0.0001 },
+        usage: { inputTokens: 10, outputTokens: 10, costUsd: 0.0001, latencyMs: 2100 },
       });
     }
     const after = await domainFor();

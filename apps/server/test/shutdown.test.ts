@@ -20,6 +20,24 @@ afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()!();
 });
 
+/**
+ * Build a stand-in for `app.close`. Fastify's `close` is OVERLOADED — a
+ * promise form `(): Promise<undefined>` and a callback form
+ * `(closeListener: () => void): undefined` — so a bare arrow satisfies only
+ * half of it and is not assignable. This honours both signatures and defers
+ * to `drain` for the outcome the test wants to script.
+ */
+function closeStub(drain: () => Promise<undefined>): FastifyInstance['close'] {
+  function close(): Promise<undefined>;
+  function close(closeListener: () => void): undefined;
+  function close(closeListener?: () => void): Promise<undefined> | undefined {
+    if (closeListener === undefined) return drain();
+    void drain().then(closeListener, closeListener);
+    return undefined;
+  }
+  return close;
+}
+
 /** Listen on an ephemeral port and return the base URL. */
 async function listen(app: FastifyInstance): Promise<string> {
   const address = await app.listen({ port: 0, host: '127.0.0.1' });
@@ -73,7 +91,7 @@ describe('gracefulShutdown (SPEC §12.8)', () => {
     const app = await buildServer({ seed: false });
     cleanups.push(() => void app.close().catch(() => {}));
     // Sabotage close(): the drain never completes.
-    app.close = () => new Promise(() => {});
+    app.close = closeStub(() => new Promise<undefined>(() => {}));
     const exits: number[] = [];
     const logs: string[] = [];
     await gracefulShutdown(app, app.potion, {
@@ -88,7 +106,7 @@ describe('gracefulShutdown (SPEC §12.8)', () => {
   it('force-exits 1 when the drain itself fails', async () => {
     const app = await buildServer({ seed: false });
     cleanups.push(() => void app.close().catch(() => {}));
-    app.close = () => Promise.reject(new Error('close exploded'));
+    app.close = closeStub(() => Promise.reject<undefined>(new Error('close exploded')));
     const exits: number[] = [];
     await gracefulShutdown(app, app.potion, {
       processExit: (code) => exits.push(code),

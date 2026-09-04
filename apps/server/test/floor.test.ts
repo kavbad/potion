@@ -92,7 +92,7 @@ describe('policy apply with rebindKeys', () => {
       id: 'pol-floor-rider',
       orgId: ORG,
       name: 'with rider',
-      config: { type: 'min_cost', qualityFloor: 0.9, shadow: { compare: ['max_quality'] } },
+      config: { type: 'min_cost', qualityFloor: 0.9, shadow: { sampleRate: 0.1, candidates: 'frontier' } },
     });
     const rebindOld = await app.inject({
       method: 'POST',

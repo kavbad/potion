@@ -19,7 +19,7 @@ afterEach(async () => {
   server = null;
 });
 
-async function open(opts: Partial<ConstructorParameters<typeof MockMcpServer.start>[0]> = {}) {
+async function open(opts: Partial<Parameters<typeof MockMcpServer.start>[0]> = {}) {
   server = await MockMcpServer.start({ tools: TOOLS, ...opts });
   const transport = new StreamableHttpTransport({
     baseUrl: server.mcpUrl,
@@ -81,7 +81,7 @@ describe('McpSession', () => {
     const transport = new StreamableHttpTransport({
       baseUrl: server.mcpUrl,
       timeoutMs: 50,
-      fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) =>
+      fetchImpl: ((_input: Parameters<typeof fetch>[0], init?: RequestInit) =>
         init?.signal
           ? new Promise<Response>((_, reject) => {
               init.signal!.addEventListener('abort', () =>

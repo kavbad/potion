@@ -24,7 +24,7 @@ const KEY = 'pk_prov_test_key';
 const POLICY: Policy = { type: 'max_quality', costCeilingPer1K: 100 };
 const CODE_PROMPT = 'Write a python function that reverses a string';
 
-function point(mode: FrontierPoint['providerMode'] | 'absent', quality: number): FrontierPoint {
+function point(mode: NonNullable<FrontierPoint['providerMode']> | 'absent', quality: number): FrontierPoint {
   const p: FrontierPoint = {
     clusterId: 'code-gen',
     strategyHash: strategyHash({ type: 'single', model: 'mock-mid' }),

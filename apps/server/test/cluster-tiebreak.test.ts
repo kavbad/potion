@@ -9,7 +9,7 @@ import type { RankedAssignment } from '@potion/cluster';
 import { createOrg, insertApiKey, insertPolicy, requestLogs } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
-import { ambiguousRunnerUp, pickSafer } from '../src/routing/ambiguity.js';
+import { ambiguousRunnerUp, pickSafer, type TiebreakCandidate } from '../src/routing/ambiguity.js';
 
 const ORG = 'org-tiebreak';
 const KEY = 'pk_tiebreak';
@@ -59,7 +59,10 @@ async function serve(r: RankedAssignment, prompt: string) {
 
 describe('pickSafer', () => {
   it('measured beats unmeasured, then quality, then cost, then the original best', () => {
-    const a = { clusterId: 'a', quality: 0.8, costPer1K: 0.3 };
+    // Typed as the interface, not inferred from the literal: pickSafer is
+    // generic over ONE T, so an inferred `quality: number` here would forbid
+    // the null-carrying candidates these cases exist to exercise.
+    const a: TiebreakCandidate = { clusterId: 'a', quality: 0.8, costPer1K: 0.3 };
     expect(pickSafer(a, { clusterId: 'b', quality: null, costPer1K: null }).clusterId).toBe('a');
     expect(pickSafer({ clusterId: 'a', quality: null, costPer1K: null }, a).clusterId).toBe('a');
     expect(pickSafer(a, { clusterId: 'b', quality: 0.9, costPer1K: 1 }).clusterId).toBe('b');

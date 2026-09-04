@@ -29,7 +29,7 @@ import { saveFrontier } from '@potion/pareto';
 import { fileURLToPath } from 'node:url';
 import { insertTraceSpans, type NewTraceSpan } from '@potion/db';
 import { evalTaskById } from '@potion/providers';
-import { suiteCertifyHandler, tracesClusterHandler, orgHashOf, toolSignatureSlug, type JobContext } from '@potion/workers';
+import { suiteCertifyHandler, tracesClusterHandler, orgHashOf, toolSignatureSlug, type JobContext, type SuiteCertifyResult } from '@potion/workers';
 import { buildServer } from '../src/server.js';
 import { latestRetentionHeadline } from '../src/routes/guarantee-report.js';
 
@@ -58,6 +58,32 @@ const GUARANTEE = { minQuality: 0.99, windowMin: 60, sampleRate: 1, action: 'ale
 
 let app: FastifyInstance;
 const db = () => app.potion.db.db;
+
+/** `suiteCertifyHandler` is declared as a `WorkerHandler`, whose contract
+ *  resolves `unknown`; the implementation resolves a `SuiteCertifyResult`.
+ *  Narrow it back through a REAL runtime check rather than a cast, so a
+ *  handler that ever stopped returning one would fail loudly right here. */
+function isSuiteCertifyResult(r: unknown): r is SuiteCertifyResult {
+  return (
+    typeof r === 'object' &&
+    r !== null &&
+    'status' in r &&
+    (r.status === 'certified' || r.status === 'failed') &&
+    'outcome' in r &&
+    typeof r.outcome === 'string'
+  );
+}
+
+async function certify(
+  payload: Parameters<typeof suiteCertifyHandler>[0],
+  ctx: JobContext,
+): Promise<SuiteCertifyResult> {
+  const r = await suiteCertifyHandler(payload, ctx);
+  if (!isSuiteCertifyResult(r)) {
+    throw new Error(`suite:certify did not return a SuiteCertifyResult: ${JSON.stringify(r)}`);
+  }
+  return r;
+}
 
 const today = new Date().toISOString().slice(0, 10);
 // Fixture times RELATIVE to the test run (base = 24h ago): the clustering
@@ -277,7 +303,7 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     const CFG_FRONTIER = { type: 'single', model: 'mock-frontier' } as const;
     await upsertStrategyConfig(db(), strategyHash(CFG_FRONTIER), CFG_FRONTIER);
     await designateIncumbent(db(), ORG, clusterId, strategyHash(CFG_FRONTIER));
-    const cert = await suiteCertifyHandler({ orgId: ORG, clusterId }, jobCtx);
+    const cert = await certify({ orgId: ORG, clusterId }, jobCtx);
     expect(cert.status).toBe('certified'); // real measurement
     return clusterId;
   }
@@ -304,7 +330,7 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     const CFG_F = { type: 'single', model: 'mock-frontier' } as const;
     await upsertStrategyConfig(db(), strategyHash(CFG_F), CFG_F);
     await designateIncumbent(db(), ORG, clusterId, strategyHash(CFG_F));
-    const cert = await suiteCertifyHandler({ orgId: ORG, clusterId }, jobCtx2);
+    const cert = await certify({ orgId: ORG, clusterId }, jobCtx2);
     expect(cert.status).toBe('certified');
     return clusterId;
   }
@@ -462,7 +488,7 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     const CFG_F = { type: 'single', model: 'mock-frontier' } as const;
     await upsertStrategyConfig(db(), strategyHash(CFG_F), CFG_F);
     await designateIncumbent(db(), ORG, clusterId, strategyHash(CFG_F));
-    const cert = await suiteCertifyHandler({ orgId: ORG, clusterId }, jc);
+    const cert = await certify({ orgId: ORG, clusterId }, jc);
     expect(cert.status).toBe('certified'); // a REAL measurement, never stubbed
     await insertQualitySample(db(), { orgId: ORG, strategyHash: H_MID, quality: 0.9, createdAt: new Date(), policyId: PID, clusterId });
     return clusterId;

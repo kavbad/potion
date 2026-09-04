@@ -18,7 +18,7 @@
 //     violation, and raise ONE standing condition that auto-resolves
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
+import { sha256, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import {
   insertApiKey,
   insertPolicy,
@@ -43,14 +43,16 @@ const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
 // got selected, and execution died with "Cannot read properties of
 // undefined (reading 'length')" — surfacing as a 503 that looked like a
 // broken auto-resolve.
-const CFG_CASCADE = {
+// Annotated, not `as const`: the literal's readonly tuple is not assignable
+// to CascadeStage[].
+const CFG_CASCADE: StrategyConfig = {
   type: 'cascade',
   stages: [
     { model: 'mock-cheap', escalateIf: { confidenceBelow: 0.7 } },
     { model: 'mock-frontier' },
   ],
   confidenceMethod: 'self-report-calibrated',
-} as const;
+};
 const CFG_STRONG = { type: 'single', model: 'mock-frontier' } as const;
 
 const H_CHEAP = strategyHash(CFG_CHEAP);
