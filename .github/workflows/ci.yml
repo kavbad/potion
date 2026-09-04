@@ -16,6 +16,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege, stated explicitly. gitleaks-action reads the PR's commit
+# list to scope its scan, which needs pull-requests:read — without it the step
+# dies on a 403 "Resource not accessible by integration" and scans nothing.
+# The repo default did not include it (found 2026-09-04, on the workflow's
+# second-ever execution).
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
