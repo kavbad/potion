@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 /** **bold** and `code` inside one line. */
 function inline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
+  const re = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -23,6 +23,12 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
         <strong key={`${keyPrefix}-b${i}`} className="font-semibold text-ink">
           {tok.slice(2, -2)}
         </strong>,
+      );
+    } else if (tok.startsWith('*')) {
+      out.push(
+        <em key={`${keyPrefix}-i${i}`} className="italic">
+          {tok.slice(1, -1)}
+        </em>,
       );
     } else {
       out.push(
