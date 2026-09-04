@@ -303,10 +303,10 @@ describe('the counterfactual ladder (2026-08-28: measured incumbent over the cei
       await insertEvalResult(h.db, {
         cacheKey: `ck-inc-${i}`, runId: 'run-inc', itemId: `item-${i}`, clusterId: 'summarization',
         strategyHash: incHash, strategyConfig: { type: 'single', model: 'mock-incumbent' },
-        quality: 0.8, scorer: 'judge', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150, costUsd: 0.004, latencyMs: 700 },
-        latencyMs: { total: 700 }, modelVersions: {}, pricesVersion: 'pv-r1', providerMode: 'live',
+        quality: 0.8, scorer: 'judge', usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.004, latencyMs: 700 },
+        latencyMs: { p50: 700, p95: 700, mean: 700 }, modelVersions: {}, pricesVersion: 'pv-r1', providerMode: 'live',
         createdAt: new Date().toISOString(),
-      } as never);
+      });
     }
     const res = await app.inject({
       method: 'POST',

@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { strategyHash, type StrategyConfig } from '@potion/core';
-import { sql } from 'drizzle-orm';
 import { createDb, evalResults, migrate, singleModelLatencyP95, type DbHandle } from '@potion/db';
 import { buildRegistry } from '@potion/researcher';
 import { loadPrices } from '@potion/providers';
@@ -94,7 +93,11 @@ describe('singleModelLatencyP95 (R2 evidence base)', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  function cell(model: string, p95: number, opts: { mode?: string; type?: string } = {}) {
+  function cell(
+    model: string,
+    p95: number,
+    opts: { mode?: string; type?: string } = {},
+  ): typeof evalResults.$inferInsert {
     const config =
       opts.type === 'cascade'
         ? ({ type: 'cascade', stages: [{ model }, { model }], confidenceMethod: 'self-report-calibrated' } as StrategyConfig)
@@ -107,13 +110,16 @@ describe('singleModelLatencyP95 (R2 evidence base)', () => {
       strategyConfig: config,
       quality: 1,
       scorer: 'exact',
-      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0, latencyMs: p95 },
       latencyMs: { p50: p95 / 2, p95, mean: p95 / 2 },
       modelVersions: {},
       pricesVersion: 'v-test',
       providerMode: opts.mode ?? 'live',
       cacheKey: `ck-${model}-${p95}-${opts.mode ?? 'live'}-${opts.type ?? 'single'}`,
-      createdAt: sql`now()`,
+      // eval_results.created_at is TEXT holding an ISO string (it mirrors
+      // core EvalResult.createdAt), so write one — the query under test does
+      // not filter on it.
+      createdAt: new Date().toISOString(),
     };
   }
 
@@ -124,7 +130,7 @@ describe('singleModelLatencyP95 (R2 evidence base)', () => {
       cell('m-a', 3000),
       cell('m-a', 900, { mode: 'mock' }), // excluded: wrong provenance
       cell('m-b', 400, { type: 'cascade' }), // excluded: not a single
-    ] as never);
+    ]);
     const got = await singleModelLatencyP95(db.db, 'extraction', 'live');
     expect(got.has('m-b')).toBe(false);
     const p95 = got.get('m-a');

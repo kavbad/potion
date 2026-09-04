@@ -110,6 +110,9 @@ describe('research_cycles repo (M4b #37)', () => {
   it('rejects out-of-vocabulary trigger and status (CHECK constraints)', async () => {
     const h = await migratedDb();
     await expect(
+      // INTENTIONAL bad value, field-scoped: 'nightly' is outside the trigger
+      // vocabulary, so this exercises the research_cycles trigger CHECK
+      // constraint (migration 0036) at the database, not the type system.
       insertResearchCycle(h.db, { trigger: 'nightly' as never }),
     ).rejects.toThrow();
     await h.close();

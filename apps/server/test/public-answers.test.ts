@@ -10,14 +10,17 @@ import { buildServer } from '../src/server.js';
 
 const PUBLIC_SINGLE: StrategyConfig = { type: 'single', model: 'gpt-mini-class' };
 const EMBARGOED_SINGLE: StrategyConfig = { type: 'single', model: 'or-solar-pro4' };
+// The REAL CascadeStage shape (core types.ts) is `escalateIf.confidenceBelow`;
+// the `confidenceThreshold` this fixture used to carry is a field no cascade
+// has ever read (see compound-policy.test.ts for what that costs in prod).
 const COMBINATION: StrategyConfig = {
   type: 'cascade',
   stages: [
-    { model: 'gpt-mini-class', confidenceThreshold: 0.7 },
-    { model: 'gpt-frontier-class', confidenceThreshold: 0 },
+    { model: 'gpt-mini-class', escalateIf: { confidenceBelow: 0.7 } },
+    { model: 'gpt-frontier-class' },
   ],
   confidenceMethod: 'logprob',
-} as never;
+};
 
 function pt(clusterId: string, config: StrategyConfig, quality: number, costPer1K: number, providerMode: 'live' | 'mock'): FrontierPoint {
   return { clusterId, strategyHash: strategyHash(config), strategyConfig: config, quality, costPer1K, latencyP95: 500, providerMode } as FrontierPoint;
@@ -77,7 +80,10 @@ describe('GET /api/public/answers', () => {
   it('the serialized payload carries no embargoed name, no member list, no strategy hash', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/public/answers' });
     const raw = res.body.toLowerCase();
-    for (const banned of ['solar', 'upstage', 'cascade', 'confidencethreshold', 'gpt-frontier-class', 'strategyhash']) {
+    // `escalateif`/`confidencebelow` are the composition internals the fixture
+    // actually carries (it used to carry a `confidenceThreshold` that no
+    // cascade config has); banning them keeps this assertion non-vacuous.
+    for (const banned of ['solar', 'upstage', 'cascade', 'escalateif', 'confidencebelow', 'gpt-frontier-class', 'strategyhash']) {
       expect(raw).not.toContain(banned);
     }
     expect(/[0-9a-f]{16,64}/.test(res.body)).toBe(false); // no hashes of any kind

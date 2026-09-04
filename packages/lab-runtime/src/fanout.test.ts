@@ -9,9 +9,9 @@
 //   · the fan-out law rides only fanOut-bearing prompts (replay law).
 import { describe, expect, it } from 'vitest';
 import { createDb, createLabRun, migrate, seedIsolationOrgs, ORG_A, labRunSteps } from '@potion/db';
-import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
+import { harnessSpecHash, parseHarnessSpec, type HarnessSpec } from '@potion/lab-spec';
 import { runLeg, systemPrompt } from './loop.js';
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
 import { allocateFanOut, deriveSubSpec, fanOutSpentFromSteps, validateFanOut } from './fanout.js';
 
 function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
@@ -69,12 +69,19 @@ describe('fanOutSpentFromSteps — the one family-spend derivation', () => {
 
 describe('deriveSubSpec — the helper laws, structural', () => {
   it('depth-1, never-acts, memory-off, budget slice', () => {
-    const sub = deriveSubSpec(
+    const derived = deriveSubSpec(
       { name: 'parent', brain: { policy: { type: 'min_cost', qualityFloor: 0 } }, superpowers: [{ id: 'web', scopes: [] }, { id: 'github', scopes: ['repo'] }, { id: 'code', scopes: [] }], rules: ['be terse'] },
       { goal: 'read the docs', doneDefinition: 'summary written' },
       0.25,
       0,
-    ) as unknown as HarnessSpec;
+    );
+    // deriveSubSpec returns an untyped record; the REAL parser is what turns
+    // it into a HarnessSpec — so parsing it here both types the value and
+    // proves the derived spec is valid (what the old cast asserted by fiat).
+    const parsed = parseHarnessSpec(derived);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(`derived spec did not parse: ${JSON.stringify(parsed.issues)}`);
+    const sub: HarnessSpec = parsed.spec;
     expect(sub.fanOut).toBeUndefined(); // a helper never delegates
     expect(sub.checkIns).toEqual([]); // nothing to park on
     expect(sub.memory.enabled).toBe(false); // never writes the working set
@@ -109,12 +116,13 @@ describe('the fuel gate counts recorded helper spend', () => {
       },
       { runId: 'run-fanfuel', orgId: ORG_A, seq: 2, kind: 'tool', payload: { kind: 'tool', toolName: 'delegate', toolInput: { tasks: [{ goal: 'g', doneDefinition: 'd' }] }, toolOutput: { ok: true, helpers: [{ runId: 'sub-x-1', state: 'completed', estUsd: 0.6, result: 'r', goal: 'g' }] }, clockMs: 0, rngSample: 0 } },
     ]);
-    const client = {
-      complete: async (_req: ServingRequest): Promise<ServingResult> => {
-        throw new Error('the fuel gate must fire BEFORE any model call');
-      },
-      emitSpans: async () => true,
-    } as unknown as ServingClient;
+    // A REAL ServingClient with its outbound methods scripted, so the stub's
+    // replies are type-checked against ServingResult.
+    const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+    client.complete = async (_req: ServingRequest): Promise<ServingResult> => {
+      throw new Error('the fuel gate must fire BEFORE any model call');
+    };
+    client.emitSpans = async () => true;
     const out = await runLeg({ db: h.db, client, runId: 'run-fanfuel', orgId: ORG_A, spec: s, harnessHash: hash });
     expect(out.status).toBe('killed-budget');
     await h.close();

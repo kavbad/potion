@@ -135,10 +135,11 @@ describe('steps → eval items, zero converter changes', () => {
       },
     ];
     const q = [...scriptedResults];
-    const scripted = {
-      complete: async () => q.shift()!,
-      emitSpans: async () => true,
-    } as unknown as ServingClient;
+    // A REAL ServingClient with its outbound methods scripted, so the stub's
+    // replies are type-checked against ServingResult.
+    const scripted = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+    scripted.complete = async () => q.shift()!;
+    scripted.emitSpans = async () => true;
 
     const runId = 'run-synth-1';
     await createLabRun(h.db, { id: runId, orgId: ORG, harnessHash: hash, harnessName: spec.name, spec });

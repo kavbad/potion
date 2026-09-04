@@ -20,11 +20,11 @@ function pt(over: Partial<FrontierPoint> & { strategyHash: string }): FrontierPo
     ...over,
   };
 }
-const FRONTIER = {
+const FRONTIER: Frontier = {
   id: 'fr-motion-1', clusterId: 'summarization', version: 2, parentId: null, trigger: 'recompute',
   points: [pt({ strategyHash: 'lo', quality: 0.6, costPer1K: 0.005, latencyP95: 400 }), pt({ strategyHash: 'hi', quality: 0.9, costPer1K: 0.03, latencyP95: 1200 })],
   pricesVersion: 'pv', createdAt: '',
-} as unknown as Frontier;
+};
 
 const BASE_SPEC = {
   specVersion: 1 as const,

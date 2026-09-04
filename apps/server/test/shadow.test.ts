@@ -10,7 +10,7 @@
 //     shadow candidate (chaos provider, timeout-guarded).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { sha256, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
+import { sha256, strategyHash, type Frontier, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import {
   insertApiKey,
   insertPolicy,
@@ -64,6 +64,20 @@ const POINTS: FrontierPoint[] = [
   point(CFG_MID, 0.7, 1.0),
   point(CFG_STRONG, 0.9, 10.0),
 ];
+
+// The serving frontier handed to resolveShadowCandidates/runShadow. Only
+// `.points` is read, but the whole record is spelled out so the fixture is
+// checked against the real Frontier shape.
+const FRONTIER: Frontier = {
+  id: 'fr-shadow',
+  clusterId: 'code-gen',
+  version: 1,
+  parentId: null,
+  trigger: 'manual',
+  points: POINTS,
+  pricesVersion: '2026-08-04',
+  createdAt: '2026-08-04T00:00:00Z',
+};
 
 const CODE_PROMPT = 'Write a python function that reverses a string';
 
@@ -182,7 +196,7 @@ describe('candidateModelOf', () => {
 // ---------- candidate resolution ----------
 
 describe('resolveShadowCandidates', () => {
-  const frontier = { points: POINTS } as never; // only .points is read
+  const frontier = FRONTIER;
 
   it("'frontier' picks the OTHER points, capped at MAX_SHADOW_CANDIDATES", async () => {
     const candidates = await resolveShadowCandidates(app.potion, {
@@ -229,7 +243,7 @@ describe('runShadow', () => {
         messages: [{ role: 'user', content: CODE_PROMPT }],
         primary: { hash: H_CHEAP, text: 'primary answer text' },
         shadow: { sampleRate: 1, candidates: 'frontier' },
-        frontier: { points: POINTS } as never,
+        frontier: FRONTIER,
         orgProviders,
       },
       () => {},
@@ -262,7 +276,7 @@ describe('runShadow', () => {
         messages: [{ role: 'user', content: CODE_PROMPT }],
         primary: { hash: H_CHEAP, text: 'primary answer text' },
         shadow: { sampleRate: 1, candidates: 'frontier' },
-        frontier: { points: POINTS } as never,
+        frontier: FRONTIER,
         orgProviders,
       },
       () => {},
@@ -295,7 +309,7 @@ describe('runShadow', () => {
         messages: [{ role: 'user', content: CODE_PROMPT }],
         primary: { hash: H_CHEAP, text: 'primary answer text' },
         shadow: { sampleRate: 1, candidates: [H_MID] },
-        frontier: { points: POINTS } as never,
+        frontier: FRONTIER,
         orgProviders: { ...orgProviders, providers: { ...orgProviders.providers, mock: judgeDown } },
       },
       (m) => warnings.push(m),
@@ -321,7 +335,7 @@ describe('runShadow', () => {
         messages: [{ role: 'user', content: CODE_PROMPT }],
         primary: { hash: H_CHEAP, text: 'primary answer text' },
         shadow: { sampleRate: 1, candidates: [H_MID, H_BAD] },
-        frontier: { points: POINTS } as never,
+        frontier: FRONTIER,
         orgProviders,
       },
       (msg) => warnings.push(msg),

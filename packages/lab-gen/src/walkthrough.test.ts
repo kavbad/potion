@@ -138,11 +138,15 @@ describe('Leg B — intent → valid spec → running harness (DoD)', () => {
       clusterHint: 'summarization',
     });
     const q = [extraction];
-    const scripted = { complete: async () => ({
+    // A REAL ServingClient with complete() scripted (the class holds private
+    // state) — the scripted reply stays type-checked against ServingResult.
+    // The base URL is never dialled: complete() is replaced outright.
+    const scripted = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+    scripted.complete = async (): Promise<ServingResult> => ({
       kind: 'ok', completionId: 'chatcmpl-wt-1', text: q.shift() ?? '', toolCalls: [],
       finishReason: 'stop', usage: { promptTokens: 40, completionTokens: 30, totalTokens: 70 },
       frontierTrace: 't',
-    } as ServingResult) } as unknown as ServingClient;
+    });
 
     const r = await generateSpec(ANSWERS, {
       client: scripted,

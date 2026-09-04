@@ -66,21 +66,23 @@ afterAll(async () => {
   }
 });
 
-interface SignalRow {
+// A type alias rather than an interface: aliases carry an implicit index
+// signature, so a raw driver row narrows to this in one checked assertion.
+type SignalRow = {
   status: string;
   cluster_id: string | null;
   cluster_confidence: number | null;
   runner_up_cluster: string | null;
   cluster_margin: number | null;
   shape: Record<string, unknown> | null;
-}
+};
 
 async function rows(): Promise<SignalRow[]> {
   const res = await app.potion.db.db.execute(
     'select status, cluster_id, cluster_confidence, runner_up_cluster, cluster_margin, shape ' +
       'from request_logs order by id desc limit 50',
   );
-  return (res.rows ?? []) as unknown as SignalRow[];
+  return (res.rows ?? []) as SignalRow[];
 }
 
 async function serve(payload: Record<string, unknown>): Promise<number> {

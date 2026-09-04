@@ -10,7 +10,8 @@ import { createDb, createLabRun, listLabSteps, migrate, seedIsolationOrgs, ORG_A
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { runLeg, steerMessage } from './loop.js';
 import { replayRun } from './replay.js';
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
+import type { StepPayload } from './checkpoint.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
 
 const ORG = ORG_A;
 
@@ -31,16 +32,20 @@ function spec(): HarnessSpec {
 function scripted(results: ServingResult[]): ServingClient & { calls: ServingRequest[] } {
   const queue = [...results];
   const calls: ServingRequest[] = [];
-  return {
-    calls,
-    complete: async (req: ServingRequest) => {
-      calls.push(req);
-      const next = queue.shift();
-      if (!next) throw new Error('scripted client exhausted');
-      return next;
-    },
-    emitSpans: async () => true,
-  } as unknown as ServingClient & { calls: ServingRequest[] };
+  // A REAL ServingClient with its outbound methods scripted, so the stub's
+  // replies are type-checked against ServingResult.
+  const client = Object.assign(
+    new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' }),
+    { calls },
+  );
+  client.complete = async (req: ServingRequest) => {
+    calls.push(req);
+    const next = queue.shift();
+    if (!next) throw new Error('scripted client exhausted');
+    return next;
+  };
+  client.emitSpans = async () => true;
+  return client;
 }
 
 function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult {
@@ -106,7 +111,8 @@ describe('the steer law', () => {
     // THE MIRROR: the steered record replays divergence-free.
     const verdict = replayRun(
       s,
-      steps.map((x) => ({ seq: x.seq, kind: x.kind as 'model' | 'tool' | 'check-in', payload: x.payload as never })),
+      // jsonb payloads arrive as `unknown`; narrow only that field.
+      steps.map((x) => ({ seq: x.seq, kind: x.kind, payload: x.payload as StepPayload })),
       { state: 'completed', reason: null },
     );
     expect(verdict.ok).toBe(true);

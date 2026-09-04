@@ -3,7 +3,7 @@
 // expired/revoked/reset-database cookie renders the page, the page calls the
 // API, and the 401 came back as a 500. The recovery must fire on exactly that
 // case, must not fire on a 403, and must not be able to loop.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 const state = vi.hoisted(() => ({
   path: '/usage' as string | null,
@@ -43,14 +43,18 @@ async function redirectOf(run: () => Promise<unknown>): Promise<string | null> {
   }
 }
 
-function respondWith(status: number, body: unknown = { error: { message: 'nope' } }): void {
-  globalThis.fetch = vi.fn(
+/** Installs a fetch that always answers `status`; returns the spy so a test
+ * can count the calls it made. */
+function respondWith(status: number, body: unknown = { error: { message: 'nope' } }): Mock<typeof fetch> {
+  const mock = vi.fn<typeof fetch>(
     async () =>
       new Response(JSON.stringify(body), {
         status,
         headers: { 'content-type': 'application/json' },
       }),
-  ) as unknown as typeof fetch;
+  );
+  globalThis.fetch = mock;
+  return mock;
 }
 
 const realFetch = globalThis.fetch;
@@ -118,9 +122,9 @@ describe('fetchOrRecover', () => {
   });
 
   it('leaves an unreachable API to the page, which has its own empty state', async () => {
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       throw new Error('ECONNREFUSED');
-    }) as unknown as typeof fetch;
+    });
     await expect(fetchOrRecover('/api/usage')).rejects.toBeInstanceOf(ApiUnreachable);
   });
 
@@ -173,21 +177,21 @@ describe('the destination is never anything but a same-origin path', () => {
 describe('the one-retry law (2026-08-28: a racy 401 cleared a fresh session)', () => {
   it('a 401 that succeeds on retry returns the body — no redirect, session kept', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       calls += 1;
       return calls === 1
         ? new Response(JSON.stringify({ error: { message: 'nope' } }), { status: 401, headers: { 'content-type': 'application/json' } })
         : new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
-    }) as unknown as typeof fetch;
+    });
     const out = await fetchOrRecover<{ ok: boolean }>('/api/flaky');
     expect(out.ok).toBe(true);
     expect(calls).toBe(2);
   });
 
   it('a 401 that REPEATS still recovers through the clear route', async () => {
-    respondWith(401);
+    const fetchMock = respondWith(401);
     const to = await redirectOf(() => fetchOrRecover('/api/dead'));
     expect(to).toContain('/api/auth/clear');
-    expect((globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(2);
+    expect(fetchMock.mock.calls.length).toBe(2);
   });
 });

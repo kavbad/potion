@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { canonicalJson, type Frontier } from '@potion/core';
-import type { ServingClient, ServingResult } from '@potion/lab-runtime';
+import { ServingClient, type ServingResult } from '@potion/lab-runtime';
 import { generateSpec, type GenerationResult } from './generate.js';
 import type { InterviewAnswers } from './interview.js';
 
@@ -86,7 +86,10 @@ describe('golden replay — byte-identical', () => {
     it(`${name} replays to the committed result`, async () => {
       const g = load(name);
       const q = [...g.responses];
-      const client = { complete: async () => ok(q.shift() ?? '') } as unknown as ServingClient;
+      // A REAL ServingClient with complete() scripted (the class holds private
+      // state) — the replay's replies stay type-checked against ServingResult.
+      const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+      client.complete = async () => ok(q.shift() ?? '');
       const result = await generateSpec(g.answers, { client, loadFrontier: async () => g.frontier });
       expect(canonicalJson(result)).toBe(canonicalJson(g.expected));
     });

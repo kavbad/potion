@@ -80,8 +80,8 @@ beforeAll(async () => {
   for (let i = 0; i < 10; i += 1) {
     await insertRequestLog(db(), {
       orgId: ORG, clusterId: 'classification', strategyHash: H_CHEAP, model: 'mock-cheap',
-      status: 'ok', usage: { costUsd: 0.001 }, latencyMs: 300,
-    } as never);
+      status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.001, latencyMs: 300 }, latencyMs: 300,
+    });
   }
 }, 90_000);
 afterAll(async () => {

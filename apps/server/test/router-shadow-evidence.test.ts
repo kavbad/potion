@@ -44,15 +44,15 @@ beforeAll(async () => {
   for (let i = 0; i < 10; i += 1) {
     await insertRequestLog(db(), {
       orgId: ORG, clusterId: 'code-gen', strategyHash: H_CHEAP, model: 'mock-cheap',
-      status: 'ok', usage: { costUsd: 0.001 }, latencyMs: 300,
-    } as never);
+      status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.001, latencyMs: 300 }, latencyMs: 300,
+    });
   }
   // The serving strategy's own serve-judge scores (quality_samples).
   for (let i = 0; i < 5; i += 1) {
     await insertQualitySample(db(), {
       orgId: ORG, requestId: `chatcmpl-ev-${i}`, strategyHash: H_CHEAP, clusterId: 'code-gen',
       policyId: 'pol-shadow-ev', quality: 0.8, scorer: 'llm-judge:mock-judge', judgeModel: 'mock-judge', judgeCostUsd: 0,
-    } as never);
+    });
   }
   // Challenger mock-mid: 35 scored shadow rows, high quality, $0.1/1K.
   for (let i = 0; i < 35; i += 1) {

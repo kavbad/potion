@@ -22,7 +22,21 @@ import {
 import { and, eq, like } from 'drizzle-orm';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
-import type { ServingClient, ServingRequest, ServingResult } from '@potion/lab-runtime';
+import { ServingClient } from '@potion/lab-runtime';
+import type { ServingRequest, ServingResult, StepPayload } from '@potion/lab-runtime';
+
+/** lab_run_steps.payload is a jsonb column, so drizzle types it `unknown`.
+ *  A recorded step payload always carries the step kind — which is exactly
+ *  what replayRun dispatches on — so that is the narrowing, done for real
+ *  rather than asserted. */
+function isStepPayload(p: unknown): p is StepPayload {
+  return typeof p === 'object' && p !== null && 'kind' in p;
+}
+
+function recordedPayload(p: unknown): StepPayload {
+  if (!isStepPayload(p)) throw new Error(`lab step payload is not a recorded step: ${typeof p}`);
+  return p;
+}
 import { createLabRunHandler, DEFAULT_PRICES_PATH, type JobContext } from './handlers.js';
 
 const ORG = ORG_A;
@@ -75,25 +89,37 @@ function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): Serving
 }
 
 /** Scripted client factory: pops one result per complete(); records the
- * apiKey the handler minted so tests can assert the raw is the one in use. */
+ * apiKey the handler minted so tests can assert the raw is the one in use.
+ *
+ * A real SUBCLASS, not a cast object literal: ServingClient holds private
+ * state, so a subclass is the only thing that can honestly stand in for one.
+ * Both network-touching methods are overridden, so the base constructor's
+ * stored baseUrl/apiKey are never dialled. */
 function scriptedFactory(results: ServingResult[]): {
   factory: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
   seen: { apiKey?: string; baseUrl?: string; requests: ServingRequest[] };
 } {
   const queue = [...results];
   const seen: { apiKey?: string; baseUrl?: string; requests: ServingRequest[] } = { requests: [] };
+  class ScriptedServingClient extends ServingClient {
+    override async complete(req: ServingRequest): Promise<ServingResult> {
+      seen.requests.push(req);
+      const next = queue.shift();
+      if (!next) throw new Error('scripted client exhausted');
+      return next;
+    }
+    override async emitSpans(): Promise<boolean> {
+      return true;
+    }
+  }
   const factory = (opts: { baseUrl: string; apiKey: string; clusterHint?: string }): ServingClient => {
     seen.apiKey = opts.apiKey;
     seen.baseUrl = opts.baseUrl;
-    return {
-      complete: async (req: ServingRequest) => {
-        seen.requests.push(req);
-        const next = queue.shift();
-        if (!next) throw new Error('scripted client exhausted');
-        return next;
-      },
-      emitSpans: async () => true,
-    } as unknown as ServingClient;
+    return new ScriptedServingClient({
+      baseUrl: opts.baseUrl,
+      apiKey: opts.apiKey,
+      ...(opts.clusterHint !== undefined ? { clusterHint: opts.clusterHint } : {}),
+    });
   };
   return { factory, seen };
 }
@@ -717,7 +743,7 @@ describe('X4 — fan-out: one fuel tree, one trace (integration)', () => {
     const { replayRun } = await import('@potion/lab-runtime');
     const verdict = replayRun(
       s,
-      parentSteps.map((x) => ({ seq: x.seq, kind: x.kind as 'model' | 'tool' | 'check-in', payload: x.payload as never })),
+      parentSteps.map((x) => ({ seq: x.seq, kind: x.kind, payload: recordedPayload(x.payload) })),
       { state: 'completed', reason: null },
     );
     expect(verdict.ok).toBe(true);

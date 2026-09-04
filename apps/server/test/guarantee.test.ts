@@ -36,12 +36,13 @@ import {
   listRequestLogs,
   resolveIncident,
   DEFAULT_ORG_ID,
+  type PotionDb,
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { ORG_A, seedIsolationOrgs } from './fixtures/orgs.js';
 import { scoreServedAnswer, SERVE_JUDGE_SCALE } from '@potion/harness';
-import type { OrgProviders } from '../src/context.js';
+import type { OrgProviders, PotionContext } from '../src/context.js';
 import { orgLabel } from '@potion/observability';
 import {
   GUARANTEE_EVALUATE_JOB,
@@ -261,10 +262,18 @@ describe('runGuaranteeSample', () => {
 
   it('with a queue: enqueues a CONTENT-FREE per-target evaluation (no prompt/answer text)', async () => {
     const enqueued: Array<{ name: string; payload: Record<string, unknown> }> = [];
-    const fakeQueueCtx = {
+    const fakeQueueCtx: PotionContext = {
       ...app.potion,
-      queue: { enqueue: (name: string, payload: unknown) => enqueued.push({ name, payload: payload as Record<string, unknown> }) },
-    } as unknown as typeof app.potion;
+      queue: {
+        enqueue: async (name: string, payload: unknown) => {
+          enqueued.push({ name, payload: payload as Record<string, unknown> });
+          return 'job-guarantee';
+        },
+        registerHandler: () => {},
+        getJob: async () => null,
+        close: async () => {},
+      },
+    };
     const evaluation = await runGuaranteeSample(
       fakeQueueCtx,
       {
@@ -297,7 +306,14 @@ describe('runGuaranteeSample', () => {
 
   it('NEVER throws: a broken db is swallowed with a warn', async () => {
     const warnings: string[] = [];
-    const brokenCtx = { ...app.potion, db: { db: null } } as never;
+    // INTENTIONAL bad value, narrowed to the one field under test: a null
+    // drizzle handle, to prove runGuaranteeSample's catch-and-warn swallows a
+    // broken db instead of throwing into the serve path. Everything else on
+    // the context stays real and type-checked.
+    const brokenCtx: PotionContext = {
+      ...app.potion,
+      db: { ...app.potion.db, db: null as unknown as PotionDb },
+    };
     const result = await runGuaranteeSample(
       brokenCtx,
       {

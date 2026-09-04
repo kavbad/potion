@@ -3,7 +3,7 @@
 // (mock feel is labeled, never laundered).
 import { describe, expect, it } from 'vitest';
 import type { Policy } from '@potion/core';
-import type { ServingClient, ServingResult } from '@potion/lab-runtime';
+import { ServingClient, type ServingResult } from '@potion/lab-runtime';
 import {
   feltPosition,
   feltSweep,
@@ -26,17 +26,21 @@ function memCache(): FeltCache & { size: () => number } {
   };
 }
 
+// A REAL ServingClient with its outbound method scripted (the house idiom —
+// see lab-runtime's contract-law tests): the stub's replies are type-checked
+// against ServingResult, which an object literal standing in for the class
+// could never be.
 function scriptedClient(trace: string, text: string, counter: { calls: number }): ServingClient {
-  return {
-    complete: async (): Promise<ServingResult> => {
-      counter.calls += 1;
-      return {
-        kind: 'ok', completionId: `chatcmpl-felt-${counter.calls}`, text, toolCalls: [],
-        finishReason: 'stop', usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-        frontierTrace: trace,
-      } as ServingResult;
-    },
-  } as unknown as ServingClient;
+  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+  client.complete = async (): Promise<ServingResult> => {
+    counter.calls += 1;
+    return {
+      kind: 'ok', completionId: `chatcmpl-felt-${counter.calls}`, text, toolCalls: [],
+      finishReason: 'stop', usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      frontierTrace: trace,
+    };
+  };
+  return client;
 }
 
 const POLICY: Policy = { type: 'compound', qualityFloor: 0.9, p95Ms: 2000 };

@@ -14,7 +14,7 @@
 //   narrow the sweep to tool-capable models, or it spends real money and
 //   leaves the gap exactly where it was.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DemandAccumulator, type FrontierPoint } from '@potion/core';
+import { DemandAccumulator, type CoverageReason, type FrontierPoint } from '@potion/core';
 import {
   addScannedModels,
   createDb,
@@ -27,6 +27,7 @@ import {
   type DbHandle,
 } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
+import type { CoverageGap } from '@potion/pareto';
 import { eq } from 'drizzle-orm';
 import {
   capabilityFilterFor,
@@ -116,8 +117,31 @@ describe('learningAutonomyFromEnv — off unless the operator says otherwise', (
 });
 
 describe('capabilityFilterFor — the reason IS the filter', () => {
-  const gap = (reason: string, requiredContextTokens = 16_000) =>
-    ({ reason, requiredContextTokens }) as never;
+  /** A whole gap, not a two-field stand-in: capabilityFilterFor only reads
+   *  `reason` and `requiredContextTokens`, but the cell and the verdict
+   *  numbers around them are what make it a CoverageGap, and typing them
+   *  honestly is what keeps this fixture from drifting out of shape. */
+  const gap = (reason: CoverageReason, requiredContextTokens = 16_000): CoverageGap => ({
+    reason,
+    covered: false,
+    score: 1,
+    requiredContextTokens,
+    cell: {
+      cellKey: `cell-${reason}`,
+      bucket: 'code-gen',
+      bucketKind: 'cluster',
+      shapeClass: 'chars:1k-4k|tools:0',
+      weekStart: '2026-08-17',
+      requests: 100,
+      orgCount: 3,
+      confidenceMean: null,
+      confidenceMin: null,
+      confidenceCount: 0,
+      centroid: null,
+      publishedAt: AT,
+    },
+    evidence: null,
+  });
 
   it('narrows a tools gap to tool-capable models', () => {
     expect(capabilityFilterFor(gap('no_tool_capable_point'))).toEqual({ tools: true });

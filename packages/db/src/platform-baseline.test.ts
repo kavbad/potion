@@ -109,7 +109,7 @@ describe('platform baseline import', () => {
       version: 7,
       parentId: null,
       trigger: 'manual',
-      points: [] as never,
+      points: [],
       orgId: null,
       pricesVersion: 'operator',
       createdAt: '2026-08-16T00:00:00.000Z',

@@ -48,7 +48,7 @@ describe('retention shapes (the 2026-08-25 prod crash class)', () => {
     expect(html).toContain('95% CI 0.97');
   });
   it('tolerates a bare-number retention (legacy) and a null retention', () => {
-    const num = { ...PROPOSAL, id: 'p2', retention: 1.02 as never };
+    const num = { ...PROPOSAL, id: 'p2', retention: 1.02 };
     expect(renderToStaticMarkup(<BarProposal initialProposals={[num]} initialAdmin={true} />)).toContain('1.02');
     const none = { ...PROPOSAL, id: 'p3', retention: null };
     expect(() => renderToStaticMarkup(<BarProposal initialProposals={[none]} initialAdmin={true} />)).not.toThrow();

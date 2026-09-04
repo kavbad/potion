@@ -146,7 +146,7 @@ describe('postJsonWithRetry', () => {
     // Live capture 2026-08-20: an OpenRouter gemini-2.5-pro 200 carried a raw
     // control character, which strict JSON parsing rejects. Previously this
     // returned json=undefined and callers threw an untyped TypeError.
-    const corrupt = new Response('{"choices":[{"message":{"content":"ab', {
+    const corrupt = new Response('{"choices":[{"message":{"content":"a\u0001b', {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });

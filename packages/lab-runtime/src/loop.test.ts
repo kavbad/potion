@@ -20,8 +20,8 @@ import {
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { seedIsolationOrgs, ORG_A } from '@potion/db';
 import { runLeg, type LabTool } from './loop.js';
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
-import { SecretInCheckpointError, buildStepPayload } from './checkpoint.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import { SecretInCheckpointError, buildStepPayload, type StepPayload } from './checkpoint.js';
 
 function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
   return {
@@ -39,20 +39,23 @@ function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
 }
 
 /** Scripted client: pops one result per complete() call. */
-function scripted(results: ServingResult[]): ServingClient {
+function scripted(results: ServingResult[]): ServingClient & { calls: ServingRequest[] } {
   const queue = [...results];
   const calls: ServingRequest[] = [];
-  const client = {
-    calls,
-    complete: async (req: ServingRequest) => {
-      calls.push(req);
-      const next = queue.shift();
-      if (!next) throw new Error('scripted client exhausted');
-      return next;
-    },
-    emitSpans: async () => true,
+  // A REAL ServingClient with its outbound methods scripted, so the stub's
+  // replies are type-checked against ServingResult.
+  const client = Object.assign(
+    new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' }),
+    { calls },
+  );
+  client.complete = async (req: ServingRequest) => {
+    calls.push(req);
+    const next = queue.shift();
+    if (!next) throw new Error('scripted client exhausted');
+    return next;
   };
-  return client as unknown as ServingClient;
+  client.emitSpans = async () => true;
+  return client;
 }
 
 function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult {
@@ -376,25 +379,26 @@ describe('X2 — the durable task ledger across legs', () => {
       ok({ text: 'check complete' }),
     ];
     const queue = [...script];
-    const client = {
-      complete: async (req: { messages: Array<{ role: string; content: string }> }) => {
-        (client as unknown as { requests: unknown[] }).requests.push(req.messages.map((m) => m.content));
-        return queue.shift()!;
-      },
-      emitSpans: async () => true,
-      requests: [] as unknown[],
+    // A REAL ServingClient with its outbound methods scripted, so the stub's
+    // replies are type-checked against ServingResult.
+    const requests: string[][] = [];
+    const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+    client.complete = async (req: ServingRequest) => {
+      requests.push(req.messages.map((m) => m.content));
+      return queue.shift()!;
     };
+    client.emitSpans = async () => true;
     const leg1 = await runLeg({
-      db: h.db, client: client as never, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash, maxStepsPerLeg: 2,
+      db: h.db, client, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash, maxStepsPerLeg: 2,
     });
     expect(leg1.status).toBe('leg-cap');
     const leg2 = await runLeg({
-      db: h.db, client: client as never, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash,
+      db: h.db, client, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash,
     });
     expect(leg2.status).toBe('completed');
 
     // The leg-2 request carries the re-injected ledger…
-    const leg2Messages = (client.requests.at(-1) as string[]).join('\n---\n');
+    const leg2Messages = requests.at(-1)!.join('\n---\n');
     expect(leg2Messages).toContain('Your task ledger');
     expect(leg2Messages).toContain('[x] 1 · gather');
     expect(leg2Messages).toContain('[~] 2 · compute');
@@ -408,7 +412,8 @@ describe('X2 — the durable task ledger across legs', () => {
     const run = await getLabRun(h.db, 'run-x2', 'org_x2');
     const replay = replayRun(
       spec,
-      steps.map((s) => ({ seq: s.seq, kind: s.kind as never, payload: s.payload as never })),
+      // jsonb payloads arrive as `unknown`; narrow only that field.
+      steps.map((s) => ({ seq: s.seq, kind: s.kind, payload: s.payload as StepPayload })),
       { state: run!.state, reason: run!.stateReason },
     );
     expect(replay.ok, JSON.stringify(replay)).toBe(true);

@@ -237,18 +237,19 @@ describe('DoD leg 3: spec drift refuses a resume (F7 applied to runs)', () => {
     // refuse as 'terminal' before drift is ever checked. The drift check
     // needs a genuinely NON-terminal run — a truncated ('length') response
     // parks the leg at its cap without completing it.
-    const lengthClient = {
-      complete: async () => ({
-        kind: 'ok' as const,
-        completionId: 'c-drift',
-        text: 'working…',
-        toolCalls: [],
-        finishReason: 'length',
-        usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
-        frontierTrace: 'cluster=summarization;strategy=x;frontier=v1;policy=compound;fallback=0;provenance=mock',
-      }),
-      emitSpans: async () => {},
-    } as unknown as ServingClient;
+    // A REAL ServingClient with its outbound methods scripted, so the stub's
+    // replies are type-checked against ServingResult.
+    const lengthClient = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+    lengthClient.complete = async () => ({
+      kind: 'ok' as const,
+      completionId: 'c-drift',
+      text: 'working…',
+      toolCalls: [],
+      finishReason: 'length',
+      usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+      frontierTrace: 'cluster=summarization;strategy=x;frontier=v1;policy=compound;fallback=0;provenance=mock',
+    });
+    lengthClient.emitSpans = async () => true;
     const { runId } = await startRun({
       db: h.db, client: lengthClient, orgId: ORG, specText: JSON.stringify(s), maxStepsPerLeg: 1,
     });

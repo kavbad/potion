@@ -3,7 +3,7 @@
 // every measured route into a 503 while /readyz stayed green).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
+import { strategyHash, type FrontierPoint, type JudgeConfig, type StrategyConfig } from '@potion/core';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import {
@@ -18,14 +18,22 @@ function point(clusterId: string, config: StrategyConfig, cost = 1): FrontierPoi
 
 describe('modelsInStrategy — every shape, every model field', () => {
   it('finds the model in each strategy shape, including nested judge/routing/stages', () => {
-    const judge = { kind: 'llm-judge', rubric: 'r', judgeModel: 'J', scale: [0, 1] } as const;
+    // A best-of-n judge is a JudgeConfig (`model` + optional `rubric`) — this
+    // fixture used to hold an llm-judge SCORING method (`judgeModel`/`scale`),
+    // a shape no StrategyConfig can contain.
+    const judge: JudgeConfig = { model: 'J', rubric: 'r' };
     const cases: Array<[StrategyConfig, string[]]> = [
       [{ type: 'single', model: 'A' }, ['A']],
-      [{ type: 'cascade', stages: [{ model: 'A', confidenceThreshold: 0.5 }, { model: 'B', confidenceThreshold: 0 }] as never, confidenceMethod: 'logprob' }, ['A', 'B']],
-      [{ type: 'best-of-n', model: 'A', n: 3, judge } as never, ['A', 'J']],
+      // CascadeStage escalation is `escalateIf.confidenceBelow`, never a
+      // top-level `confidenceThreshold` (the field runCascade cannot read).
+      [{ type: 'cascade', stages: [{ model: 'A', escalateIf: { confidenceBelow: 0.5 } }, { model: 'B' }], confidenceMethod: 'logprob' }, ['A', 'B']],
+      [{ type: 'best-of-n', model: 'A', n: 3, judge }, ['A', 'J']],
       [{ type: 'draft-verify', draftModel: 'A', verifierModel: 'B' }, ['A', 'B']],
-      [{ type: 'ensemble', models: ['A', 'B', 'C'], fusion: { kind: 'vote' } } as never, ['A', 'B', 'C']],
-      [{ type: 'decompose', decomposerModel: 'D', routing: { 'code-gen': 'A', extraction: 'B' } } as never, ['A', 'B', 'D']],
+      // FusionConfig keys on `method`, not `kind`, and 'vote' is not one of
+      // its methods; concat-rank is the model-free one, so the expectation
+      // (models reached through `models[]` only) is unchanged.
+      [{ type: 'ensemble', models: ['A', 'B', 'C'], fusion: { method: 'concat-rank' } }, ['A', 'B', 'C']],
+      [{ type: 'decompose', decomposerModel: 'D', routing: { 'code-gen': 'A', extraction: 'B' } }, ['A', 'B', 'D']],
       [{ type: 'composite', startModel: 'A', upgradeModel: 'B', upgradeIf: { confidenceBelow: 0.5 } }, ['A', 'B']],
     ];
     for (const [cfg, expected] of cases) expect(modelsInStrategy(cfg)).toEqual(expected);

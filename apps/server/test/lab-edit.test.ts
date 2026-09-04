@@ -19,6 +19,7 @@ import {
   type DbHandle,
 } from '@potion/db';
 import { harnessSpecHash, parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
+import type { PotionQueue } from '@potion/queue';
 import { buildServer } from '../src/server.js';
 
 const ORG = 'org_lab_edit';
@@ -310,19 +311,24 @@ describe('P1 — arm/pause + the scheduler window math', () => {
     const hash = await seedCatalog(s);
     await armLabMission(h.db, { orgId: ORG, harnessHash: hash, cadenceCron: '0 9 * * *', armedBy: 'test' });
     const enqueued: Array<{ kind: string; runId: string }> = [];
-    const queue = { enqueue: async (kind: string, payload: { runId: string }) => { enqueued.push({ kind, runId: payload.runId }); return 'job-1'; } };
+    const queue: PotionQueue = {
+      enqueue: async (kind: string, payload: unknown) => { enqueued.push({ kind, runId: (payload as { runId: string }).runId }); return 'job-1'; },
+      registerHandler: () => {},
+      getJob: async () => null,
+      close: async () => {},
+    };
     const at = new Date('2026-08-28T09:05:00Z');
-    await schedulerTick({ db: h, queue: queue as never }, at);
+    await schedulerTick({ db: h, queue }, at);
     expect(enqueued).toHaveLength(1);
     expect(enqueued[0]!.runId).toBe(`chk-${hash.slice(0, 8)}-2026-08-28`);
     const run = await getLabRun(h.db, enqueued[0]!.runId, ORG);
     expect(run!.state).toBe('pending');
     // Same window, second tick: handled — nothing new (two dedups agree).
-    await schedulerTick({ db: h, queue: queue as never }, new Date('2026-08-28T09:30:00Z'));
+    await schedulerTick({ db: h, queue }, new Date('2026-08-28T09:30:00Z'));
     expect(enqueued).toHaveLength(1);
     // A MISSED window is skipped, never bursted: next day's tick starts
     // one check for THAT day only.
-    await schedulerTick({ db: h, queue: queue as never }, new Date('2026-08-30T09:05:00Z'));
+    await schedulerTick({ db: h, queue }, new Date('2026-08-30T09:05:00Z'));
     expect(enqueued).toHaveLength(2);
     expect(enqueued[1]!.runId).toBe(`chk-${hash.slice(0, 8)}-2026-08-30`);
     const m = await getLabMission(h.db, ORG, hash);
@@ -330,7 +336,7 @@ describe('P1 — arm/pause + the scheduler window math', () => {
     // Paused: nothing starts.
     const { pauseLabMission } = await import('@potion/db');
     await pauseLabMission(h.db, ORG, hash);
-    await schedulerTick({ db: h, queue: queue as never }, new Date('2026-08-31T09:05:00Z'));
+    await schedulerTick({ db: h, queue }, new Date('2026-08-31T09:05:00Z'));
     expect(enqueued).toHaveLength(2);
   });
 });
@@ -390,8 +396,13 @@ describe('P5 — event triggers: the webhook inlet + the feed watcher', () => {
     const feedFetch: typeof fetch = async () => new Response(page, { status: 200 });
     const feedLookup = async () => ({ address: '203.0.113.9' });
     const enqueued: string[] = [];
-    const queue = { enqueue: async (_k: string, p: { runId: string }) => { enqueued.push(p.runId); return 'job-f'; } };
-    const opts = { db: h, queue: queue as never, feedFetch, feedLookup };
+    const queue: PotionQueue = {
+      enqueue: async (_k: string, p: unknown) => { enqueued.push((p as { runId: string }).runId); return 'job-f'; },
+      registerHandler: () => {},
+      getJob: async () => null,
+      close: async () => {},
+    };
+    const opts = { db: h, queue, feedFetch, feedLookup };
 
     // First sight primes — no run.
     await feedTick(opts, new Date('2026-08-28T10:00:00Z'));
@@ -439,8 +450,13 @@ describe('P5 — event triggers: the webhook inlet + the feed watcher', () => {
     const feedFetch: typeof fetch = async () => { fetched += 1; return new Response('x'); };
     const feedLookup = async () => ({ address: '10.0.0.7' }); // resolves private
     const enqueued: string[] = [];
-    const queue = { enqueue: async (_k: string, p: { runId: string }) => { enqueued.push(p.runId); return 'job-s'; } };
-    await feedTick({ db: h, queue: queue as never, feedFetch, feedLookup }, new Date('2026-08-28T11:00:00Z'));
+    const queue: PotionQueue = {
+      enqueue: async (_k: string, p: unknown) => { enqueued.push((p as { runId: string }).runId); return 'job-s'; },
+      registerHandler: () => {},
+      getJob: async () => null,
+      close: async () => {},
+    };
+    await feedTick({ db: h, queue, feedFetch, feedLookup }, new Date('2026-08-28T11:00:00Z'));
     expect(fetched).toBe(0);
     expect(enqueued).toHaveLength(0);
   });

@@ -13,6 +13,23 @@ import { buildServer } from '../src/server.js';
 import { checkReadiness } from '../src/readiness.js';
 import type { PotionContext } from '../src/context.js';
 
+/**
+ * Exactly the surface checkReadiness reads (readiness.ts): `ctx.db.db`,
+ * `ctx.db.driver`, and a duck-typed `ctx.queue`. Standing up a whole
+ * PotionContext — providers, custody, embedder, demand accumulator — to probe
+ * two fields would be fiction, so the stand-ins below are checked against this
+ * real surface (PotionContext is assignable to it) and widened in one place.
+ */
+interface ReadinessCtx {
+  db: { db: unknown; driver: string; close(): Promise<void> };
+  queue?: {
+    close(): Promise<void>;
+    ping?: () => Promise<unknown>;
+    getJob?: (id: string) => Promise<unknown>;
+  };
+}
+const asCtx = (ctx: ReadinessCtx): PotionContext => ctx as PotionContext;
+
 let app: FastifyInstance;
 
 beforeAll(async () => {
@@ -69,13 +86,13 @@ describe('GET /readyz (SPEC §12.8)', () => {
 
   it('db ping timeout path → 503 with a timeout detail', async () => {
     const db = await createDb();
-    const ctx = {
+    const ctx = asCtx({
       db: {
         driver: 'node-postgres',
         db: { execute: () => new Promise(() => {}) }, // hung driver
         close: async () => {},
       },
-    } as unknown as PotionContext;
+    });
     const report = await checkReadiness(ctx, { dbTimeoutMs: 25 });
     expect(report.ok).toBe(false);
     expect(report.checks.db).toMatchObject({ ok: false, driver: 'node-postgres' });
@@ -87,7 +104,7 @@ describe('GET /readyz (SPEC §12.8)', () => {
   it('queue ping failure → 503 with queue detail (bullmq-style redis ping)', async () => {
     const db = await createDb();
     await migrate(db.db);
-    const ctx = {
+    const ctx = asCtx({
       db,
       queue: {
         ping: async () => {
@@ -95,7 +112,7 @@ describe('GET /readyz (SPEC §12.8)', () => {
         },
         close: async () => {},
       },
-    } as unknown as PotionContext;
+    });
     const report = await checkReadiness(ctx);
     expect(report.ok).toBe(false);
     expect(report.checks.db.ok).toBe(true);
@@ -113,7 +130,7 @@ describe('GET /readyz (SPEC §12.8)', () => {
       }
       async close(): Promise<void> {}
     }
-    const ctx = { db, queue: new BullMQQueue() } as unknown as PotionContext;
+    const ctx = asCtx({ db, queue: new BullMQQueue() });
     const down = await checkReadiness(ctx);
     expect(down.ok).toBe(false);
     expect(down.checks.queue).toMatchObject({ ok: false, driver: 'bullmq' });
@@ -126,7 +143,7 @@ describe('GET /readyz (SPEC §12.8)', () => {
       }
       async close(): Promise<void> {}
     }
-    const up = await checkReadiness({ db, queue: new BullMQUp() } as unknown as PotionContext);
+    const up = await checkReadiness(asCtx({ db, queue: new BullMQUp() }));
     expect(up.checks.queue).toMatchObject({ ok: true, driver: 'bullmq' });
     await db.close();
   });
@@ -143,7 +160,7 @@ describe('GET /readyz (SPEC §12.8)', () => {
       async close(): Promise<void> {}
     }
     const queue = new MemoryQueue();
-    const report = await checkReadiness({ db, queue } as unknown as PotionContext);
+    const report = await checkReadiness(asCtx({ db, queue }));
     expect(report.checks.queue).toMatchObject({ ok: true, driver: 'memory' });
     expect(queue.probeCount).toBe(0); // memory: no probe, always ok
     await db.close();

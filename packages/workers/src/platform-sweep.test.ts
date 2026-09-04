@@ -882,7 +882,7 @@ describe('incumbent carry-forward into the sweep pool', () => {
 
   it('alias extraction covers every strategy shape', () => {
     expect(strategyModelAliases(CASCADE).sort()).toEqual(['or-deepseek', 'or-opus']);
-    expect(strategyModelAliases({ type: 'ensemble', models: ['a', 'b'], fusion: { kind: 'judge-pick', judge: { model: 'j' } } } as never)).toEqual(['a', 'b']);
-    expect(strategyModelAliases({ type: 'draft-verify', draftModel: 'd', verifierModel: 'v' } as never).sort()).toEqual(['d', 'v']);
+    expect(strategyModelAliases({ type: 'ensemble', models: ['a', 'b'], fusion: { method: 'judge-pick', judge: { model: 'j' } } })).toEqual(['a', 'b']);
+    expect(strategyModelAliases({ type: 'draft-verify', draftModel: 'd', verifierModel: 'v' }).sort()).toEqual(['d', 'v']);
   });
 });

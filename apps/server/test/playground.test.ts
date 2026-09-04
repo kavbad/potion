@@ -249,12 +249,12 @@ describe('POST /api/playground/chat — point selection', () => {
 describe('Try page rules (operator, 2026-08-22): optimize for cost / quality / latency', () => {
   it('pickUnderRule applies each rule to one frontier', async () => {
     const { pickUnderRule } = await import('../src/routes/playground.js');
-    const pts = [
-      { strategyHash: 'a', strategyConfig: { type: 'single', model: 'a' }, quality: 0.9, costPer1K: 0.1, latencyP95: 900 },
-      { strategyHash: 'b', strategyConfig: { type: 'single', model: 'b' }, quality: 0.96, costPer1K: 0.5, latencyP95: 300 },
-      { strategyHash: 'c', strategyConfig: { type: 'single', model: 'c' }, quality: 0.99, costPer1K: 4, latencyP95: 1200 },
-      { strategyHash: 'd', strategyConfig: { type: 'single', model: 'd' }, quality: 0.97, costPer1K: 2, latencyP95: 200 },
-    ] as never;
+    const pts: FrontierPoint[] = [
+      { clusterId: 'code-gen', strategyHash: 'a', strategyConfig: { type: 'single', model: 'a' }, quality: 0.9, costPer1K: 0.1, latencyP95: 900 },
+      { clusterId: 'code-gen', strategyHash: 'b', strategyConfig: { type: 'single', model: 'b' }, quality: 0.96, costPer1K: 0.5, latencyP95: 300 },
+      { clusterId: 'code-gen', strategyHash: 'c', strategyConfig: { type: 'single', model: 'c' }, quality: 0.99, costPer1K: 4, latencyP95: 1200 },
+      { clusterId: 'code-gen', strategyHash: 'd', strategyConfig: { type: 'single', model: 'd' }, quality: 0.97, costPer1K: 2, latencyP95: 200 },
+    ];
     expect(pickUnderRule(pts, 'cost', 0.95)?.strategyHash).toBe('b');
     expect(pickUnderRule(pts, 'quality', 0.95)?.strategyHash).toBe('c');
     expect(pickUnderRule(pts, 'latency', 0.95)?.strategyHash).toBe('d');

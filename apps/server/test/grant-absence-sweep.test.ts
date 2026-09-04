@@ -28,6 +28,7 @@ import {
 } from '@potion/db';
 import { buildServer } from '../src/server.js';
 import { ROUTE_INVENTORY, type RouteInventoryRow } from '../src/security/route-inventory.js';
+import type { HarnessSpec } from '@potion/lab-spec';
 
 const ORG = 'org_grantsweep';
 const KEY = 'pk_grantsweep_admin';
@@ -219,7 +220,7 @@ describe('inventory-driven grant-absence sweep', () => {
     await regrant();
     const db = app.potion.db.db;
     const { upsertLabHarness, markLabGrantStatus } = await import('@potion/db');
-    const spec = {
+    const spec: HarnessSpec = {
       specVersion: 1,
       name: 'grant posture harness',
       brain: { policy: { type: 'min_cost', qualityFloor: 0 } },
@@ -231,7 +232,7 @@ describe('inventory-driven grant-absence sweep', () => {
       checkIns: [],
     };
     const { harnessSpecHash } = await import('@potion/lab-spec');
-    const hash = harnessSpecHash(spec as never);
+    const hash = harnessSpecHash(spec);
     await upsertLabHarness(db, {
       orgId: ORG,
       harnessHash: hash,

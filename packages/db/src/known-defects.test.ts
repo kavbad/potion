@@ -46,20 +46,17 @@ describe('KNOWN DEFECT F17: chunked cascade delete reads rowCount, which PGlite 
     'erases an org with >CHUNK request_logs at all (today: 23503 — the cascade aborts)',
     async () => {
       await createOrg(h.db, { id: 'org_f17', name: 'F17' });
-      const rows = Array.from({ length: 1200 }, (_, i) => ({
+      const rows: (typeof requestLogs.$inferInsert)[] = Array.from({ length: 1200 }, (_, i) => ({
         orgId: 'org_f17',
-        route: '/v1/chat/completions',
         model: 'mock-cheap',
         provider: 'mock',
-        promptTokens: 1,
-        completionTokens: 1,
-        costUsd: '0',
+        usage: { inputTokens: 1, outputTokens: 1, costUsd: 0, latencyMs: 1 },
         latencyMs: 1,
-        status: 200,
-        createdAt: new Date(Date.now() - i * 1000),
+        status: '200',
+        ts: new Date(Date.now() - i * 1000),
       }));
       for (let i = 0; i < rows.length; i += 200) {
-        await h.db.insert(requestLogs).values(rows.slice(i, i + 200) as never);
+        await h.db.insert(requestLogs).values(rows.slice(i, i + 200));
       }
       const report = await deleteOrgCascade(h.db, 'org_f17');
       // The receipt must state what was actually erased.

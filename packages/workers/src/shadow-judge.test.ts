@@ -18,8 +18,12 @@ describe('shadow:judge tombstone', () => {
       candidateText: 'a candidate answer',
       primaryText: 'the primary answer',
     };
+    // The legacy shape is passed as a VARIABLE, not a fresh literal: its five
+    // retired fields are extra baggage the current ShadowJudgePayload does not
+    // declare, which is exactly the drain this test proves, and structural
+    // assignability accepts it without any cast.
     await expect(
-      shadowJudgeHandler(legacyTextPayload as never, {} as JobContext),
+      shadowJudgeHandler(legacyTextPayload, {} as JobContext),
     ).resolves.toMatchObject({ retired: true });
     await expect(
       shadowJudgeHandler({ shadowResultId: 'sr-1' }, {} as JobContext),

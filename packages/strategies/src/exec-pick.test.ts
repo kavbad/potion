@@ -1,7 +1,8 @@
 // exec-pick fusion (R4, 2026-08-24): execution decides, judge only on ties,
 // confidence when no judge, honest degrade when the tests are unusable.
 import { describe, expect, it } from 'vitest';
-import type { ChatMessage, StrategyConfig } from '@potion/core';
+import type { ChatMessage, FusionConfig, PriceTable, StrategyConfig } from '@potion/core';
+import { createProviders } from '@potion/providers';
 import { execute, type ExecContext } from './index.js';
 import { buildTestWriterMessages } from './ensemble.js';
 
@@ -15,11 +16,15 @@ const TESTS =
   "test('adds', () => assertDeepEqual(add(2, 3), 5));\n" +
   "test('adds negatives', () => assertDeepEqual(add(-1, -2), -3));";
 
+/** Every call below is routed by the scripted `resolve`, so the table is
+ *  legitimately empty and the provider map is never consulted. */
+const PRICES: PriceTable = { version: 't', updatedAt: '2026-01-01T00:00:00Z', entries: [] };
+
 /** Scripted context: each model name maps to a fixed answer. */
 function scriptedCtx(byModel: Record<string, string>, extra?: Partial<ExecContext>): ExecContext {
   return {
-    providers: {} as never,
-    prices: { version: 't', updatedAt: 't', entries: [] } as never,
+    providers: createProviders({ prices: PRICES }),
+    prices: PRICES,
     resolve: (model: string) => ({
       provider: {
         id: 'mock',
@@ -34,11 +39,11 @@ function scriptedCtx(byModel: Record<string, string>, extra?: Partial<ExecContex
       entry: { alias: model, provider: 'mock', model, inputPer1M: 0, outputPer1M: 0 },
     }),
     ...extra,
-  } as never;
+  };
 }
 
-function ensemble(models: string[], fusion: Record<string, unknown>): StrategyConfig {
-  return { type: 'ensemble', models, fusion } as never;
+function ensemble(models: string[], fusion: FusionConfig): StrategyConfig {
+  return { type: 'ensemble', models, fusion };
 }
 
 describe("ensemble fusion: 'exec-pick'", () => {

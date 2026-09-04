@@ -43,6 +43,18 @@ afterEach(() => {
   clearBudgetHardStopCache();
 });
 
+/**
+ * Exactly what the spending gate reads (budgets.ts): `ctx.providerMode`,
+ * `ctx.providersForOrg(orgId).byok`, and `ctx.db.db` (whose contents the
+ * vi.mock below interprets). PotionContext is assignable to this, so the stub
+ * stays type-checked against the real surface and is widened in one place.
+ */
+interface BudgetGateCtx {
+  providerMode: 'mock' | 'live';
+  providersForOrg: (orgId: string) => Promise<{ byok: boolean }>;
+  db: { db: unknown };
+}
+
 /** A context stub with only what the gate reads. */
 function ctxWith(over: {
   providerMode?: 'mock' | 'live';
@@ -53,11 +65,11 @@ function ctxWith(over: {
   mtdUsd?: number;
   platformSpendToday?: number;
 }): PotionContext {
-  return {
+  const stub: BudgetGateCtx = {
     providerMode: over.providerMode ?? 'live',
     providersForOrg: async () => {
       if (over.providersThrows) throw new Error('provider resolution down');
-      return { byok: over.byok ?? false } as never;
+      return { byok: over.byok ?? false };
     },
     db: {
       db: {
@@ -72,7 +84,8 @@ function ctxWith(over: {
         },
       },
     },
-  } as unknown as PotionContext;
+  };
+  return stub as PotionContext;
 }
 
 vi.mock('@potion/db', async (importOriginal) => {

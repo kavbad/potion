@@ -3,7 +3,8 @@
 // coverage of those fields — the omission class reference-free judges were
 // measured blind to (G8), caught without a reference.
 import { describe, expect, it } from 'vitest';
-import type { ChatMessage, StrategyConfig } from '@potion/core';
+import type { ChatMessage, FusionConfig, PriceTable, StrategyConfig } from '@potion/core';
+import { createProviders } from '@potion/providers';
 import { execute, type ExecContext } from './index.js';
 import { fieldCoverage, parseFieldList } from './ensemble.js';
 
@@ -16,10 +17,14 @@ const MISSING = '{"order_number":"4471","issue":"arrived broken"}';
 const BROKEN = 'order number is 4471, issue: broken';
 const FIELDS = '["order_number","issue","urgency"]';
 
+/** Every call below is routed by the scripted `resolve`, so the table is
+ *  legitimately empty and the provider map is never consulted. */
+const PRICES: PriceTable = { version: 't', updatedAt: '2026-01-01T00:00:00Z', entries: [] };
+
 function scriptedCtx(byModel: Record<string, string>): ExecContext {
   return {
-    providers: {} as never,
-    prices: { version: 't', updatedAt: 't', entries: [] } as never,
+    providers: createProviders({ prices: PRICES }),
+    prices: PRICES,
     resolve: (model: string) => ({
       provider: {
         id: 'mock',
@@ -33,11 +38,11 @@ function scriptedCtx(byModel: Record<string, string>): ExecContext {
       },
       entry: { alias: model, provider: 'mock', model, inputPer1M: 0, outputPer1M: 0 },
     }),
-  } as never;
+  };
 }
 
-function ensemble(models: string[], fusion: Record<string, unknown>): StrategyConfig {
-  return { type: 'ensemble', models, fusion } as never;
+function ensemble(models: string[], fusion: FusionConfig): StrategyConfig {
+  return { type: 'ensemble', models, fusion };
 }
 
 describe('field helpers', () => {

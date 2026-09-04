@@ -16,7 +16,8 @@ import { seedIsolationOrgs, ORG_A } from '@potion/db';
 import { runLeg } from './loop.js';
 import { replayRun, type RecordedStep } from './replay.js';
 import { extractDeliverable } from './deliverable.js';
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
+import type { StepPayload } from './checkpoint.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
 
 function standingSpec(withContract: boolean): HarnessSpec {
   return {
@@ -42,15 +43,17 @@ const GOOD_BRIEF = JSON.stringify({
 
 function scripted(results: ServingResult[]): ServingClient {
   const queue = [...results];
-  const client = {
-    complete: async (_req: ServingRequest) => {
-      const next = queue.shift();
-      if (!next) throw new Error('scripted client exhausted');
-      return next;
-    },
-    emitSpans: async () => true,
+  // A REAL ServingClient with its two outbound methods scripted — so the
+  // stub's replies are type-checked against ServingResult (the class has
+  // private state, which no object literal can stand in for).
+  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+  client.complete = async (_req: ServingRequest) => {
+    const next = queue.shift();
+    if (!next) throw new Error('scripted client exhausted');
+    return next;
   };
-  return client as unknown as ServingClient;
+  client.emitSpans = async () => true;
+  return client;
 }
 
 function ok(text: string): ServingResult {
@@ -91,7 +94,7 @@ describe('the contract law — loop side', () => {
     const run = await getLabRun(h.db, 'run-contract', ORG_A);
     expect(run!.stateReason).toContain('deliverable filed');
     const steps = await listLabSteps(h.db, 'run-contract', ORG_A);
-    const found = extractDeliverable(s, steps.map((st) => ({ seq: st.seq, kind: st.kind, payload: st.payload as never })));
+    const found = extractDeliverable(s, steps.map((st) => ({ seq: st.seq, kind: st.kind, payload: st.payload as StepPayload })));
     expect(found?.brief.headline[0]?.claim).toBe('Northwind cut Pro 20%');
     expect((await replayOf(h, s)).ok).toBe(true);
     await h.close();

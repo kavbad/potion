@@ -76,7 +76,7 @@ describe('applying proposals merges floors', () => {
       incumbentModel: 'mock-mid', incumbentHash: strategyHash(MID), incumbentQuality: 0.92, incumbentCostPer1K: 1.0,
       servingHash: strategyHash(CHEAP), servingModel: 'mock-cheap', servingQuality: 0.8, servingCostPer1K: 0.2,
       retention: 0.87, suggestedFloor, projectedSaving: 0.8, items: 10, spendUsd: 0.01, status: 'proposed',
-    } as never);
+    });
 
   it('one proposal adds its cluster floor and keeps the others', async () => {
     await proposal('lp-f-1', 'classification', 0.82);

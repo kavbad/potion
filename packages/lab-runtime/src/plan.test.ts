@@ -52,6 +52,11 @@ describe('the tool + the render', () => {
     expect(bad.error).toContain('at least one');
   });
   it('render marks are stable (the prompt contract)', () => {
-    expect(renderPlanLedger([T('a', 'pending') as never, T('b', 'doing') as never])).toBe('[ ] a · task a\n[~] b · task b');
+    // renderPlanLedger takes real PlanTasks (T is deliberately loose so the
+    // validatePlan cases above can feed it a bad status).
+    expect(renderPlanLedger([
+      { id: 'a', title: 'task a', status: 'pending' },
+      { id: 'b', title: 'task b', status: 'doing' },
+    ])).toBe('[ ] a · task a\n[~] b · task b');
   });
 });

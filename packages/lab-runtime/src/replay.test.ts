@@ -160,7 +160,8 @@ describe('INERTNESS — playback writes nothing, as a count invariant', () => {
       const out: number[] = [];
       for (const t of TABLES) {
         const r = await h.db.execute(sql.raw(`SELECT count(*)::int AS n FROM ${t}`));
-        out.push((r as unknown as { rows: Array<{ n: number }> }).rows[0]!.n);
+        const rows = r.rows as Array<{ n: number }>;
+        out.push(rows[0]!.n);
       }
       return out;
     };

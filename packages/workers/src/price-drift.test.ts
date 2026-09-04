@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { priceDriftReport } from './price-drift.js';
 import type { PriceTable } from '@potion/core';
 
-const roster = { version: 't', entries: [
+const roster: PriceTable = { version: 't', updatedAt: '2026-08-23T00:00:00Z', entries: [
   { alias: 'or-a', provider: 'openrouter', model: 'x/a', inputPer1M: 1, outputPer1M: 4 },
   { alias: 'or-b', provider: 'openrouter', model: 'x/b', inputPer1M: 2, outputPer1M: 8 },
   { alias: 'or-gone', provider: 'openrouter', model: 'x/gone', inputPer1M: 1, outputPer1M: 1 },
   { alias: 'mock-cheap', provider: 'mock', model: 'mock', inputPer1M: 0, outputPer1M: 0 },
-] } as unknown as PriceTable;
+] };
 
 describe('priceDriftReport', () => {
   it('flags movers past the threshold, names the vanished, skips the stable and the mock', () => {

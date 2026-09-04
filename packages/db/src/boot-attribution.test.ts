@@ -33,23 +33,25 @@ async function seedCrossTenantState(version = 1): Promise<void> {
     id: `f-platform-${version}`, clusterId: CLUSTER, version, orgId: null,
     trigger: 'manual', points: [], pricesVersion: 'v1',
     createdAt: '2026-08-10T00:00:00.000Z',
-  } as never);
+  });
   await h.db.insert(evalResults).values({
     cacheKey: `ck-platform-${version}`, runId: 'r1', itemId: 'i1', clusterId: CLUSTER,
     strategyHash: 'hh', strategyConfig: { type: 'single', model: 'mock-cheap' },
-    quality: 0.9, scorer: 'mock', usage: {}, latencyMs: { total: 100 },
+    quality: 0.9, scorer: 'mock',
+    usage: { inputTokens: 10, outputTokens: 5, costUsd: 0, latencyMs: 100 },
+    latencyMs: { p50: 100, p95: 100, mean: 100 },
     modelVersions: {}, pricesVersion: 'v1', providerMode: 'mock',
     orgId: null, stale: false, createdAt: '2026-08-10T00:00:00.000Z',
-  } as never);
+  });
 }
 
 async function attribution(): Promise<Record<string, number>> {
-  const res = await h.db.execute(sql.raw(`
+  const res = await h.db.execute<Record<string, number>>(sql.raw(`
     SELECT (SELECT count(*)::int FROM frontiers WHERE org_id IS NULL) AS plat_f,
            (SELECT count(*)::int FROM frontiers WHERE org_id = 'org_tenant') AS ten_f,
            (SELECT count(*)::int FROM eval_results WHERE org_id IS NULL) AS plat_e,
            (SELECT count(*)::int FROM eval_results WHERE org_id = 'org_tenant') AS ten_e`));
-  return (res as unknown as { rows: Record<string, number>[] }).rows[0]!;
+  return res.rows[0]!;
 }
 
 describe('F12: a reboot never re-attributes evidence', () => {
@@ -76,7 +78,7 @@ describe('F12: a reboot never re-attributes evidence', () => {
       id: 'f-tenant-1', clusterId: CLUSTER, version: 1, orgId: 'org_tenant',
       trigger: 'recompute', points: [], pricesVersion: 'v1',
       createdAt: '2026-08-10T01:00:00.000Z',
-    } as never);
+    });
 
     // Previously: 'Failed query: UPDATE frontiers SET org_id = c.org_id' —
     // a unique-index violation thrown on the boot path.
@@ -173,16 +175,16 @@ describe('F12 repair (0033): only the provable subset is touched', () => {
 
     await runRepair();
 
-    const rows = await h.db.execute(sql.raw(
+    const rows = await h.db.execute<{ id: string; org_id: string | null }>(sql.raw(
       "SELECT id, org_id FROM frontiers WHERE id IN ('f-stolen','f-genuine') ORDER BY id"));
-    expect((rows as unknown as { rows: Array<Record<string, unknown>> }).rows).toEqual([
+    expect(rows.rows).toEqual([
       { id: 'f-genuine', org_id: 'org_tenant' }, // untouched
       { id: 'f-stolen', org_id: null },          // returned to platform
     ]);
 
-    const audit = await h.db.execute(sql.raw(
+    const audit = await h.db.execute<{ row_key: string; disposition: string }>(sql.raw(
       'SELECT row_key, disposition FROM evidence_attribution_audit ORDER BY row_key'));
-    expect((audit as unknown as { rows: Array<Record<string, unknown>> }).rows).toEqual([
+    expect(audit.rows).toEqual([
       { row_key: 'f-genuine', disposition: 'ambiguous-review' },
       { row_key: 'f-stolen', disposition: 'reset-to-platform' },
     ]);
@@ -195,8 +197,8 @@ describe('F12 repair (0033): only the provable subset is touched', () => {
     const before = await attribution();
     await migrate(h.db);
     expect(await attribution()).toEqual(before);
-    const audit = await h.db.execute(sql.raw(
+    const audit = await h.db.execute<{ n: number }>(sql.raw(
       'SELECT count(*)::int AS n FROM evidence_attribution_audit'));
-    expect((audit as unknown as { rows: Array<{ n: number }> }).rows[0]!.n).toBe(0);
+    expect(audit.rows[0]!.n).toBe(0);
   }, 120_000);
 });

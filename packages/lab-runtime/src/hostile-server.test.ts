@@ -37,7 +37,7 @@ function awaitingHuman(o: LegOutcome): Extract<LegOutcome, { status: 'awaiting-h
   }
   return o;
 }
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
 
 const MASTER = randomBytes(32);
 const TOKEN_A = 'gho_HOSTILEconnA_4X9mQ2vL7pK8rT3sW6zE';
@@ -79,10 +79,12 @@ function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
 
 function scripted(results: ServingResult[]): ServingClient {
   const queue = [...results];
-  return {
-    complete: async (_req: ServingRequest) => queue.shift() ?? Promise.reject(new Error('exhausted')),
-    emitSpans: async () => true,
-  } as unknown as ServingClient;
+  // A REAL ServingClient with its outbound methods scripted, so the stub's
+  // replies are type-checked against ServingResult.
+  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+  client.complete = async (_req: ServingRequest) => queue.shift() ?? Promise.reject(new Error('exhausted'));
+  client.emitSpans = async () => true;
+  return client;
 }
 const ok = (over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult => ({
   kind: 'ok',

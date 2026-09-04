@@ -51,8 +51,9 @@ function orgProvidersOf(): OrgProviders {
   return {
     providers: app.potion.providers,
     resolve: app.potion.resolve,
-    source: 'platform',
-  } as unknown as OrgProviders;
+    byok: false,
+    byokProviders: [],
+  };
 }
 
 async function waitFor<T>(fn: () => Promise<T>, pred: (v: T) => boolean, timeoutMs = 9000): Promise<T> {
@@ -97,7 +98,7 @@ beforeAll(async () => {
     orgId: ORG,
     kind: 'webhook',
     targetUrl: captureUrl,
-    events: ['quality_breach', 'rollback', 'guarantee_unverifiable'] as never,
+    events: ['quality_breach', 'rollback', 'guarantee_unverifiable'],
   });
 }, 30000);
 

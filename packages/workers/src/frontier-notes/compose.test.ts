@@ -116,15 +116,15 @@ describe('frontier-notes potion writer', () => {
     });
     const f = composeFactSheet(run, replays);
     const good = JSON.stringify(deterministicDraft(f));
-    const fetchImpl = (async () =>
+    const fetchImpl: typeof fetch = (async () =>
       new Response(JSON.stringify({ choices: [{ message: { content: good } }], usage: { prompt_tokens: 10, completion_tokens: 20 } }), {
         status: 200, headers: { 'content-type': 'application/json', 'x-frontier-trace': 'cluster=creative;strategy=07b4dc72;frontier=v3;policy=min_cost;fallback=0;provenance=live' },
-      })) as unknown as typeof fetch;
+      }));
     const r = await potionDraft(f, { url: 'http://x', apiKey: 'pk_test', fetchImpl });
     expect(r.fallback).toBeNull();
     expect(r.receipt?.cluster).toBe('creative');
     expect(r.receipt?.completionTokens).toBe(20);
-    const bad = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch;
+    const bad: typeof fetch = (async () => new Response('nope', { status: 503 }));
     const r2 = await potionDraft(f, { url: 'http://x', apiKey: 'pk_test', fetchImpl: bad });
     expect(r2.fallback).toMatch(/HTTP 503/);
     expect(r2.draft.title).toBe(deterministicDraft(f).title);

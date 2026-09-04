@@ -9,7 +9,7 @@
 // decoration — so the routed flag is read back out of the trace we handed the
 // caller, and every unknown counts against it.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { buildServer } from '../src/server.js';
 import { parseTraceHeader, traceHeaderValue, traceWasRouted } from '../src/routes/chat.js';
 import { configuredPublicUrl, publicBaseUrl } from '../src/public-url.js';
@@ -82,7 +82,11 @@ describe('public base url', () => {
     else process.env.POTION_PUBLIC_URL = saved;
   });
 
-  const req = { protocol: 'http', headers: { host: 'potion-server:3000' } } as never;
+  // publicBaseUrl reads only `protocol` and `headers`; the rest of a
+  // FastifyRequest is irrelevant here, so the stand-in is typed as the
+  // partial it honestly is (which still checks both fields) and widened once.
+  const partialReq: Partial<FastifyRequest> = { protocol: 'http', headers: { host: 'potion-server:3000' } };
+  const req = partialReq as FastifyRequest;
 
   it('POTION_PUBLIC_URL WINS over the request — the proxy case', () => {
     // Without this the customer is handed `http://potion-server:3000`, an

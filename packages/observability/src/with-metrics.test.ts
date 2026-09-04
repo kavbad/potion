@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PriceTable, ProviderId } from '@potion/core';
 import type { CompleteRequest, CompleteResponse, Provider } from '@potion/providers';
-import { createMetrics, withMetrics } from './index.js';
+import { NoopMetrics, createMetrics, withMetrics, type Metrics } from './index.js';
 
 const PRICES: PriceTable = {
   version: 'test',
@@ -33,8 +33,30 @@ function fakeProvider(overrides: Partial<Provider> = {}): Provider {
   };
 }
 
+/** withMetrics takes the FULL provider set. These tests exercise one
+ * transport at a time, so every slot holds it and the test reads back the
+ * slot matching the provider's own id. */
 function setOf(provider: Provider): Record<ProviderId, Provider> {
-  return { mock: provider } as Record<ProviderId, Provider>;
+  return {
+    anthropic: provider,
+    openai: provider,
+    google: provider,
+    openrouter: provider,
+    mock: provider,
+  };
+}
+
+/** A Metrics that records provider-call observations; the rest of the
+ * contract no-ops (the proxy calls nothing else). */
+function recordingMeter(calls: unknown[]): Metrics {
+  return {
+    incRequest: () => undefined,
+    observeProviderCall: (o) => {
+      calls.push(o);
+    },
+    observeFrontierDecision: () => undefined,
+    setBreakerState: () => undefined,
+  };
 }
 
 const REQ: CompleteRequest = { model: 'mock-mid', messages: [{ role: 'user', content: 'hi' }] };
@@ -135,16 +157,16 @@ describe('withMetrics', () => {
 describe('withMetrics keeps the stream (2026-08-22)', () => {
   it('forwards completeStream, relays tokens, and meters it once', async () => {
     const calls: unknown[] = [];
-    const meter = { observeProviderCall: (o: unknown) => calls.push(o) } as never;
-    const base = {
-      id: 'openrouter' as const,
+    const meter = recordingMeter(calls);
+    const base: Provider = {
+      id: 'openrouter',
       complete: async () => { throw new Error('not used'); },
-      completeStream: async (_req: unknown, onToken: (t: string) => void) => {
+      completeStream: async (_req: CompleteRequest, onToken: (t: string) => void) => {
         onToken('a'); onToken('b');
         return { text: 'ab', usage: { inputTokens: 1, outputTokens: 2 }, latencyMs: 5, modelVersion: 'm' };
       },
     };
-    const wrapped = withMetrics({ openrouter: base } as never, meter);
+    const wrapped = withMetrics(setOf(base), meter);
     const seen: string[] = [];
     const res = await wrapped.openrouter.completeStream!({ model: 'x', messages: [] }, (t) => seen.push(t));
     expect(seen).toEqual(['a', 'b']);
@@ -153,7 +175,11 @@ describe('withMetrics keeps the stream (2026-08-22)', () => {
     expect(wrapped.openrouter.complete).toBeTypeOf('function');
   });
   it('leaves completeStream absent when the transport has none', () => {
-    const wrapped = withMetrics({ mock: { id: 'mock', complete: async () => ({ text: '', usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: 0, modelVersion: '' }) } } as never, { observeProviderCall: () => undefined } as never);
+    const streamless: Provider = {
+      id: 'mock',
+      complete: async () => ({ text: '', usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: 0, modelVersion: '' }),
+    };
+    const wrapped = withMetrics(setOf(streamless), new NoopMetrics());
     expect(wrapped.mock.completeStream).toBeUndefined();
   });
 });

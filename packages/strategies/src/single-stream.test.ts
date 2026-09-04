@@ -5,22 +5,23 @@ import type { PriceTable } from '@potion/core';
 import { execute } from './execute.js';
 import type { ExecContext } from './types.js';
 
-const PRICES: PriceTable = { version: 'test', entries: [{ alias: 'mock-cheap', provider: 'mock', model: 'mock-cheap-v1', inputPer1M: 0, outputPer1M: 0 }] } as never;
+const PRICES: PriceTable = { version: 'test', updatedAt: '2026-01-01T00:00:00Z', entries: [{ alias: 'mock-cheap', provider: 'mock', model: 'mock-cheap-v1', inputPer1M: 0, outputPer1M: 0 }] };
 
 /** The deterministic mock transport, given a real token stream. */
 function makeCtx(log: string[], tokens: string[], extra?: Partial<ExecContext>): ExecContext {
   const base = createProviders({ prices: PRICES });
+  type Req = Parameters<typeof base.mock.complete>[0];
   const mock = {
     ...base.mock,
-    complete: async (req: never) => { log.push('complete'); return base.mock.complete(req); },
-    completeStream: async (req: never, onToken: (t: string) => void) => {
+    complete: async (req: Req) => { log.push('complete'); return base.mock.complete(req); },
+    completeStream: async (req: Req, onToken: (t: string) => void) => {
       log.push('stream');
       const res = await base.mock.complete(req);
       for (const piece of res.text.split(' ')) onToken(piece + ' ');
       return res;
     },
   };
-  const providers = { ...base, mock } as never;
+  const providers = { ...base, mock };
   return { providers, prices: PRICES, resolve: createResolver(providers, PRICES), stream: (t: string) => tokens.push(t), ...extra };
 }
 const MESSAGES = [{ role: 'user' as const, content: 'Summarize the plot of Hamlet briefly.' }];
@@ -35,10 +36,10 @@ describe('single strategy streaming', () => {
   });
   it('relays with tools too (the transport assembles the calls), and replays only for confidence capture', async () => {
     const log: string[] = []; const tokens: string[] = [];
-    await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log, tokens, { params: { tools: [{ type: 'function', function: { name: 'f', parameters: {} } }] } } as never));
+    await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log, tokens, { params: { tools: [{ type: 'function', function: { name: 'f', parameters: {} } }] } }));
     expect(log).toEqual(['stream']);
     const log2: string[] = []; const tokens2: string[] = [];
-    const r = await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log2, tokens2, { captureConfidence: true } as never));
+    const r = await execute({ type: 'single', model: 'mock-cheap' }, MESSAGES, makeCtx(log2, tokens2, { captureConfidence: true }));
     expect(log2).toEqual(['complete']);
     expect(tokens2.join('')).toBe(r.text);
   });

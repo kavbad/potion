@@ -1,13 +1,14 @@
 // SuiteManifest schema tests (ROADMAP M1a): valid manifests parse; every
 // provenance/format requirement rejects with a clear error.
 import { describe, expect, it } from 'vitest';
+import type { EvalItem } from '@potion/core';
 import {
   SuiteManifestSchema,
   crossCheckItem,
   scoringRequiresReference,
 } from './manifest.js';
 
-const VALID_ITEM = {
+const VALID_ITEM: EvalItem = {
   id: 'he-js-01',
   clusterId: 'code-gen',
   prompt: [{ role: 'user', content: 'EVAL: he-js-01\nImplement `f`.' }],
@@ -102,18 +103,18 @@ describe('crossCheckItem / scoringRequiresReference', () => {
   };
 
   it('passes a matching item', () => {
-    expect(crossCheckItem(manifest, VALID_ITEM as never, 0)).toEqual([]);
+    expect(crossCheckItem(manifest, VALID_ITEM, 0)).toEqual([]);
   });
 
   it('flags clusterId mismatch', () => {
-    const item = { ...VALID_ITEM, clusterId: 'extraction' };
-    const problems = crossCheckItem(manifest, item as never, 0);
+    const item: EvalItem = { ...VALID_ITEM, clusterId: 'extraction' };
+    const problems = crossCheckItem(manifest, item, 0);
     expect(problems.some((p) => p.includes('clusterId'))).toBe(true);
   });
 
   it('flags scoring kind outside the manifest allowlist', () => {
-    const item = { ...VALID_ITEM, scoring: { kind: 'exact' }, reference: 'x' };
-    const problems = crossCheckItem(manifest, item as never, 0);
+    const item: EvalItem = { ...VALID_ITEM, scoring: { kind: 'exact' }, reference: 'x' };
+    const problems = crossCheckItem(manifest, item, 0);
     expect(problems.some((p) => p.includes('scoring.allowed'))).toBe(true);
   });
 
@@ -122,10 +123,10 @@ describe('crossCheckItem / scoringRequiresReference', () => {
     expect(scoringRequiresReference('field-match')).toBe(true);
     expect(scoringRequiresReference('code-exec')).toBe(false);
     expect(scoringRequiresReference('llm-judge')).toBe(false);
-    const item = { ...VALID_ITEM, scoring: { kind: 'exact' }, reference: undefined };
-    delete (item as Record<string, unknown>).reference;
+    const item: EvalItem = { ...VALID_ITEM, scoring: { kind: 'exact' } };
+    delete item.reference; // the point of the fixture: no reference at all
     const noAllow = { suiteId: 's', clusterId: 'code-gen', scoring: {} };
-    const problems = crossCheckItem(noAllow, item as never, 2);
+    const problems = crossCheckItem(noAllow, item, 2);
     expect(problems.some((p) => p.includes('requires a reference'))).toBe(true);
     expect(problems[0]).toContain('item 3'); // 1-based index in message
   });

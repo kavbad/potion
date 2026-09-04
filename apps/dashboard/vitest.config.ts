@@ -16,8 +16,11 @@ export default defineConfig({
     jsx: 'automatic',
   },
   test: {
-    // Same prices.json write tripwire the root config carries — this config
-    // shadows the root one, so the guard must ride along explicitly.
+    // This config SHADOWS the root one, so anything the root `test` block
+    // carries must ride along explicitly — the same trap the prices guard
+    // hit. Both the tripwire and the timeouts are copies, not inheritance.
+    testTimeout: 120_000,
+    hookTimeout: 60_000,
     globalSetup: [fileURLToPath(new URL('../../vitest.prices-guard.ts', import.meta.url))],
   },
 });

@@ -22,7 +22,7 @@ function frontier(points: FrontierPoint[], id = 'fr-geo-1'): Frontier {
   return {
     id, clusterId: 'summarization', version: 4, parentId: null, trigger: 'recompute',
     points, pricesVersion: 'pv', createdAt: '',
-  } as unknown as Frontier;
+  };
 }
 
 // The Step 6 executed counterexample, now the dial's canonical 3-axis case.

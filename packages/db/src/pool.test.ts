@@ -137,7 +137,7 @@ describe('attachPoolErrorHandler — a dropped idle connection is witnessed, nev
     const { EventEmitter } = await import('node:events');
     const fake = new EventEmitter();
     const seen: string[] = [];
-    attachPoolErrorHandler(fake as never, (m) => seen.push(m));
+    attachPoolErrorHandler(fake, (m) => seen.push(m));
     // Without a listener this exact emit is what killed prod (42d72fdf):
     // an unlistened 'error' event throws. With the handler it is a log line.
     fake.emit('error', new Error('Connection terminated unexpectedly'));

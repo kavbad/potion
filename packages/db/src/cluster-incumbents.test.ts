@@ -30,10 +30,10 @@ beforeEach(async () => {
   await createOrg(db(), { id: ORG, name: 'Incumbents' });
   await createOrg(db(), { id: OTHER_ORG, name: 'Other' });
   for (const hash of [HASH_A, HASH_B]) {
-    await upsertStrategyConfig(db(), hash, {
-      generator: { model: 'mock-cheap', temperature: 0 },
-      refinement: { rounds: 0 },
-    } as never);
+    // The designation only needs the hash to RESOLVE to a real config row; the
+    // config's shape is never asserted on here, so the simplest valid
+    // StrategyConfig variant is the honest fixture.
+    await upsertStrategyConfig(db(), hash, { type: 'single', model: 'mock-cheap' });
   }
 });
 

@@ -134,7 +134,7 @@ describe('rankCoverageGaps', () => {
         point({
           clusterId: 'general',
           strategyHash: 'ens',
-          strategyConfig: { type: 'ensemble', models: ['tooly', 'plain'], fusion: { method: 'concat' } as never },
+          strategyConfig: { type: 'ensemble', models: ['tooly', 'plain'], fusion: { method: 'concat-rank' } },
         }),
       ],
       'manual',

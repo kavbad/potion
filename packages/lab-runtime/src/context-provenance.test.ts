@@ -35,9 +35,9 @@ import { MockMcpServer } from '@potion/lab-mcp/mock-server';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { buildMcpLabTools } from './mcp-tools.js';
-import { runLeg } from './loop.js';
+import { runLeg, type LabTool } from './loop.js';
 import type { StepPayload } from './checkpoint.js';
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
 
 const MASTER = randomBytes(32);
 const TOKEN = 'gho_provenanceTEST4X9mQ2vL7pK8rT3sW6zE1';
@@ -134,10 +134,12 @@ function spec(): HarnessSpec {
 
 function scripted(results: ServingResult[]): ServingClient {
   const queue = [...results];
-  return {
-    complete: async (_req: ServingRequest) => queue.shift() ?? Promise.reject(new Error('exhausted')),
-    emitSpans: async () => true,
-  } as unknown as ServingClient;
+  // A REAL ServingClient with its outbound methods scripted, so the stub's
+  // replies are type-checked against ServingResult.
+  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+  client.complete = async (_req: ServingRequest) => queue.shift() ?? Promise.reject(new Error('exhausted'));
+  client.emitSpans = async () => true;
+  return client;
 }
 const ok = (over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult => ({
   kind: 'ok',
@@ -182,7 +184,7 @@ async function seeded(runId: string): Promise<{ h: DbHandle; hash: string; s: Ha
  * serving — read back from the durable checkpoint, which is what the model
  * actually saw (never a re-derivation). */
 async function contextToolsFor(
-  tools: Array<{ name: string; description: string; parameters: unknown }>,
+  tools: LabTool[],
   runId: string,
   h: DbHandle,
   s: HarnessSpec,
@@ -195,7 +197,7 @@ async function contextToolsFor(
     orgId: ORG_A,
     spec: s,
     harnessHash: hash,
-    tools: tools as never,
+    tools,
   });
   const steps = await listLabSteps(h.db, runId, ORG_A);
   const first = steps.find((x) => x.kind === 'model')!;
@@ -393,7 +395,7 @@ describe('authored usage guidance reaches the system prompt (Step 11 §7)', () =
 /** The whole request payload, canonicalised: model + every message + every
  * tool definition. Read from the durable checkpoint, never re-derived. */
 async function fullContextFor(
-  tools: Array<{ name: string; description: string; parameters: unknown }>,
+  tools: LabTool[],
   guidance: readonly string[],
   runId: string,
   h: DbHandle,
@@ -408,7 +410,7 @@ async function fullContextFor(
     orgId: ORG_A,
     spec: s,
     harnessHash: hash,
-    tools: tools as never,
+    tools,
     toolGuidance: guidance,
   });
   const steps = await listLabSteps(h.db, runId, ORG_A);
@@ -567,7 +569,13 @@ describe('replay self-containment for a run that loaded a superpower (L7)', () =
     // self-contained rather than dependent on a live catalog lookup.
     const first = steps.find((x) => x.kind === 'model')!;
     expect((first.payload as StepPayload).toolGuidance).toEqual(['Authored guidance, from the package.']);
-    const report = replayRun(a.s, steps as never, { state: 'completed' });
+    // listLabSteps hands back jsonb payloads as `unknown`; narrow at that
+    // boundary (seq and kind stay type-checked).
+    const report = replayRun(
+      a.s,
+      steps.map((x) => ({ seq: x.seq, kind: x.kind, payload: x.payload as StepPayload })),
+      { state: 'completed' },
+    );
     // No divergence at all — and stated as the ok:true shape rather than an
     // empty-array check that would also pass on a result with no findings.
     expect(report.ok, `divergences: ${JSON.stringify((report as { divergences?: unknown }).divergences)}`).toBe(true);

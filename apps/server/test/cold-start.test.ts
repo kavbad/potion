@@ -72,7 +72,7 @@ describe('cold start: a customer with no workload of their own', () => {
     const rows = await app.potion.db.db.execute(
       "select count(*)::int as n from frontier_points where provider_mode = 'live' and org_id is null",
     );
-    const n = Number((rows.rows ?? (rows as unknown as Array<{ n: number }>))[0]!.n);
+    const n = Number(((rows.rows ?? []) as Array<{ n: number }>)[0]!.n);
     expect(n).toBeGreaterThan(20); // the Step 5 sweep's measured points
   });
 

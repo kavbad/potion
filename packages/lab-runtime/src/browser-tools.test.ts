@@ -84,9 +84,9 @@ describe('session lifecycle + plumbing', () => {
   });
 
   it('an unreachable service degrades to a typed error, never a throw', async () => {
-    const failing = (async () => {
+    const failing: typeof fetch = async () => {
       throw new Error('ECONNREFUSED');
-    }) as unknown as typeof fetch;
+    };
     const setup = buildBrowserLabTools({ browserUrl: 'http://browser.test', fetchImpl: failing });
     const byName = new Map(setup.tools.map((t) => [t.name, t]));
     const res = (await byName.get('browser_open')!.run({ url: 'https://x.example' })) as { error: string };

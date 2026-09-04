@@ -51,6 +51,8 @@ import {
   type GuaranteeSuiteVerifyResult,
   type JobContext,
 } from './handlers.js';
+import type { GuaranteeSuiteVerifyPayload } from './jobs.js';
+import type { PotionQueue } from '@potion/queue';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
 
@@ -81,13 +83,62 @@ const fakeEmbedder = {
   },
 };
 
-function ctx(queue?: { enqueue(kind: string, payload: unknown): Promise<void> }): JobContext {
+/** A PotionQueue whose enqueue records. The three members these handlers
+ *  never reach refuse loudly instead of being cast away, so a handler that
+ *  starts using one fails here rather than at runtime. */
+function recordingQueue(onEnqueue: (kind: string, payload: unknown) => void): PotionQueue {
+  let n = 0;
+  return {
+    enqueue: async (kind, payload) => {
+      onEnqueue(kind, payload);
+      n += 1;
+      return `job-${n}`;
+    },
+    registerHandler: () => {
+      throw new Error('recordingQueue: registerHandler is not part of this test');
+    },
+    getJob: async () => {
+      throw new Error('recordingQueue: getJob is not part of this test');
+    },
+    close: async () => {},
+  };
+}
+
+/**
+ * Read a captured enqueue payload back as the TYPED payload the enqueuer
+ * promised — field by field, with a real runtime check. The handler is then
+ * fed a value the compiler has actually seen, so a drift in what the sweep
+ * enqueues fails this test instead of being cast past the type checker.
+ */
+function suiteVerifyPayload(p: Record<string, unknown>): GuaranteeSuiteVerifyPayload {
+  const str = (k: string): string => {
+    const v = p[k];
+    if (typeof v !== 'string') {
+      throw new Error(`enqueued guarantee:suite-verify payload: ${k} is ${typeof v}, not a string`);
+    }
+    return v;
+  };
+  const capUsd = p.capUsd;
+  return {
+    orgId: str('orgId'),
+    policyId: str('policyId'),
+    clusterId: str('clusterId'),
+    servingStrategyHash: str('servingStrategyHash'),
+    ...(typeof capUsd === 'number' ? { capUsd } : {}),
+    ...(p.advisoryIncidentId !== undefined ? { advisoryIncidentId: str('advisoryIncidentId') } : {}),
+    ...(p.restoreForIncidentId !== undefined
+      ? { restoreForIncidentId: str('restoreForIncidentId') }
+      : {}),
+  };
+}
+
+function ctx(queue?: PotionQueue): JobContext {
   return {
     db: db.db,
     dbHandle: db,
     pricesPath,
     embedder: fakeEmbedder,
-    ...(queue !== undefined ? { queue: queue as never } : {}),
+    ...(queue !== undefined ? { queue } : {}),
   };
 }
 
@@ -384,7 +435,7 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
     const evalHandler = createGuaranteeEvaluateHandler({});
     const result = (await evalHandler(
       { orgId: ORG, policyId: PID, clusterId, strategyHash: H_INCUMBENT, policy },
-      ctx({ enqueue: async (kind, payload) => void enqueued.push({ kind, payload: payload as Record<string, unknown> }) }),
+      ctx(recordingQueue((kind, payload) => enqueued.push({ kind, payload: payload as Record<string, unknown> }))),
     )) as { advisories: Array<{ incidentId: string; suiteVerifyEnqueued: boolean }> };
     expect(result.advisories).toHaveLength(1);
     expect(result.advisories[0]!.suiteVerifyEnqueued).toBe(true);
@@ -394,7 +445,7 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
 
     // Run the enqueued verify: all-clear (floor 0) must RESOLVE the
     // advisory with the verdict recorded on the row.
-    const r = (await guaranteeSuiteVerifyHandler(enqueued[0]!.payload as never, ctx())) as GuaranteeSuiteVerifyResult;
+    const r = await guaranteeSuiteVerifyHandler(suiteVerifyPayload(enqueued[0]!.payload), ctx());
     expect(r.outcome).toBe('all-clear');
     expect(r.advisoryResolved).toBe(true);
     expect(
@@ -419,10 +470,9 @@ describe('G2.2 incident SLAs', () => {
     const enqueued: Array<{ kind: string; payload: Record<string, unknown> }> = [];
     return {
       enqueued,
-      queue: {
-        enqueue: async (kind: string, payload: unknown) =>
-          void enqueued.push({ kind, payload: payload as Record<string, unknown> }),
-      },
+      queue: recordingQueue((kind, payload) =>
+        enqueued.push({ kind, payload: payload as Record<string, unknown> }),
+      ),
     };
   }
 

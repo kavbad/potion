@@ -36,7 +36,15 @@ describe('the reaper', () => {
 
     const enqueued: string[] = [];
     await reapTick(
-      { db: h, queue: { enqueue: async (_t: string, p: { runId: string }) => { enqueued.push(p.runId); return 'job-1'; } } as never },
+      {
+        db: h,
+        queue: {
+          enqueue: async (_t: string, p: unknown) => { enqueued.push((p as { runId: string }).runId); return 'job-1'; },
+          registerHandler: () => {},
+          getJob: async () => null,
+          close: async () => {},
+        },
+      },
       future,
     );
     expect(enqueued).toContain('run-stranded');

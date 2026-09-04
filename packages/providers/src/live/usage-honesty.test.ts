@@ -5,21 +5,22 @@
 // the serving degeneracy rollup read text-bearing answers as empty
 // completions, and corrupted every counterfactual computed from costUsd.
 import { describe, expect, it } from 'vitest';
+import type { PriceTable } from '@potion/core';
 import { openAiCompatibleComplete, openAiCompatibleCompleteStream } from './openai.js';
 
-const prices = { version: 't', entries: [{ alias: 'or-mid', provider: 'openrouter', model: 'vendor/mid', inputPer1M: 1, outputPer1M: 2 }] } as never;
+const prices: PriceTable = { version: 't', updatedAt: '2026-01-01T00:00:00Z', entries: [{ alias: 'or-mid', provider: 'openrouter', model: 'vendor/mid', inputPer1M: 1, outputPer1M: 2 }] };
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
 
 function completeWith(body: unknown) {
-  const fetchFn = (async () => jsonResponse(body)) as unknown as typeof fetch;
+  const fetchFn: typeof fetch = async () => jsonResponse(body);
   return openAiCompatibleComplete(
     'openrouter',
     'http://x',
     {},
-    { apiKey: 'k', prices, fetchFn } as never,
+    { apiKey: 'k', prices, fetchFn },
     { model: 'or-mid', messages: [{ role: 'user', content: 'hi there' }] },
   );
 }
@@ -107,9 +108,9 @@ describe('honest usage on the stream path', () => {
     const raw =
       `data: ${JSON.stringify({ model: 'vendor/mid', choices: [{ delta: { content: 'Hello' } }] })}\n\n` +
       `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 7, completion_tokens: 2, cost: 0.00042 } })}`;
-    const fetchFn = (async () => sseRaw(raw)) as unknown as typeof fetch;
+    const fetchFn: typeof fetch = async () => sseRaw(raw);
     const res = await openAiCompatibleCompleteStream(
-      'openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn } as never,
+      'openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn },
       { model: 'or-mid', messages: [{ role: 'user', content: 'hi' }] }, () => undefined,
     );
     expect(res.text).toBe('Hello');
@@ -122,9 +123,9 @@ describe('honest usage on the stream path', () => {
       `data: ${JSON.stringify({ model: 'vendor/mid', choices: [{ delta: { content: 'stream' } }] })}\n\n` +
       `data: ${JSON.stringify({ choices: [{ delta: { content: 'ed answer' }, finish_reason: 'stop' }] })}\n\n` +
       'data: [DONE]\n\n';
-    const fetchFn = (async () => sseRaw(raw)) as unknown as typeof fetch;
+    const fetchFn: typeof fetch = async () => sseRaw(raw);
     const res = await openAiCompatibleCompleteStream(
-      'openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn } as never,
+      'openrouter', 'http://x', {}, { apiKey: 'k', prices, fetchFn },
       { model: 'or-mid', messages: [{ role: 'user', content: 'hi' }] }, () => undefined,
     );
     expect(res.text).toBe('streamed answer');

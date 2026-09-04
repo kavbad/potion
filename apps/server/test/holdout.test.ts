@@ -5,7 +5,7 @@
 //   own randomized traffic proves it.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { sha256, strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
+import { sha256, strategyHash, type FrontierPoint, type PriceTable, type StrategyConfig } from '@potion/core';
 import {
   createOrg,
   insertApiKey,
@@ -106,7 +106,7 @@ describe('eligibleIncumbent (fail-closed)', () => {
   const prices = app ? undefined : undefined; // populated in tests below via app
   void prices;
   it('never a mock baseline under live providers; honest reasons otherwise', () => {
-    const table = { version: 'v', updatedAt: '', entries: [{ alias: 'mock-frontier', provider: 'mock', model: 'mock', inputPer1M: 1, outputPer1M: 1 }] } as never;
+    const table: PriceTable = { version: 'v', updatedAt: '', entries: [{ alias: 'mock-frontier', provider: 'mock', model: 'mock', inputPer1M: 1, outputPer1M: 1 }] };
     expect(eligibleIncumbent(['mock-frontier'], table, 'live')).toMatchObject({ model: null });
     expect(eligibleIncumbent(['mock-frontier'], table, 'mock')).toEqual({ model: 'mock-frontier' });
     expect(eligibleIncumbent([], table, 'mock')).toMatchObject({ model: null, why: 'no incumbent designated' });
@@ -160,14 +160,14 @@ describe('verified savings (the only block allowed to say "verified")', () => {
     for (let i = 0; i < MIN_HOLDOUT_REQUESTS + 5; i += 1) {
       await insertRequestLog(db(), {
         orgId: ORG, clusterId: 'classification', strategyHash: strategyHash({ type: 'single', model: INCUMBENT }),
-        model: INCUMBENT, status: 'ok', usage: { costUsd: 0.002 }, latencyMs: 300, holdout: true, ts: today,
-      } as never);
+        model: INCUMBENT, status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.002, latencyMs: 300 }, latencyMs: 300, holdout: true, ts: today,
+      });
     }
     for (let i = 0; i < 100; i += 1) {
       await insertRequestLog(db(), {
         orgId: ORG, clusterId: 'classification', strategyHash: strategyHash(CHEAP),
-        model: 'mock-cheap', status: 'ok', usage: { costUsd: 0.0002 }, latencyMs: 200, ts: today,
-      } as never);
+        model: 'mock-cheap', status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.0002, latencyMs: 200 }, latencyMs: 200, ts: today,
+      });
     }
     const res = await app.inject({ method: 'GET', url: '/api/reports/savings', headers: { authorization: `Bearer ${KEY}` } });
     expect(res.statusCode).toBe(200);

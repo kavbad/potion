@@ -244,15 +244,15 @@ describe('pricing v2: at cost plus a share of VERIFIED savings', () => {
     for (let i = 0; i < 35; i += 1) {
       await insertRequestLog(db, {
         orgId: 'org-v2holdout', clusterId: 'code-gen', strategyHash: 'h-incumbent', model: 'mock-frontier',
-        status: 'ok', usage: { costUsd: 0.01 }, latencyMs: 300, holdout: true, ts,
-      } as never);
+        status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.01, latencyMs: 300 }, latencyMs: 300, holdout: true, ts,
+      });
     }
     // 100 routed requests, $0.002 each → routed spend $0.2.
     for (let i = 0; i < 100; i += 1) {
       await insertRequestLog(db, {
         orgId: 'org-v2holdout', clusterId: 'code-gen', strategyHash: 'h-routed', model: 'mock-cheap',
-        status: 'ok', usage: { costUsd: 0.002 }, latencyMs: 200, ts,
-      } as never);
+        status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.002, latencyMs: 200 }, latencyMs: 200, ts,
+      });
     }
     const inv = await generateInvoice(db, 'org-v2holdout', '2026-08', BASIS);
     // without-Potion = 0.01 × 100 routed = $1.00 (lower bound identical:

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { FastifyRequest } from 'fastify';
 import { baseUrlOf } from '../src/routes/auth.js';
 
-const req = { protocol: 'http', headers: { host: 'server:3000' } } as never;
+const req: Pick<FastifyRequest, 'protocol' | 'headers'> = { protocol: 'http', headers: { host: 'server:3000' } };
 
 describe('magic-link base URL', () => {
   it('points at the deployed dashboard verify proxy when POTION_APP_URL is set', () => {

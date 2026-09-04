@@ -75,15 +75,24 @@ function ctx(queue?: PotionQueue): JobContext {
   };
 }
 
-/** Queue stub capturing enqueues. */
-function stubQueue() {
+/** Queue stub capturing enqueues. The three members the handlers under test
+ *  never touch are implemented as loud refusals rather than cast away, so a
+ *  handler that starts using one fails here instead of at runtime. */
+function stubQueue(): { queue: PotionQueue; calls: { kind: string; payload: unknown }[] } {
   const calls: { kind: string; payload: unknown }[] = [];
-  const queue = {
+  const queue: PotionQueue = {
     enqueue: async (kind: string, payload: unknown) => {
       calls.push({ kind, payload });
       return `job-${calls.length}`;
     },
-  } as unknown as PotionQueue;
+    registerHandler: () => {
+      throw new Error('stubQueue: registerHandler is not part of this test');
+    },
+    getJob: async () => {
+      throw new Error('stubQueue: getJob is not part of this test');
+    },
+    close: async () => {},
+  };
   return { queue, calls };
 }
 

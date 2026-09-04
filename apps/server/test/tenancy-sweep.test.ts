@@ -253,7 +253,7 @@ beforeAll(async () => {
     orgId: ORG_A,
     kind: 'webhook',
     targetUrl: 'https://sweep-a.example/hook',
-    events: ['quality_breach'] as never,
+    events: ['quality_breach'],
   });
   seeded.alertRule = rule.id;
 

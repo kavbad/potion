@@ -10,6 +10,7 @@ import {
   createOrg,
   insertAlertRule,
   migrate,
+  type AlertEvent,
   type DbHandle,
 } from '@potion/db';
 import { dispatchAlertEvent, type AlertDispatchDeps } from './handlers.js';
@@ -19,22 +20,22 @@ const ORG = 'org_disp';
 let db: DbHandle;
 
 function okFetch(): typeof fetch {
-  return (async () => new Response('ok', { status: 200 })) as unknown as typeof fetch;
+  return (async () => new Response('ok', { status: 200 }));
 }
 function failFetch(): typeof fetch {
-  return (async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
+  return (async () => new Response('nope', { status: 500 }));
 }
 
 function deps(over: Partial<AlertDispatchDeps> = {}): AlertDispatchDeps {
   return { fetchImpl: okFetch(), sleep: async () => {}, ...over };
 }
 
-async function rule(events: string[] = ['quality_breach']): Promise<void> {
+async function rule(events: AlertEvent[] = ['quality_breach']): Promise<void> {
   await insertAlertRule(db.db, {
     orgId: ORG,
     kind: 'webhook',
     targetUrl: 'https://alerts.example.com/hook?token=secret',
-    events: events as never,
+    events,
   });
 }
 
@@ -131,7 +132,11 @@ describe('dispatch latency (G2.2)', () => {
       const r = await dispatchAlertEvent(db.db, { orgId: ORG, event, clockStartAt: new Date().toISOString() }, deps());
       expect(r.delivered).toBe(1);
     }
-    // Unknown events still refuse loudly.
+    // Unknown events still refuse loudly. The cast is DELIBERATE and scoped
+    // to this one field: it feeds an event outside the AlertEvent union past
+    // the compiler to exercise the runtime ALERT_EVENTS guard in
+    // dispatchAlertEvent, which is the only thing standing between a typo'd
+    // enqueue and a silently undelivered alert.
     await expect(
       dispatchAlertEvent(db.db, { orgId: ORG, event: 'nope' as never }, deps()),
     ).rejects.toThrow(/unknown event/);

@@ -7,6 +7,7 @@ import {
   convertHumanEval,
   descriptionFromPrompt,
   sanitizeTaskId,
+  type JsTranspilation,
 } from './humaneval.js';
 
 const FIXTURE = [
@@ -40,12 +41,12 @@ const TRANSPILE = {
     solution: "function countVowels(s) {\n  return [...s].filter((c) => 'aeiouAEIOU'.includes(c)).length;\n}",
     tests: "test('two vowels', () => assert(countVowels('hello') === 2));\ntest('none', () => assert(countVowels('xyz') === 0));",
   },
-};
+} satisfies Record<string, JsTranspilation>;
 
-function convert(transpilations?: Record<string, unknown>) {
+function convert(transpilations?: Record<string, JsTranspilation>) {
   return convertHumanEval(FIXTURE.map((t) => JSON.stringify(t)).join('\n') + '\n', {
     idPrefix: 'he-js-',
-    transpilations: transpilations as never,
+    transpilations,
   });
 }
 

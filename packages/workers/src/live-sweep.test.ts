@@ -22,7 +22,7 @@ import {
   type DbHandle,
 } from '@potion/db';
 import { loadCurrentFrontier } from '@potion/pareto';
-import { runEval } from '@potion/harness';
+import { runEval, type SpendCall } from '@potion/harness';
 import { eq } from 'drizzle-orm';
 import {
   frontierLiveSweepHandler,
@@ -154,8 +154,8 @@ describe('frontier:live-sweep (G1.7)', () => {
     // pre-check (G2.8 legs 3/4 leaked 60%), so a dying-and-retrying job
     // could spend past a hard-stop cap forever — the design-partner blocker.
     const meter = perCallRequestLogSink(db.db, { orgId: 'org_ls', clusterId, status: 'eval_live' });
-    const call = (costUsd: number) => ({
-      provider: 'openrouter' as never,
+    const call = (costUsd: number): SpendCall => ({
+      provider: 'openrouter',
       model: 'judge-class',
       resolvedModel: 'judge-class-v1',
       inputTokens: 1000,

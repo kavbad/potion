@@ -7,10 +7,12 @@
 // timeout fired first; anything needing 60–180s died at 60. These pin the
 // policy actually handed to the wrapper.
 import { describe as describe2, expect as expect2, it as it2 } from 'vitest';
+import type { PriceTable } from '@potion/core';
 import { createProviders, resolveTimeoutMs } from './factory.js';
 
 describe2('resilience timeout inherits the declared provider timeout', () => {
-  const prices = { version: 'test', entries: [] } as never;
+  // No model is ever resolved here — only the timeout policy is under test.
+  const prices: PriceTable = { version: 'test', updatedAt: '2026-01-01T00:00:00Z', entries: [] };
 
   it2('a slow declared timeout is NOT clamped by the wrapper at 60s', async () => {
     // A provider that answers after 65s would die under the old wrapper

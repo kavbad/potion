@@ -76,9 +76,7 @@ async function seedRun(
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         clockMs: 1000 + seq,
         rngSample: 0.5,
-        legSeq: 1,
-        stepInLeg: seq,
-      } as never),
+      }),
       harnessHash: hash,
       leaseMs: 60_000,
       now: new Date(),
@@ -90,9 +88,9 @@ async function seedRun(
     orgId: ORG,
     completionId: `cmpl-${runId}-metered`,
     model: 'mock-cheap',
-    usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.0123 },
+    usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.0123, latencyMs: 12 },
     latencyMs: 12,
-  } as never);
+  });
   await transitionLabRun(h.db, {
     runId,
     orgId: ORG,

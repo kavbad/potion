@@ -439,7 +439,7 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
       orgId: ORG, policyId: PID, clusterId, candidateHash: H_MID,
       suiteId: `${clusterId}-replays-v0-legacy`, suiteVersion: '0.9.0',
       providerMode: 'mock', outcome: 'contractual-breach',
-      retention: retentionBlock({ mean: 0.27 }) as unknown as Record<string, unknown>,
+      retention: retentionBlock({ mean: 0.27 }),
     });
     await insertQualitySample(db(), { orgId: ORG, strategyHash: H_MID, quality: 0.9, createdAt: new Date(), policyId: PID, clusterId });
 
@@ -544,7 +544,7 @@ describe('GET /api/reports/guarantee (G2.1)', () => {
     const breachId = await insertGuaranteeVerdict(db(), {
       orgId: ORG, policyId: PID, clusterId: cl, candidateHash: H_MID,
       providerMode: 'mock', outcome: 'contractual-breach',
-      retention: retentionBlock({ mean: 0.31 }) as unknown as Record<string, unknown>,
+      retention: retentionBlock({ mean: 0.31 }),
       verdictIncidentId: inc,
     });
     // …then it is RETRACTED, and the newest active verdict is a refusal.

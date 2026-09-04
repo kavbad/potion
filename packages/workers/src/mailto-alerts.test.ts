@@ -13,9 +13,9 @@ beforeAll(async () => {
 
 describe('mailto alert delivery', () => {
   it('delivers through the registered email transport and records the delivery', async () => {
-    await insertAlertRule(h.db, { orgId: 'org-mailto', kind: 'webhook', targetUrl: 'mailto:ops@example.com', events: ['breaker_open'] } as never);
+    await insertAlertRule(h.db, { orgId: 'org-mailto', kind: 'webhook', targetUrl: 'mailto:ops@example.com', events: ['breaker_open'] });
     const sent: { to: string; subject: string }[] = [];
-    const res = await dispatchAlertEvent(h.db, { orgId: 'org-mailto', event: 'breaker_open', detail: { breaker: 'openrouter:m' } } as never, {
+    const res = await dispatchAlertEvent(h.db, { orgId: 'org-mailto', event: 'breaker_open', detail: { breaker: 'openrouter:m' } }, {
       sendEmail: async (m) => { sent.push({ to: m.to, subject: m.subject }); },
     });
     expect(res.delivered).toBe(1);
@@ -23,8 +23,8 @@ describe('mailto alert delivery', () => {
   });
   it('without a transport the delivery is recorded as FAILED, never silently dropped', async () => {
     await createOrg(h.db, { id: 'org-mailto2', name: 'M2' });
-    await insertAlertRule(h.db, { orgId: 'org-mailto2', kind: 'webhook', targetUrl: 'mailto:ops@example.com', events: ['breaker_open'] } as never);
-    const res = await dispatchAlertEvent(h.db, { orgId: 'org-mailto2', event: 'breaker_open', detail: {} } as never, {});
+    await insertAlertRule(h.db, { orgId: 'org-mailto2', kind: 'webhook', targetUrl: 'mailto:ops@example.com', events: ['breaker_open'] });
+    const res = await dispatchAlertEvent(h.db, { orgId: 'org-mailto2', event: 'breaker_open', detail: {} }, {});
     expect(res.failed).toBe(1);
     expect(res.outcomes[0]!.lastError).toContain('no email transport');
   });

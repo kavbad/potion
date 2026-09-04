@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 
 const call = (provider: 'openrouter' | 'openai', costUsd: number) => ({
-  provider: provider as never,
+  provider,
   model: 'judge-class',
   resolvedModel: 'judge-class-v1',
   inputTokens: 1200,

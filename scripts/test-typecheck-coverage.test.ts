@@ -114,12 +114,19 @@ function surveyPackages(): Pkg[] {
  * and no clusterId, a Usage missing the very field production aggregates on,
  * a strategy config with a fusion method that does not exist.
  *
- * Some remaining uses are legitimate (deliberately injecting a bad value to
- * prove a runtime guard rejects it), so this is not zero and is not a
- * deadline. It is a RATCHET: the count may fall, never rise. Cleaning one up
- * means lowering this number in the same commit.
+ * The four that remain are all legitimate: each injects ONE bad field to
+ * prove a runtime guard rejects it (an out-of-vocabulary alert event, two
+ * database CHECK constraints, a null db handle), each is scoped to that
+ * field so the rest of the object stays checked, and each carries a comment
+ * naming the guard. That is the floor, not a deadline. It is a RATCHET: the
+ * count may fall, never rise.
+ *
+ * NOTE on the pattern: the leading \b matters. Without it, "w-as never" in
+ * ordinary prose ("the private hop was never fetched") counts as a cast —
+ * which is exactly how the first version of this budget came to be 223 when
+ * the true number of casts was far lower.
  */
-const ESCAPE_HATCH_BUDGET = 223;
+const ESCAPE_HATCH_BUDGET = 4;
 
 function countEscapeHatches(): { total: number; byFile: Array<[string, number]> } {
   const roots = [path.join(REPO_ROOT, 'packages'), path.join(REPO_ROOT, 'apps')];
@@ -132,7 +139,7 @@ function countEscapeHatches(): { total: number; byFile: Array<[string, number]> 
       if (entry.isDirectory()) visit(full);
       else if (/\.test\.tsx?$/.test(entry.name)) {
         const src = readFileSync(full, 'utf8');
-        const n = (src.match(/as never\b|as unknown as\b/g) ?? []).length;
+        const n = (src.match(/\bas never\b|\bas unknown as\b/g) ?? []).length;
         if (n > 0) {
           byFile.push([path.relative(REPO_ROOT, full), n]);
           total += n;
@@ -187,6 +194,39 @@ describe('test-typecheck coverage', () => {
         : `The budget is stale — ${total} remain, below ${ESCAPE_HATCH_BUDGET}. Lower ` +
           `ESCAPE_HATCH_BUDGET to ${total} to lock the gain in.`,
     ).toBe(ESCAPE_HATCH_BUDGET);
+  });
+
+  // Found the hard way: two test files embedded RAW control bytes (NUL, ESC)
+  // as fixture data for control-character handling. That makes the file
+  // "binary" to every text tool — `grep` skips such files SILENTLY, so those
+  // two were invisible to every audit run across this whole sweep, including
+  // the escape-hatch counts above. The runtime value of ' ' is
+  // identical, so the escape form costs nothing and keeps the file greppable.
+  it('test files are text — no raw control bytes that make tools skip them', () => {
+    const roots = [path.join(REPO_ROOT, 'packages'), path.join(REPO_ROOT, 'apps')];
+    const binary: string[] = [];
+    const visit = (d: string): void => {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.next') continue;
+        const full = path.join(d, entry.name);
+        if (entry.isDirectory()) visit(full);
+        else if (/\.test\.tsx?$/.test(entry.name)) {
+          const buf = readFileSync(full);
+          // Anything outside tab/LF/CR that a text tool treats as binary.
+          if (buf.some((b) => b === 0 || (b < 9) || (b > 13 && b < 32))) {
+            binary.push(path.relative(REPO_ROOT, full));
+          }
+        }
+      }
+    };
+    for (const r of roots) if (existsSync(r)) visit(r);
+    expect(
+      binary,
+      `These test files contain raw control bytes, so grep and other text ` +
+        `tools skip them silently — they are invisible to every audit. Write ` +
+        `the characters as escapes ('\\u0000', '\\u001b') instead; the runtime ` +
+        `value is identical: ${binary.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('PENDING names only packages that actually exist and still have tests', () => {

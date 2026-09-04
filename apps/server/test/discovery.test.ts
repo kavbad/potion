@@ -58,7 +58,7 @@ describe('discovered workloads', () => {
     expect(jobId).toBeTruthy();
     // Drain the job before teardown (it also proves the worker path runs
     // end-to-end on the server's own context: embedder wired, no throw).
-    const q = (app.potion as unknown as { queue?: { getJob(id: string): Promise<{ state: string } | null> } }).queue;
+    const q = app.potion.queue;
     let state: string | undefined;
     const deadline = Date.now() + 9000;
     while (q !== undefined && Date.now() < deadline) {

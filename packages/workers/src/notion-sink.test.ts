@@ -22,9 +22,9 @@ describe('notion sink', () => {
     expect(JSON.stringify(blocks)).toContain('did not earn a slot');
   });
   it('posting is best-effort: a failing fetch returns a status, never throws', async () => {
-    const bad = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+    const bad: typeof fetch = (async () => { throw new Error('offline'); });
     expect(await postObservatoryEntry({ token: 't', pageId: 'p', fetchImpl: bad }, run)).toMatch(/offline/);
-    const ok = (async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    const ok: typeof fetch = (async () => new Response('{}', { status: 200 }));
     expect(await postObservatoryEntry({ token: 't', pageId: 'p', fetchImpl: ok }, run)).toBe('notion: posted');
   });
 });

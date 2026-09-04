@@ -112,6 +112,9 @@ describe('tenancy schema constraints', () => {
       await createOrg(handle.db, { id: 'org_b', name: 'B' });
       await createUser(handle.db, { id: 'usr_b1', email: 'b1@x.dev', name: 'B One' });
       await expect(
+        // INTENTIONAL bad value, field-scoped: 'owner' is outside the role
+        // vocabulary, so this exercises the memberships role CHECK constraint
+        // at the database — the point of the test.
         createMembership(handle.db, { orgId: 'org_b', userId: 'usr_b1', role: 'owner' as never }),
       ).rejects.toThrow();
       // valid roles work
@@ -140,9 +143,17 @@ describe('tenancy schema constraints', () => {
           policyId: null,
         }),
       ).rejects.toThrow();
-      // NOT NULL: org_id omitted is rejected
+      // NOT NULL: org_id omitted is rejected. INTENTIONALLY incomplete — the
+      // row is typed Partial so every field it DOES set is still checked, and
+      // only the deliberate omission needs the cast. Exercises the api_keys
+      // org_id NOT NULL constraint at the database.
+      const missingOrgId: Partial<typeof apiKeys.$inferInsert> = {
+        id: 'key-y',
+        keyHash: 'h-y',
+        name: 'y',
+      };
       await expect(
-        handle.db.insert(apiKeys).values({ id: 'key-y', keyHash: 'h-y', name: 'y' } as never),
+        handle.db.insert(apiKeys).values(missingOrgId as typeof apiKeys.$inferInsert),
       ).rejects.toThrow();
     } finally {
       await handle.close();

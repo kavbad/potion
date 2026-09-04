@@ -18,7 +18,7 @@ import {
 const pt = (q: number, c: number, hash = `h${q}${c}`): FrontierPoint =>
   ({ clusterId: 'code-gen', strategyHash: hash, strategyConfig: { type: 'single', model: `m-${hash}` }, quality: q, costPer1K: c, latencyP95: 100 }) as FrontierPoint;
 const entry = (alias: string, inp: number, out: number, model = alias): PriceEntry =>
-  ({ alias, provider: 'openrouter', model, inputPer1M: inp, outputPer1M: out, class: 'cheap' }) as unknown as PriceEntry;
+  ({ alias, provider: 'openrouter', model, inputPer1M: inp, outputPer1M: out });
 
 describe('isoWeek', () => {
   it('is ISO-8601: Jan 1 2027 (a Friday) belongs to 2026-W53', () => {

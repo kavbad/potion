@@ -43,7 +43,7 @@ function frontier(points: FrontierPoint[]): Frontier {
     points,
     pricesVersion: 'pv',
     createdAt: new Date(0).toISOString(),
-  } as unknown as Frontier;
+  };
 }
 
 describe('kneePoint — hand-computed', () => {

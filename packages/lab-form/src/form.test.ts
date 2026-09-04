@@ -62,7 +62,7 @@ describe('deriveFormState — golden derivation from the design-gate capture', (
 
   it('task silhouette branch (review change 4): the field is DRAWN, not phantom', () => {
     const task: HarnessDto = JSON.parse(JSON.stringify(H));
-    task.spec!.mission = { kind: 'task', goal: 'one thing', doneDefinition: 'done', worthPerRunUsd: 1 } as never;
+    task.spec!.mission = { kind: 'task', goal: 'one thing', doneDefinition: 'done', worthPerRunUsd: 1 };
     const t = deriveFormState(task, M, null, null);
     expect(t.membrane.missionKind).toBe('task');
     const ops = countOps((ctx, view) => draw(ctx, t, view));
@@ -218,7 +218,7 @@ describe('draw-op budget at the TRUE spec maxima', () => {
     max.superpowers = Array.from({ length: SPEC_LIMITS.MAX_SUPERPOWERS }, (_v, i) => ({
       id: `sp${i}`, scopes: [], status: 'revoked' as const,
     }));
-    max.spec!.superpowers = max.superpowers.map((s) => ({ id: s.id, scopes: [] })) as never;
+    max.spec!.superpowers = max.superpowers.map((s) => ({ id: s.id, scopes: [] }));
     const state = deriveFormState(max, M, FINAL, 100);
     const pulses = state.stepEvents.map((e, i) => ({
       event: e, bornMs: 500, metered: false, angle: i,

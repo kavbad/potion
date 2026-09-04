@@ -10,6 +10,61 @@ import { sha256 } from '@potion/core';
 import { createOrg, getInvoiceCharge, insertApiKey, upsertBillingCustomer } from '@potion/db';
 import { buildServer } from '../src/server.js';
 import { LedgerPaymentsTransport, StripePaymentsTransport, verifyStripeSignature } from '../src/billing/payments.js';
+import { PRICING_MODEL_V2, type Invoice } from '../src/billing/invoice.js';
+import type { VerifiedSavings } from '../src/verified-savings.js';
+
+/**
+ * A COMPLETE Invoice for the transport tests. chargeInvoice reads only
+ * `id`, `period`, `currency` and `totals.totalUsd`, but the record is spelled
+ * out in full so the fixture is checked against the real shape rather than
+ * asserted past it.
+ */
+const NOT_VERIFIED: VerifiedSavings = {
+  status: 'off',
+  holdoutRate: null,
+  incumbentModel: null,
+  holdoutRequests: 0,
+  minHoldoutRequests: 30,
+  routedRequests: 0,
+  routedSpendUsd: 0,
+  meanIncumbentCostUsd: null,
+  meanCi95: null,
+  withoutPotionUsd: null,
+  verifiedSavingsUsd: null,
+  verifiedSavingsLowerUsd: null,
+};
+
+function invoiceFixture(over: { id: string; orgId?: string; period?: string; totalUsd: number }): Invoice {
+  const orgId = over.orgId ?? 'org-abc';
+  const p = over.period ?? '2026-08';
+  return {
+    id: over.id,
+    object: 'potion.invoice',
+    orgId,
+    org: { id: orgId, name: 'Billing Co' },
+    period: p,
+    periodStart: `${p}-01T00:00:00.000Z`,
+    periodEnd: `${p}-28T23:59:59.999Z`,
+    currency: 'usd',
+    pricingModel: PRICING_MODEL_V2,
+    marginPct: 0,
+    savingsSharePct: 0,
+    lineItems: [],
+    verified: NOT_VERIFIED,
+    savingsShareLine: null,
+    totals: {
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      platformCostUsd: 0,
+      marginUsd: 0,
+      projectedSavedUsd: 0,
+      savingsShareUsd: 0,
+      totalUsd: over.totalUsd,
+    },
+    generatedAt: '2026-09-01T00:00:00.000Z',
+  };
+}
 
 const ORG = 'org-billing';
 const ADMIN_KEY = 'pk_billing_admin';
@@ -124,7 +179,7 @@ describe('stripe signature verification', () => {
 describe('the ledger transport itself', () => {
   it('cannot charge: it reports recorded, with a local_ id nothing can mistake for Stripe', async () => {
     const t = new LedgerPaymentsTransport();
-    const r = await t.chargeInvoice('local_cus_x', { id: 'inv_1', totals: { totalUsd: 12.34 }, currency: 'usd' } as never);
+    const r = await t.chargeInvoice('local_cus_x', invoiceFixture({ id: 'inv_1', totalUsd: 12.34 }));
     expect(r.status).toBe('recorded');
     expect(r.externalId.startsWith('local_')).toBe(true);
     expect(t.verifyWebhook()).toBeNull();
@@ -210,7 +265,7 @@ describe('stripe transport sends what the live API actually needs', () => {
       { ok: true, body: { id: 'pi_1', status: 'succeeded' } },
     ]);
     const t = new StripePaymentsTransport('sk_test_x', undefined, f);
-    const r = await t.chargeInvoice('cus_1', { id: 'inv_9', orgId: 'org-abc', period: '2026-08', totals: { totalUsd: 10 }, currency: 'usd' } as never);
+    const r = await t.chargeInvoice('cus_1', invoiceFixture({ id: 'inv_9', orgId: 'org-abc', period: '2026-08', totalUsd: 10 }));
     expect(r.status).toBe('paid');
     expect(calls[0]!.url).toContain('/customers/cus_1/payment_methods?type=card');
     const form = new URLSearchParams(String(calls[1]!.init?.body));
@@ -221,7 +276,7 @@ describe('stripe transport sends what the live API actually needs', () => {
   it('chargeInvoice fails honestly when no card is on file — no blind confirm', async () => {
     const { fetch: f, calls } = scripted([{ ok: true, body: { data: [] } }]);
     const t = new StripePaymentsTransport('sk_test_x', undefined, f);
-    const r = await t.chargeInvoice('cus_1', { id: 'inv_9', orgId: 'org-abc', period: '2026-08', totals: { totalUsd: 10 }, currency: 'usd' } as never);
+    const r = await t.chargeInvoice('cus_1', invoiceFixture({ id: 'inv_9', orgId: 'org-abc', period: '2026-08', totalUsd: 10 }));
     expect(r.status).toBe('failed');
     expect(r.error).toContain('no card payment method');
     expect(calls.length).toBe(1); // never attempted the PaymentIntent

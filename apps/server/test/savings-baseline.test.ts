@@ -22,7 +22,16 @@ function point(cfg: FrontierPoint['strategyConfig'], quality: number, costPer1K:
   return { clusterId: 'code-gen', strategyHash: H(cfg), strategyConfig: cfg, quality, costPer1K, latencyP95: 400, providerMode: 'mock' };
 }
 const POINTS = [point(CHEAP, 0.8, 0.2), point(MID, 0.9, 1.0), point(TOP, 0.95, 4.0)];
-const FRONTIER = { clusterId: 'code-gen', version: 1, points: POINTS } as unknown as Frontier;
+const FRONTIER: Frontier = {
+  id: 'fr-baseline',
+  clusterId: 'code-gen',
+  version: 1,
+  parentId: null,
+  trigger: 'manual',
+  points: POINTS,
+  pricesVersion: 'test-prices',
+  createdAt: '2026-08-28T00:00:00Z',
+};
 
 describe('baselineCostUsd', () => {
   it('scales to the best point by default and to the named baseline when given', () => {

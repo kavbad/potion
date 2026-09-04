@@ -49,7 +49,7 @@ describe('research heartbeat', () => {
     const prev = process.env[RESEARCH_SCAN_INTERVAL_ENV];
     delete process.env[RESEARCH_SCAN_INTERVAL_ENV];
     const q = fakeQueue();
-    const s = startResearchSchedule({ queue: q as never, log: () => {} });
+    const s = startResearchSchedule({ queue: q, log: () => {} });
     expect(s.intervalHours).toBeNull();
     expect(q.enqueue).not.toHaveBeenCalled();
     if (prev !== undefined) process.env[RESEARCH_SCAN_INTERVAL_ENV] = prev;
@@ -60,7 +60,7 @@ describe('research heartbeat', () => {
     process.env[RESEARCH_SCAN_INTERVAL_ENV] = '6';
     const t = fakeTimer();
     const s = startResearchSchedule({
-      queue: fakeQueue() as never,
+      queue: fakeQueue(),
       log: () => {},
       setTimer: t.setTimer,
     });
@@ -73,7 +73,7 @@ describe('research heartbeat', () => {
   it('rejects a zero or negative interval rather than spinning', () => {
     for (const v of [0, -1, Number.NaN]) {
       const s = startResearchSchedule({
-        queue: fakeQueue() as never,
+        queue: fakeQueue(),
         intervalHours: v,
         log: () => {},
       });
@@ -85,7 +85,7 @@ describe('research heartbeat', () => {
     const t = fakeTimer();
     const q = fakeQueue();
     const s = startResearchSchedule({
-      queue: q as never,
+      queue: q,
       intervalHours: 6,
       log: () => {},
       setTimer: t.setTimer,
@@ -101,7 +101,7 @@ describe('research heartbeat', () => {
     const t = fakeTimer();
     const q = fakeQueue();
     const s = startResearchSchedule({
-      queue: q as never,
+      queue: q,
       intervalHours: 6,
       log: () => {},
       setTimer: t.setTimer,
@@ -116,7 +116,7 @@ describe('research heartbeat', () => {
     const t = fakeTimer();
     const q = fakeQueue();
     const s = startResearchSchedule({
-      queue: q as never,
+      queue: q,
       intervalHours: 6,
       log: () => {},
       setTimer: t.setTimer,
@@ -137,7 +137,7 @@ describe('research heartbeat', () => {
     };
     const logs: string[] = [];
     const s = startResearchSchedule({
-      queue: q as never,
+      queue: q,
       intervalHours: 6,
       log: (m) => logs.push(m),
       setTimer: t.setTimer,
@@ -154,7 +154,7 @@ describe('research heartbeat', () => {
     const t = fakeTimer();
     const q = fakeQueue();
     const s = startResearchSchedule({
-      queue: q as never,
+      queue: q,
       intervalHours: 6,
       log: () => {},
       setTimer: t.setTimer,

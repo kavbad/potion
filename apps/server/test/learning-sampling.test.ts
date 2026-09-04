@@ -87,9 +87,9 @@ describe('learning-period sampling', () => {
     await migrate(h.db);
     await createOrg(h.db, { id: 'org-s', name: 'S' });
     await upsertOrgIncumbents(h.db, { orgId: 'org-s', models: ['or-gpt-full'], other: null, samplingConsent: true });
-    const withParts = [
+    const withParts: ChatMessage[] = [
       { role: 'user', content: 'what is in this image?', parts: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }] },
-    ] as unknown as ChatMessage[];
+    ];
     expect(
       await maybeKeepLearningSample(h.db, sample(0, { messages: withParts, toolCount: 2, responseFormat: 'json_object' })),
     ).toBe('kept');

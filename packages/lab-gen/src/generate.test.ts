@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import type { Frontier, FrontierPoint } from '@potion/core';
-import type { ServingClient, ServingResult } from '@potion/lab-runtime';
+import { ServingClient, type ServingResult } from '@potion/lab-runtime';
 import { generateSpec, verifyChoicesBinding } from './generate.js';
 import type { InterviewAnswers } from './interview.js';
 
@@ -24,12 +24,14 @@ function okResult(text: string): ServingResult {
 function scripted(responses: string[]): { client: ServingClient; calls: () => number } {
   const q = [...responses];
   let n = 0;
-  const client = {
-    complete: async () => {
-      n += 1;
-      return okResult(q.shift() ?? '');
-    },
-  } as unknown as ServingClient;
+  // A REAL ServingClient with its outbound method scripted (the class holds
+  // private state, so no object literal can stand in for it) — the stub's
+  // replies stay type-checked against ServingResult.
+  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+  client.complete = async () => {
+    n += 1;
+    return okResult(q.shift() ?? '');
+  };
   return { client, calls: () => n };
 }
 
@@ -61,7 +63,7 @@ function livePoint(hash: string): FrontierPoint {
   };
 }
 
-const FRONTIER = {
+const FRONTIER: Frontier = {
   id: 'fr-gen-1',
   clusterId: 'summarization',
   version: 1,
@@ -70,7 +72,7 @@ const FRONTIER = {
   points: [livePoint('hh-live-1')],
   pricesVersion: 'pv',
   createdAt: new Date(0).toISOString(),
-} as unknown as Frontier;
+};
 
 const loadFrontier = async () => FRONTIER;
 

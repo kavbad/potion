@@ -20,7 +20,7 @@ import {
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { runLeg, type LabTool } from './loop.js';
 import { replayRun, type RecordedStep, type RecordedTerminal } from './replay.js';
-import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
+import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
 
 const ORG = ORG_A;
 
@@ -54,14 +54,16 @@ function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): Serving
 
 function scripted(results: ServingResult[]): ServingClient {
   const queue = [...results];
-  return {
-    complete: async (_req: ServingRequest) => {
-      const next = queue.shift();
-      if (!next) throw new Error('scripted client exhausted');
-      return next;
-    },
-    emitSpans: async () => true,
-  } as unknown as ServingClient;
+  // A REAL ServingClient with its outbound methods scripted, so the stub's
+  // replies are type-checked against ServingResult.
+  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
+  client.complete = async (_req: ServingRequest) => {
+    const next = queue.shift();
+    if (!next) throw new Error('scripted client exhausted');
+    return next;
+  };
+  client.emitSpans = async () => true;
+  return client;
 }
 
 describe('0037 catalog ↔ Step 4 replay invariants', () => {

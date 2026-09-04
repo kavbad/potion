@@ -18,11 +18,25 @@ function memWorkspace(seed: Record<string, Buffer> = {}, opts: { refuse?: string
   };
 }
 
-function sandboxResponding(result: unknown, status = 200): typeof fetch {
-  return (async (_url: unknown, init?: RequestInit) => {
-    (sandboxResponding as unknown as { lastBody: unknown }).lastBody = JSON.parse(String(init?.body));
+/** What the code tool ships to the sandbox — the fields these tests read
+ * back off the stub. */
+interface SandboxRequestBody {
+  files: Array<{ name: string }>;
+}
+
+/** A fetch stub that answers as the sandbox and remembers the LAST request
+ * body it was handed, so a test can assert on what was actually shipped. */
+interface SandboxStub {
+  (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response>;
+  lastBody?: SandboxRequestBody;
+}
+
+function sandboxResponding(result: unknown, status = 200): SandboxStub {
+  const impl: SandboxStub = async (_url, init) => {
+    impl.lastBody = JSON.parse(String(init?.body)) as SandboxRequestBody;
     return new Response(JSON.stringify(result), { status, headers: { 'content-type': 'application/json' } });
-  }) as unknown as typeof fetch;
+  };
+  return impl;
 }
 
 describe('run_python', () => {
@@ -34,7 +48,7 @@ describe('run_python', () => {
     });
     const [tool] = buildCodeLabTools({ sandboxUrl: 'http://sb', workspace: ws, fetchImpl });
     const out = (await tool!.run({ code: 'print(1)' })) as { filesWritten: unknown[]; workspace: string[] };
-    const sent = (sandboxResponding as unknown as { lastBody: { files: Array<{ name: string }> } }).lastBody;
+    const sent = fetchImpl.lastBody!;
     expect(sent.files[0]!.name).toBe('in.csv');
     expect(out.filesWritten).toEqual([{ name: 'out.xlsx', size: 4 }]);
     expect(ws.store.has('out.xlsx')).toBe(true);

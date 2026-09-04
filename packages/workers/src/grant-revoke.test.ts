@@ -14,7 +14,7 @@ import {
 } from '@potion/db';
 import { sealEnvelope, StaticMasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
-import { createLabGrantRevokeHandler } from './handlers.js';
+import { createLabGrantRevokeHandler, DEFAULT_PRICES_PATH } from './handlers.js';
 import type { JobContext } from './index.js';
 
 const MASTER = randomBytes(32).toString('hex');
@@ -72,7 +72,7 @@ async function seeded(): Promise<DbHandle> {
   return h;
 }
 
-const ctxFor = (h: DbHandle): JobContext => ({ db: h.db }) as unknown as JobContext;
+const ctxFor = (h: DbHandle): JobContext => ({ db: h.db, dbHandle: h, pricesPath: DEFAULT_PRICES_PATH });
 
 describe('lab:grant-revoke', () => {
   it('calls the provider DELETE with the sealed token and reports revoked', async () => {
