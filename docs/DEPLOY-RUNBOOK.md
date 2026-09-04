@@ -253,13 +253,37 @@ dump, and a restore without it leaves every stored BYOK key undecryptable.
 
 ## §9 Upgrades
 
+**Use the script.** Every rule below is a production incident that already
+happened, and prose is what failed to prevent them the first time:
+
 ```bash
-git pull && docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod up -d --build
+bash scripts/deploy-prod.sh            # dry run: plan + preflight, sends nothing
+bash scripts/deploy-prod.sh --go       # deploy (asks you to type DEPLOY)
+bash scripts/deploy-prod.sh --rollback # previous images, no build, ~15s
+```
+
+It refuses to ship a tree no commit describes (dirty **or** untracked —
+rsync sends the tree, not the index), always excludes `.env*`, sets
+`COPYFILE_DISABLE=1` and drops `._*`, builds **one service at a time**,
+avoids the `| tail` pipe that once masked a failed build's exit code, and
+checks `/readyz` at the end with the rollback command printed on failure.
+
+The underlying chain, if you are doing it by hand:
+
+```bash
+COPYFILE_DISABLE=1 rsync -az --delete --exclude ".env*" --exclude "._*" \
+  --exclude .git --exclude node_modules --exclude .next --exclude dist \
+  ./ root@HOST:/opt/potion/app/
+# then, on the host, ONE AT A TIME:
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod build server
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod build dashboard
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
 New migrations apply on boot, exactly once, recorded in `schema_migrations`.
 Take a dump first (§8): the ledger prevents *repeat* application, not a
-mistake inside a new migration.
+mistake inside a new migration. The script names the migrations in recent
+history so you know whether this deploy carries any.
 
 ---
 
