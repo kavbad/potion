@@ -190,7 +190,20 @@ export function LabChat({
   // below says it once, properly. Before this the operator read the same
   // question three times — the stop, the check-in row, and the card.
   const turns = useMemo(() => {
-    const all = (run?.steps ?? []).filter((s) => s.hidden !== true);
+    const visible = (run?.steps ?? []).filter((s) => s.hidden !== true);
+    // A worker's ask is recorded TWICE by design — the stop that carried
+    // the text, then the check-in that parked on it. The check-in is the
+    // meaningful row ("asked you a question"), so the stop before it is
+    // dropped: reading the same paragraph twice is what made this page
+    // feel wonky.
+    const normOf = (t: (typeof visible)[number]) =>
+      `${t.detail ?? ''} ${t.excerpt ?? ''}`.replace(/\s+/g, ' ').trim();
+    const all = visible.filter((t, i) => {
+      const next = visible[i + 1];
+      if (next === undefined || next.kind !== 'check-in' || t.kind !== 'model') return true;
+      const head = normOf(t).slice(0, 60);
+      return head.length < 12 || !normOf(next).includes(head);
+    });
     const q = run?.state === 'awaiting-human' ? (run.pendingQuestion ?? null) : null;
     if (q === null) return all;
     const norm = (t: string) => t.replace(/\s+/g, ' ').trim();
