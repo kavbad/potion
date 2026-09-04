@@ -85,7 +85,19 @@ run-record box, and the verification line.
 - CTAs: `apps/dashboard/lib/research-ctas.ts` — a CTA resolves to a LIVE
   surface or it does not exist (E7).
 
-## The daily ledger (F6 — live)
+## The daily ledger (F6 — live, Delta-framed)
+
+**PROVEN 2026-09-04**: `/research/2026-09-04` published autonomously,
+byline **Delta**, framing run `run-c244a0c0`, every number from the
+code-composed ledger. Four defects were found getting there, each only
+visible by reading the published artifact (never by a green build):
+the lane WEDGED on a parked framing run (`awaiting-human` was not
+terminal — no daily would ever have posted); the first publish was HELD
+because the ledger printed the prices append-log carrying withheld
+aliases; a read-after-write race read `daily.json` 889ms after the run
+completed and saw nothing; and `parseDraft`'s three-FAQ rule made the
+Delta byline structurally unreachable on a format that has no FAQ.
+
 
 `dailyLedgerTick` runs on the same 60s clock, once per UTC day: it
 composes the day's facts from `research_cycles` and `recipe_status`
