@@ -240,6 +240,31 @@ export function hasUnfilledSlot(goal: string): boolean {
   return /\[[A-Z][A-Z0-9./-]* [A-Z0-9 ./-]{2,56}\]/.test(goal);
 }
 
+/** THE QUESTION-STOP LAW (2026-09-04, from the operator's GTM worker): a
+ * task run that ends by ASKING THE OPERATOR FOR INFORMATION has not
+ * finished — it is blocked, and filing it as 'completed' leaves its
+ * questions in a dead transcript with nowhere to answer them. The slot law
+ * already catches this when the GOAL carries an authored [PLACEHOLDER];
+ * this catches the same stop when the worker discovers the gap itself.
+ *
+ * Deterministic and re-derivable from the record alone (no file or tool
+ * state consulted): an explicit request-for-input phrase plus a question
+ * mark. A report that merely poses a rhetorical question does not match —
+ * the phrase list is second-person asks only. */
+const ASK_FOR_INPUT =
+  /\b(?:i need (?:to know|you to|from you|the following|more information)|i(?:'|’)?ll need (?:to know|you to|from you)|please (?:provide|confirm|share|specify|tell me|send)|could you (?:provide|confirm|share|specify|tell|send)|can you (?:provide|confirm|share|specify|tell|send)|before i can (?:begin|start|proceed|continue|run)|to proceed[, ]|let me know (?:which|what|if|your|how)|what (?:is|are) your|which (?:would|do) you)\b/i;
+
+export function isQuestionStop(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 40 || !t.includes('?')) return false;
+  return ASK_FOR_INPUT.test(t);
+}
+
+/** A recorded question the operator must be able to ACT on: 600 chars cut
+ * the GTM worker's multi-part ask mid-sentence, so the card showed half a
+ * question with no way to see the rest. */
+export const ASK_QUESTION_MAX = 4000;
+
 export function buildAskTool(): LabTool {
   return {
     name: ASK_TOOL_NAME,
@@ -851,7 +876,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             let q = 'The worker needs more information to continue.';
             try {
               const i = JSON.parse(call.function.arguments || '{}') as { question?: unknown };
-              if (typeof i.question === 'string' && i.question.trim() !== '') q = i.question.trim().slice(0, 600);
+              if (typeof i.question === 'string' && i.question.trim() !== '') q = i.question.trim().slice(0, ASK_QUESTION_MAX);
             } catch { /* malformed args → the generic question */ }
             seq += 1;
             await appendLabStep(opts.db, {
@@ -1066,8 +1091,22 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         // Once per run (askedBefore), operator channel only. Mirrored in
         // replay same commit.
         if ((opts.askChannel ?? 'operator') === 'operator' && !askedBefore && !sawToolStep && hasUnfilledSlot(opts.spec.mission.goal)) {
-          const q = (result.text ?? '').trim().slice(0, 600)
+          const q = (result.text ?? '').trim().slice(0, ASK_QUESTION_MAX)
             || 'The mission has unfilled input slots — what should they be?';
+          seq += 1;
+          await appendLabStep(opts.db, {
+            runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',
+            payload: buildStepPayload({ ...takeLegStamp(), kind: 'check-in', checkInTrigger: 'worker-question', checkInQuestion: q, clockMs: clock.now(), rngSample: rng() }),
+            harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
+          });
+          await fenced.transition('awaiting-human', undefined, q);
+          return { status: 'awaiting-human', question: q, steps: stepsThisLeg };
+        }
+        // THE QUESTION-STOP LAW (2026-09-04): the worker found the gap
+        // itself and asked in prose. That is a PARK, not a completion —
+        // the operator gets a real place to answer and the run resumes.
+        if ((opts.askChannel ?? 'operator') === 'operator' && !askedBefore && isQuestionStop(result.text ?? '')) {
+          const q = (result.text ?? '').trim().slice(0, ASK_QUESTION_MAX);
           seq += 1;
           await appendLabStep(opts.db, {
             runId: opts.runId, orgId: opts.orgId, fence, seq, kind: 'check-in',

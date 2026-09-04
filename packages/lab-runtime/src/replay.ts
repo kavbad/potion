@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, contractRepairMessage, doneFileRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, doneFileRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, isQuestionStop, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
 import { decideAction } from './gateway.js';
 import { planLedgerMessage } from './plan.js';
@@ -225,7 +225,14 @@ export function replayRun(
       // stop — the loop parked it as a worker-question; the check-in step
       // that follows derives the awaiting-human.
       const slotParked = spec.mission.kind === 'task' && !askedAlready && !sawToolStep && hasUnfilledSlot(spec.mission.goal);
-      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked && fileClaims === undefined && emptyStopStamp !== true) {
+      // THE QUESTION-STOP LAW (mirrored same commit): a task stop that asks
+      // the operator for information parked the run; the check-in step that
+      // follows derives the awaiting-human. Derived from the recorded text
+      // alone — no file or tool state consulted, by design.
+      const questionParked =
+        spec.mission.kind === 'task' && !askedAlready && calls.length === 0 && p.finishReason === 'stop'
+        && isQuestionStop(p.responseText ?? '');
+      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked && !questionParked && fileClaims === undefined && emptyStopStamp !== true) {
         if (runHadTools && !expectWrapUp) {
           // The wrap-up follows; terminal completes AFTER it.
           expectWrapUp = true;

@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { HarnessDto, RunDto } from '@potion/lab-form';
 import { LabWorkbench } from './lab-workbench';
+import { askItems, quickReplies, RichText } from '@/lib/rich-text';
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
@@ -71,7 +72,7 @@ function Turn({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
             {body}
           </pre>
         ) : (
-          <p className="mt-0.5 whitespace-pre-wrap text-[14.5px] leading-relaxed text-ink">{body}</p>
+          <RichText text={body} className="mt-0.5 text-[14.5px] leading-relaxed text-ink" />
         )
       ) : null}
       {step.steers !== undefined && step.steers.length > 0
@@ -154,6 +155,7 @@ export function LabChat({
   const [attachments, setAttachments] = useState<Array<{ name: string; contentBase64: string; size: number }>>([]);
   const [showSettings, setShowSettings] = useState(true);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const seen = useRef(0);
 
   const state = run?.state;
@@ -264,8 +266,15 @@ export function LabChat({
   }, [text, parked, live, runId, harness.harnessHash, attachments]);
 
   const askQuestion = parked ? (run?.pendingQuestion ?? null) : null;
+  const askParts = useMemo(() => (askQuestion === null ? [] : askItems(askQuestion)), [askQuestion]);
+  const quick = useMemo(() => (askQuestion === null ? [] : quickReplies(askQuestion)), [askQuestion]);
+  // The moment it starts waiting, the cursor is already where the answer
+  // goes — nobody should have to hunt for the reply box.
+  useEffect(() => {
+    if (parked) inputRef.current?.focus();
+  }, [parked]);
   const composerHint = parked
-    ? 'answering — your reply authorizes the action and lands on the record'
+    ? 'your answer resumes the run and lands on the permission record'
     : live
       ? 'steering — guidance for its next step, never authorization'
       : attachments.length > 0
@@ -305,11 +314,66 @@ export function LabChat({
           )}
         </div>
 
-        {/* the ask, impossible to miss, right above the box that answers it */}
+        {/* THE ASK CARD (2026-09-04, operator: "it should have buttons,
+            clear choices, clear place to reply"). A worker waiting on a
+            person is the one moment the page must stop being a transcript:
+            a banded card, the ask as a CHECKLIST when it has parts, quick
+            choices when it truly offers them, and the reply box below it
+            already focused. */}
         {askQuestion !== null ? (
-          <div className="mt-3 border border-warn bg-white px-4 py-3" data-testid="chat-ask">
-            <span className={`${MONO} uppercase tracking-[0.13em] text-warn`}>it needs you</span>
-            <p className="mt-1 text-[14.5px] leading-relaxed text-ink">{askQuestion}</p>
+          <div className="mt-3 border-2 border-warn bg-[#fffdf7]" data-testid="chat-ask">
+            <div className="flex items-center gap-2 border-b border-warn/40 bg-warn/10 px-4 py-2">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-warn" />
+              </span>
+              <span className={`${MONO} uppercase tracking-[0.13em] text-warn`}>
+                your worker is waiting on you
+              </span>
+              <span className={`${MONO} ml-auto text-faint`}>it stopped and spends nothing until you reply</span>
+            </div>
+            <div className="px-4 py-3">
+              {askParts.length > 0 ? (
+                <>
+                  <p className="text-[14.5px] font-medium text-ink">It needs {askParts.length} things to continue:</p>
+                  <ol className="mt-2 space-y-1.5" data-testid="ask-items">
+                    {askParts.map((t, i) => (
+                      <li key={i} className="flex gap-2.5 text-[14.5px] leading-relaxed text-ink">
+                        <span className={`${MONO} mt-[3px] shrink-0 rounded-full border border-warn/50 px-[6px] text-warn`}>
+                          {i + 1}
+                        </span>
+                        <span>{t}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <details className="mt-2.5">
+                    <summary className={`${MONO} cursor-pointer text-faint hover:text-accent`}>
+                      read its full message
+                    </summary>
+                    <RichText text={askQuestion} className="mt-1.5 text-[13.5px] leading-relaxed text-soft" />
+                  </details>
+                </>
+              ) : (
+                <RichText text={askQuestion} className="text-[14.5px] leading-relaxed text-ink" />
+              )}
+              {quick.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2" data-testid="ask-quick">
+                  {quick.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => {
+                        setText(q);
+                        inputRef.current?.focus();
+                      }}
+                      className="border border-warn bg-white px-3 py-1.5 text-[13px] text-ink hover:bg-warn hover:text-white"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -321,6 +385,7 @@ export function LabChat({
             }`}
           >
             <textarea
+              ref={inputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
@@ -330,7 +395,7 @@ export function LabChat({
               disabled={busy}
               placeholder={
                 parked
-                  ? 'your answer…'
+                  ? 'Type your answer here — the worker picks up right where it stopped'
                   : live
                     ? 'steer it — e.g. “skip the pricing pages, focus on the changelog”'
                     : 'add anything for this run (optional), then send it to work'
@@ -358,10 +423,12 @@ export function LabChat({
                 type="button"
                 onClick={() => void send()}
                 disabled={busy || ((parked || live) && text.trim() === '')}
-                className="bg-ink px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-25"
+                className={`px-4 py-1.5 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-25 ${
+                  parked ? 'bg-warn px-5 py-2' : 'bg-ink'
+                }`}
                 data-testid="chat-send"
               >
-                {busy ? '…' : parked ? 'Answer' : live ? 'Steer' : 'Send to work'}
+                {busy ? '…' : parked ? 'Send answer →' : live ? 'Steer' : 'Send to work'}
               </button>
             </div>
           </div>

@@ -291,3 +291,91 @@ describe('W3 correction — the slot law fires only on WORK-FREE stops', () => {
     await h.close();
   }, 60_000);
 });
+
+// THE QUESTION-STOP LAW (2026-09-04) — from the operator's GTM worker: it
+// planned, found real gaps ("I need to know: your business, the lead
+// channels, the target volume…"), wrote them into its report and the run
+// filed as COMPLETED. The questions sat in a dead transcript with nowhere
+// to answer them. A task run that ends by asking the operator for
+// information is BLOCKED, not finished.
+describe('THE QUESTION-STOP LAW: a stop that asks for input parks, it does not complete', () => {
+  const ASKING =
+    'I have the mission but a few gaps before I can begin sourcing leads.\n\n' +
+    'What I need to know to actually run this:\n' +
+    '1. Your business — what you sell and who the ideal customer is?\n' +
+    '2. Which lead channels should I use?\n' +
+    'Please provide these and I will start the first cycle.';
+
+  it('parks awaiting-human carrying the whole question; the answer resumes and it completes; replay clean', async () => {
+    const s = spec();
+    const { h, hash } = await freshRun(s);
+    const leg1 = await runLeg({
+      db: h.db,
+      client: scripted([ok({ text: ASKING })]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    expect(leg1.status).toBe('awaiting-human');
+    const run = (await getLabRun(h.db, 'run-ask', ORG))!;
+    expect(run.state).toBe('awaiting-human');
+    // The WHOLE ask is on the record — a half-question cannot be answered.
+    expect(run.pendingQuestion).toContain('Which lead channels');
+    const steps = await listLabSteps(h.db, 'run-ask', ORG);
+    const parked = steps.find((x) => x.kind === 'check-in');
+    expect((parked!.payload as { checkInTrigger?: string }).checkInTrigger).toBe('worker-question');
+
+    expect(await answerLabRun(h.db, 'run-ask', ORG, 'We sell B2B analytics to ops leads; use LinkedIn and email.')).toBe(true);
+    const leg2 = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: 'Sourced 12 leads and drafted outreach for each. Done.' }),
+        ok({ text: 'Wrap-up: sourced and drafted after the answer.' }),
+      ]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    expect(leg2.status).toBe('completed');
+    const rec = await recordOf(h);
+    const res = replayRun(s, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it('a real report that merely contains a question mark still completes — the law reads second-person ASKS, not punctuation', async () => {
+    const s = spec();
+    const { h, hash } = await freshRun(s);
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({
+          text:
+            'Analysis complete. Which day drove the most revenue? Saturday, at $1,778.40 across 87 checks — ' +
+            'and the answer holds after removing the duplicate order.',
+        }),
+        ok({ text: 'Wrap-up: the analysis stands.' }),
+      ]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    expect(leg.status).toBe('completed');
+    const rec = await recordOf(h);
+    expect(replayRun(s, rec.steps, rec.terminal).ok).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it('once per run: after one park, a second asking stop completes rather than looping', async () => {
+    const s = spec();
+    const { h, hash } = await freshRun(s);
+    await runLeg({
+      db: h.db, client: scripted([ok({ text: ASKING })]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    await answerLabRun(h.db, 'run-ask', ORG, 'B2B analytics; LinkedIn and email.');
+    const leg2 = await runLeg({
+      db: h.db,
+      client: scripted([ok({ text: ASKING }), ok({ text: 'Wrap-up: still blocked, reported as such.' })]),
+      runId: 'run-ask', orgId: ORG, spec: s, harnessHash: hash, tools: [],
+    });
+    expect(leg2.status).toBe('completed');
+    const rec = await recordOf(h);
+    expect(replayRun(s, rec.steps, rec.terminal).ok).toBe(true);
+    await h.close();
+  }, 60_000);
+});
