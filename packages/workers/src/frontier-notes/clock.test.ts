@@ -235,6 +235,84 @@ describe('the state machine', () => {
     expect(issue.title).not.toMatch(/cycles/);
   });
 
+  // THE LATE WRITER (found live 2026-09-04, run-d21f0a1b): the writer's run
+  // did 95 seconds of work after 29 MINUTES queued behind another job. The
+  // deadline was measuring queue latency, so the finished draft was binned.
+  it('a LATE writer keeps its claim on the day and replaces the composed piece', async () => {
+    const signals = [
+      {
+        clusterId: 'code-gen',
+        points: [
+          { model: 'or-grok-4.6', quality: 1, costPer1K: 6.846255319148936, n: 94 },
+          { model: 'or-solar-pro4', quality: 0.979456802063185, costPer1K: 0.023159680851063822, n: 94 },
+        ],
+      },
+    ];
+    const w = world();
+    let clock = TUESDAY;
+    const io = (extra: Partial<DailyIo> = {}): DailyIo => ({
+      now: () => clock,
+      agendaSignals: async () => signals,
+      publishedClaims: async () => new Map(),
+      measurementFooter: async () => '3 measurement cycles ran in the last 24 hours, no recipe reached a frontier.',
+      readIssue: (d) => w.issues.get(d) ?? null,
+      writeIssueFiles: (i) => void w.issues.set(i.week, i),
+      startWorkerRun: async () => {
+        const id = `run-late-${w.started.length + 1}`;
+        w.runs.set(id, { state: null, files: new Map() });
+        w.started.push(id);
+        return id;
+      },
+      runTerminalState: async (id) => (w.runs.has(id) ? w.runs.get(id)!.state : 'failed'),
+      readRunFile: async (id, n) => w.runs.get(id)?.files.get(n) ?? null,
+      readState: (d) => w.states.get(d) ?? null,
+      writeState: (st, o) => {
+        if (o?.exclusive && w.states.has(st.week)) return false;
+        w.states.set(st.week, st);
+        return true;
+      },
+      deltaHarness: 'dd'.repeat(32),
+      framingDeadlineMs: 1000,
+      log: (l) => w.log.push(l),
+      ...extra,
+    });
+
+    expect(await dailyPieceTick(io())).toMatch(/^daily-delta:/);
+    const rid = w.started[0]!;
+
+    // The run is still queued when the framing deadline passes: the day is
+    // filed ON TIME with the composed piece, but stays open for the writer.
+    clock = new Date(TUESDAY.getTime() + 60_000);
+    expect(await dailyPieceTick(io())).toBe('daily-published');
+    expect(w.issues.get('2026-09-01')!.byline).toBe('Potion Research');
+    expect(w.states.get('2026-09-01')!.phase).toBe('awaiting-writer');
+    expect(w.states.get('2026-09-01')!.assignment?.id).toBe('quality-premium:code-gen');
+
+    // ...and the writer lands. Its prose replaces the composed piece, and a
+    // model NAME with a version number in it is not read as a claim.
+    w.runs.get(rid)!.state = 'completed';
+    w.runs.get(rid)!.files.set(
+      'piece.json',
+      JSON.stringify({
+        title: 'The last 2.1 code gen quality points cost 296 times more.',
+        summary: 'grok-4.6 scored 1.000; a withheld model scored 0.979.',
+        plain: 'grok-4.6 scored a perfect 1.000 across 94 tasks; the cheaper model scored 0.979.',
+        lede: 'The gap is 2.1 points and the price gap is 296 times.',
+        takeaway: 'Decide which of the two numbers your workload needs.',
+      }),
+    );
+    clock = new Date(TUESDAY.getTime() + 120_000);
+    expect(await dailyPieceTick(io())).toBe('daily-upgraded');
+    const upgraded = w.issues.get('2026-09-01')!;
+    expect(upgraded.byline).toBe('Delta');
+    expect(upgraded.writer?.runId).toBe(rid);
+    expect(upgraded.title).toMatch(/296 times more/);
+    expect(w.states.get('2026-09-01')!.phase).toBe('done');
+
+    // The day is closed: a later tick does not touch it again.
+    expect(await dailyPieceTick(io())).toBeNull();
+  });
+
   it('an empty agenda publishes NOTHING — silence beats filler', async () => {
     const w = world();
     const io: DailyIo = {

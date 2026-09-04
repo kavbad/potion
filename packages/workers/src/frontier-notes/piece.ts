@@ -72,7 +72,12 @@ export function auditPieceNumbers(draft: Draft, c: AgendaCandidate, now: Date): 
   // so every figure they contain is permitted by construction.
   for (const m of `${c.headline} ${c.dek}`.matchAll(/(?<![\w.])(\d+(?:[.,]\d+)?)(?![\w])/g)) allowed.add(m[1]!.replace(/,/g, ''));
 
-  const text = stripNames([draft.title, draft.summary, draft.plain, draft.lede, draft.frontierNote, draft.auditionNote, draft.takeaway].join(' '), c);
+  // `auditionNote` is NOT scanned: both publish paths overwrite it with the
+  // code-composed measurement footer, so its figures ("...in the last 24
+  // hours") are provenance we wrote, not claims the writer made. Checking
+  // them against the candidate's evidence refused every draft on "24" —
+  // the second law to mistake our own output for the model's (2026-09-04).
+  const text = stripNames([draft.title, draft.summary, draft.plain, draft.lede, draft.frontierNote, draft.takeaway].join(' '), c);
   for (const m of text.matchAll(/(?<![\w.$])(\d+(?:[.,]\d+)?)(?![\w])/g)) {
     const raw = m[1]!.replace(/,/g, '');
     if (allowed.has(raw)) continue;

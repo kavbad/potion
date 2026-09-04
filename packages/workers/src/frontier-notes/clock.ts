@@ -25,7 +25,7 @@ import { randomUUID } from 'node:crypto';
 import type { ObservatoryRun } from '../observatory.js';
 import { composeFactSheet } from './compose.js';
 import { parseDailyDraft, utcDay } from './daily.js';
-import { generateAgenda, generateCatalogueAgenda, type CatalogueEntry, type ClusterSignal } from './agenda.js';
+import { generateAgenda, generateCatalogueAgenda, type AgendaCandidate, type CatalogueEntry, type ClusterSignal } from './agenda.js';
 import { assemblePieceIssue, auditPieceNumbers, deterministicPiece } from './piece.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
@@ -36,7 +36,7 @@ import { loadReplaysFromStore, type StoreLike } from './replay-source.js';
 import type { FactSheet, Issue } from './types.js';
 import { deterministicDraft, parseDraft, type Draft } from './write.js';
 
-export type ClockPhase = 'delta' | 'auditor' | 'gate-held' | 'done' | 'skipped';
+export type ClockPhase = 'delta' | 'auditor' | 'gate-held' | 'done' | 'skipped' | 'awaiting-writer';
 
 /** F8: the DAILY PIECE tick — Atlas picks, Delta writes, the corpus
  * remembers. The daily post is the top item on the agenda: a question
@@ -65,6 +65,8 @@ export interface DailyIo {
    * still a real answer to a real question, never a chore log. */
   deltaHarness: string | null;
   framingDeadlineMs?: number;
+  /** How long a merely-LATE writer keeps its claim on the day (default 6h). */
+  lateWriterCeilingMs?: number;
   log(line: string): void;
 }
 
@@ -80,8 +82,64 @@ export interface DailyIo {
  */
 export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   const day = utcDay(io.now());
-  if (io.readIssue(day) !== null) return null; // today is filed
   const state = io.readState(day);
+  // Today is filed — unless it was filed WITHOUT its writer, in which case
+  // the day stays open for the upgrade below (see THE LATE WRITER).
+  if (io.readIssue(day) !== null && state?.phase !== 'awaiting-writer') return null;
+
+  // THE LATE WRITER (found live 2026-09-04, run-d21f0a1b). The writer's run
+  // did 95 seconds of work — after sitting 29 MINUTES in a queue that runs
+  // one job at a time. The framing deadline was measuring queue latency and
+  // calling it a slow writer, so the composed fallback published and the
+  // finished draft was thrown away.
+  //
+  // Both things a reader deserves are now true: the day is filed on time
+  // (the composed piece answers the same question), and the writer's prose
+  // replaces it the moment the run lands and passes the laws. A writer that
+  // is merely LATE no longer loses its piece; only one that is wrong does.
+  if (state?.phase === 'awaiting-writer') {
+    const filed = io.readIssue(day);
+    const runId = state.deltaRunId;
+    if (filed === null || runId === undefined || io.deltaHarness === null) {
+      io.writeState({ ...state, phase: 'done' });
+      return null;
+    }
+    const startedMs = Date.parse(state.startedAt);
+    const abandon = Number.isFinite(startedMs) && io.now().getTime() - startedMs > (io.lateWriterCeilingMs ?? 6 * 60 * 60_000);
+    const terminal = await io.runTerminalState(runId);
+    if (terminal === null) {
+      if (!abandon) return null;
+      io.log(`fnotes daily ${day}: writer ${runId} never landed — the composed piece stands`);
+      io.writeState({ ...state, phase: 'done' });
+      return null;
+    }
+    // The writer is judged against the assignment it was GIVEN, not against
+    // an agenda recomputed since — otherwise a measurement that landed while
+    // it was queued would make its correct numbers look invented.
+    const assigned = state.assignment;
+    const text = terminal === 'completed' ? await io.readRunFile(runId, 'piece.json') : null;
+    if (terminal === 'completed' && text === null && !abandon) return null; // read-after-write
+    io.writeState({ ...state, phase: 'done' });
+    if (text === null || assigned === undefined) {
+      io.log(`fnotes daily ${day}: writer ${runId} ended ${terminal} with no usable piece — the composed piece stands`);
+      return null;
+    }
+    const footer = await io.measurementFooter();
+    const parsed = parseDailyDraft(normalizeDraftText(text), deterministicPiece(assigned, footer));
+    const violation = parsed === null ? 'no usable piece.json' : (auditPieceNumbers(parsed, assigned, io.now()) ?? lintDraft({ ...parsed, faq: [] }));
+    if (parsed === null || violation !== null) {
+      io.log(`fnotes daily ${day}: late writer refused (${violation}) — the composed piece stands`);
+      return null;
+    }
+    const upgraded = assemblePieceIssue(assigned, { ...parsed, mixingNote: '', auditionNote: footer, faq: [] }, day, {
+      publishedAt: filed.publishedAt,
+      byline: 'Delta',
+      writer: { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId },
+    });
+    io.writeIssueFiles(upgraded);
+    io.log(`fnotes daily ${day}: ${upgraded.status.toUpperCase()} — the late writer's piece replaces the composed one (${runId})`);
+    return 'daily-upgraded';
+  }
 
   const published = await io.publishedClaims();
   const agenda = [
@@ -106,7 +164,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
           1,
         ),
       });
-      io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId, note: candidate.id });
+      io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId, note: candidate.id, assignment: candidate });
       io.log(`fnotes daily ${day}: assigned "${candidate.headline}" to ${runId} (score ${candidate.score})`);
       return `daily-delta:${runId}`;
     }
@@ -118,6 +176,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   let draft = deterministicPiece(candidate, footer);
   let writer: Issue['writer'] = null;
   let note = `composed: ${candidate.id}`;
+  let late = false;
   if (state?.deltaRunId) {
     const terminal = await io.runTerminalState(state.deltaRunId);
     const startedMs = Date.parse(state.startedAt);
@@ -138,6 +197,9 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
       note = `written by Delta (${state.deltaRunId}): ${candidate.id}`;
     } else {
       io.log(`fnotes daily ${day}: writing refused (${violation}) — the composed piece publishes`);
+      // Late is not wrong. A writer that simply has not finished keeps its
+      // claim on the day and replaces the composed piece when it lands.
+      if (terminal === null) late = true;
     }
   }
   const issue = assemblePieceIssue(candidate, draft, day, {
@@ -146,7 +208,10 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
     ...(writer !== null ? { byline: 'Delta' } : {}),
   });
   io.writeIssueFiles(issue);
-  io.writeState({ week: day, startedAt: state?.startedAt ?? io.now().toISOString(), attempts: state?.attempts ?? 1, ...state, phase: 'done', note });
+  io.writeState({
+    week: day, startedAt: state?.startedAt ?? io.now().toISOString(), attempts: state?.attempts ?? 1, ...state,
+    phase: late ? 'awaiting-writer' : 'done', note, ...(late ? { assignment: candidate } : {}),
+  });
   io.log(`fnotes daily ${day}: ${issue.status.toUpperCase()} — "${issue.title}" (${note})`);
   return 'daily-published';
 }
@@ -166,6 +231,9 @@ export interface ClockState {
   gateRunId?: string;
   gateActionId?: string;
   argsHash?: string;
+  /** F8: the agenda candidate the writer was handed. A late draft is judged
+   * against ITS OWN assignment, never against an agenda recomputed since. */
+  assignment?: AgendaCandidate;
   note?: string;
 }
 

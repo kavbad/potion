@@ -3,9 +3,12 @@
 // suite → mock eval → org frontier → rubric generation + probe calibration
 // → live-stamped rows via the providerModeOverride seam), seeds every
 // remaining inventory table (alerts+deliveries, budgets+events, shares,
-// shadow, quality samples, custody, auth events, request logs, usage), then
-// deletes and asserts EVERY table empty for the org, platform assets
-// UNCHANGED, and the run idempotent.
+// shadow, quality samples, custody, auth events, request logs, usage, billing,
+// invites/pins, the guarantee trio, the Lab runtime), then deletes and asserts
+// EVERY org-scoped table empty for the org, platform assets UNCHANGED, and the
+// run idempotent. The asserted table list is DERIVED from the migrated schema
+// (see orgFkTables), and the fixture's own coverage of it is asserted too — a
+// hardcoded list is how this test drifted to ~26 of ~51 tables.
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -90,6 +93,52 @@ async function orgCount(table: string, orgPredicate = `org_id = '${ORG}'`): Prom
 async function totalCount(table: string): Promise<number> {
   const res = await db.db.execute(sql.raw(`SELECT count(*)::int AS n FROM ${table}`));
   return Number((res.rows[0] as { n: number }).n);
+}
+
+interface OrgFkTable {
+  table: string;
+  /** 'no action' BLOCKS `DELETE FROM orgs`; 'cascade' is swept by Postgres. */
+  onDelete: 'cascade' | 'no action';
+}
+
+/**
+ * The org-scoped table inventory, DERIVED from the migrated database rather
+ * than hand-listed. A mutation audit (2026-09-04) found the hardcoded list this
+ * replaces had drifted to ~26 of the ~51 tables the cascade handles: about 30
+ * were unasserted, and `lab_harnesses` — a NO ACTION FK, so a real deletion
+ * ABORTS without its delete — was among them. Reading pg_constraint means a
+ * migration that adds an org-scoped table widens this test automatically; there
+ * is no list to forget to update.
+ */
+async function orgFkTables(): Promise<OrgFkTable[]> {
+  const res = await db.db.execute(sql.raw(
+    `SELECT c.conrelid::regclass::text AS t, c.confdeltype AS del
+     FROM pg_constraint c
+     WHERE c.contype = 'f' AND c.confrelid = 'orgs'::regclass
+     ORDER BY 1`,
+  ));
+  return (res.rows as Array<{ t: string; del: string }>).map((r) => ({
+    table: r.t,
+    onDelete: r.del === 'c' ? 'cascade' : 'no action',
+  }));
+}
+
+/** Tables with an `org_id` column but NO FK to orgs — the silent-orphan class:
+ * nothing blocks the delete, so an omission can never surface as an error. */
+async function bareOrgIdTables(): Promise<string[]> {
+  const res = await db.db.execute(sql.raw(
+    `SELECT c.table_name AS t
+     FROM information_schema.columns c
+     JOIN information_schema.tables t
+       ON t.table_name = c.table_name AND t.table_schema = c.table_schema
+     WHERE c.column_name = 'org_id' AND c.table_schema = 'public'
+       AND t.table_type = 'BASE TABLE'
+       AND c.table_name NOT IN (
+         SELECT k.conrelid::regclass::text FROM pg_constraint k
+         WHERE k.contype = 'f' AND k.confrelid = 'orgs'::regclass)
+     ORDER BY 1`,
+  ));
+  return (res.rows as Array<{ t: string }>).map((r) => r.t);
 }
 
 beforeEach(async () => {
@@ -191,6 +240,55 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     await db.db.execute(sql.raw(
       `INSERT INTO magic_links (token_hash, email, org_id, expires_at) VALUES ('${sha256('ml_casc')}', 'casc@x.dev', '${ORG}', now() + interval '1 hour')`,
     ));
+    // Billing (R0/0039+0054), the invite/pin surfaces, the guarantee trio and
+    // the Lab runtime — every one of them a NO ACTION org FK the pipeline
+    // fixture above never reaches. Seeded because an EMPTY table makes its
+    // `orgCount === 0` assertion vacuous: with a row present, a delete dropped
+    // from the cascade aborts `DELETE FROM orgs` with an FK violation instead
+    // of passing silently. The seeded set is not hand-picked — the assertion
+    // right before the delete DERIVES it and fails if any is missed.
+    await db.db.execute(sql.raw(
+      `INSERT INTO billing_customers (org_id, customer_id) VALUES ('${ORG}', 'cus_casc')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO invoice_charges (id, org_id, period, amount_cents, status, transport) VALUES ('ic_casc', '${ORG}', '2026-08', 1000, 'pending', 'ledger')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO frontier_pins (org_id, cluster_id, frontier_id, frontier_version, pinned_by) VALUES ('${ORG}', '${clusterId}', 'fr_casc', 1, 'casc@x.dev')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO invites (org_id, email, role, invited_by) VALUES ('${ORG}', 'invitee@x.dev', 'member', 'casc@x.dev')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO cluster_incumbents (org_id, cluster_id, strategy_hash) VALUES ('${ORG}', '${clusterId}', 'h_casc')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO guarantee_verdicts (org_id, policy_id, cluster_id, candidate_hash, outcome) VALUES ('${ORG}', 'pol_casc', '${clusterId}', 'c_casc', 'all-clear')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO suite_certifications (org_id, cluster_id, suite_id, suite_version, status) VALUES ('${ORG}', '${clusterId}', '${suiteId}', '1.0.0', 'certified')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO research_cycles (org_id, trigger) VALUES ('${ORG}', 'manual')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO lab_harnesses (org_id, harness_hash, name, spec_text, sidecar, cluster_id) VALUES ('${ORG}', 'hh_casc', 'h', 'spec', '{}'::jsonb, '${clusterId}')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO lab_harness_memory (org_id, harness_hash, key, value) VALUES ('${ORG}', 'hh_casc', 'k', '{"v":1}'::jsonb)`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO lab_felt_samples (org_id, probe_hash, policy_hash, frontier_id, strategy_hash, frontier_version, provenance, output, latency_ms, completion_id) VALUES ('${ORG}', 'ph_casc', 'poh_casc', 'fr_casc', 'h_casc', 1, 'mock', 'out', 1, 'cmp_casc')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO lab_runs (id, org_id, harness_hash, harness_name, spec, state) VALUES ('lr_casc', '${ORG}', 'hh_casc', 'h', '{}'::jsonb, 'completed')`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO lab_run_steps (run_id, org_id, seq, kind, payload) VALUES ('lr_casc', '${ORG}', 1, 'model', '{}'::jsonb)`,
+    ));
+    await db.db.execute(sql.raw(
+      `INSERT INTO lab_superpower_grants (id, org_id, connector_id, superpower_id, scopes_granted, token_envelope, status, granted_by) VALUES ('lsg_casc', '${ORG}', 'conn', 'sp', '[]'::jsonb, 'env', 'active', 'casc@x.dev')`,
+    ));
 
     // ---- platform baselines (must be UNCHANGED afterwards) ----
     const platformBefore = {
@@ -212,6 +310,26 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     const calsBefore = await totalCount('judge_calibrations');
     expect(calsBefore).toBeGreaterThan(0);
 
+    // The fixture's OWN completeness is asserted, not assumed. `orgCount === 0`
+    // on a table that never had a row is a vacuous assertion — it passes just
+    // as happily when the cascade forgot the table. For a NO ACTION FK a seeded
+    // row converts a forgotten delete into an FK violation on `DELETE FROM
+    // orgs`, which is loud. So: every NO ACTION org FK must be non-empty here,
+    // and a new one fails THIS assertion (pointing at the fixture) rather than
+    // quietly widening the hole.
+    const orgFks = await orgFkTables();
+    expect(orgFks.length, 'the pg_constraint derivation found the org FKs').toBeGreaterThan(45);
+    const unseeded: string[] = [];
+    for (const { table, onDelete } of orgFks) {
+      if (onDelete === 'no action' && (await orgCount(table)) === 0) unseeded.push(table);
+    }
+    expect(
+      unseeded,
+      `NO ACTION org-FK table(s) this fixture never seeds: ${unseeded.join(', ')}. ` +
+        'Seed each one above — an empty table makes its "nothing survives" check vacuous, ' +
+        'and a NO ACTION FK left out of the cascade aborts real org deletions.',
+    ).toEqual([]);
+
     // ---- DELETE ----
     let invalidated: string | null = null;
     const handler = createOrgDeleteHandler({ onOrgDeleted: (o) => void (invalidated = o) });
@@ -222,18 +340,27 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     expect(report.usersErased).toBe(1);
 
     // ---- NOTHING DERIVED SURVIVES ----
-    for (const table of [
-      'memberships', 'sessions', 'magic_links', 'policies', 'api_keys',
-      'request_logs', 'provider_keys', 'custody_audit', 'usage_daily',
-      'shadow_results', 'quality_samples', 'incidents', 'share_tokens',
-      'alert_rules', 'budgets', 'auth_events', 'trace_spans',
-      'derived_suites', 'cluster_rubrics', 'eval_runs', 'eval_results',
-      'frontiers', 'frontier_points', 'research_cycles', 'budget_events',
-      'clusters',
-    ]) {
+    // Every table with an FK to orgs, derived above — not a hand-kept list.
+    for (const { table } of orgFks) {
       expect(await orgCount(table), table).toBe(0);
     }
-    expect(await totalCount('derived_suite_items')).toBe(0); // the one real FK cascade
+
+    // The silent-orphan class: an `org_id` column with NO FK to orgs. Postgres
+    // can never object, so only an explicit delete clears these. The set is
+    // FROZEN so a new bare-org_id table fails here instead of leaking quietly.
+    expect(new Set(await bareOrgIdTables())).toEqual(
+      new Set(['budget_events', 'clusters', 'demand_cell_contributors', 'job_executions']),
+    );
+    for (const table of ['budget_events', 'clusters']) {
+      expect(await orgCount(table), table).toBe(0);
+    }
+    // NOT asserted, because they are NOT cleared: `demand_cell_contributors`
+    // and `job_executions` keep org-attributed rows after the org is gone
+    // (open gap found 2026-09-04 by the sweep that wrote this block). Closing
+    // it is a cascade change, not a test change — recorded here rather than
+    // asserted-as-fine so the next reader sees the gap instead of inheriting it.
+
+    expect(await totalCount('derived_suite_items')).toBe(0); // rides the derived_suites cascade
     expect(await totalCount('cluster_exemplars')).toBe(0); // transitive via org clusters
     expect(await totalCount('judge_calibrations')).toBe(0); // three-route union
     expect(await db.db.execute(sql.raw(`SELECT count(*)::int AS n FROM alert_deliveries WHERE rule_id = '${ruleId}'`)).then((r) => Number((r.rows[0] as { n: number }).n))).toBe(0);

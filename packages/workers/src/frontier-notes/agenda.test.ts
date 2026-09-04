@@ -226,3 +226,22 @@ describe('the piece number law', () => {
     expect(auditPieceNumbers(draft({ plain: 'It is 47 times cheaper.' }) as never, candidate as never, NOW)).toMatch(/"47"/);
   });
 });
+
+// The measurement footer is OUR prose, not the writer's. Scanning it against
+// the candidate's evidence refused every draft on the "24" in "the last 24
+// hours" — the second time a law mistook our own output for the model's.
+describe('the piece number law and the footer', () => {
+  const candidate = {
+    id: 'quality-premium:code-gen', kind: 'quality-premium' as const, clusterId: 'code-gen',
+    headline: 'The last 2.1 points cost 296×', dek: 'One model scored 1.000, another 0.979.', demandQuery: 'q',
+    evidence: { topModel: 'grok-4.6', topQuality: 1, cheapQuality: 0.9795, factor: 295.6, qualityPoints: 2.1, n: 94 },
+    scores: { demand: 1, magnitude: 1, evidence: 1, novelty: 1 }, score: 0.99, why: 'w',
+  };
+  it('does not read the measurement footer as a claim', () => {
+    const draft = {
+      title: 'T', summary: 'S', plain: 'P', lede: 'L', frontierNote: '', mixingNote: '', takeaway: 'T2', faq: [],
+      auditionNote: '3 measurement cycles ran in the last 24 hours, 7 newly listed models were measured.',
+    };
+    expect(auditPieceNumbers(draft as never, candidate as never, new Date('2026-09-04T00:00:00Z'))).toBeNull();
+  });
+});
