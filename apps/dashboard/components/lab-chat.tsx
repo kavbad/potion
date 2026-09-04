@@ -327,7 +327,11 @@ export function LabChat({
           </div>
           {turns.length === 0 ? (
             <p className={`${MONO} px-1 py-6 text-faint`} data-testid="chat-empty">
-              {runId === null ? 'no runs yet — send it to work below' : 'starting…'}
+              {runId === null
+                ? 'no runs yet — send it to work below'
+                : parked
+                  ? 'it read the mission and stopped to ask you this ↓'
+                  : 'starting…'}
             </p>
           ) : (
             turns.map((s) => <Turn key={s.seq} step={s} />)

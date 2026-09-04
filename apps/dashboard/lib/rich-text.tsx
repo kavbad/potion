@@ -121,7 +121,18 @@ export function askItems(question: string): string[] {
     const t = (n !== null ? n[2] : b !== null ? b[1] : '')?.trim() ?? '';
     if (t.length > 2) items.push(t.replace(/\*\*/g, ''));
   }
-  return items.slice(0, 8);
+  if (items.length > 0) return items.slice(0, 8);
+  // No list markers — but a worker asking for several things in prose is
+  // still asking for several things (the live GTM ask was one paragraph
+  // holding three questions). Each sentence that ENDS in a question mark is
+  // one of them; a single question stays a paragraph, not a list of one.
+  const sentences = question
+    .replace(/\s+/g, ' ')
+    .split(/(?<=\?)\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.endsWith('?') && t.length > 12)
+    .map((t) => t.replace(/\*\*/g, ''));
+  return sentences.length > 1 ? sentences.slice(0, 8) : [];
 }
 
 /** Short, mutually exclusive choices a question offers, if any — rendered as
