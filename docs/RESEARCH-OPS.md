@@ -1,6 +1,6 @@
 # Potion Research — operations runbook (v1, 2026-09-02)
 
-**Status: the F-ladder's operating manual.** The fleet doctrine is
+**Status: the F-ladder's operating manual (F0–F7 shipped).** The fleet doctrine is
 `docs/RESEARCH-FLEET.md`; the writing standard is
 `docs/RESEARCH-WRITING.md`; this is how the weekly loop actually runs.
 Built F0–F2 (2026-09-01/02): Delta writes in a recorded run, Auditor
@@ -120,8 +120,21 @@ generation is promoted.
 
 ## The roadmap (operator-directed, 2026-09-03)
 
-- **F5 — automate Monday**: the observatory measurement as a scheduled
-  tick, closing the last manual step.
+- **F5 — automate Monday — SHIPPED (55076e7)**: the Monday tick RUNS the
+  proven `scripts/observatory-week.ts` inside the server container (the
+  runtime image carries the tree and tsx), so the money path is never
+  duplicated and its envelope belt is untouched. **DISARMED unless
+  `POTION_OBSERVATORY_ARM=YYYY-MM-DD`** is set in `.env.prod` — the same
+  dated risk-acceptance the script demands by hand, deliberately not
+  defaulted in compose. One run per ISO week (exclusive `wx` marker +
+  run-file guard; a non-zero exit clears the marker so a failed week
+  retries). Never a queue job — a long measurement would starve the
+  fleet's own `lab:run` legs at concurrency 1. `FRONTIER_NOTES_SKIP=1`
+  stops the script publishing its own note: it used to write the week's
+  issue via the OLD one-shot path, which would have preempted
+  Delta/Auditor/the gate. Trigger:
+  `POST /api/research/frontier-notes {"measure":"dry"|"run"}` (dry plans
+  without spending); `GET` reports arm state and any running measurement.
 - **F6 — the daily cadence — SHIPPED (05026b3)**: `dailyLedgerTick`
   runs beside the weekly on the same 60s clock. The daily UNIT is the
   ledger of what the instruments did in 24h (cycles, candidates swept,
@@ -143,11 +156,14 @@ generation is promoted.
   complete, even on a stop that names nothing (`doneFileRepair`, one
   round, replay-mirrored). Platform-wide, not fleet-only.
 
-## Filed follow-ups
+## The loop, closed
 
-- **Monday observatory automation** — the clock starts only when the
-  measurement half has landed `runs/<week>.json`; that half is still
-  hand-run.
+Monday measures (F5, when armed) → Tuesday drafts, verifies, gates and
+publishes (F4) → every day files a ledger (F6) → the magazine renders it
+(F7). No operator machine is in the loop for any of it; the operator's
+remaining levers are the arm date, the standing grant, and the veto.
+
+## Filed follow-ups
 - **runx- sessions on the dashboard run route**: the gate session's
   recorded resolutions are read via `DATABASE_URL` by the release script
   because `GET /api/lab/runs/:id` rejects the id shape; serve them.
