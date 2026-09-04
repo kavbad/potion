@@ -50,6 +50,8 @@ export interface BootEnvView {
   SENTRY_DSN?: string | undefined;
   POTION_PUBLIC_URL?: string | undefined;
   POTION_OPERATOR_TOKEN?: string | undefined;
+  POTION_GOOGLE_CLIENT_ID?: string | undefined;
+  POTION_GOOGLE_CLIENT_SECRET?: string | undefined;
   POTION_METRICS?: string | undefined;
 }
 
@@ -164,6 +166,30 @@ export function bootGateReport(env: BootEnvView, providerMode: 'live' | 'mock'):
     name: 'POTION_OPERATOR_TOKEN',
     state: sourceOf(env.POTION_OPERATOR_TOKEN) === 'explicit' ? 'set — operator routes reachable' : 'unset — operator routes fail closed',
     source: sourceOf(env.POTION_OPERATOR_TOKEN),
+  });
+
+  // Sign in with Google is a PAIR, and half a pair is the exact failure this
+  // file was written for: paste the client id, miss the secret, and the
+  // button silently never appears — with nothing anywhere saying why.
+  const gId = sourceOf(env.POTION_GOOGLE_CLIENT_ID);
+  const gSecret = sourceOf(env.POTION_GOOGLE_CLIENT_SECRET);
+  const googleOn = gId === 'explicit' && gSecret === 'explicit';
+  const googleHalf = (gId === 'explicit') !== (gSecret === 'explicit');
+  rows.push({
+    name: 'sign in with Google',
+    state: googleOn
+      ? 'on — the button is drawn'
+      : googleHalf
+        ? 'OFF — only half the pair is set'
+        : 'off — email link only',
+    source: googleOn ? 'explicit' : gId,
+    ...(googleHalf
+      ? {
+          warn: `half-configured: client id ${gId === 'explicit' ? 'set' : 'missing'}, secret ${
+            gSecret === 'explicit' ? 'set' : 'missing'
+          } — the button will not appear.`,
+        }
+      : {}),
   });
 
   rows.push({

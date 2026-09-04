@@ -48,6 +48,7 @@ import { TwoRoads } from '@/components/landing/two-roads';
 import { EvidenceBand } from '@/components/landing/evidence-band';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
 import { ResearchLoop } from '@/components/landing/research-loop';
+import { AskAi } from '@/components/landing/ask-ai';
 
 // THE LAB LOOK (operator, 2026-08-22: "design the landing page as if you are
 // Dario Amodei … i want to look like this is the frontier"). The page reads
@@ -471,6 +472,15 @@ export function Landing() {
           </Reveal>
         </div>
       </LabSection>
+
+      {/* ---------------- second opinion ---------------- */}
+      {/* Placed HERE deliberately: after the proof and the engineering, one
+          breath before the ask. A visitor who has read this far has been
+          told the numbers are measured; the last move before "get a key" is
+          to hand them somebody else to check with. Earlier on the page it
+          would read as deflection — send someone away before they know what
+          they are checking and they simply leave. */}
+      <AskAi />
 
       {/* ---------------- close ---------------- */}
       <section className="bg-[#f4f2ec] border-t border-[#d9d5cb]">

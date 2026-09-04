@@ -1066,8 +1066,12 @@ export const budgetEvents = pgTable(
  */
 export type AuthEventKind = 'login' | 'logout' | 'invite';
 export const AUTH_EVENT_KINDS: readonly AuthEventKind[] = ['login', 'logout', 'invite'];
-export type AuthEventMethod = 'magic_link' | 'oidc';
-export const AUTH_EVENT_METHODS: readonly AuthEventMethod[] = ['magic_link', 'oidc'];
+/** How the actor got in. 'google' is OIDC underneath, but the audit export
+ * is read by a person asking which door was used, and 'oidc' there means the
+ * org's own enterprise IdP — so consumer Google sign-in gets its own word
+ * (migration 0091). */
+export type AuthEventMethod = 'magic_link' | 'oidc' | 'google';
+export const AUTH_EVENT_METHODS: readonly AuthEventMethod[] = ['magic_link', 'oidc', 'google'];
 
 export const authEvents = pgTable(
   'auth_events',
@@ -1089,7 +1093,7 @@ export const authEvents = pgTable(
   },
   (_t) => [
     check('auth_events_kind_check', sql`kind IN ('login', 'logout', 'invite')`),
-    check('auth_events_method_check', sql`method IN ('magic_link', 'oidc')`),
+    check('auth_events_method_check', sql`method IN ('magic_link', 'oidc', 'google')`),
   ],
 );
 

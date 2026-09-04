@@ -141,6 +141,15 @@ services:
       # know the measured roster — caught in the Phase D rehearsal (503 on route).
       POTION_PRICES_PATH: /app/.tranche/prices.json
       POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
+      # SIGN IN WITH GOOGLE (2026-09-04). Unset → the /auth/google/* routes
+      # are never registered and /auth/providers reports google:false, so
+      # the login page simply does not draw the button. The redirect URI is
+      # derived from POTION_APP_URL above (…/api/auth/google/callback) —
+      # override only if the console has a different one registered.
+      # See docs/GOOGLE-SIGNIN.md for the console steps.
+      POTION_GOOGLE_CLIENT_ID: ${POTION_GOOGLE_CLIENT_ID:-}
+      POTION_GOOGLE_CLIENT_SECRET: ${POTION_GOOGLE_CLIENT_SECRET:-}
+      POTION_GOOGLE_REDIRECT_URI: ${POTION_GOOGLE_REDIRECT_URI:-}
       # The learning period runs in-process here; a customer's audit must never run on mock providers
       POTION_EVAL_PROVIDER: live
       # 2026-09-01 (external review P0, confirmed): research cycles fell

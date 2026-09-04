@@ -57,6 +57,48 @@ export function oidcConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OidcCon
   return { issuer: issuer.replace(/\/$/, ''), clientId, clientSecret, redirectUri };
 }
 
+/**
+ * GOOGLE SIGN-IN (2026-09-04) — the consumer front door, built on the SAME
+ * verified OIDC machinery as the enterprise IdP above rather than a second
+ * implementation. Google is a compliant OIDC provider, so discovery, JWKS,
+ * RS256 verification, PKCE, state and nonce are all reused byte-for-byte;
+ * only three things differ and they are all data, not code:
+ *
+ *   · the issuer is FIXED (Google's, never operator-supplied)
+ *   · the redirect URI lands on the DASHBOARD origin, not this one — see
+ *     routes/google-auth.ts for why the browser half of the flow lives
+ *     there (the session cookie must be planted on withpotion.com, and this
+ *     server answers on api.withpotion.com)
+ *   · email_verified is REQUIRED (see verifyGoogleClaims)
+ *
+ * Two env vars, not four: the issuer is a constant and the redirect URI
+ * derives from POTION_APP_URL, which the magic-link flow already uses for
+ * exactly the same purpose. The fewer strings an operator must retype into
+ * a cloud console by hand, the fewer sign-in outages.
+ */
+export const GOOGLE_ISSUER = 'https://accounts.google.com';
+
+/** The dashboard path Google redirects back to (see routes/google-auth.ts
+ * and app/api/auth/google/callback). This exact string, joined to
+ * POTION_APP_URL, is what must be registered in the Google Cloud console. */
+export const GOOGLE_CALLBACK_PATH = '/api/auth/google/callback';
+
+/**
+ * Read the Google config from env; null unless BOTH the client id and
+ * secret are set (→ the routes stay unregistered and the login page never
+ * offers a button that cannot work).
+ */
+export function googleConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OidcConfig | null {
+  const clientId = env.POTION_GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = env.POTION_GOOGLE_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) return null;
+  const explicit = env.POTION_GOOGLE_REDIRECT_URI?.trim();
+  const appUrl = env.POTION_APP_URL?.trim().replace(/\/$/, '');
+  const redirectUri = explicit || (appUrl ? `${appUrl}${GOOGLE_CALLBACK_PATH}` : '');
+  if (!redirectUri) return null; // no app origin to come back to — refuse to half-configure
+  return { issuer: GOOGLE_ISSUER, clientId, clientSecret, redirectUri };
+}
+
 /** OIDC failures carry the HTTP status the callback should answer with. */
 export class OidcError extends Error {
   constructor(

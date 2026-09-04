@@ -1,4 +1,17 @@
-// /login (M2 Wave 2, ROADMAP #14) — magic-link sign-in.
+// /login — sign-in. TWO DOORS now (2026-09-04): Continue with Google, and
+// the email link that has always been here.
+//
+// Google goes FIRST and is the only filled control on the page, because it
+// is the only path where signing in costs one click and no context switch.
+// The email link stays underneath, unchanged and unapologetic — it is the
+// floor of the contract, the answer for anyone without a Google account,
+// and the only path that works when a deployment has no Google client.
+//
+// The page ASKS which doors are open (/api/auth/providers) rather than
+// assuming: a Continue-with-Google button on a deployment with no Google
+// client leads nowhere, and a dead sign-in control is worse than one fewer
+// option. Until the answer arrives, nothing is drawn in its place — no
+// skeleton that turns out to be a lie.
 //
 // TWO PATHS, and the page must not confuse them. When the deployment has a
 // real email sender, the response carries no link and "check your email" is
@@ -15,9 +28,10 @@
 // in the response means the email copy, unchanged.
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SiteHeader } from '@/components/site-header';
+import { GoogleSignInButton } from '@/components/google-signin';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -32,6 +46,24 @@ function LoginForm() {
   const [code, setCode] = useState('');
   const [codeBusy, setCodeBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(error);
+  // null = not asked yet (draw nothing rather than a button that may not
+  // exist); false = this deployment has no Google client.
+  const [googleReady, setGoogleReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let stale = false;
+    fetch('/api/auth/providers', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (!stale) setGoogleReady((b as { providers?: { google?: boolean } } | null)?.providers?.google === true);
+      })
+      .catch(() => {
+        if (!stale) setGoogleReady(false);
+      });
+    return () => {
+      stale = true;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -94,8 +126,8 @@ function LoginForm() {
     <div className="max-w-md">
       <h1 className="text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] text-ink">Sign in to Potion</h1>
       <p className="mb-10 mt-2 text-sm leading-relaxed text-soft">
-        Passwordless — no password to choose or forget. First sign-in creates your workspace;
-        teammates join by admin invite.
+        No password to choose or forget. First sign-in creates your workspace; teammates join by
+        admin invite.
       </p>
 
       {formError && (
@@ -169,28 +201,37 @@ function LoginForm() {
             </button>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-4">
-            <label className="block text-sm font-medium text-ink" htmlFor="email">
-              Work email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={state === 'sending'}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-800 disabled:opacity-50"
-            >
-              {state === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
-            </button>
-          </form>
+          <>
+            {/* THE GOOGLE DOOR, drawn only once the deployment has SAID it
+                has a Google client (googleReady) — never optimistically.
+                The control itself lives in components/google-signin.tsx so
+                it can be rendered and asserted on its own; a conditional
+                control buried in a large client component is the kind of
+                thing that renders wrong for months unnoticed. */}
+            {googleReady === true && <GoogleSignInButton />}
+            <form onSubmit={submit} className={`space-y-4 ${googleReady === true ? 'mt-5' : ''}`}>
+              <label className="block text-sm font-medium text-ink" htmlFor="email">
+                Work email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={state === 'sending'}
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-800 disabled:opacity-50"
+              >
+                {state === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
+              </button>
+            </form>
+          </>
         )}
       </div>
 

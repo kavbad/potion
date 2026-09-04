@@ -66,6 +66,7 @@ import {
 } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { sendEmailFromEnv } from '../email.js';
+import { googleConfigFromEnv, oidcConfigFromEnv } from '../oidc.js';
 
 /** Session + magic-link TTLs. */
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -99,6 +100,13 @@ export interface AuthRouteOptions {
   sendEmail?: SendEmail;
   /** Public base URL used inside magic links (default: request origin). */
   publicBaseUrl?: string;
+  /** Whether the Google routes were ACTUALLY registered, for
+   * /auth/providers. Passed in rather than re-derived from env, because the
+   * routes themselves can be configured by injection (BuildServerOptions
+   * .googleAuth) — and a /auth/providers that consults a different source
+   * than the router is exactly the drift this endpoint exists to prevent.
+   * Default: what env alone would decide. */
+  googleEnabled?: boolean;
 }
 
 const EmailSchema = z
@@ -332,6 +340,29 @@ export function registerAuthRoutes(
 
   /** Module-level provisioning shared with the OIDC callback (M4 #34). */
   const provision = (email: string) => provisionForEmail(db, email);
+
+  // ---------- GET /auth/providers ----------
+  // WHICH DOORS ARE ACTUALLY OPEN (2026-09-04). The login page needs this
+  // before it can draw anything: a "Continue with Google" button on a
+  // deployment with no Google client is a button that leads to a 404, and
+  // a dead sign-in button is worse than no sign-in button. Deriving it from
+  // a second NEXT_PUBLIC_* env var on the dashboard would put the answer in
+  // two places and let them drift; this endpoint is the one place that
+  // knows, because it asks the same config readers the routes gate on.
+  //
+  // Public and deliberately contentless: it names sign-in METHODS, never
+  // whether an account exists, and it reveals nothing an anonymous visitor
+  // could not learn by clicking the buttons.
+  app.get('/auth/providers', async (_req, reply) =>
+    reply.send({
+      providers: {
+        magicLink: true, // always — the floor of the sign-in contract
+        google: opts.googleEnabled ?? googleConfigFromEnv() !== null,
+        oidc: oidcConfigFromEnv() !== null,
+      },
+      selfServe: selfServeEnabled(),
+    }),
+  );
 
   // ---------- POST /auth/request-link ----------
   app.post('/auth/request-link', async (req, reply) => {

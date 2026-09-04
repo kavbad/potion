@@ -74,6 +74,8 @@ import { registerBillingRoutes } from './routes/billing.js';
 // ---- end M4 #31 share imports ----
 // ---- M4 #34 enterprise (m4-enterprise) — appended imports ----
 import { registerOidcRoutes } from './routes/oidc.js';
+import { registerGoogleAuthRoutes } from './routes/google-auth.js';
+import { googleConfigFromEnv } from './oidc.js';
 import { registerAuditRoutes } from './routes/audit.js';
 // ---- end M4 #34 enterprise imports ----
 // ---- M4 #33/#35 alerts + budget (m4-alerts-budget) — appended imports ----
@@ -128,6 +130,12 @@ export interface BuildServerOptions extends ContextOptions {
   artifacts?: ArtifactStore;
   /** BYO-MCP probe deps (tests inject a scripted server + DNS). */
   labProbeDeps?: import('./custom-mcp.js').ProbeDeps;
+  /** Sign-in-with-Google config seam. The issuer is a CONSTANT in
+   * googleConfigFromEnv — deliberately not operator-supplied, so the Google
+   * button can never be pointed at another IdP by an env var. That leaves
+   * tests no way to aim the flow at a mock IdP, which is what this is for:
+   * an explicit injection point, in code, alongside labProbeDeps. */
+  googleAuth?: import('./routes/google-auth.js').GoogleAuthRouteOptions;
 }
 
 export async function buildServer(opts: BuildServerOptions = {}): Promise<FastifyInstance> {
@@ -201,7 +209,12 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   app.decorateRequest('potionOrg', null);
   app.decorateRequest('potionAuth', null);
   app.addHook('onRequest', dashboardAuthHook(ctx));
-  registerAuthRoutes(app, ctx);
+  // ONE resolution of the Google config, read by both the routes that use
+  // it and the endpoint that advertises it. Deriving it twice is how a
+  // "Continue with Google" button ends up pointing at a 404.
+  const googleAuthOpts = opts.googleAuth ?? {};
+  const googleConfig = googleAuthOpts.config ?? googleConfigFromEnv();
+  registerAuthRoutes(app, ctx, { googleEnabled: googleConfig !== null });
   app.log.info({ transport: sendEmailFromEnv().transport }, 'email transport');
   // The 2026-08-27 hardening: every security- and billing-relevant gate
   // reports its RESOLVED state and where that state came from, because a
@@ -388,6 +401,12 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // context first: GET /api/audit (recent 100) + GET /api/audit/export.jsonl
   // (bounded 92-day JSONL stream, custody + auth + incident chronology).
   registerOidcRoutes(app, ctx);
+  // Sign in with Google (2026-09-04) — self-gating on
+  // POTION_GOOGLE_CLIENT_ID/SECRET the same way the OIDC quartet gates
+  // above. The BROWSER half of this flow lives in the dashboard, because
+  // the session cookie has to land on the dashboard's origin; see
+  // routes/google-auth.ts for the split and why.
+  registerGoogleAuthRoutes(app, ctx, googleConfig !== null ? { config: googleConfig } : {});
   registerAuditRoutes(app, ctx);
   // ---- end M4 #34 enterprise ----
   // ---- M4 #33/#35 alerts + budget (m4-alerts-budget) ----

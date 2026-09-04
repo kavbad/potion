@@ -3,6 +3,13 @@
 The two enterprise table-stakes: single sign-on against your IdP, and a
 unified audit trail you can export to your SIEM.
 
+> **Consumer Google sign-in is a different thing and lives elsewhere.** The
+> "Continue with Google" button on `/login` is not this OIDC path — it is a
+> separate, self-gating client built on the same machinery, documented in
+> [GOOGLE-SIGNIN.md](./GOOGLE-SIGNIN.md). The two coexist: an org can point
+> `POTION_OIDC_*` at its own IdP while the Google button stays on, or off,
+> independently.
+
 ## SSO (OIDC)
 
 Potion supports OpenID Connect **authorization-code flow with PKCE** for the

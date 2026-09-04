@@ -74,6 +74,35 @@ describe('boot gate report', () => {
     expect(bootWarnings(rows)).toEqual([]);
   });
 
+  it('sign in with Google: both halves, or it is off and says so', () => {
+    const off = bootGateReport({}, 'live').find((r) => r.name === 'sign in with Google');
+    expect(off?.state).toContain('off');
+    expect(off?.warn).toBeUndefined();
+
+    const on = bootGateReport(
+      { POTION_GOOGLE_CLIENT_ID: 'id', POTION_GOOGLE_CLIENT_SECRET: 's' },
+      'live',
+    ).find((r) => r.name === 'sign in with Google');
+    expect(on?.state).toContain('on');
+    expect(on?.warn).toBeUndefined();
+  });
+
+  it('HALF a Google pair is the silent-off shape this file exists for', () => {
+    // Paste the client id, miss the secret: the routes never register, the
+    // button never draws, and without this row nothing anywhere says why.
+    const half = bootGateReport({ POTION_GOOGLE_CLIENT_ID: 'id' }, 'live').find(
+      (r) => r.name === 'sign in with Google',
+    );
+    expect(half?.state).toContain('OFF');
+    expect(half?.warn).toContain('secret missing');
+    // And an EMPTY secret is the same mistake, not a different one.
+    const empty = bootGateReport(
+      { POTION_GOOGLE_CLIENT_ID: 'id', POTION_GOOGLE_CLIENT_SECRET: '' },
+      'live',
+    ).find((r) => r.name === 'sign in with Google');
+    expect(empty?.warn).toContain('secret missing');
+  });
+
   it('reports every gate on every boot, warning or not', () => {
     expect(bootGateReport({}, 'live').length).toBeGreaterThanOrEqual(8);
   });
