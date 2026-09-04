@@ -45,7 +45,20 @@ export type TenancyClass =
 export interface CrossOrgProbe {
   /** 'uniform-404': org B hitting org A's real id is byte-indistinguishable
    *  from a nonexistent id. 'org-list-absent': org A's rows never appear in
-   *  org B's response. 'skip': cannot leak — skipReason REQUIRED. */
+   *  org B's response. 'skip': cannot leak — skipReason REQUIRED.
+   *
+   * THE "NO PARAMETER, NOTHING TO CROSS" FALLACY (mutation audit, 2026-09-04).
+   * Several org-scoped READS used to skip the probe on the argument that they
+   * take no cross-org parameter. That argument is INVALID on its own: a route
+   * with no parameter returns whatever the repo read returns, so it is safe
+   * only IF that read is org-scoped — the very thing the skip leaves untested.
+   * `GET /api/challengers` carried exactly this reason, and dropping
+   * `eq(challengerProposals.orgId, orgId)` from `listChallengerProposals`
+   * passed the ENTIRE 1012-test server suite. The absence of a parameter is
+   * what makes the route a LIST probe ('org-list-absent'), not what makes it
+   * exempt. So: a route that reads org-owned rows and renders them takes
+   * 'org-list-absent'; 'skip' is for routes that read NO tenant rows at all
+   * (enqueue-only, pure computation, self-credential echoes, shared assets). */
   expect: 'uniform-404' | 'org-list-absent' | 'skip';
   skipReason?: string;
 }
@@ -83,6 +96,8 @@ export interface RouteInventoryRow {
     | 'rubric'
     | 'certification'
   | 'proposal'
+  | 'challengerProposal'
+  | 'orgWorkload'
     | 'shareToken'
     | 'alertRule'
     | 'labHarness'
@@ -167,19 +182,29 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/api/learning/proposals/apply-all', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'merges the CALLER\'s own open proposals into its own policy — no parameter, nothing to cross' } },
   // G2 rungs 1+3: discovered org workloads — org-scoped reads, an
   // enqueue-only refresh, and the explicit adopt/retire routing flips.
-  { method: 'GET', path: '/api/workloads/discovered', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "lists the CALLING org's own discovered workloads — no parameter, nothing to cross" } },
+  // NOT 'skip': it renders org-owned rows, so "no parameter" proves nothing
+  // (see CrossOrgProbe). The org scope lives in listOrgWorkloads' WHERE — the
+  // sweep and workload-adoption.test.ts probe it with two real orgs.
+  { method: 'GET', path: '/api/workloads/discovered', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'orgWorkload', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'POST', path: '/api/workloads/discover', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "enqueues discovery for the CALLING org only — no parameter, nothing to cross" } },
-  { method: 'POST', path: '/api/workloads/:id/adopt', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/adopt', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: "org-scoped listOrgWorkloads lookup → a foreign org's id is a uniform 404 (pinned in workload-adoption.test.ts)" } },
-  { method: 'POST', path: '/api/workloads/:id/retire', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/retire', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: "org-scoped listOrgWorkloads lookup → a foreign org's id is a uniform 404 (pinned in workload-adoption.test.ts)" } },
+  // Also promoted out of 'skip' (2026-09-04): both look the row up through
+  // the same org-scoped listOrgWorkloads, so the sweep can PROBE the claim
+  // with ORG_A's real workload id instead of citing another file for it.
+  { method: 'POST', path: '/api/workloads/:id/adopt', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/adopt', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'orgWorkload', crossOrgProbe: { expect: 'uniform-404' } },
+  { method: 'POST', path: '/api/workloads/:id/retire', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/retire', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'orgWorkload', crossOrgProbe: { expect: 'uniform-404' } },
   // G1 holdout settings: the CALLING org's own consent + rate; the serving
   // swap is chat.ts machinery, not a route.
   { method: 'GET', path: '/api/holdout', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "reads the CALLING org's own holdout config — no parameter, nothing to cross" } },
   { method: 'PUT', path: '/api/holdout', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "writes the CALLING org's own holdout config — no parameter, nothing to cross" } },
   // G1 challenger promotion: org-scoped reads; apply mints the CALLER's own
-  // org frontier from its own measurements (cross-org id → uniform 404 via
-  // getChallengerProposal's org filter, pinned in challengers.test.ts).
-  { method: 'GET', path: '/api/challengers', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'lists the CALLING org\'s own proposals — no parameter, nothing to cross' } },
-  { method: 'POST', path: '/api/challengers/:id/apply', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/challengers/cp-x/apply', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: 'org-scoped getChallengerProposal → a foreign org\'s id is a uniform 404 (pinned in challengers.test.ts)' } },
+  // org frontier from its own measurements. BOTH rows used to skip the probe
+  // — the list on the "no parameter, nothing to cross" fallacy (which a
+  // mutation audit broke: the orgId filter could be deleted from
+  // listChallengerProposals with the whole suite still green), the apply on a
+  // citation. Both are PROBED now: the list must not carry ORG_A's rows, and
+  // ORG_A's real proposal id must 404 uniformly for ORG_B.
+  { method: 'GET', path: '/api/challengers', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', seededResource: 'challengerProposal', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'POST', path: '/api/challengers/:id/apply', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/challengers/cp-x/apply', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'challengerProposal', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'GET', path: '/api/org-settings', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'reads the CALLER\'s own org row — no cross-org parameter exists' } },
   { method: 'PUT', path: '/api/org-settings', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'flips the CALLER\'s own model-semantics flag (0058) — no cross-org parameter exists' } },
   { method: 'PUT', path: '/api/floor', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'sets the CALLER\'s own org-wide floor (new policy row, own keys rebound) — no cross-org parameter exists' } },

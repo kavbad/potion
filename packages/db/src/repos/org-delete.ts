@@ -4,9 +4,23 @@
 // evidence rows AND tombstones included, historical explainability knowingly
 // sacrificed. This is the only code path allowed to hard-delete evidence.
 //
-// The cascade is hand-written and ORDERED: the schema has exactly one FK
-// cascade (derived_suite_items → derived_suites); every other org reference
-// is NO ACTION and would block DELETE FROM orgs. Id sets are SNAPSHOTTED
+// The cascade is hand-written and ORDERED. Of the 51 FKs that reference
+// orgs(id), 37 are NO ACTION — those BLOCK `DELETE FROM orgs` unless this
+// function clears them first — and 14 are ON DELETE CASCADE (the G1/learning/
+// lab tables that landed after G2.7: challenger_proposals, lab_action_grants,
+// lab_custom_connectors, lab_digests, lab_evidence_reports, lab_missions,
+// lab_run_files, lab_run_steers, learning_proposals, org_incumbents,
+// org_workloads, outcomes, router_interpretations, router_versions). Two
+// non-org cascades exist as well: derived_suite_items → derived_suites and
+// lab_run_steps → lab_runs.
+//
+// The CASCADE ones are deleted EXPLICITLY here anyway, so the per-table count
+// ledger names them — but that also means DROPPING one from this list is
+// INVISIBLE end-to-end: Postgres sweeps the rows itself and every "nothing
+// survives" assertion still passes. Only the structural completeness test in
+// org-delete.test.ts catches it, which is why that test must match a DELETE
+// POSITION (`.delete(table)`) and never a bare mention — the import block
+// below names every table in the file. Id sets are SNAPSHOTTED
 // before parents are deleted (the judge_calibrations union and the
 // alert_deliveries cast-join are unreachable afterwards). Platform assets
 // are NEVER touched: models, strategy_configs (content-addressed, shared),
@@ -240,7 +254,8 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
       .where(eq(suiteCertifications.orgId, orgId))
       .returning({ id: suiteCertifications.id }),
   );
-  // derived_suite_items ride the schema's ONE real cascade.
+  // derived_suite_items ride the derived_suites cascade (one of the schema's
+  // two non-org ON DELETE CASCADE edges).
   await count(
     'derived_suites',
     db.delete(derivedSuites).where(eq(derivedSuites.orgId, orgId)).returning({ id: derivedSuites.suiteId }),

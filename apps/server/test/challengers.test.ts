@@ -9,6 +9,7 @@ import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
 import {
   insertApiKey,
+  insertChallengerProposal,
   insertPolicy,
   insertRequestLog,
   insertShadowResult,
@@ -116,6 +117,46 @@ describe('challenger promotion, end to end', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { proposals: Array<{ challengerModel: string; status: string }> };
     expect(body.proposals[0]).toMatchObject({ challengerModel: 'mock-mid', status: 'proposed' });
+  });
+
+  // THE TWO-ORG LIST PIN (mutation audit, 2026-09-04). Every assertion above
+  // reads ONE org, so `eq(challengerProposals.orgId, orgId)` could be deleted
+  // from listChallengerProposals — making one org's list return EVERY org's
+  // proposals — with all 1012 server tests still green. A second org that
+  // owns a proposal of its own is what makes the filter observable; the
+  // assertion is on the EXACT id set, because a list returning everybody's
+  // rows still "contains" the caller's.
+  it("GET /api/challengers returns ONLY the calling org's proposals", async () => {
+    // ORG_A's true set, captured BEFORE ORG_B owns anything — so it is the
+    // right answer even if the repo under test is the thing that is broken.
+    const mine = (await listChallengerProposals(db(), ORG)).map((p) => p.id);
+    expect(mine.length, 'the pin is vacuous unless ORG_A owns a proposal').toBeGreaterThan(0);
+
+    const B_ID = 'cp-orgb-isolation';
+    await insertChallengerProposal(db(), {
+      id: B_ID, orgId: ORG_B, clusterId: 'classification', suiteId: 'classification-replays-v1',
+      servingHash: H_CHEAP, servingModel: 'mock-cheap', servingQuality: 0.8,
+      challengerHash: H_MID, challengerModel: 'mock-mid', challengerQuality: 0.93,
+      retention: { mean: 0.98, ci95: [0.95, 1], floor: 0.7 }, shadow: { n: 35, costPer1K: 0.1 }, items: 35,
+    });
+
+    // the repo itself — the org filter, not the route's rendering
+    expect((await listChallengerProposals(db(), ORG)).map((p) => p.id)).toEqual(mine);
+    expect((await listChallengerProposals(db(), ORG_B)).map((p) => p.id)).toEqual([B_ID]);
+
+    // and over HTTP, under each org's own credential
+    const a = await app.inject({ method: 'GET', url: '/api/challengers', headers: { authorization: `Bearer ${KEY}` } });
+    expect(a.statusCode).toBe(200);
+    const aIds = (a.json() as { proposals: Array<{ id: string }> }).proposals.map((p) => p.id);
+    expect(aIds, "ORG_A's list carried a foreign proposal").toEqual(mine);
+    expect(a.body).not.toContain(B_ID);
+    expect(a.body).not.toContain(ORG_B);
+
+    const b = await app.inject({ method: 'GET', url: '/api/challengers', headers: { authorization: `Bearer ${KEY_B}` } });
+    expect(b.statusCode).toBe(200);
+    const bIds = (b.json() as { proposals: Array<{ id: string }> }).proposals.map((p) => p.id);
+    expect(bIds, "ORG_B's list carried a foreign proposal").toEqual([B_ID]);
+    for (const id of mine) expect(b.body).not.toContain(id);
   });
 
   it("cross-org apply is a uniform 404 — one org can never promote into another's routing", async () => {

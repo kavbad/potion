@@ -116,6 +116,26 @@ describe('deleteOrgCascade', () => {
 // derives the obligation from the SCHEMA, so migration N+1 fails the build
 // rather than shipping the same hole (the route-inventory precedent).
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Is `varName` actually DELETED in the cascade source — as opposed to merely
+ * NAMED in it? The distinction is the entire test: org-delete.ts imports every
+ * table it touches, so a bare `\bvarName\b` match is satisfied by the import
+ * block alone and stays green after the delete is removed (proven by mutation,
+ * 2026-09-04). Matching a delete POSITION closes that. Three call shapes are
+ * legitimate, and all three appear in the file:
+ *   `db.delete(x)`                        — the common form
+ *   `db\n  .delete(x)` / `tx.delete(x)`   — wrapped chains, tail transaction
+ *   `chunkedDeleteByOrg(db, x, orgId)`    — raw-SQL chunked hot tables
+ * `\.delete\(` is anchored on the call, so the receiver (`db`, `tx`, or a
+ * newline-wrapped chain) does not matter; only the argument does.
+ */
+function isDeletedIn(cascadeSrc: string, varName: string): boolean {
+  return (
+    new RegExp(`\\.delete\\(\\s*${varName}\\s*\\)`).test(cascadeSrc) ||
+    new RegExp(`chunkedDeleteByOrg\\(\\s*\\w+\\s*,\\s*${varName}\\s*,`).test(cascadeSrc)
+  );
+}
+
 describe('deleteOrgCascade structural completeness', () => {
   it('every org_id-FK table in the schema is handled by the cascade', async () => {
     const { readFileSync } = await import('node:fs');
@@ -146,7 +166,7 @@ describe('deleteOrgCascade structural completeness', () => {
 
     const unhandled = orgScoped
       .filter((d) => !exempt.has(d.table))
-      .filter((d) => !new RegExp(`\\b${d.varName}\\b`).test(cascadeSrc))
+      .filter((d) => !isDeletedIn(cascadeSrc, d.varName))
       .map((d) => d.table);
 
     expect(
@@ -155,6 +175,48 @@ describe('deleteOrgCascade structural completeness', () => {
         'Add a delete (or an entry to `exempt` with its reason) — a NOT NULL org FK ' +
         'left out of the cascade makes org deletion abort with an FK violation.',
     ).toEqual([]);
+  });
+
+  // The matcher above is the whole test. A mutation audit (2026-09-04) showed
+  // the previous one — `new RegExp('\\b' + varName + '\\b')` — was satisfied by
+  // the IMPORT BLOCK at the top of org-delete.ts, which names every table in
+  // the file: deleting the `lab_harnesses` delete and deleting the
+  // `quality_samples` delete both left this suite GREEN. So the matcher itself
+  // is now tested, by mutation, against a copy of the real source.
+  it('the matcher keys on a DELETE POSITION, not a mention (import-block defeat)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const cascadeSrc = readFileSync(
+      fileURLToPath(new URL('./repos/org-delete.ts', import.meta.url)),
+      'utf8',
+    );
+
+    // Each case: [import identifier, a regex that removes ONLY its delete].
+    // The import line survives every strip — that is the point.
+    const mutations: Array<[string, RegExp]> = [
+      // NO ACTION FK: a live org deletion would abort without this delete.
+      ['labHarnesses', /\n *await count\('lab_harnesses',[\s\S]*?\);/],
+      // ON DELETE CASCADE FK: Postgres would sweep the rows, so NO end-to-end
+      // assertion can see this one go missing. This test is the only guard.
+      ['outcomes', /\n *await count\(\n? *'outcomes',[\s\S]*?\n *\);/],
+      // Chunked raw-SQL delete — a third call shape the matcher must know.
+      ['requestLogs', /\n *deleted\.request_logs = await chunkedDeleteByOrg\([^;]*;/],
+    ];
+
+    for (const [varName, strip] of mutations) {
+      expect(isDeletedIn(cascadeSrc, varName), `${varName} is deleted in the real source`).toBe(
+        true,
+      );
+      const mutated = cascadeSrc.replace(strip, '\n');
+      expect(mutated, `the ${varName} strip actually matched something`).not.toBe(cascadeSrc);
+      expect(mutated, `${varName} is still IMPORTED in the mutated copy`).toMatch(
+        new RegExp(`^\\s*${varName},$`, 'm'),
+      );
+      expect(
+        isDeletedIn(mutated, varName),
+        `matcher must REJECT a source where only the ${varName} import remains`,
+      ).toBe(false);
+    }
   });
 
   it('an org with the FULL guarantee trail deletes cleanly — the case the old fixture missed', async () => {

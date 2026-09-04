@@ -9,7 +9,7 @@
 // ("statistically good enough, not point-estimate good enough").
 import { describe, expect, it } from 'vitest';
 import type { Frontier, FrontierPoint } from './types.js';
-import { qualityLowerBound, selectPoint } from './select.js';
+import { fastestQualityQualifyingPoint, qualityLowerBound, selectPoint } from './select.js';
 
 function pt(hash: string, quality: number, costPer1K: number, over: Partial<FrontierPoint> = {}): FrontierPoint {
   return {
@@ -82,6 +82,44 @@ describe('feasibility tests the PROVEN bound', () => {
     const uncertain = pt('uncertain', 0.96, 1, { evidence: evidenceOf({ qualityCi: [0.93, 0.99] }), latencyP95: 400 });
     expect(selectPoint({ type: 'compound', qualityFloor: 0.95, p95Ms: 1000 }, frontierOf([uncertain]))).toBeNull();
     expect(selectPoint({ type: 'compound', qualityFloor: 0.9, p95Ms: 1000 }, frontierOf([uncertain]))?.strategyHash).toBe('uncertain');
+  });
+});
+
+describe('the latency-violation fallback tests the PROVEN bound too', () => {
+  // The dangerous half of the law. When NO point clears the latency bound,
+  // selectPoint refuses and serving falls back to the FASTEST point that
+  // still meets the quality floor (pareto/src/serving.ts, G2.6 case (ii)) —
+  // so this function decides what gets served precisely when the policy
+  // CANNOT be satisfied. Violating latency is the deliberate trade; the
+  // floor is not, and it may not be met on a mean the evidence never proved.
+  const hasty = pt('hasty', 0.96, 1, { latencyP95: 600, evidence: evidenceOf({ qualityCi: [0.93, 0.99] }) });
+  const proven = pt('proven', 0.96, 4, { latencyP95: 900, evidence: evidenceOf({ qualityCi: [0.955, 0.97] }) });
+  const slowerProven = pt('slower', 0.97, 2, { latencyP95: 1400, evidence: evidenceOf({ qualityCi: [0.96, 0.99] }) });
+
+  it('this fallback is the live code path: no point clears the latency bound', () => {
+    const policy = { type: 'compound', qualityFloor: 0.95, p95Ms: 500 } as const;
+    expect(selectPoint(policy, frontierOf([hasty, proven, slowerProven]))).toBeNull();
+  });
+
+  it('the FASTEST point is refused when only its MEAN clears the floor', () => {
+    // hasty is 300ms quicker and its mean 0.96 reads above the 0.95 floor,
+    // but the interval proves only 0.93. The served point is the fastest
+    // whose lower bound actually clears — proven (900ms), not slower (1400).
+    const served = fastestQualityQualifyingPoint([hasty, proven, slowerProven], 0.95);
+    expect(served?.strategyHash).not.toBe('hasty');
+    expect(served?.strategyHash).toBe('proven');
+    expect(qualityLowerBound(served!)).toBeGreaterThanOrEqual(0.95);
+  });
+
+  it('null when no point PROVES the floor, even one whose mean clears it', () => {
+    // Serving then falls through to its highest-quality fallback rather than
+    // labelling a latency violation it bought with an unproven floor.
+    expect(fastestQualityQualifyingPoint([hasty], 0.95)).toBeNull();
+  });
+
+  it('a legacy point with no interval still qualifies on its mean (no retroactive refusal)', () => {
+    const legacy = pt('legacy', 0.96, 1, { latencyP95: 700 });
+    expect(fastestQualityQualifyingPoint([hasty, legacy, proven], 0.95)?.strategyHash).toBe('legacy');
   });
 });
 

@@ -230,3 +230,43 @@ describe('workload adoption, end to end', () => {
     expect(retireAgain.statusCode).toBe(409);
   });
 });
+
+// THE TWO-ORG LIST PIN (mutation audit, 2026-09-04). Everything above reads
+// the discovered list under ONE org, so `eq(orgWorkloads.orgId, orgId)` could
+// be deleted from listOrgWorkloads and the list route would happily hand one
+// org every org's workloads. A second org owning a workload of its own is
+// what makes the filter observable; the assertion is on the EXACT id set,
+// because a list returning everybody's rows still "contains" the caller's.
+describe('GET /api/workloads/discovered is org-scoped', () => {
+  const WL_B = 'wl-orgb-isolation-1';
+
+  it("returns ONLY the calling org's workloads", async () => {
+    await seedWorkloadRow('measured'); // ORG_A owns exactly WL
+    const [centroid] = await app.potion.embedder.embed([TEXT]);
+    await replaceOrgWorkloads(db(), ORG_B, [
+      {
+        id: WL_B, orgId: ORG_B, parentCluster: parent, sampleCount: 4, cohesion: 0.9,
+        exemplarText: 'org B exemplar', centroid: centroid!, memberTraceIds: [],
+        status: 'observed', threshold: 0.62, windowDays: 30,
+      },
+    ]);
+
+    // the repo itself — the org filter, not the route's rendering
+    expect((await listOrgWorkloads(db(), ORG)).map((w) => w.id)).toEqual([WL]);
+    expect((await listOrgWorkloads(db(), ORG_B)).map((w) => w.id)).toEqual([WL_B]);
+
+    const list = (res: Awaited<ReturnType<typeof app.inject>>): string[] =>
+      (res.json() as { workloads: Array<{ id: string }> }).workloads.map((w) => w.id);
+
+    const a = await app.inject({ method: 'GET', url: '/api/workloads/discovered', headers: { authorization: `Bearer ${KEY}` } });
+    expect(a.statusCode).toBe(200);
+    expect(list(a), "ORG_A's list carried a foreign workload").toEqual([WL]);
+    expect(a.body).not.toContain(WL_B);
+    expect(a.body).not.toContain(ORG_B);
+
+    const b = await app.inject({ method: 'GET', url: '/api/workloads/discovered', headers: { authorization: `Bearer ${KEY_B}` } });
+    expect(b.statusCode).toBe(200);
+    expect(list(b), "ORG_B's list carried a foreign workload").toEqual([WL_B]);
+    expect(b.body).not.toContain(WL);
+  });
+});

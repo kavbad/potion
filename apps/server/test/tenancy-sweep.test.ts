@@ -42,7 +42,9 @@ import {
   upsertLabGrant,
   upsertDerivedSuite,
   upsertLabHarness,
-  upsertStrategyConfig, insertLearningProposal, createInvite } from '@potion/db';
+  upsertStrategyConfig, insertLearningProposal, createInvite,
+  insertChallengerProposal,
+  replaceOrgWorkloads } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { ROUTE_INVENTORY, type RouteInventoryRow } from '../src/security/route-inventory.js';
@@ -74,6 +76,8 @@ const UNKNOWN: Record<string, string> = {
   labRun: 'run-neverexist',
   labGrant: 'grant-neverexist',
   labActionGrant: 'lag-000000000000',
+  challengerProposal: 'cp-does-not-exist',
+  orgWorkload: 'wl-does-not-exist',
 };
 
 let app: FastifyInstance;
@@ -236,6 +240,48 @@ beforeAll(async () => {
     retention: { mean: 0.99 }, suggestedFloor: 0.95, projectedSaving: 0.8, items: 8, spendUsd: 0,
   });
   seeded.proposal = 'lp-sweep-a';
+
+  // G1 challenger promotion + G2 discovered workloads: ORG_A rows for the
+  // two routes whose cross-org probe used to be SKIPPED on the "no
+  // parameter, nothing to cross" argument (mutation audit 2026-09-04 — the
+  // orgId filter could be deleted from listChallengerProposals and the whole
+  // server suite stayed green). Without a real ORG_A row here the probe
+  // would be vacuous: an empty list leaks nothing no matter what the repo
+  // does, so the seed is what gives the assertion teeth.
+  seeded.challengerProposal = 'cp-sweep-a';
+  await insertChallengerProposal(db(), {
+    id: seeded.challengerProposal,
+    orgId: ORG_A,
+    clusterId: seeded.cluster!,
+    suiteId: `${seeded.cluster}-replays-v1`,
+    servingHash: strategyHash(CFG),
+    servingModel: 'mock-mid',
+    servingQuality: 0.9,
+    challengerHash: sha256('sweep-a-challenger'),
+    challengerModel: 'mock-cheap',
+    challengerQuality: 0.88,
+    retention: { mean: 0.98, ci95: [0.95, 1], floor: 0.8 },
+    shadow: { n: 35, costPer1K: 0.1 },
+    items: 35,
+  });
+
+  seeded.orgWorkload = 'wl-sweepa-1';
+  await replaceOrgWorkloads(db(), ORG_A, [
+    {
+      id: seeded.orgWorkload,
+      orgId: ORG_A,
+      parentCluster: 'classification',
+      sampleCount: 6,
+      cohesion: 0.93,
+      exemplarText: 'sweep A workload exemplar',
+      centroid: [0.1, 0.2],
+      memberTraceIds: [],
+      status: 'observed',
+      threshold: 0.62,
+      windowDays: 30,
+    },
+  ]);
+
   // Team invites (P0-2): an ORG_A invite for the cross-org uniform-404 probe.
   const inv = await createInvite(db(), { orgId: ORG_A, email: 'sweep@invites.co', role: 'viewer', invitedBy: 'sweep' });
   seeded.invite = inv.id;
