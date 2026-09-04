@@ -135,6 +135,14 @@ generation is promoted.
   Delta/Auditor/the gate. Trigger:
   `POST /api/research/frontier-notes {"measure":"dry"|"run"}` (dry plans
   without spending); `GET` reports arm state and any running measurement.
+  **ARMED on prod 2026-09-04 by operator order** (`POTION_OBSERVATORY_ARM=2026-09-04`
+  appended to `.env.prod`, backup `.env.prod.bak-202609040447`). First
+  automated measurement: **Monday 2026-09-07, 06:00 PT** (W37). Expected
+  spend ≈ $8/week (10 canaries $2 + 3 auditions $6) inside the $50
+  monthly envelope. Belts verified live at arm time: the week guard
+  refused a real `run` for an already-measured week, and a `dry` spawn
+  succeeded while creating no week lock. **To disarm: remove that line
+  and recreate the server.**
 - **F6 — the daily cadence — SHIPPED (05026b3)**: `dailyLedgerTick`
   runs beside the weekly on the same 60s clock. The daily UNIT is the
   ledger of what the instruments did in 24h (cycles, candidates swept,
