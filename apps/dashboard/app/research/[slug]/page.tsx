@@ -69,7 +69,7 @@ export default async function IssuePage({ params }: Params) {
             <p key={para.slice(0, 40)} className="mt-6 text-[16px] leading-relaxed text-ink">{para}</p>
           ))}
           <p className="mt-8 border-t border-dashed border-[#d9d5cb] pt-4 text-[13.5px] leading-relaxed text-soft">
-            {i.plain} The current numbers live on{' '}
+            The current numbers live on{' '}
             <Link href="/answers" className="text-accent underline">the measured answers</Link>; the method is{' '}
             <Link href="/research/methodology" className="text-accent underline">public</Link>.
           </p>
@@ -270,7 +270,7 @@ export default async function IssuePage({ params }: Params) {
             </div>
             <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
               This issue was written by <span className="font-medium text-ink">{i.byline}</span>, a persistent Potion worker, in a recorded run —{' '}
-              <span className="font-mono text-ink">{i.writer.runId}</span>, ${i.writer.costUsd.toFixed(4)} metered. The byline is a provenance claim the record backs: the draft, every
+              <span className="font-mono text-ink">{i.writer.runId}</span>. The byline is a provenance claim the record backs: the draft, every
               tool step, and the judge&apos;s verdict are on the run.
               {i.writer.verifiedBy && (
                 <>

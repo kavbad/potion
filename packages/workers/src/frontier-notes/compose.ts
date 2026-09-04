@@ -37,9 +37,20 @@ function isWithheld(model: string, extra: readonly string[]): boolean {
   });
 }
 
+/**
+ * The routing prefix is ours, not the model's. Potion's catalogue addresses
+ * OpenRouter-served models as `or-<name>`; a reader has never seen that
+ * prefix and it makes published prose read like a config file (found live
+ * 2026-09-04: the daily piece named "or-grok-4.6"). Stripped for print
+ * only — the withheld check above always runs on the real alias.
+ */
+export function displayName(model: string): string {
+  return model.replace(/^or-/, '');
+}
+
 /** Public name or the literal 'name withheld'. */
 export function publicName(model: string, extra: readonly string[] = []): string {
-  return isWithheld(model, extra) ? 'name withheld' : model;
+  return isWithheld(model, extra) ? 'name withheld' : displayName(model);
 }
 
 /**

@@ -3,6 +3,7 @@
 // nothing it cannot prove.
 import { describe, expect, it } from 'vitest';
 import { claimKey, generateAgenda, generateCatalogueAgenda, renderAgenda, type ClusterSignal } from './agenda.js';
+import { auditPieceNumbers } from './piece.js';
 
 const NOW = new Date('2026-09-04T12:00:00Z');
 
@@ -33,7 +34,9 @@ describe('the agenda', () => {
     expect(a[0]!.headline).toMatch(/last 2\.1 points of code gen quality cost 296×/);
     // Every number in the headline is in the evidence the writer will get.
     expect(a[0]!.evidence.factor).toBe(295.6);
-    expect(a[0]!.evidence.topModel).toBe('or-grok-4.6');
+    // THE ROUTING PREFIX IS OURS: `or-` addresses the provider, not the
+    // model, and a reader has never seen it. Print names, not config.
+    expect(a[0]!.evidence.topModel).toBe('grok-4.6');
     // THE DISCLOSURE LAW: a routed pick's NAME is withheld while its
     // numbers publish — so the agenda emits the public name, and the
     // piece is publishable by construction instead of dying at the gate.
@@ -192,5 +195,34 @@ describe('the catalogue generators (price economics)', () => {
 
   it('stays silent on a catalogue too small to say anything', () => {
     expect(generateCatalogueAgenda({ entries: entries.slice(0, 4), now: NOW })).toEqual([]);
+  });
+});
+
+// A NAME IS NOT A CLAIM (found live 2026-09-04, run-0a9de197): the number
+// law read the "4.6" in `grok-4.6` as an invented figure and refused the
+// draft. Since every piece worth publishing names its models, the writer
+// lane was dead and the composed fallback published every single day.
+describe('the piece number law', () => {
+  const candidate = {
+    id: 'quality-premium:code-gen', kind: 'quality-premium' as const, clusterId: 'code-gen',
+    headline: 'The last 2.1 points of code gen quality cost 296×',
+    dek: 'One model scored 1.000 at $6.85 while another scored 0.979 at $0.0232.',
+    demandQuery: 'q',
+    evidence: { topModel: 'grok-4.6', topQuality: 1, topCostPer1K: 6.8463, cheapModel: 'name withheld', cheapQuality: 0.9795, cheapCostPer1K: 0.0232, factor: 295.6, qualityPoints: 2.1, n: 94 },
+    scores: { demand: 1, magnitude: 1, evidence: 1, novelty: 1 }, score: 0.99, why: 'w',
+  };
+  const draft = (over: Partial<Record<string, string>> = {}) => ({
+    title: 'T', summary: 'S', plain: 'P', lede: 'L', frontierNote: '', auditionNote: '', mixingNote: '', takeaway: 'T2', faq: [], ...over,
+  });
+  const NOW = new Date('2026-09-04T17:00:00.000Z');
+
+  it('lets a piece name the models it compares', () => {
+    for (const name of ['grok-4.6', 'gpt-5', 'claude-sonnet-4.5', 'llama-3.3-70b', 'deepseek-v4-flash-0731']) {
+      expect(auditPieceNumbers(draft({ plain: `${name} leads this suite.` }) as never, candidate as never, NOW)).toBeNull();
+    }
+  });
+
+  it('still refuses a figure the evidence does not contain', () => {
+    expect(auditPieceNumbers(draft({ plain: 'It is 47 times cheaper.' }) as never, candidate as never, NOW)).toMatch(/"47"/);
   });
 });

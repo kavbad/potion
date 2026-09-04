@@ -7,6 +7,7 @@
 // page, including the fact sheet's own names.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { auditNoOwnSpend } from './lint.js';
 import { assertPublishable } from './redact.js';
 import type { FactSheet, Issue } from './types.js';
 import { METHOD_NOTE, type Draft } from './write.js';
@@ -72,26 +73,22 @@ export function publishableText(i: Omit<Issue, 'status' | 'heldReason'>): string
   ].join('\n');
 }
 
-/** F6: the daily ledger renders as prose — no frontier table, no FAQ. */
+/** A daily piece renders as an article — no frontier table, no FAQ, and no
+ * section headings: three paragraphs do not need three of them, and the
+ * "In plain words / The ledger / What it means for you" scaffold printed
+ * the same sentences twice (found live 2026-09-04). The body is the piece;
+ * the takeaway is appended only for older issues that kept it outside. */
 function renderDailyMarkdown(i: Issue): string {
+  const body = i.body ?? i.lede;
+  const paras = [...body.split('\n\n'), ...(i.takeaway && !body.includes(i.takeaway) ? [i.takeaway] : [])];
   return [
     `# ${i.title}`,
     '',
     `*Frontier Notes · daily · ${i.week} · ${i.byline}*${i.status === 'held' ? `\n\n> HELD: ${i.heldReason}` : ''}`,
     '',
-    '## In plain words',
-    '',
-    i.plain,
-    '',
-    '## The ledger',
-    '',
-    ...(i.body ?? i.lede).split('\n\n').flatMap((p) => [p, '']),
-    '## What it means for you',
-    '',
-    i.takeaway,
-    '',
+    ...paras.filter((p) => p.trim() !== '').flatMap((p) => [p, '']),
     ...(i.writer?.runId
-      ? ['---', '', `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}), $${i.writer.costUsd.toFixed(4)} metered.${i.writer.verifiedBy ? ` Verified by Auditor, a Potion research-integrity worker, in a recorded run (${i.writer.verifiedBy.runId}).` : ''}*`, '']
+      ? ['---', '', `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}).${i.writer.verifiedBy ? ` Verified by Auditor, a Potion research-integrity worker, in a recorded run (${i.writer.verifiedBy.runId}).` : ''}*`, '']
       : []),
   ].join('\n');
 }
@@ -156,7 +153,7 @@ export function renderMarkdown(i: Issue): string {
       ? [
           '---',
           '',
-          `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}), $${i.writer.costUsd.toFixed(4)} metered.${
+          `*Written by ${i.byline} in a recorded worker run (${i.writer.runId}).${
             i.writer.verifiedBy ? ` Verified by Auditor, a Potion research-integrity worker, in a recorded run (${i.writer.verifiedBy.runId}).` : ''
           }*`,
           '',
@@ -176,9 +173,18 @@ export function renderMarkdown(i: Issue): string {
 
 export function writeIssue(dir: string, issue: Issue): { json: string; md: string } {
   mkdirSync(dir, { recursive: true });
-  const json = `${dir}/${issue.week}.json`;
-  const md = `${dir}/${issue.week}.md`;
-  writeFileSync(json, JSON.stringify(issue, null, 1) + '\n');
-  writeFileSync(md, renderMarkdown(issue));
+  // THE OWN-SPEND LAW, applied to the page rather than the draft. A template
+  // can publish a figure the writer never wrote, so the last thing checked
+  // before an issue becomes a file is the file itself; a hit holds the issue
+  // instead of printing it.
+  let out = issue;
+  if (out.status === 'published') {
+    const leak = auditNoOwnSpend(renderMarkdown(out));
+    if (leak !== null) out = { ...out, status: 'held', heldReason: leak };
+  }
+  const json = `${dir}/${out.week}.json`;
+  const md = `${dir}/${out.week}.md`;
+  writeFileSync(json, JSON.stringify(out, null, 1) + '\n');
+  writeFileSync(md, renderMarkdown(out));
   return { json, md };
 }

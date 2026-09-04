@@ -44,9 +44,9 @@ describe('frontier-notes compose', () => {
   it('withholds names and keeps numbers', () => {
     const f = composeFactSheet(run, replays);
     expect(f.frontier.find((c) => c.clusterId === 'classification')?.pick).toBe('name withheld');
-    expect(f.frontier.find((c) => c.clusterId === 'creative')?.pick).toBe('or-sonnet');
+    expect(f.frontier.find((c) => c.clusterId === 'creative')?.pick).toBe('sonnet');
     expect(f.frontier[0]?.storedQuality).toBe(0.976);
-    expect(publicName('or-gpt-mini')).toBe('or-gpt-mini');
+    expect(publicName('or-gpt-mini')).toBe('gpt-mini');
     expect(publicName('upstage/solar-pro-4')).toBe('name withheld');
   });
 

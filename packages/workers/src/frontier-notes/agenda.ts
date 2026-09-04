@@ -102,9 +102,9 @@ const KIND_DEMAND: Record<CandidateKind, number> = {
   'category-explainer': 0.6,
 };
 
-const money = (x: number) => (x >= 1 ? `$${x.toFixed(2)}` : `$${x.toFixed(4)}`);
+export const money = (x: number) => (x >= 1 ? `$${x.toFixed(2)}` : `$${x.toFixed(4)}`);
 const q3 = (x: number) => x.toFixed(3);
-const ratio = (x: number) => (x >= 100 ? `${Math.round(x)}×` : x >= 10 ? `${x.toFixed(0)}×` : `${x.toFixed(1)}×`);
+export const ratio = (x: number) => (x >= 100 ? `${Math.round(x)}×` : x >= 10 ? `${x.toFixed(0)}×` : `${x.toFixed(1)}×`);
 
 /** Magnitude on a log scale: a 300× premium is a story, 1.4× is a footnote. */
 function magnitudeScore(x: number): number {

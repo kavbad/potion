@@ -64,6 +64,11 @@ const OWN_SPEND_PATTERNS: Array<{ re: RegExp; what: string }> = [
   { re: /\b(measurement|research|instrument|canary|audition)s?\b[^.]{0,30}\b(spend|spent|budget)\b/i, what: 'the measurement budget' },
   { re: /\bspend(ing)?\b[^.]{0,20}\b(was|of|totall?ed|came to)\b[^.]{0,10}\$/i, what: 'a spend total' },
   { re: /\$[\d.]+\s*(to run|for the (week|day|run|check|sweep))/i, what: 'the price of running our own week' },
+  // The provenance footer published "$0.0031 metered" — our own writer bill,
+  // on the page, under every piece (found live 2026-09-04). A figure the
+  // prose never wrote still reached the reader through the template, so the
+  // law now runs over the rendered page and not only over the draft.
+  { re: /\$[\d.]+\s*metered/i, what: "the writer run's metered cost" },
 ];
 
 /** Returns the violation, or null. Model prices per request are untouched. */

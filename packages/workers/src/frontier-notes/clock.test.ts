@@ -229,7 +229,7 @@ describe('the state machine', () => {
     expect(w.log.join(' ')).toMatch(/states "900".*not in its evidence/);
     expect(issue.title).toMatch(/last 2\.1 points of code gen quality cost 296×/);
     expect(issue.agenda?.id).toBe('quality-premium:code-gen');
-    expect(issue.agenda?.claimKey).toContain('or-grok-4.6');
+    expect(issue.agenda?.claimKey).toContain('grok-4.6');
     // The ledger is a FOOTER now, never the headline.
     expect(issue.auditionNote).toMatch(/3 measurement cycles/);
     expect(issue.title).not.toMatch(/cycles/);
