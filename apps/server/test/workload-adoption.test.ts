@@ -9,7 +9,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
-import { insertApiKey, insertEvalResult, insertPolicy, listOrgWorkloads, replaceOrgWorkloads } from '@potion/db';
+import { insertApiKey, insertEvalResult, insertPolicy, listOrgWorkloads, orgWorkloads, replaceOrgWorkloads } from '@potion/db';
+import { and, eq } from 'drizzle-orm';
 import { loadCurrentFrontier, saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { bustWorkloadRoutingCache } from '../src/routing/workload-assignment.js';
@@ -140,6 +141,71 @@ describe('workload adoption, end to end', () => {
     expect(trace).toContain(`cluster=${WL}`);
     expect(trace).toContain(`parent=${parent}`);
     expect(res.headers['x-potion-model']).toBe('mock-mid');
+  });
+
+  // THE GATE IS READ FROM THE ROW. Without this, setting the threshold to 0
+  // — or ignoring it entirely — changed nothing: the only sub-assignment
+  // test used a request that matched anyway, so the stored value was dead
+  // weight that no test consulted (mutation audit, 2026-09-04).
+  it('a similarity below the row’s own threshold does not sub-assign', async () => {
+    const row = (await listOrgWorkloads(db(), ORG)).find((w) => w.id === WL)!;
+    // Raise the gate above any attainable cosine, leaving everything else
+    // identical to the passing case above. Only the stored number changed,
+    // so only the stored number can explain the difference.
+    await db().update(orgWorkloads).set({ threshold: 1.1 })
+      .where(and(eq(orgWorkloads.orgId, ORG), eq(orgWorkloads.id, WL)));
+    bustWorkloadRoutingCache(ORG);
+    const res = await chat(KEY);
+    expect(res.statusCode).toBe(200);
+    const trace = res.headers['x-frontier-trace'] as string;
+    expect(trace).toContain(`cluster=${parent}`);
+    expect(trace).not.toContain('parent=');
+    expect(res.headers['x-potion-model']).toBe('mock-cheap');
+
+    // Restore the row's gate and the same request sub-assigns again.
+    await db().update(orgWorkloads).set({ threshold: row.threshold })
+      .where(and(eq(orgWorkloads.orgId, ORG), eq(orgWorkloads.id, WL)));
+    bustWorkloadRoutingCache(ORG);
+    const again = await chat(KEY);
+    expect(again.headers['x-frontier-trace'] as string).toContain(`cluster=${WL}`);
+  });
+
+  // THE PRE-CHECK FAILS OPEN TO THE PARENT. Previously the only thing
+  // guarding this was a regex asserting guardFrontierProvenance still
+  // APPEARED in the file — keeping the call and ignoring its result shipped
+  // green. An adopted workload whose frontier is gone must serve the parent,
+  // never drop through to the default strategy.
+  it('an adopted workload with no servable frontier falls open to the parent', async () => {
+    const saved = await loadCurrentFrontier(db(), WL, ORG);
+    expect(saved).not.toBeNull(); // it is adopted, so one exists
+    // Supersede it with an empty one — the state a retired or fully-excluded
+    // frontier leaves behind, and exactly what the pre-check tests for.
+    await saveFrontier(db(), WL, [], 'recompute', app.potion.prices.version, {
+      orgId: ORG,
+      provenance: { suiteId: `learn-${WL}-v1` },
+    });
+    const gone = await loadCurrentFrontier(db(), WL, ORG);
+    expect(gone === null || gone.points.length === 0, 'the workload must have nothing servable').toBe(true);
+    bustWorkloadRoutingCache(ORG);
+
+    const res = await chat(KEY);
+    expect(res.statusCode).toBe(200);
+    const trace = res.headers['x-frontier-trace'] as string;
+    // The parent, on the parent's measured point — not the workload id, and
+    // not a fallback: falling through would serve the default strategy.
+    expect(trace).toContain(`cluster=${parent}`);
+    expect(trace).not.toContain('parent=');
+    expect(trace).toContain('fallback=0');
+    expect(res.headers['x-potion-model']).toBe('mock-cheap');
+
+    // Put it back so the retire test below still has an adopted, servable
+    // workload to hand back.
+    await saveFrontier(db(), WL, saved!.points, 'recompute', app.potion.prices.version, {
+      orgId: ORG,
+      provenance: { suiteId: `learn-${WL}-v1` },
+    });
+    bustWorkloadRoutingCache(ORG);
+    expect((await chat(KEY)).headers['x-frontier-trace'] as string).toContain(`cluster=${WL}`);
   });
 
   it('a hinted request never sub-assigns — the hint path has no vector', async () => {

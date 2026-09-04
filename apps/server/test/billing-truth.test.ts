@@ -231,20 +231,30 @@ describe('pricing v2: at cost plus a share of VERIFIED savings', () => {
   it('the share bills 25% of the HOLDOUT-VERIFIED lower bound — hand-computed to the cent', async () => {
     const db = app.potion.db.db;
     await createOrg(db, { id: 'org-v2holdout', name: 'V2 Holdout Co' });
+    // THE PROJECTED NUMBER IS DELIBERATELY FAR FROM THE VERIFIED ONE.
+    // baseline $5 − cost $0.2 → projected $4.80, against a verified figure
+    // near $0.80. When these were both $0.80 (baselineCostUsd: 1) billing the
+    // projection was numerically indistinguishable from billing the verified
+    // lower bound, so nothing here could catch the wrong basis.
     await db.insert(usageDaily).values({
       orgId: 'org-v2holdout', day: '2026-08-05', clusterId: 'code-gen',
       requests: 100, inputTokens: 1000, outputTokens: 2000,
-      costUsd: 0.2, platformCostUsd: 0.2, baselineCostUsd: 1,
+      costUsd: 0.2, platformCostUsd: 0.2, baselineCostUsd: 5,
     });
     await upsertOrgIncumbents(db, { orgId: 'org-v2holdout', models: ['mock-frontier'], other: null, samplingConsent: true });
     await setHoldoutConfig(db, 'org-v2holdout', { consent: true, rate: 0.03 });
     const ts = new Date('2026-08-10T12:00:00Z');
-    // 35 randomized incumbent requests at a CONSTANT $0.01 → mean 0.01,
-    // degenerate CI [0.01, 0.01] — the lower bound is exact by construction.
-    for (let i = 0; i < 35; i += 1) {
+    // 35 randomized incumbent requests with SPREAD costs averaging $0.01.
+    // The spread is the point: a constant $0.01 gives a degenerate interval
+    // where mean === lower bound, so billing the mean and billing the lower
+    // bound produce the same cents and no test can tell them apart. With
+    // variance the bound sits strictly below the mean, and the assertions
+    // below pin which one the invoice used.
+    const holdoutCosts = Array.from({ length: 35 }, (_, i) => (i % 5 === 0 ? 0.026 : 0.006));
+    for (const costUsd of holdoutCosts) {
       await insertRequestLog(db, {
         orgId: 'org-v2holdout', clusterId: 'code-gen', strategyHash: 'h-incumbent', model: 'mock-frontier',
-        status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.01, latencyMs: 300 }, latencyMs: 300, holdout: true, ts,
+        status: 'ok', usage: { inputTokens: 120, outputTokens: 60, costUsd, latencyMs: 300 }, latencyMs: 300, holdout: true, ts,
       });
     }
     // 100 routed requests, $0.002 each → routed spend $0.2.
@@ -255,20 +265,39 @@ describe('pricing v2: at cost plus a share of VERIFIED savings', () => {
       });
     }
     const inv = await generateInvoice(db, 'org-v2holdout', '2026-08', BASIS);
-    // without-Potion = 0.01 × 100 routed = $1.00 (lower bound identical:
-    // constant costs) → verified savings = 1.00 − 0.20 = $0.80 → share
-    // 25% = 20 cents.
     expect(inv.verified.status).toBe('verified');
-    expect(inv.verified.verifiedSavingsLowerUsd).toBeCloseTo(0.8, 8);
     expect(inv.savingsShareLine).not.toBeNull();
-    expect(inv.savingsShareLine!.basisUsd).toBeCloseTo(0.8, 8);
-    expect(inv.savingsShareLine!.amountCents).toBe(20);
+
+    // ---- the three candidate bases must be DISTINCT, or nothing below
+    // discriminates. Assert the separation itself first, so a future fixture
+    // that collapses them fails here rather than silently going vacuous.
+    const lower = inv.verified.verifiedSavingsLowerUsd!;
+    const mean = inv.verified.verifiedSavingsUsd!;
+    const projected = inv.totals.projectedSavedUsd;
+    expect(lower, 'spread holdout costs must put the bound BELOW the mean').toBeLessThan(mean);
+    expect(projected, 'projected must differ from verified, or "bills the projection" passes').toBeGreaterThan(mean + 1);
+
+    // ---- the invariant: the share is 25% of the VERIFIED LOWER BOUND.
+    // Money is integer cents, so each candidate is rounded the way the
+    // invoice rounds it, then compared. Billing the mean, or the projection,
+    // now lands on a different number of cents.
+    const cents = (usd: number): number => Math.round(usd * 100);
+    const shareOf = (usd: number): number => Math.round((cents(usd) * 25) / 100);
+    expect(inv.savingsShareLine!.basisUsd).toBeCloseTo(cents(lower) / 100, 8);
+    expect(inv.savingsShareLine!.amountCents).toBe(shareOf(lower));
+    expect(inv.savingsShareLine!.amountCents).not.toBe(shareOf(mean));
+    expect(inv.savingsShareLine!.amountCents).not.toBe(shareOf(projected));
     expect(inv.savingsShareLine!.description).toContain('lower bound');
-    expect(inv.totals.savingsShareUsd).toBe(0.2);
-    expect(inv.totals.totalUsd).toBe(0.4); // platform 0.2 + share 0.2
-    // The alignment property, now against the MEASURED counterfactual:
-    // what the customer pays is less than their own incumbent's measured
-    // cost for the routed traffic.
-    expect(inv.totals.totalUsd).toBeLessThan(1.0);
+
+    // The projection stays on the invoice as context and is billed for
+    // nothing: the total is platform cost plus the verified share alone.
+    expect(inv.totals.savingsShareUsd).toBeCloseTo(shareOf(lower) / 100, 8);
+    expect(inv.totals.totalUsd).toBeCloseTo(0.2 + shareOf(lower) / 100, 8);
+    expect(inv.totals.totalUsd).toBeLessThan(shareOf(projected) / 100);
+
+    // The alignment property, against the MEASURED counterfactual: what the
+    // customer pays is less than their own incumbent's measured cost for the
+    // routed traffic.
+    expect(inv.totals.totalUsd).toBeLessThan(mean + 0.2);
   });
 });
