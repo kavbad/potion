@@ -69,6 +69,15 @@ export default async function IssuePage({ params }: Params) {
             <p key={para.slice(0, 40)} className="mt-6 text-[16px] leading-relaxed text-ink">{para}</p>
           ))}
           <p className="mt-8 border-t border-dashed border-[#d9d5cb] pt-4 text-[13.5px] leading-relaxed text-soft">
+            {/* The byline is a provenance claim, and a daily piece earns it
+                the same way a weekly one does — the run id is the receipt. */}
+            {i.writer?.runId ? (
+              <>
+                Written by {i.byline} in a recorded worker run (
+                <span className="font-mono text-[12.5px] text-ink">{i.writer.runId}</span>)
+                {i.writer.verifiedBy ? <>, verified by Auditor (<span className="font-mono text-[12.5px] text-ink">{i.writer.verifiedBy.runId}</span>)</> : null}.{' '}
+              </>
+            ) : null}
             The current numbers live on{' '}
             <Link href="/answers" className="text-accent underline">the measured answers</Link>; the method is{' '}
             <Link href="/research/methodology" className="text-accent underline">public</Link>.

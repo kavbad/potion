@@ -183,6 +183,30 @@ publishes (F4) → every day files a ledger (F6) → the magazine renders it
 (F7). No operator machine is in the loop for any of it; the operator's
 remaining levers are the arm date, the standing grant, and the veto.
 
+## Laws grown from published pages (2026-09-04)
+
+Three defects that only reading the published artifact could find. All
+three passed every test and logged success.
+
+- **A name is not a claim.** The piece number law read the "4.6" in
+  `grok-4.6` as an invented figure and refused the draft (`run-0a9de197`).
+  Because every piece worth publishing names its models, the writer lane
+  was effectively dead and the composed fallback published *every day* —
+  the logs said "writing refused / the composed piece publishes", which
+  read like a rare safety net rather than the daily norm it had become.
+  Names are now stripped before figures are read.
+- **The routing prefix is ours.** `or-` addresses the provider inside
+  Potion's catalogue. `publicName()` passed it straight through, so the
+  page printed `or-grok-4.6`. It now prints the model, not the config.
+- **The own-spend law had to reach the page, not just the draft.** The
+  provenance footer published `$0.0031 metered` — our own writer bill,
+  under every piece. The draft lint could not see it because the
+  *template* wrote it. `writeIssue` now runs the law over the rendered
+  markdown and holds the issue if it trips.
+
+The general rule this keeps proving: **a guard that only sees the model's
+output cannot see what the code around it prints.** Lint the artifact.
+
 ## Filed follow-ups
 - **runx- sessions on the dashboard run route**: the gate session's
   recorded resolutions are read via `DATABASE_URL` by the release script
