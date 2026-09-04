@@ -48,21 +48,61 @@ MAX_OUTPUT_TOTAL = 64 * 1024 * 1024
 MAX_STREAM_BYTES = 64 * 1024  # stdout/stderr each, truncated with a marker
 RLIMIT_AS_BYTES = 768 * 1024 * 1024
 RLIMIT_CPU_S = 60
-RLIMIT_NPROC = 64
+RLIMIT_NPROC_HEADROOM = 64
+
+
+def _uid_process_count():
+    """How many processes this real UID already owns, or None if unknowable.
+
+    RLIMIT_NPROC is counted PER REAL UID across the whole host, not per
+    process tree. A fixed ceiling therefore says "this exec cannot fork-bomb"
+    only where the sandbox OWNS its uid — true in the prod container (its own
+    USER, a handful of processes), false anywhere the uid is shared. On a CI
+    runner the uid owns the entire box, so a ceiling of 64 is already spent
+    and the sandboxed shell cannot fork at all: `git` fails, `set -e` aborts,
+    and the exec produces nothing while looking like it ran. That is exactly
+    the Darwin failure this file already documents; Linux was never immune,
+    only usually lucky.
+    """
+    uid = os.getuid()
+    try:
+        n = 0
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                if os.stat("/proc/" + entry).st_uid == uid:
+                    n += 1
+            except OSError:
+                pass  # the process exited mid-scan; it does not count
+        return n
+    except OSError:
+        return None  # no /proc (macOS): fall through to skipping the limit
+
+
+# Measured once at startup: the count drifts, the headroom absorbs it, and the
+# parent's wall-clock kill is the backstop that holds regardless.
+_NPROC_BASE = _uid_process_count()
 
 
 def child_limits():
-    # Each limit is best-effort: they all apply on the Linux prod container;
-    # macOS dev refuses some (notably RLIMIT_AS), and NPROC is skipped there
-    # outright — Darwin counts it PER USER, so a dev machine's hundreds of
-    # processes make bash unable to fork at all (X7 found this via the
-    # shell). The wall-clock kill in the parent holds everywhere.
+    # Each limit is best-effort: macOS dev refuses some (notably RLIMIT_AS).
+    # NPROC is applied as HEADROOM over the uid's existing processes wherever
+    # that count is knowable (/proc), and skipped where it is not (macOS) —
+    # the same outcome Darwin had before, now reached by the real condition
+    # rather than by a platform name. The wall-clock kill in the parent holds
+    # everywhere.
     limits = [
         (resource.RLIMIT_AS, RLIMIT_AS_BYTES),
         (resource.RLIMIT_CPU, RLIMIT_CPU_S),
     ]
-    if sys.platform != "darwin":
-        limits.append((resource.RLIMIT_NPROC, RLIMIT_NPROC))
+    # HEADROOM, not an absolute: the cap is what this exec may add on top of
+    # what the uid already runs, which is the property actually wanted ("this
+    # snippet cannot fork-bomb") and is true whether or not the uid is
+    # dedicated. In the prod container _NPROC_BASE is a handful, so the
+    # effective ceiling stays ~64 — unchanged from before.
+    if _NPROC_BASE is not None:
+        limits.append((resource.RLIMIT_NPROC, _NPROC_BASE + RLIMIT_NPROC_HEADROOM))
     for lim, val in limits:
         try:
             resource.setrlimit(lim, (val, val))
