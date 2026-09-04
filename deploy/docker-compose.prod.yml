@@ -168,6 +168,10 @@ services:
       # defaulted: the clock's ON state is safe to commit, spending is not.
       # Set POTION_OBSERVATORY_ARM=YYYY-MM-DD in .env.prod to arm Mondays.
       POTION_OBSERVATORY_ARM: ${POTION_OBSERVATORY_ARM:-}
+      # F6: the DAILY framing generation (scripts/delta-daily-hire.ts).
+      # Unset = the code-composed ledger publishes unframed — still a post
+      # every day, just without the model's plain-words opening.
+      POTION_RESEARCH_DELTA_DAILY_HARNESS: ${POTION_RESEARCH_DELTA_DAILY_HARNESS:-}
     # F4: the research mount (rw — the clock writes notes + its state files;
     # the dashboard keeps its own ro mount of artifacts/notes).
     volumes:

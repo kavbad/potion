@@ -52,7 +52,16 @@ export interface DailyIo {
   readRunFile(runId: string, name: string): Promise<string | null>;
   readState(week: string): ClockState | null;
   writeState(state: ClockState, opts?: { exclusive?: boolean }): boolean;
-  deltaHarness: string;
+  /** The DAILY framing generation (its mission reads ledger.json and writes
+   * daily.json). Absent = no framing attempt at all: the code-composed
+   * ledger publishes on its own. NEVER fall back to the weekly harness —
+   * a worker briefed on fact sheets, handed a ledger, parks and asks
+   * (found live 2026-09-04: run-c7507c2c wedged the day). */
+  deltaHarness: string | null;
+  /** A framing run that has not finished within this window is abandoned and
+   * the ledger publishes anyway. The day is never missed for a slow model.
+   * Default 20 minutes. */
+  framingDeadlineMs?: number;
   log(line: string): void;
 }
 
@@ -60,33 +69,48 @@ export interface DailyIo {
  * is always publishable, so the model draft is an IMPROVEMENT attempt, never
  * a gate — one attempt per tick, and the deterministic ledger ships if it
  * does not pass. Publishing a daily needs no gate ask: the content is
- * code-composed and the weekly's publish grant covers the class. */
+ * code-composed and the weekly's publish grant covers the class.
+ *
+ * THE DAY IS NEVER MISSED. Every path out of a framing attempt — parked,
+ * failed, slow, unparseable, number-law refused, or no harness at all —
+ * publishes the code-composed ledger. A daily lane that can wait on a human
+ * is a lane that stops publishing. */
 export async function dailyLedgerTick(io: DailyIo): Promise<string | null> {
   const facts = await io.dailyFacts();
   const day = facts.day;
   if (io.readIssue(day) !== null) return null; // today is filed
   const state = io.readState(day);
 
-  // Start: one Delta framing attempt, once per day.
+  // Start: one framing attempt, once per day — or none at all when no
+  // daily generation is configured.
   if (state === null) {
     if (!io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1 }, { exclusive: true })) return null;
-    const runId = await io.startWorkerRun(io.deltaHarness, { name: 'ledger.json', content: JSON.stringify(facts, null, 1) });
-    io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId });
-    io.log(`fnotes daily ${day}: Delta framing in ${runId}`);
-    return `daily-delta:${runId}`;
+    if (io.deltaHarness === null) {
+      io.log(`fnotes daily ${day}: no daily framing generation — publishing the composed ledger`);
+    } else {
+      const runId = await io.startWorkerRun(io.deltaHarness, { name: 'ledger.json', content: JSON.stringify(facts, null, 1) });
+      io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId });
+      io.log(`fnotes daily ${day}: framing in ${runId}`);
+      return `daily-delta:${runId}`;
+    }
   }
-  if (state.phase === 'done') return null;
+  if (state?.phase === 'done') return null;
 
   let draft = deterministicDailyDraft(facts);
   let writer: Issue['writer'] = null;
   let note = 'deterministic ledger';
-  if (state.deltaRunId) {
+  if (state?.deltaRunId) {
     const terminal = await io.runTerminalState(state.deltaRunId);
-    if (terminal === null) return null; // still framing
+    const startedMs = Date.parse(state.startedAt);
+    const overdue = Number.isFinite(startedMs) && io.now().getTime() - startedMs > (io.framingDeadlineMs ?? 20 * 60_000);
+    // Still framing AND inside the window: wait. Past the window: abandon it
+    // and publish — a slow or wedged run must never cost the day.
+    if (terminal === null && !overdue) return null;
     const text = terminal === 'completed' ? await io.readRunFile(state.deltaRunId, 'daily.json') : null;
     const parsed = text !== null ? parseDraft(normalizeDraftText(text), draft) : null;
-    const violation = parsed === null ? 'no daily.json' : auditDailyNumbers(parsed, facts);
-    if (parsed !== null && violation === null) {
+    const violation =
+      terminal === null ? `framing overdue (run ${state.deltaRunId})` : parsed === null ? `no daily.json (run ended ${terminal})` : auditDailyNumbers(parsed, facts);
+    if (parsed !== null && violation === null && io.deltaHarness !== null) {
       draft = { ...parsed, faq: [] };
       writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };
       note = `framed by Delta (${state.deltaRunId})`;
@@ -100,7 +124,7 @@ export async function dailyLedgerTick(io: DailyIo): Promise<string | null> {
     ...(writer !== null ? { byline: 'Delta' } : {}),
   });
   io.writeIssueFiles(issue);
-  io.writeState({ ...state, phase: 'done', note });
+  io.writeState({ week: day, startedAt: state?.startedAt ?? io.now().toISOString(), attempts: state?.attempts ?? 1, ...state, phase: 'done', note });
   io.log(`fnotes daily ${day}: ${issue.status.toUpperCase()} — "${issue.title}" (${note})`);
   return 'daily-published';
 }

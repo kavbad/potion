@@ -2,7 +2,7 @@
 // IO: draft → refuse → redraft → verify → gate hold → operator approval →
 // publish, plus the deterministic fallback when attempts exhaust.
 import { describe, expect, it } from 'vitest';
-import { frontierNotesTick, inTuesdayWindow, isoWeekOf, type ClockIO, type ClockState } from './clock.js';
+import { dailyLedgerTick, frontierNotesTick, inTuesdayWindow, isoWeekOf, type ClockIO, type ClockState, type DailyIo } from './clock.js';
 import type { FactSheet, Issue } from './types.js';
 import { deterministicDraft } from './write.js';
 
@@ -156,6 +156,56 @@ describe('the state machine', () => {
     w.resolutions.set(actionId, 'approved');
     expect(await frontierNotesTick(makeIo(w, TUESDAY))).toBe('published');
     expect(w.issues.get('2026-W36')!.publishGate?.priorResolution).toBe(true);
+  });
+
+  it('THE DAY IS NEVER MISSED: parked, overdue, or no harness all still publish', async () => {
+    const facts = { day: '2026-09-04', at: '', cycles: [], measured: [], promoted: 0, registrySize: 322, pricesVersion: 'p1', spendUsd: 0, quiet: true, caveats: [] };
+    const base = (w: World, harness: string | null, extra: Partial<DailyIo> = {}): DailyIo => ({
+      now: () => TUESDAY,
+      dailyFacts: async () => facts,
+      readIssue: (d) => w.issues.get(d) ?? null,
+      writeIssueFiles: (i) => void w.issues.set(i.week, i),
+      startWorkerRun: async () => {
+        const id = `run-daily-${w.started.length + 1}`;
+        w.runs.set(id, { state: null, files: new Map() });
+        w.started.push(id);
+        return id;
+      },
+      // null means STILL RUNNING — distinct from an unknown run, which is
+      // 'failed'. (Conflating them hid the overdue path from this test.)
+      runTerminalState: async (id) => (w.runs.has(id) ? w.runs.get(id)!.state : 'failed'),
+      readRunFile: async (id, n) => w.runs.get(id)?.files.get(n) ?? null,
+      readState: (d) => w.states.get(d) ?? null,
+      writeState: (s, o) => {
+        if (o?.exclusive && w.states.has(s.week)) return false;
+        w.states.set(s.week, s);
+        return true;
+      },
+      deltaHarness: harness,
+      log: (l) => w.log.push(l),
+      ...extra,
+    });
+
+    // 1. A PARKED framing run (the live 2026-09-04 wedge) still publishes.
+    const parked = world();
+    await dailyLedgerTick(base(parked, 'dd'.repeat(32)));
+    parked.runs.get(parked.started[0]!)!.state = 'awaiting-human';
+    expect(await dailyLedgerTick(base(parked, 'dd'.repeat(32)))).toBe('daily-published');
+    expect(parked.issues.get('2026-09-04')!.status).toBe('published');
+    expect(parked.issues.get('2026-09-04')!.byline).toBe('Potion Research');
+
+    // 2. An OVERDUE run (never terminal) is abandoned and the day ships.
+    const slow = world();
+    await dailyLedgerTick(base(slow, 'dd'.repeat(32)));
+    const late = base(slow, 'dd'.repeat(32), { now: () => new Date(TUESDAY.getTime() + 25 * 60_000) });
+    expect(await dailyLedgerTick(late)).toBe('daily-published');
+    expect(slow.log.join(' ')).toMatch(/framing overdue/);
+
+    // 3. NO framing generation configured: the ledger publishes unframed.
+    const bare = world();
+    expect(await dailyLedgerTick(base(bare, null))).toBe('daily-published');
+    expect(bare.started).toHaveLength(0);
+    expect(bare.issues.get('2026-09-04')!.title).toMatch(/quiet day/i);
   });
 
   it('exhausted attempts fall back to the deterministic draft, which needs no verifier', async () => {

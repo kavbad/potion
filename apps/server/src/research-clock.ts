@@ -54,6 +54,10 @@ export function registerFrontierNotesClock(
   const orgId = process.env.POTION_RESEARCH_ORG;
   const deltaHarness = process.env.POTION_RESEARCH_DELTA_HARNESS;
   const auditorHarness = process.env.POTION_RESEARCH_AUDITOR_HARNESS;
+  // F6: the DAILY framing generation. Unset = no framing attempt; the
+  // code-composed ledger publishes on its own. Never the weekly harness:
+  // a worker briefed on fact sheets, handed a ledger, parks and asks.
+  const dailyHarness = process.env.POTION_RESEARCH_DELTA_DAILY_HARNESS ?? null;
   const armed = Boolean(envDir && orgId && deltaHarness && auditorHarness);
   /** The primary dir plus any rehearsal dirs armed via the route (in-memory
    * by design: a rehearsal that does not survive a restart is a feature). */
@@ -300,11 +304,18 @@ export function registerFrontierNotesClock(
           readIssue: io.readIssue,
           writeIssueFiles: io.writeIssueFiles,
           startWorkerRun: io.startWorkerRun,
-          runTerminalState: io.runTerminalState,
+          // A PARKED framing run is a FAILED framing run: the daily lane
+          // never waits on a human (2026-09-04 — a parked run wedged the
+          // day silently). Treat awaiting-human as terminal here.
+          runTerminalState: async (runId) => {
+            const run = await getLabRun(db, runId, orgId!);
+            if (run === null) return 'failed';
+            return TERMINAL.has(run.state) || run.state === 'awaiting-human' ? run.state : null;
+          },
           readRunFile: io.readRunFile,
           readState: io.readState,
           writeState: io.writeState,
-          deltaHarness: io.deltaHarness,
+          deltaHarness: dailyHarness,
           log: io.log,
         });
       } catch (err) {
