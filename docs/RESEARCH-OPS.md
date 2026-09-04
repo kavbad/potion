@@ -107,6 +107,29 @@ worker, concurrency 1 — a waiting job would deadlock it; the clock is an
 in-process tick like the reaper). Update the harness env vars when a new
 generation is promoted.
 
+## The roadmap (operator-directed, 2026-09-03)
+
+- **F5 — automate Monday**: the observatory measurement as a scheduled
+  tick, closing the last manual step.
+- **F6 — the daily cadence**: new content on /research every single day
+  (operator directive). The honest shape: a **daily ledger note**
+  (Issue kind 'daily' already exists) composed from what the instruments
+  actually did in the last 24 hours — the nightly scan's screenings,
+  auditions measured, price moves, frontier changes, answer updates —
+  drafted by Delta, guarded, verified, gated like everything else. A
+  quiet day publishes a short true ledger, never a forced finding: the
+  calendar never outranks the evidence, so the DAILY unit is the ledger
+  (always true), and findings ride it only when real.
+- **F7 — the reading experience**: make /research much nicer. Target
+  STRUCTURE: review.firstround.com (editorial magazine — dominant
+  featured piece, generous hierarchy, browsable article grid with
+  topic tags, strong masthead). Structure only — the landing design
+  directives bind: serif veto is permanent, mono labels ≥12px, no
+  floating tiles. Study the target live at build time.
+- **The done-verifier law** (runtime, all workers): a task run whose
+  done-definition names a missing deliverable file must not complete on
+  a mid-thought message — the hollow class taxed the Auditor ~50%.
+
 ## Filed follow-ups
 
 - **Monday observatory automation** — the clock starts only when the
