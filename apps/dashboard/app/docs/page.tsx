@@ -526,6 +526,7 @@ export default async function DocsPage() {
           <Endpoint method="POST" path="/v1/traces" note="Agent spans in; priced, loop-flagged, clustered into agent-* workloads." />
           <Endpoint method="GET / PUT" path="/api/traces/retention" note="Span retention in days; 0 keeps metadata only. admin to change" />
           <Endpoint method="GET" path="/api/audit" note="Key custody, sign-ins and incidents, one chronology; /api/audit/export.jsonl for a window. admin" />
+          <Endpoint method="GET / POST" path="/api/alerts" note="Webhook or Slack notifications. Subscribe to evidence_ready to hear when a challenger or a workload is measured and waiting on your decision. admin" />
         </ul>
       </Section>
 

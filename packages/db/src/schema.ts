@@ -885,7 +885,15 @@ export type AlertEvent =
   // this org is served. Emitted per affected org with the buyer-readable
   // narrative from diffFrontiers, so silent improvement stays the DEFAULT
   // rather than the only option.
-  | 'frontier_moved';
+  | 'frontier_moved'
+  // G2 rung 4 (2026-09-02): the LOOP produced something that waits on a
+  // human — a challenger proved on this org's own traffic, or a discovered
+  // workload finished measuring and can be routed. Everything the evidence
+  // plane earns is inert until someone accepts it, and until now the only
+  // way to discover that was to visit the router page. Same TS-only
+  // widening as the events above (alert_rules.events is text[], no DB
+  // CHECK), so no migration.
+  | 'evidence_ready';
 export const ALERT_EVENTS: readonly AlertEvent[] = [
   'quality_breach',
   'rollback',
@@ -898,6 +906,7 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'guarantee_recovery_unconfirmed',
   'policy_infeasible',
   'frontier_moved',
+  'evidence_ready',
 ];
 
 /** R0 (migration 0054): the org's payment identity. Card METADATA only —

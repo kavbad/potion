@@ -46,6 +46,7 @@ import {
   computeRetention,
   DEFAULT_RETENTION_FLOOR,
   deriveSuiteVerifyCapUsd,
+  emitAlertEvent,
   LIVE_SWEEP_ANSWER_MAX_TOKENS,
   LIVE_SWEEP_JUDGE_MAX_TOKENS,
   PLATFORM_SUITE_BY_CLUSTER,
@@ -391,6 +392,32 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
           items: cPairs.length, spendUsd: 0, status: 'proposed',
         });
         report.challengers.push({ clusterId, id: cpId, challengerModel: challenger.shadow.model });
+        // G2 rung 4: a proved challenger is inert until someone promotes it.
+        // Alert delivery must never fail the learning period — the proposal
+        // row is already the durable record.
+        try {
+          await emitAlertEvent(ctx, {
+            orgId,
+            event: 'evidence_ready',
+            detail: {
+              kind: 'challenger_proposed',
+              proposalId: cpId,
+              clusterId,
+              challengerModel: challenger.shadow.model,
+              servingModel: pointLabel(serving),
+              retention: cVerdict.retention,
+              items: cPairs.length,
+              narrative:
+                `On your own '${clusterId}' traffic, ${challenger.shadow.model} held ` +
+                `${(cVerdict.retention.mean * 100).toFixed(1)}% of what ${pointLabel(serving)} scores ` +
+                `(lower bound ${(cVerdict.retention.ci95[0] * 100).toFixed(1)}%, ${cPairs.length} paired items) ` +
+                `for less. Promoting builds a router from your measurements; your quality floor still decides ` +
+                `what serves.`,
+            },
+          });
+        } catch {
+          // swallowed: an alert fault must not undo a landed proposal
+        }
       }
     }
 

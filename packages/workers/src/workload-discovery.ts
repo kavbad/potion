@@ -43,6 +43,7 @@ import {
   cosineSim,
   deriveSuiteVerifyCapUsd,
   DEFAULT_RETENTION_FLOOR,
+  emitAlertEvent,
   LIVE_SWEEP_ANSWER_MAX_TOKENS,
   LIVE_SWEEP_JUDGE_MAX_TOKENS,
   meanCentroid,
@@ -411,6 +412,31 @@ export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover'> = asy
           runId: `wm-${randomUUID().slice(0, 8)}`,
         });
         result.measured += 1;
+        // G2 rung 4: a measured workload is a decision waiting on a human —
+        // it routes nothing until someone adopts it. Alert delivery must
+        // never fail the measurement: the row is already the durable record.
+        try {
+          await emitAlertEvent(ctx, {
+            orgId,
+            event: 'evidence_ready',
+            detail: {
+              kind: 'workload_measured',
+              workloadId: w.id,
+              parentCluster: w.parentCluster,
+              items: pairs.length,
+              retention: verdict.retention,
+              servingModel: cfg.type === 'single' ? (cfg.model ?? 'single') : `combination (${cfg.type})`,
+              incumbentModel,
+              narrative:
+                `A kind of work inside '${w.parentCluster}' finished measuring on ${pairs.length} of your own ` +
+                `requests: what serves it today keeps ${(verdict.retention.mean * 100).toFixed(1)}% of ` +
+                `${incumbentModel}'s quality on that work. Route it separately, or leave it as it is — ` +
+                `nothing changes until you say so.`,
+            },
+          });
+        } catch {
+          // swallowed: an alert fault must not undo a landed measurement
+        }
       }
     });
   }
