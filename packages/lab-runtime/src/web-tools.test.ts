@@ -51,7 +51,7 @@ describe('web_fetch — extraction, redaction, redirect law', () => {
   });
   it('every redirect hop is re-validated — a hop into private space is refused', async () => {
     const seen: string[] = [];
-    const fetchImpl = (async (url: RequestInfo | URL) => {
+    const fetchImpl = (async (url: Parameters<typeof fetch>[0]) => {
       seen.push(String(url));
       return new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/creds' } });
     }) as typeof fetch;

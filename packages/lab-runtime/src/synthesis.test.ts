@@ -9,7 +9,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
 import {
   createDb,
@@ -35,7 +34,7 @@ const RAW_KEY = 'pk_lab_synth_key_0001';
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
 
 let h: DbHandle;
-let app: FastifyInstance;
+let app: Awaited<ReturnType<typeof buildServer>>;
 let client: ServingClient;
 let suitesV2Dir: string;
 

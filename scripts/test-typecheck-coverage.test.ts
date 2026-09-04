@@ -31,12 +31,10 @@ const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
  * delete the row.
  */
 const PENDING: Record<string, string> = {
-  'lab-runtime':
-    '18 errors at survey (2026-09-02), and its loop/replay modules are under ' +
-    'concurrent edit by another session — enabling it here would fight that ' +
-    'work. Known shape: 6 of the errors are the DOM-only `RequestInfo` type ' +
-    '(web-tools, browser-tools, git-tools); `Parameters<typeof fetch>[0]` is ' +
-    'the fix used everywhere else in this repo.',
+  // Empty, and meant to stay that way: as of 2026-09-02 every package with
+  // tests typechecks them. A row here is a debt, not an exemption — it needs
+  // a reason and a measured error count, and the assertions below refuse a
+  // row for a package that has already been enabled.
 };
 
 interface Pkg {

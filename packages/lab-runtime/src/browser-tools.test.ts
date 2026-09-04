@@ -12,7 +12,7 @@ interface Call { path: string; method: string; body: unknown }
 function scriptedService(pages: Record<string, unknown>): { fetchImpl: typeof fetch; calls: Call[] } {
   const calls: Call[] = [];
   let sessions = 0;
-  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = String(input);
     const path = url.replace('http://browser.test', '');
     const body = init?.body !== undefined ? JSON.parse(String(init.body)) : undefined;
@@ -135,7 +135,7 @@ describe('custody at the tool boundary', () => {
 describe('the resume guard (X6: approved acts survive leg boundaries honestly)', () => {
   function restoreService(stateLabel: string): typeof fetch {
     let sessions = 0;
-    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const path = String(input).replace('http://browser.test', '');
       if (path === '/session' && init?.method === 'POST') {
         sessions += 1;
@@ -182,7 +182,7 @@ describe('the resume guard (X6: approved acts survive leg boundaries honestly)',
 describe('the resume guard fails closed on UNRECORDED refs (final-pass fix)', () => {
   it('an approved ref the recorded page never showed refuses — the human could not have seen it', async () => {
     let sessions = 0;
-    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const path = String(input).replace('http://browser.test', '');
       if (path === '/session' && init?.method === 'POST') {
         sessions += 1;

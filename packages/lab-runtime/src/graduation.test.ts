@@ -27,7 +27,10 @@ function ev(
     at: opts.at ?? daysAgo(5),
     outcome,
     highStakes: opts.highStakes ?? false,
-    fromAudit: opts.fromAudit,
+    // exactOptionalPropertyTypes: an optional field must be ABSENT, not
+    // present-and-undefined — the two are different states to anything that
+    // checks with `in`.
+    ...(opts.fromAudit !== undefined ? { fromAudit: opts.fromAudit } : {}),
     situation: opts.situation ?? `sit-${sitCounter}`,
   };
 }

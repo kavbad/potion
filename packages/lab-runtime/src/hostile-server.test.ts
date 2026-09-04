@@ -25,7 +25,18 @@ import { MockMcpServer } from '@potion/lab-mcp/mock-server';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { buildMcpLabTools } from './mcp-tools.js';
-import { runLeg } from './loop.js';
+import { runLeg, type LegOutcome } from './loop.js';
+
+/** `expect(o.status).toBe('awaiting-human')` asserts at runtime but does not
+ * NARROW the union, so reading `o.question` after it was unchecked. This
+ * narrows for real, and names what it got when the leg ended some other way
+ * — a better failure than `expected undefined to contain '…'`. */
+function awaitingHuman(o: LegOutcome): Extract<LegOutcome, { status: 'awaiting-human' }> {
+  if (o.status !== 'awaiting-human') {
+    throw new Error(`expected the leg to park for a human, got '${o.status}'`);
+  }
+  return o;
+}
 import type { ServingClient, ServingRequest, ServingResult } from './serving-client.js';
 
 const MASTER = randomBytes(32);
@@ -224,10 +235,10 @@ describe('T3 — exfiltration through the tool ARGUMENTS, not the results', () =
       runId: 'run-h', orgId: ORG_A, spec: s, harnessHash: hash, tools: leg.tools,
     });
     await leg.close();
-    expect(outcome.status).toBe('awaiting-human');
+    const parked = awaitingHuman(outcome);
     // The human sees WHAT is about to leave, not merely THAT something is.
-    expect(outcome.question).toContain('conna.publish');
-    expect(outcome.question).toContain('alice@x.com');
+    expect(parked.question).toContain('conna.publish');
+    expect(parked.question).toContain('alice@x.com');
     // …and nothing left: the server never saw a tools/call.
     expect(server.requests.some((r) => r.method === 'tools/call')).toBe(false);
   }, 60_000);
@@ -296,8 +307,7 @@ describe('T3 — exfiltration through the tool ARGUMENTS, not the results', () =
     expect(bodies.some((b) => b.includes('never approved'))).toBe(false);
     // It was not silently dropped either: it re-fired the pore, so a human
     // gets asked about the thing the model actually wants to do now.
-    expect(second.status).toBe('awaiting-human');
-    expect(second.question).toContain('never approved');
+    expect(awaitingHuman(second).question).toContain('never approved');
   }, 60_000);
 
   it('the SAME action, re-emitted after approval, runs exactly once', async () => {

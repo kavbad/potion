@@ -4,7 +4,6 @@
 // limiter. No in-process shortcut exists in this file; the runtime speaks
 // HTTP like any customer.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
 import {
   createDb,
@@ -31,7 +30,7 @@ const ORG = 'org_lab_wt';
 const RAW_KEY = 'pk_lab_walkthrough_key_0001';
 
 let h: DbHandle;
-let app: FastifyInstance;
+let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let client: ServingClient;
 
@@ -160,7 +159,10 @@ describe('DoD leg 2: hard stops kill runs, through the real route', () => {
     // first consultation stops (the billing-test seeding pattern).
     await insertRequestLog(h.db, {
       orgId: KILL_ORG, model: 'gpt-mini-class', status: 'ok',
-      usage: { inputTokens: 100, outputTokens: 100, costUsd: 5 },
+      // latencyMs is required by Usage — the row is persisted under that
+      // type, and cost rollups read the blob, so an incomplete one is a row
+      // production queries cannot fully account for.
+      usage: { inputTokens: 100, outputTokens: 100, costUsd: 5, latencyMs: 100 },
     });
     await upsertBudget(h.db, { orgId: KILL_ORG, monthlyCapUsd: 1, hardStop: true, warnPct: 50 });
     const killClient = new ServingClient({ baseUrl, apiKey: KILL_KEY });

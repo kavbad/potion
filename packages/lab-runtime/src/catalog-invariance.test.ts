@@ -119,7 +119,12 @@ describe('0037 catalog ↔ Step 4 replay invariants', () => {
     expect(JSON.parse(before.result).ok).toBe(true);
 
     // The EDIT: every mutable catalog column moves, same (orgId, harnessHash).
-    const edited = spec({ name: 'EDITED harness', fuel: { maxUsdPerRun: 99, hardStop: false } });
+    // `hardStop` stays true — the schema pins it (`z.literal(true)`,
+    // lab-spec/src/schema.ts): the fuel hard stop is not a thing a spec may
+    // switch off, so a fixture setting it false was building a harness the
+    // real parse path would refuse. The moved fuel value is maxUsdPerRun,
+    // which is what this assertion actually needs.
+    const edited = spec({ name: 'EDITED harness', fuel: { maxUsdPerRun: 99, hardStop: true } });
     await upsertLabHarness(h.db, {
       orgId: ORG,
       harnessHash: hash,

@@ -96,7 +96,7 @@ describe('repo_fetch', () => {
       { path: 'api-abc123/README.md', content: '# api\n' },
     ]));
     const ws = memWorkspace();
-    const fetchImpl = (async (input: RequestInfo | URL) => {
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
       expect(String(input)).toBe('https://codeload.github.com/acme/api/tar.gz/main');
       return new Response(new Uint8Array(tgz), { status: 200 });
     }) as typeof fetch;
@@ -117,7 +117,7 @@ describe('repo_fetch', () => {
   it('a grant token rides the fetch as Authorization', async () => {
     let auth: string | null = null;
     const tgz = gzipSync(tarOf([{ path: 'x-1/a.txt', content: 'x' }]));
-    const fetchImpl = (async (_i: RequestInfo | URL, init?: RequestInit) => {
+    const fetchImpl = (async (_i: Parameters<typeof fetch>[0], init?: RequestInit) => {
       auth = (init?.headers as Record<string, string>)?.authorization ?? null;
       return new Response(new Uint8Array(tgz), { status: 200 });
     }) as typeof fetch;
@@ -138,7 +138,7 @@ describe('github_pr', () => {
     const ws = memWorkspace();
     ws.files.set('repo/src/index.js', Buffer.from('fixed\n'));
     const seen: string[] = [];
-    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const url = String(input);
       seen.push(`${init?.method ?? 'GET'} ${url.replace('https://api.github.com', '')}`);
       if (url.endsWith('/repos/acme/api')) return new Response(JSON.stringify({ default_branch: 'main' }), { status: 200 });
@@ -163,7 +163,7 @@ describe('github_pr', () => {
   });
 
   it('a missing workspace file aborts before anything is committed for it', async () => {
-    const fetchImpl = (async (input: RequestInfo | URL) => {
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.endsWith('/repos/acme/api')) return new Response(JSON.stringify({ default_branch: 'main' }), { status: 200 });
       if (url.includes('/git/ref/')) return new Response(JSON.stringify({ object: { sha: 's' } }), { status: 200 });
