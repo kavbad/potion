@@ -19,7 +19,7 @@
 import { canonicalJson, sha256, type ChatMessage } from '@potion/core';
 import { parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import type { StepPayload } from './checkpoint.js';
-import { checkInAnswerMessage, contractRepairMessage, doneFileRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, isQuestionStop, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
+import { checkInAnswerMessage, contractRepairMessage, doneFileRepairMessage, emptyStopRepairMessage, fileClaimRepairMessage, intentionStopRepairMessage, isQuestionStop, steerMessage, systemPrompt, toolResultMessage, wrapUpMessage, hasUnfilledSlot } from './loop.js';
 import { fanOutSpentFromSteps } from './fanout.js';
 import { decideAction } from './gateway.js';
 import { planLedgerMessage } from './plan.js';
@@ -214,6 +214,12 @@ export function replayRun(
       if (emptyStopStamp === true) {
         messages.push(emptyStopRepairMessage());
       }
+      // THE INTENTION-STOP LAW (mirrored same commit): a stamped promise-stop
+      // did NOT complete — the loop pushed one repair round and continued.
+      const intentionStamp = (p as { intentionStopRepair?: boolean }).intentionStopRepair;
+      if (intentionStamp === true) {
+        messages.push(intentionStopRepairMessage());
+      }
       // ask_operator (2026-08-31, mirrored same commit): calls stay pending —
       // a PARKED ask is cleared by its worker-question check-in below, and a
       // helper's refused ask is consumed by its recorded tool step like any
@@ -232,7 +238,7 @@ export function replayRun(
       const questionParked =
         spec.mission.kind === 'task' && !askedAlready && calls.length === 0 && p.finishReason === 'stop'
         && isQuestionStop(p.responseText ?? '');
-      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked && !questionParked && fileClaims === undefined && emptyStopStamp !== true) {
+      if (calls.length === 0 && p.finishReason === 'stop' && spec.mission.kind === 'task' && !slotParked && !questionParked && fileClaims === undefined && emptyStopStamp !== true && intentionStamp !== true) {
         if (runHadTools && !expectWrapUp) {
           // The wrap-up follows; terminal completes AFTER it.
           expectWrapUp = true;

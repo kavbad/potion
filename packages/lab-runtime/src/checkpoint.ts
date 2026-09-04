@@ -102,6 +102,10 @@ export interface StepPayload {
    * (this is the law that catches a stop naming nothing); replay
    * re-derives. */
   doneFileRepair?: string[];
+  /** THE INTENTION-STOP LAW (2026-09-04): set on a task stop whose last
+   * words announced the next action instead of taking it — a promise is
+   * not a deliverable; the loop pushed one repair round; replay re-derives. */
+  intentionStopRepair?: boolean;
   /** THE EMPTY-STOP LAW (2026-09-01): set on a task stop whose text was
    * EMPTY — a stop that says nothing is not a completion; the loop pushed
    * one repair round instead; replay re-derives. */

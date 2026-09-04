@@ -260,6 +260,40 @@ export function isQuestionStop(text: string): boolean {
   return ASK_FOR_INPUT.test(t);
 }
 
+/** THE INTENTION-STOP LAW (2026-09-04, from the production teardown): two
+ * thirds of the runs scoring 0-2 end the same way — the worker ANNOUNCES
+ * its next action and then stops. Verbatim last words from real records:
+ * "Let me write it now", "Syntax error from the apostrophe. Let me re-run."
+ * The other laws catch a stop that claims a file exists, says nothing, or
+ * asks a question; none catches a stop that PROMISES. A promise is not a
+ * deliverable.
+ *
+ * Reads the FINAL sentence only, so a report that mentions its plan in
+ * passing and then delivers still completes. "Let me know if…" is an
+ * invitation, not an intention, and is excluded by name. */
+const PROMISE_OPENS =
+  /^(?:okay[,.!]?\s*|right[,.!]?\s*|good[,.!]?\s*)?(?:let me|let['\u2019]s|i['\u2019]ll|i will|i am going to|i['\u2019]m going to|next[,:]?\s*i|now i|i need to now|time to)\b/i;
+const PROMISE_PARTICIPLE =
+  /\b(?:now|next)\s+(?:writing|creating|running|generating|producing|building|computing|re-?running|fixing|adding|drafting|saving)\b/i;
+
+export function isIntentionStop(text: string): boolean {
+  const t = text.trim();
+  if (t.length === 0) return false;
+  const tail = t.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '').pop() ?? '';
+  if (tail.length < 4) return false;
+  // "Let me know if you want more" offers help; it does not promise work.
+  if (/\blet me know\b/i.test(tail)) return false;
+  return PROMISE_OPENS.test(tail) || PROMISE_PARTICIPLE.test(tail);
+}
+
+export const INTENTION_STOP_REPAIR =
+  'You stopped immediately after saying what you were about to do — but you did not do it. ' +
+  'Carry out the action you just announced now, then report what you actually produced. ' +
+  'If you genuinely cannot do it, say plainly what blocked you instead of describing it as next.';
+export function intentionStopRepairMessage(): ChatMessage {
+  return { role: 'user', content: INTENTION_STOP_REPAIR };
+}
+
 /** A recorded question the operator must be able to ACT on: 600 chars cut
  * the GTM worker's multi-part ask mid-sentence, so the card showed half a
  * question with no way to see the rest. */
@@ -502,6 +536,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     let fileClaimFiredThisLeg = false;
     let doneFileFiredThisLeg = false;
     let emptyStopFiredThisLeg = false;
+    let intentionStopFiredThisLeg = false;
     const askedBefore = priorSteps.some(
       (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
     );
@@ -823,8 +858,15 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       // BEFORE recording; the unfilled-slot park outranks it. (Terse
       // non-empty stops still complete — extractReport's 40-char bar is
       // the judge's bar, not the completion bar.)
+      // ONE LAW PER STEP: the completion branch below applies the first
+       // law that matches and continues, so each later stamp is suppressed
+       // when an earlier one already claimed this step. Without this a step
+       // carries two stamps, replay pushes two repair messages where the
+       // loop pushed one, and an honest run reads as request-drift.
       let emptyStopRepair = false;
       if (
+        fileClaimMissing.length === 0 &&
+        doneFileMissing.length === 0 &&
         opts.spec.mission.kind === 'task' &&
         result.finishReason === 'stop' &&
         result.toolCalls.length === 0 &&
@@ -834,6 +876,23 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         !emptyStopFiredThisLeg
       ) {
         emptyStopRepair = true;
+      }
+      // THE INTENTION-STOP LAW: a stop whose last words promise the next
+      // action has not taken it. One repair round per run, stamped before
+      // recording so replay re-derives the non-completion.
+      let intentionStopRepair = false;
+      if (
+        fileClaimMissing.length === 0 &&
+        doneFileMissing.length === 0 &&
+        !emptyStopRepair &&
+        opts.spec.mission.kind === 'task' &&
+        result.finishReason === 'stop' &&
+        result.toolCalls.length === 0 &&
+        isIntentionStop(result.text ?? '') &&
+        !priorSteps.some((x) => (x.payload as StepPayload).intentionStopRepair !== undefined) &&
+        !intentionStopFiredThisLeg
+      ) {
+        intentionStopRepair = true;
       }
 
       seq += 1;
@@ -850,6 +909,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
           ...(fileClaimMissing.length > 0 ? { fileClaimRepair: fileClaimMissing } : {}),
           ...(doneFileMissing.length > 0 ? { doneFileRepair: doneFileMissing } : {}),
           ...(emptyStopRepair ? { emptyStopRepair: true } : {}),
+          ...(intentionStopRepair ? { intentionStopRepair: true } : {}),
         }),
         harnessHash: opts.harnessHash, leaseMs, now: new Date(clock.now()),
       });
@@ -1080,6 +1140,13 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         if (emptyStopRepair) {
           emptyStopFiredThisLeg = true;
           messages.push(emptyStopRepairMessage());
+          continue;
+        }
+        // THE INTENTION-STOP LAW (stamped above): it said what it was about
+        // to do — send it back to do it.
+        if (intentionStopRepair) {
+          intentionStopFiredThisLeg = true;
+          messages.push(intentionStopRepairMessage());
           continue;
         }
         // THE UNFILLED-SLOT LAW (2026-08-31, from the operator's second

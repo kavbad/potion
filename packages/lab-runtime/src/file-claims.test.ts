@@ -233,3 +233,121 @@ describe('the law in the loop', () => {
     await h.close();
   }, 60_000);
 });
+
+// THE INTENTION-STOP LAW (2026-09-04) — from the production teardown: two
+// thirds of the runs scoring 0–2 ended by ANNOUNCING the next action and
+// stopping. The strings below are verbatim final words from real records.
+describe('THE INTENTION-STOP LAW: a promise is not a deliverable', () => {
+  it('the production specimen "Let me re-run." gets one repair, then the work actually lands', async () => {
+    const { h, hash } = await fresh();
+    const writer: LabTool = {
+      name: 'write_out', description: 'write the file', parameters: { type: 'object' },
+      external: false,
+      run: async () => {
+        await upsertLabRunFile(h.db, { orgId: ORG_A, runId: 'run-fc', name: 'verdict.json', content: Buffer.from('{}') });
+        return { wrote: 'verdict.json' };
+      },
+    };
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: 'Syntax error from the apostrophe in the customer name. Let me re-run.' }),
+        ok({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'w1', type: 'function', function: { name: 'write_out', arguments: '{}' } }] }),
+        ok({ text: 'verdict.json is written with all 20 checks recomputed and passing. done.' }),
+        ok({ text: 'Wrap-up: wrote the verdict after the nudge.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [writer],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    const stamped = steps.filter((x) => (x.payload as { intentionStopRepair?: boolean }).intentionStopRepair === true);
+    expect(stamped.length).toBe(1);
+    expect(stamped[0]!.seq).toBe(1);
+    const rec = await recordOf(h);
+    const res = replayRun(SPEC, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it('the participle form — "— now writing up all 20 checks" — trips it too', async () => {
+    const { h, hash } = await fresh();
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: 'Fixed the status issue — now writing up all 20 checks I have recomputed.' }),
+        ok({ text: 'I could not finish it: the sandbox rejected the path. Reporting that plainly rather than promising again.' }),
+        ok({ text: 'Wrap-up: blocked on the write, said so.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
+    });
+    expect(leg.status).toBe('completed');
+    const rec = await recordOf(h);
+    expect(replayRun(SPEC, rec.steps, rec.terminal).ok).toBe(true);
+    await h.close();
+  }, 60_000);
+
+  it('a real report that MENTIONS its plan but delivers still completes — only the last sentence is read', async () => {
+    const { h, hash } = await fresh();
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({
+          text:
+            'First I said I would compute the daily totals, so let me walk through what I found. ' +
+            'Saturday leads at $1,778.40 across 87 checks, Friday is weakest at $612.10. ' +
+            'Every figure comes from the attached file. Let me know if you want the by-customer cut too.',
+        }),
+        ok({ text: 'Wrap-up: reported the totals.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    expect(steps.filter((x) => (x.payload as { intentionStopRepair?: boolean }).intentionStopRepair === true).length).toBe(0);
+    await h.close();
+  }, 60_000);
+
+  it('once per run: a second promise-stop completes rather than looping forever', async () => {
+    const { h, hash } = await fresh();
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        ok({ text: 'Good. Let me run the analysis now.' }),
+        ok({ text: 'Almost there. Let me run it now.' }),
+        ok({ text: 'Wrap-up: it kept promising; the record says so.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    expect(steps.filter((x) => (x.payload as { intentionStopRepair?: boolean }).intentionStopRepair === true).length).toBe(1);
+    const rec = await recordOf(h);
+    expect(replayRun(SPEC, rec.steps, rec.terminal).ok).toBe(true);
+    await h.close();
+  }, 60_000);
+});
+
+describe('ONE LAW PER STEP', () => {
+  it('a promise that ALSO names a missing file is claimed by file-claims alone — two stamps would make an honest run read as drift', async () => {
+    const { h, hash } = await fresh();
+    const leg = await runLeg({
+      db: h.db,
+      client: scripted([
+        // The real record's words: a promise AND a file claim in one stop.
+        ok({ text: 'The previous run was interrupted and did not produce verdict.json. Let me write it now.' }),
+        ok({ text: 'Corrected: nothing was written, and I am reporting that rather than claiming it.' }),
+        ok({ text: 'Wrap-up: honest about the missing file.' }),
+      ]),
+      runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
+    });
+    expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    const first = steps[0]!.payload as { fileClaimRepair?: string[]; intentionStopRepair?: boolean };
+    expect(first.fileClaimRepair).toEqual(['verdict.json']);
+    expect(first.intentionStopRepair).toBeUndefined();
+    const rec = await recordOf(h);
+    const res = replayRun(SPEC, rec.steps, rec.terminal);
+    expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);
+    await h.close();
+  }, 60_000);
+});
