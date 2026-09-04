@@ -66,6 +66,29 @@ async function serve(prompt: string) {
   return { status: res.statusCode, model: res.headers['x-potion-model'], cost: row?.usage?.costUsd ?? null, baseline: row?.baselineCostUsd ?? null, basis: row?.baselineBasis ?? null };
 }
 
+/**
+ * THE RATIO, ASSERTED WHERE IT IS OBSERVABLE.
+ *
+ * The e2e rows below cannot carry a ratio: every mock alias is priced at
+ * $0/1M by design, so a served request records costUsd 0 and therefore
+ * baselineCostUsd 0. `expect(0).toBeCloseTo(0 * ratio)` holds for EVERY
+ * ratio — which is what the three assertions here used to be, identical in
+ * effect and unable to tell 4.0/0.2 from 1.0/0.2.
+ *
+ * What the row genuinely proves is the SELECTION (`basis`, plus the
+ * `baselineFor` result each test already pins). The scaling is proved by
+ * running the serve path's own `baselineCostUsd` over the hash that
+ * selection produced, at a cost where the arithmetic is visible. Change the
+ * selection and this moves; that is the property the old line claimed.
+ */
+function expectScaling(selected: string | null, ratio: number): void {
+  const servedCostUsd = 0.01; // any nonzero cost makes the ratio observable
+  expect(baselineCostUsd(FRONTIER, H(CHEAP), servedCostUsd, selected)).toBeCloseTo(
+    servedCostUsd * ratio,
+    9,
+  );
+}
+
 describe('the baseline on a served request', () => {
   it('is the best point when nothing is named', async () => {
     clearBaselineCache();
@@ -73,16 +96,16 @@ describe('the baseline on a served request', () => {
     const r = await serve('write a function that reverses a list — baseline none');
     expect(r.status).toBe(200);
     expect(r.model).toBe('mock-cheap');
-    expect(r.baseline).toBeCloseTo((r.cost as number) * (4.0 / 0.2), 9);
     expect(r.basis).toBe('best-of-frontier'); // 0089: the silent fallback is now distinguishable on the row
+    expectScaling(null, 4.0 / 0.2); // no named baseline → the frontier's best point
   });
   it('is the org’s named model from onboarding when it sits on the frontier', async () => {
     await upsertOrgIncumbents(db(), { orgId: ORG, models: ['mock-mid'], other: null, samplingConsent: false });
     clearBaselineCache();
     expect(await baselineFor(db(), ORG, 'code-gen', FRONTIER)).toEqual({ hash: H(MID), basis: 'org-incumbent' });
     const r = await serve('write a function that reverses a list — baseline org');
-    expect(r.baseline).toBeCloseTo((r.cost as number) * (1.0 / 0.2), 9);
     expect(r.basis).toBe('org-incumbent');
+    expectScaling(H(MID), 1.0 / 0.2); // the named model's point, not the best one
   });
   it('the cluster designation outranks the org’s named model', async () => {
     await upsertStrategyConfig(db(), H(TOP), TOP);
@@ -90,7 +113,7 @@ describe('the baseline on a served request', () => {
     clearBaselineCache();
     expect(await baselineFor(db(), ORG, 'code-gen', FRONTIER)).toEqual({ hash: H(TOP), basis: 'cluster-incumbent' });
     const r = await serve('write a function that reverses a list — baseline cluster');
-    expect(r.baseline).toBeCloseTo((r.cost as number) * (4.0 / 0.2), 9);
     expect(r.basis).toBe('cluster-incumbent');
+    expectScaling(H(TOP), 4.0 / 0.2); // the designated point — same ratio as best here, but a different hash
   });
 });
