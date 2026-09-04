@@ -910,7 +910,13 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
               'set -e',
               'test -f repo/src/lib.js',
               'mkdir -p out/report',
-              'git init -q workrepo && cd workrepo && git commit -q --allow-empty -m offline && cd ..',
+              // Identity passed EXPLICITLY: the sandbox sets HOME to the workdir, so no
+              // user gitconfig applies, and git's fallback (user@hostname) only resolves
+              // where the host has a domain. On a CI runner it does not, `git commit`
+              // fails, `set -e` aborts, and the assertion below saw the pre-seeded tree
+              // survive while the shell's own output never appeared. A sealed shell must
+              // not depend on ambient identity (found on the workflow's first green run).
+              'git init -q workrepo && cd workrepo && git -c user.email=lab@potion.test -c user.name=lab commit -q --allow-empty -m offline && cd ..',
               'echo "tree ok, git ok" > out/report/result.txt',
             ].join('\n'),
           }),
