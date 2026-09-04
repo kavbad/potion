@@ -54,8 +54,38 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # ORDER: cheapest and highest-signal first; every INDEPENDENT check runs
+      # even after an earlier failure (2026-09-04, P0.11).
+      #
+      # It used to read install → gitleaks → build → typecheck → lint → test →
+      # audit → SBOM, and steps stop the job on first failure. The secrets scan
+      # turned out to be the single most config-fragile step in the file —
+      # three separate defects, each findable only by running it — so for three
+      # consecutive runs a broken scanner meant NO test signal at all, and the
+      # audit gate and SBOM at the tail have never executed once in this
+      # repository's life.
+      #
+      # `if: !cancelled()` on a step means "run unless the job was cancelled" —
+      # it still FAILS the job, it just no longer hides everything behind it.
+      # Only steps that need nothing from earlier ones get it: build is a real
+      # prerequisite (workspace packages resolve through dist/), so typecheck
+      # and test stay gated behind it rather than cascading confusing errors.
+
+      # Needs only node_modules, and it is the fastest check in the file (~5s).
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm lint
+
+      # A real prerequisite: typecheck and test resolve workspace deps through
+      # dist/, so a failed build makes their output noise, not signal.
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
       # M2-security: secrets gate — scan working tree + full git history.
+      # Independent of the build, so it reports on its own merits.
       - name: Secrets scan (gitleaks)
+        if: ${{ !cancelled() }}
         uses: gitleaks/gitleaks-action@v2
         env:
           # gitleaks-action@v2 REFUSES to scan a pull_request without this and
@@ -68,23 +98,21 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_ENABLE_SUMMARY: false
 
-      - run: pnpm build
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-
       # Supply-chain gate (M2-security, re-triaged M3 #29): fail on any NEW
       # high/critical production advisory; accepted ones live in
       # scripts/security/audit-allowlist.json (currently EMPTY — re-triage
       # after the next/drizzle-orm bumps). --registry pins the official
       # registry because some mirrors lack an audit endpoint (gate fails CLOSED).
       - name: Dependency audit gate (prod, high+)
+        if: ${{ !cancelled() }}
         run: node scripts/security/audit-gate.mjs --audit-level=high --registry=https://registry.npmjs.org
 
       # CycloneDX SBOM for release provenance (cdxgen pinned via scripts/sbom.sh).
       - name: Generate SBOM (CycloneDX)
+        if: ${{ !cancelled() }}
         run: bash scripts/sbom.sh
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: sbom
           path: artifacts/sbom.cyclonedx.json
