@@ -77,10 +77,22 @@ jobs:
         run: pnpm lint
 
       # A real prerequisite: typecheck and test resolve workspace deps through
-      # dist/, so a failed build makes their output noise, not signal.
-      - run: pnpm build
-      - run: pnpm typecheck
-      - run: pnpm test
+      # dist/, so a failed build makes their output noise, not signal. They
+      # therefore gate on THIS STEP specifically — `steps.build.outcome` — and
+      # NOT on the default `success()`, which means "every earlier step passed"
+      # and would let an unrelated lint error skip the entire test suite. It
+      # did exactly that on run 33916899845, one revision of this very block
+      # ago: I moved the fragile step first and made lint the new blocker.
+      - name: Build
+        id: build
+        if: ${{ !cancelled() }}
+        run: pnpm build
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm typecheck
+      - name: Test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm test
 
       # M2-security: secrets gate — scan working tree + full git history.
       # Independent of the build, so it reports on its own merits.
