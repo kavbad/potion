@@ -11,4 +11,5 @@ export * from './lint.js';
 export * from './publisher.js';
 export * from './agenda.js';
 export * from './daily.js';
+export * from './piece.js';
 export * from './clock.js';

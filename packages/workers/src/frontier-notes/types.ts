@@ -78,6 +78,18 @@ export interface Issue {
   /** F6: the daily ledger's paragraphs, '\n\n'-joined — the shape the
    * issue page has rendered dailies from since C3. */
   body?: string;
+  /** F8: the agenda item this piece answers. The corpus is the cooldown's
+   * memory — an issue records the claim it spent so tomorrow's agenda can
+   * decline to repeat it. */
+  agenda?: {
+    id: string;
+    kind: string;
+    clusterId: string;
+    demandQuery: string;
+    score: number;
+    /** cluster + models — set at publish so the whole claim cools. */
+    claimKey?: string;
+  };
   title: string;
   /** One-paragraph summary (meta description, RSS, index card). */
   summary: string;

@@ -24,7 +24,9 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ObservatoryRun } from '../observatory.js';
 import { composeFactSheet } from './compose.js';
-import { assembleDailyIssue, auditDailyNumbers, deterministicDailyDraft, parseDailyDraft, type DailyFacts } from './daily.js';
+import { parseDailyDraft, utcDay } from './daily.js';
+import { generateAgenda, type ClusterSignal } from './agenda.js';
+import { assemblePieceIssue, auditPieceNumbers, deterministicPiece } from './piece.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
 import { lintDraft } from './lint.js';
@@ -36,98 +38,106 @@ import { deterministicDraft, parseDraft, type Draft } from './write.js';
 
 export type ClockPhase = 'delta' | 'auditor' | 'gate-held' | 'done' | 'skipped';
 
-/** F6: the DAILY tick — a ledger of what the instruments did in the last 24
- * hours, published every day. Deterministic by construction (the numbers are
- * code-composed from the day's rows); the model writes only the framing and
- * THE NUMBER LAW refuses any figure that is not in the ledger. A quiet day
- * publishes a short quiet ledger — the calendar never invents a finding. */
+/** F8: the DAILY PIECE tick — Atlas picks, Delta writes, the corpus
+ * remembers. The daily post is the top item on the agenda: a question
+ * somebody is asking, answered with numbers we measured. It replaced the
+ * LEDGER, which reported what the instruments DID — true, verified, and
+ * worthless: nobody searches for "three cycles ran". */
 export interface DailyIo {
   now(): Date;
-  /** Today's rows, already fetched. */
-  dailyFacts(): Promise<DailyFacts>;
+  /** The measured corpus the agenda reasons over. */
+  agendaSignals(): Promise<readonly ClusterSignal[]>;
+  /** Claims the published corpus already spent — the cooldown's memory. */
+  publishedClaims(): Promise<ReadonlyMap<string, string>>;
+  /** Today's measurement activity, for the provenance footer only. */
+  measurementFooter(): Promise<string>;
   readIssue(day: string): Issue | null;
   writeIssueFiles(issue: Issue): void;
   startWorkerRun(harnessHash: string, attachment: { name: string; content: string }, extra?: { name: string; content: string }): Promise<string>;
   runTerminalState(runId: string): Promise<string | null>;
   readRunFile(runId: string, name: string): Promise<string | null>;
-  readState(week: string): ClockState | null;
+  readState(day: string): ClockState | null;
   writeState(state: ClockState, opts?: { exclusive?: boolean }): boolean;
-  /** The DAILY framing generation (its mission reads ledger.json and writes
-   * daily.json). Absent = no framing attempt at all: the code-composed
-   * ledger publishes on its own. NEVER fall back to the weekly harness —
-   * a worker briefed on fact sheets, handed a ledger, parks and asks
-   * (found live 2026-09-04: run-c7507c2c wedged the day). */
+  /** The daily writing generation. Null = publish the deterministic piece —
+   * still a real answer to a real question, never a chore log. */
   deltaHarness: string | null;
-  /** A framing run that has not finished within this window is abandoned and
-   * the ledger publishes anyway. The day is never missed for a slow model.
-   * Default 20 minutes. */
   framingDeadlineMs?: number;
   log(line: string): void;
 }
 
-/** One daily tick. Same shape as the weekly machine but shorter: the ledger
- * is always publishable, so the model draft is an IMPROVEMENT attempt, never
- * a gate — one attempt per tick, and the deterministic ledger ships if it
- * does not pass. Publishing a daily needs no gate ask: the content is
- * code-composed and the weekly's publish grant covers the class.
+/**
+ * One daily tick: the agenda decides, the writer writes, the laws check.
  *
- * THE DAY IS NEVER MISSED. Every path out of a framing attempt — parked,
- * failed, slow, unparseable, number-law refused, or no harness at all —
- * publishes the code-composed ledger. A daily lane that can wait on a human
- * is a lane that stops publishing. */
-export async function dailyLedgerTick(io: DailyIo): Promise<string | null> {
-  const facts = await io.dailyFacts();
-  const day = facts.day;
+ * NEVER MISSED AND NEVER PADDED. If the writer parks, fails, runs long, or
+ * states a number outside its evidence, the deterministic piece publishes —
+ * the agenda's own headline and dek, composed from the measurements, which
+ * answer the same question. If the AGENDA is empty (nothing the corpus can
+ * prove that has not just been said), NOTHING publishes: an empty agenda is
+ * a real answer, and silence beats filler.
+ */
+export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
+  const day = utcDay(io.now());
   if (io.readIssue(day) !== null) return null; // today is filed
   const state = io.readState(day);
 
-  // Start: one framing attempt, once per day — or none at all when no
-  // daily generation is configured.
+  const agenda = generateAgenda({
+    signals: await io.agendaSignals(),
+    published: await io.publishedClaims(),
+    now: io.now(),
+  });
+  const candidate = agenda[0];
+  if (candidate === undefined) {
+    if (state === null) io.log(`fnotes daily ${day}: the agenda is empty — nothing provable left unsaid. Publishing nothing.`);
+    io.writeState({ week: day, phase: 'done', startedAt: io.now().toISOString(), attempts: 0, note: 'empty agenda' });
+    return 'agenda-empty';
+  }
+
   if (state === null) {
-    if (!io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1 }, { exclusive: true })) return null;
-    if (io.deltaHarness === null) {
-      io.log(`fnotes daily ${day}: no daily framing generation — publishing the composed ledger`);
-    } else {
-      const runId = await io.startWorkerRun(io.deltaHarness, { name: 'ledger.json', content: JSON.stringify(facts, null, 1) });
-      io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId });
-      io.log(`fnotes daily ${day}: framing in ${runId}`);
+    if (!io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, note: candidate.id }, { exclusive: true })) return null;
+    if (io.deltaHarness !== null) {
+      const runId = await io.startWorkerRun(io.deltaHarness, {
+        name: 'assignment.json',
+        content: JSON.stringify(
+          { headline: candidate.headline, dek: candidate.dek, question: candidate.demandQuery, clusterId: candidate.clusterId, evidence: candidate.evidence },
+          null,
+          1,
+        ),
+      });
+      io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, deltaRunId: runId, note: candidate.id });
+      io.log(`fnotes daily ${day}: assigned "${candidate.headline}" to ${runId} (score ${candidate.score})`);
       return `daily-delta:${runId}`;
     }
+    io.log(`fnotes daily ${day}: no writing generation — publishing the composed piece`);
   }
   if (state?.phase === 'done') return null;
 
-  let draft = deterministicDailyDraft(facts);
+  const footer = await io.measurementFooter();
+  let draft = deterministicPiece(candidate, footer);
   let writer: Issue['writer'] = null;
-  let note = 'deterministic ledger';
+  let note = `composed: ${candidate.id}`;
   if (state?.deltaRunId) {
     const terminal = await io.runTerminalState(state.deltaRunId);
     const startedMs = Date.parse(state.startedAt);
     const overdue = Number.isFinite(startedMs) && io.now().getTime() - startedMs > (io.framingDeadlineMs ?? 20 * 60_000);
-    // Still framing AND inside the window: wait. Past the window: abandon it
-    // and publish — a slow or wedged run must never cost the day.
     if (terminal === null && !overdue) return null;
-    const text = terminal === 'completed' ? await io.readRunFile(state.deltaRunId, 'daily.json') : null;
-    // READ-AFTER-WRITE (2026-09-04, run-be133d02): the tick caught the run
-    // 889ms after it completed and read daily.json before the write was
-    // visible — the framing was declared missing while the file was right
-    // there, costing the byline. A completed run whose deliverable is not
-    // yet readable gets the remaining deadline to become readable; past it
-    // the ledger publishes as composed, so the day is still never missed.
-    if (terminal === 'completed' && text === null && !overdue) return null;
-    // The DAILY parser: a daily has no FAQ, so the weekly shape rules
-    // would reject every framing (found 2026-09-04).
+    const text = terminal === 'completed' ? await io.readRunFile(state.deltaRunId, 'piece.json') : null;
+    if (terminal === 'completed' && text === null && !overdue) return null; // read-after-write
     const parsed = text !== null ? parseDailyDraft(normalizeDraftText(text), draft) : null;
     const violation =
-      terminal === null ? `framing overdue (run ${state.deltaRunId})` : parsed === null ? `no usable daily.json (run ended ${terminal})` : auditDailyNumbers(parsed, facts);
+      terminal === null
+        ? `writing overdue (run ${state.deltaRunId})`
+        : parsed === null
+          ? `no usable piece.json (run ended ${terminal})`
+          : auditPieceNumbers(parsed, candidate, io.now());
     if (parsed !== null && violation === null && io.deltaHarness !== null) {
-      draft = { ...parsed, faq: [] };
+      draft = { ...parsed, mixingNote: '', auditionNote: footer, faq: [] };
       writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };
-      note = `framed by Delta (${state.deltaRunId})`;
+      note = `written by Delta (${state.deltaRunId}): ${candidate.id}`;
     } else {
-      io.log(`fnotes daily ${day}: framing refused (${violation}) — the ledger publishes as composed`);
+      io.log(`fnotes daily ${day}: writing refused (${violation}) — the composed piece publishes`);
     }
   }
-  const issue = assembleDailyIssue(facts, draft, {
+  const issue = assemblePieceIssue(candidate, draft, day, {
     publishedAt: io.now().toISOString(),
     writer,
     ...(writer !== null ? { byline: 'Delta' } : {}),
@@ -137,6 +147,7 @@ export async function dailyLedgerTick(io: DailyIo): Promise<string | null> {
   io.log(`fnotes daily ${day}: ${issue.status.toUpperCase()} — "${issue.title}" (${note})`);
   return 'daily-published';
 }
+
 
 export interface ClockState {
   week: string;

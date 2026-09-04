@@ -2,9 +2,26 @@
 // IO: draft → refuse → redraft → verify → gate hold → operator approval →
 // publish, plus the deterministic fallback when attempts exhaust.
 import { describe, expect, it } from 'vitest';
-import { dailyLedgerTick, frontierNotesTick, inTuesdayWindow, isoWeekOf, type ClockIO, type ClockState, type DailyIo } from './clock.js';
+import { dailyPieceTick, frontierNotesTick, inTuesdayWindow, isoWeekOf, type ClockIO, type ClockState, type DailyIo } from './clock.js';
 import type { FactSheet, Issue } from './types.js';
+import type { ObservatoryRun } from '../observatory.js';
 import { deterministicDraft } from './write.js';
+
+/** A real (empty-week) observatory run for the given week. The clock only
+ *  ever asks "did Monday's measurement land?" and hands the run to
+ *  composeFacts, which is stubbed below — but the run it hands over is the
+ *  genuine shape, so a change to ObservatoryRun is caught here. */
+const observatoryRun = (week: string): ObservatoryRun => ({
+  week,
+  at: `${week}-at`,
+  envelopeBefore: { monthKey: '2026-09', capUsd: 50, mtdUsd: 0, remainingUsd: 50 },
+  plan: { canaryClusters: [], canaryBudgetUsd: 0, auditions: 0, auditionBudgetUsd: 0, notes: [] },
+  canaries: [],
+  auditions: [],
+  catalogue: { listings: 0, newSinceRegistry: 0, skippedNoPricing: 0, freeTierExcluded: 0, ranked: 0 },
+  spendUsd: 0,
+  envelopeAfter: { monthKey: '2026-09', capUsd: 50, mtdUsd: 0, remainingUsd: 50 },
+});
 
 const FACTS: FactSheet = {
   week: '2026-W36',
@@ -51,7 +68,7 @@ function makeIo(w: World, now: Date, opts: { maxAttempts?: number; noRun?: boole
   let n = 0;
   return {
     now: () => now,
-    readObservatoryRun: () => (opts.noRun ? null : ({ week: isoWeekOf(now) } as never)),
+    readObservatoryRun: () => (opts.noRun ? null : observatoryRun(isoWeekOf(now))),
     composeFacts: async () => FACTS,
     readIssue: (week) => w.issues.get(week) ?? null,
     writeIssueFiles: (issue) => void w.issues.set(issue.week, issue),
@@ -158,27 +175,36 @@ describe('the state machine', () => {
     expect(w.issues.get('2026-W36')!.publishGate?.priorResolution).toBe(true);
   });
 
-  it('THE DAY IS NEVER MISSED: parked, overdue, or no harness all still publish', async () => {
-    const facts = { day: '2026-09-04', at: '', cycles: [], measured: [], promoted: 0, registrySize: 322, pricesVersion: 'p1', spendUsd: 0, quiet: true, caveats: [] };
-    const base = (w: World, harness: string | null, extra: Partial<DailyIo> = {}): DailyIo => ({
+  it('THE DAILY IS THE AGENDA: it publishes the top claim, never a chore log', async () => {
+    const signals = [
+      {
+        clusterId: 'code-gen',
+        points: [
+          { model: 'or-grok-4.6', quality: 1, costPer1K: 6.846255319148936, n: 94 },
+          { model: 'or-solar-pro4', quality: 0.979456802063185, costPer1K: 0.023159680851063822, n: 94 },
+        ],
+      },
+    ];
+    const w = world();
+    const io = (harness: string | null, extra: Partial<DailyIo> = {}): DailyIo => ({
       now: () => TUESDAY,
-      dailyFacts: async () => facts,
+      agendaSignals: async () => signals,
+      publishedClaims: async () => new Map(),
+      measurementFooter: async () => '3 measurement cycles ran in the last 24 hours, no recipe reached a frontier.',
       readIssue: (d) => w.issues.get(d) ?? null,
       writeIssueFiles: (i) => void w.issues.set(i.week, i),
       startWorkerRun: async () => {
-        const id = `run-daily-${w.started.length + 1}`;
+        const id = `run-piece-${w.started.length + 1}`;
         w.runs.set(id, { state: null, files: new Map() });
         w.started.push(id);
         return id;
       },
-      // null means STILL RUNNING — distinct from an unknown run, which is
-      // 'failed'. (Conflating them hid the overdue path from this test.)
       runTerminalState: async (id) => (w.runs.has(id) ? w.runs.get(id)!.state : 'failed'),
       readRunFile: async (id, n) => w.runs.get(id)?.files.get(n) ?? null,
       readState: (d) => w.states.get(d) ?? null,
-      writeState: (s, o) => {
-        if (o?.exclusive && w.states.has(s.week)) return false;
-        w.states.set(s.week, s);
+      writeState: (st, o) => {
+        if (o?.exclusive && w.states.has(st.week)) return false;
+        w.states.set(st.week, st);
         return true;
       },
       deltaHarness: harness,
@@ -186,42 +212,52 @@ describe('the state machine', () => {
       ...extra,
     });
 
-    // 1. A PARKED framing run (the live 2026-09-04 wedge) still publishes.
-    const parked = world();
-    await dailyLedgerTick(base(parked, 'dd'.repeat(32)));
-    parked.runs.get(parked.started[0]!)!.state = 'awaiting-human';
-    expect(await dailyLedgerTick(base(parked, 'dd'.repeat(32)))).toBe('daily-published');
-    expect(parked.issues.get('2026-09-04')!.status).toBe('published');
-    expect(parked.issues.get('2026-09-04')!.byline).toBe('Potion Research');
+    // The assignment carries the claim and its evidence — nothing else.
+    expect(await dailyPieceTick(io('dd'.repeat(32)))).toMatch(/^daily-delta:/);
+    expect(w.log.join(' ')).toMatch(/assigned "The last 2\.1 points of code gen quality cost 296×"/);
 
-    // 2. An OVERDUE run (never terminal) is abandoned and the day ships.
-    const slow = world();
-    await dailyLedgerTick(base(slow, 'dd'.repeat(32)));
-    const late = base(slow, 'dd'.repeat(32), { now: () => new Date(TUESDAY.getTime() + 25 * 60_000) });
-    expect(await dailyLedgerTick(late)).toBe('daily-published');
-    expect(slow.log.join(' ')).toMatch(/framing overdue/);
-
-    // 2b. A completed run whose file is not visible YET waits (the 889ms
-    // read-after-write race), then frames when it appears.
-    const racy = world();
-    await dailyLedgerTick(base(racy, 'dd'.repeat(32)));
-    const rid = racy.started[0]!;
-    racy.runs.get(rid)!.state = 'completed'; // completed, file not yet readable
-    expect(await dailyLedgerTick(base(racy, 'dd'.repeat(32)))).toBeNull();
-    expect(racy.issues.size).toBe(0);
-    racy.runs.get(rid)!.files.set(
-      'daily.json',
-      JSON.stringify({ title: 'A quiet day.', summary: 's', plain: 'p', lede: 'l', frontierNote: 'f', auditionNote: 'a', mixingNote: '', takeaway: 't', faq: [] }),
+    // A piece stating a number outside its evidence is REFUSED.
+    const rid = w.started[0]!;
+    w.runs.get(rid)!.state = 'completed';
+    w.runs.get(rid)!.files.set(
+      'piece.json',
+      JSON.stringify({ title: 'Code costs 900× more.', plain: 'A 900× premium was measured.', lede: 'l', takeaway: 't' }),
     );
-    expect(await dailyLedgerTick(base(racy, 'dd'.repeat(32)))).toBe('daily-published');
-    expect(racy.issues.get('2026-09-04')!.byline).toBe('Delta');
-    expect(racy.issues.get('2026-09-04')!.writer?.runId).toBe(rid);
+    expect(await dailyPieceTick(io('dd'.repeat(32)))).toBe('daily-published');
+    const issue = w.issues.get('2026-09-01')!;
+    expect(issue.byline).toBe('Potion Research'); // refused → composed piece
+    expect(w.log.join(' ')).toMatch(/states "900".*not in its evidence/);
+    expect(issue.title).toMatch(/last 2\.1 points of code gen quality cost 296×/);
+    expect(issue.agenda?.id).toBe('quality-premium:code-gen');
+    expect(issue.agenda?.claimKey).toContain('or-grok-4.6');
+    // The ledger is a FOOTER now, never the headline.
+    expect(issue.auditionNote).toMatch(/3 measurement cycles/);
+    expect(issue.title).not.toMatch(/cycles/);
+  });
 
-    // 3. NO framing generation configured: the ledger publishes unframed.
-    const bare = world();
-    expect(await dailyLedgerTick(base(bare, null))).toBe('daily-published');
-    expect(bare.started).toHaveLength(0);
-    expect(bare.issues.get('2026-09-04')!.title).toMatch(/quiet day/i);
+  it('an empty agenda publishes NOTHING — silence beats filler', async () => {
+    const w = world();
+    const io: DailyIo = {
+      now: () => TUESDAY,
+      agendaSignals: async () => [],
+      publishedClaims: async () => new Map(),
+      measurementFooter: async () => 'x',
+      readIssue: () => null,
+      writeIssueFiles: (i) => void w.issues.set(i.week, i),
+      startWorkerRun: async () => 'run-x',
+      runTerminalState: async () => 'completed',
+      readRunFile: async () => null,
+      readState: (d) => w.states.get(d) ?? null,
+      writeState: (st) => {
+        w.states.set(st.week, st);
+        return true;
+      },
+      deltaHarness: null,
+      log: (l) => w.log.push(l),
+    };
+    expect(await dailyPieceTick(io)).toBe('agenda-empty');
+    expect(w.issues.size).toBe(0);
+    expect(w.log.join(' ')).toMatch(/nothing provable left unsaid/);
   });
 
   it('exhausted attempts fall back to the deterministic draft, which needs no verifier', async () => {

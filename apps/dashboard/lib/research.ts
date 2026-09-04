@@ -20,6 +20,7 @@ export interface Issue {
   /** 'daily' = a short event note (C3): body paragraphs, no FactSheet. */
   kind?: 'weekly' | 'daily';
   body?: string;
+  agenda?: { id: string; kind: string; clusterId: string; demandQuery: string; score: number; claimKey?: string };
   plain: string; lede: string; frontierNote: string; auditionNote: string; mixingNote: string; takeaway: string; method: string;
   faq: IssueFaq[]; facts: FactSheet | null; status: 'published' | 'held'; heldReason?: string;
   writer: { model: string; costUsd: number; receipt?: { cluster: string; strategy8: string; policy: string; provenance: string; promptTokens: number; completionTokens: number }; runId?: string; verifiedBy?: { runId: string; costUsd: number } } | null;

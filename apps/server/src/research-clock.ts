@@ -13,7 +13,7 @@
 //   POTION_RESEARCH_AUDITOR_HARNESS  (the verifier generation)
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -27,6 +27,7 @@ import {
   getLabHarness,
   getLabRun,
   getLabRunFile,
+  getLatestFrontier,
   holdExternalSession,
   listActionGrants,
   listLabSteps,
@@ -38,7 +39,21 @@ import {
 import { buildStepPayload, ceilingFor, decideAction } from '@potion/lab-runtime';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import type { PotionQueue } from '@potion/queue';
-import { clockFsIo, composeDailyFacts, dailyLedgerTick, frontierNotesTick, isoWeekOf, PUBLISH_ACTION_CLASS, type ClockIO, type DailyFacts } from '@potion/workers';
+import {
+  clockFsIo,
+  composeDailyFacts,
+  dailyPieceTick,
+  frontierNotesTick,
+  isoWeekOf,
+  measurementFooter,
+  publishedClaims,
+  PLATFORM_SUITE_BY_CLUSTER,
+  PUBLISH_ACTION_CLASS,
+  type ClockIO,
+  type ClusterSignal,
+  type DailyFacts,
+  type Issue,
+} from '@potion/workers';
 import type { PotionContext } from './context.js';
 import { requireRole } from './auth.js';
 
@@ -172,7 +187,42 @@ export function registerFrontierNotesClock(
     };
   }
 
-  // F6: the day's facts, composed from the instruments' own rows.
+  /** The published corpus: the cooldown's memory lives in the issues. */
+  const readPublishedIssues = (dir: string): Issue[] => {
+    const notes = join(dir, 'artifacts', 'notes');
+    if (!existsSync(notes)) return [];
+    const out: Issue[] = [];
+    for (const f of readdirSync(notes)) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const i = JSON.parse(readFileSync(join(notes, f), 'utf8')) as Issue;
+        if (i.status === 'published') out.push(i);
+      } catch {
+        /* a malformed note is not a claim */
+      }
+    }
+    return out;
+  };
+
+  // F8: the agenda's corpus — the measured frontiers Atlas reasons over.
+  const agendaSignals = async (): Promise<readonly ClusterSignal[]> => {
+    const out: ClusterSignal[] = [];
+    for (const clusterId of Object.keys(PLATFORM_SUITE_BY_CLUSTER).sort()) {
+      const frontier = await getLatestFrontier(db, clusterId as never, null);
+      const points = (frontier?.points ?? [])
+        .filter((p) => typeof (p.strategyConfig as { model?: string } | undefined)?.model === 'string')
+        .map((p) => ({
+          model: (p.strategyConfig as { model: string }).model,
+          quality: p.quality,
+          costPer1K: p.costPer1K,
+          n: (p.evidence as { n?: number } | undefined)?.n ?? 0,
+        }));
+      if (points.length > 0) out.push({ clusterId, points });
+    }
+    return out;
+  };
+
+  // F6, demoted: the day's measurement activity is now a provenance FOOTER.
   const dailyFacts = async (): Promise<DailyFacts> => {
     const cycles = await listResearchCycles(db, 200);
     const promoted = await listRecentlyPromoted(db, 1, 100);
@@ -298,9 +348,11 @@ export function registerFrontierNotesClock(
     if (armed) {
       try {
         const io = buildIo(envDir!);
-        await dailyLedgerTick({
+        await dailyPieceTick({
           now: io.now,
-          dailyFacts,
+          agendaSignals,
+          publishedClaims: async () => publishedClaims(readPublishedIssues(envDir!)),
+          measurementFooter: async () => measurementFooter(await dailyFacts()),
           readIssue: io.readIssue,
           writeIssueFiles: io.writeIssueFiles,
           startWorkerRun: io.startWorkerRun,
