@@ -203,7 +203,6 @@ export function generateAgenda(input: AgendaInput): AgendaCandidate[] {
     const demandBase = CLUSTER_DEMAND[s.clusterId] ?? 0.5;
     const byQuality = [...pts].sort((a, b) => b.quality - a.quality);
     const top = byQuality[0]!;
-    const nMin = Math.min(...pts.map((p) => p.n || 0));
 
     // ── 1. THE QUALITY PREMIUM — the category's defining question:
     //      what do the last points of quality actually cost?
