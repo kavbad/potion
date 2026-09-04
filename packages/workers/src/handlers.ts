@@ -279,10 +279,25 @@ export interface JobContext {
   delivery?: { jobId: string; attempt: number } | undefined;
 }
 
-export type WorkerHandler<K extends keyof JobPayloads = keyof JobPayloads> = (
+/**
+ * A job handler, keyed by job name.
+ *
+ * `R` carries the handler's RESULT type (2026-09-02). Every concrete handler
+ * below already annotates its own return — `: Promise<EvalRunResult>` and so
+ * on — but annotating the const as `WorkerHandler<'eval:run'>` erased that to
+ * `unknown`, because the declared type of the binding wins. Anything reading a
+ * handler's result (tests, operator scripts, the in-process callers) then got
+ * `unknown` and had to cast its way back to the type the handler already
+ * promised, which is how a fixture drifts out of shape unnoticed.
+ *
+ * Defaulted to `unknown`, so every existing `WorkerHandler<'job:name'>`
+ * annotation keeps working unchanged; pass the second argument where the
+ * result is read.
+ */
+export type WorkerHandler<K extends keyof JobPayloads = keyof JobPayloads, R = unknown> = (
   payload: JobPayloads[K],
   ctx: JobContext,
-) => Promise<unknown>;
+) => Promise<R>;
 
 async function writeJsonArtifact(
   artifacts: ArtifactStore | undefined,
@@ -324,7 +339,7 @@ async function loadStrategies(db: PotionDb, hashes: string[]): Promise<StrategyC
   return hashes.map((h) => byHash.get(h)!);
 }
 
-export const evalRunHandler: WorkerHandler<'eval:run'> = async (
+export const evalRunHandler: WorkerHandler<'eval:run', EvalRunResult> = async (
   payload: EvalRunPayload,
   ctx: JobContext,
 ): Promise<EvalRunResult> => {
@@ -403,7 +418,7 @@ export interface SweepRunResult {
   artifactKey: string | null;
 }
 
-export const sweepRunHandler: WorkerHandler<'sweep:run'> = async (
+export const sweepRunHandler: WorkerHandler<'sweep:run', SweepRunResult> = async (
   payload: SweepRunPayload,
   ctx: JobContext,
 ): Promise<SweepRunResult> => {
@@ -471,7 +486,7 @@ export const sweepRunHandler: WorkerHandler<'sweep:run'> = async (
 // staleness:scan — flag eval_results whose prices/judge/model versions drifted
 // ---------------------------------------------------------------------------
 
-export const stalenessScanHandler: WorkerHandler<'staleness:scan'> = async (
+export const stalenessScanHandler: WorkerHandler<'staleness:scan', StaleCounts> = async (
   _payload: StalenessScanPayload,
   ctx: JobContext,
 ): Promise<StaleCounts> => {
@@ -1337,7 +1352,7 @@ export interface ResearchScanResult {
   artifactKey: string | null;
 }
 
-export const researchScanHandler: WorkerHandler<'research:scan'> = async (
+export const researchScanHandler: WorkerHandler<'research:scan', ResearchScanResult> = async (
   payload: ResearchScanPayload,
   ctx: JobContext,
 ): Promise<ResearchScanResult> => {
@@ -1537,7 +1552,7 @@ async function emitPromotionAlerts(
   }
 }
 
-export const researchCycleHandler: WorkerHandler<'research:cycle'> = async (
+export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycleResult> = async (
   payload: ResearchCyclePayload,
   ctx: JobContext,
 ): Promise<ResearchCycleResult> =>
@@ -2229,7 +2244,7 @@ export interface TracesClusterResult {
   clusters: AgentClusterOutcome[];
 }
 
-export const tracesClusterHandler: WorkerHandler<'traces:cluster'> = async (
+export const tracesClusterHandler: WorkerHandler<'traces:cluster', TracesClusterResult> = async (
   payload: TracesClusterPayload,
   ctx: JobContext,
 ): Promise<TracesClusterResult> => {
@@ -2697,13 +2712,22 @@ export interface TracesPurgeResult {
   }[];
 }
 
+/** Rows walked / rows actually rewritten by the redaction backfill. */
+export interface TracesRedactResult {
+  scanned: number;
+  updated: number;
+}
+
 /** G1.1: PII-redaction backfill over existing trace_spans (idempotent). */
-export const tracesRedactHandler: WorkerHandler<'traces:redact'> = async (payload, ctx) => {
+export const tracesRedactHandler: WorkerHandler<'traces:redact', TracesRedactResult> = async (
+  payload,
+  ctx,
+): Promise<TracesRedactResult> => {
   const result = await backfillRedactSpans(ctx.db, payload.orgId);
   return result; // { scanned, updated }
 };
 
-export const tracesPurgeHandler: WorkerHandler<'traces:purge'> = async (
+export const tracesPurgeHandler: WorkerHandler<'traces:purge', TracesPurgeResult> = async (
   payload: TracesPurgePayload,
   ctx: JobContext,
 ): Promise<TracesPurgeResult> => {
@@ -2975,7 +2999,7 @@ export interface RubricGenerateResult {
   spendUsd: number;
 }
 
-export const rubricGenerateHandler: WorkerHandler<'rubric:generate'> = async (
+export const rubricGenerateHandler: WorkerHandler<'rubric:generate', RubricGenerateResult> = async (
   payload: RubricGeneratePayload,
   ctx: JobContext,
 ): Promise<RubricGenerateResult> =>
@@ -3226,7 +3250,7 @@ export interface FrontierLiveSweepResult {
   points: number;
 }
 
-export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep'> = async (
+export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep', FrontierLiveSweepResult> = async (
   payload: FrontierLiveSweepPayload,
   ctx: JobContext,
 ): Promise<FrontierLiveSweepResult> =>
@@ -3901,7 +3925,7 @@ export function frontierRegressionRefusal(args: {
   );
 }
 
-export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-sweep'> = async (
+export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-sweep', FrontierPlatformSweepResult> = async (
   payload: FrontierPlatformSweepPayload,
   ctx: JobContext,
 ): Promise<FrontierPlatformSweepResult> =>
@@ -4447,6 +4471,13 @@ const LAB_RUN_TERMINAL_STATES = new Set(['completed', 'failed', 'killed-budget',
  * the MCP seams: the master key (grants open in THIS process — the custody
  * perimeter now spans server + worker, same env-var discipline) and a
  * connector-registry override so tests point at the mock hosted server. */
+/** What lab:run answers with — named so callers and tests read the real
+ * shape instead of `unknown`. */
+export interface LabRunHandlerResult {
+  state: string;
+  noop?: boolean;
+}
+
 export interface LabRunHandlerDeps {
   clientFactory?: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
   masterKeyProvider?: MasterKeyProvider;
@@ -4465,7 +4496,7 @@ export interface LabRunHandlerDeps {
   sendNotify?: SendNotify;
 }
 
-export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run'> {
+export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler<'lab:run', LabRunHandlerResult> {
   return async (
     payload: LabRunJobPayload,
     ctx: JobContext,
@@ -5042,7 +5073,7 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
   });
 }
 
-export const labRunHandler: WorkerHandler<'lab:run'> = createLabRunHandler();
+export const labRunHandler: WorkerHandler<'lab:run', LabRunHandlerResult> = createLabRunHandler();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lab Step 10 — lab:grant-revoke: BEST-EFFORT provider-side revocation.
@@ -5060,9 +5091,16 @@ export interface LabGrantRevokeDeps {
   fetchImpl?: typeof fetch;
 }
 
+/** What lab:grant-revoke answers with — the provider-side outcome plus the
+ * reason, which the tests assert on directly. */
+export interface LabGrantRevokeResult {
+  provider: 'revoked' | 'skipped' | 'failed';
+  detail: string;
+}
+
 export function createLabGrantRevokeHandler(
   deps: LabGrantRevokeDeps = {},
-): WorkerHandler<'lab:grant-revoke'> {
+): WorkerHandler<'lab:grant-revoke', LabGrantRevokeResult> {
   return async (payload, ctx): Promise<{ provider: 'revoked' | 'skipped' | 'failed'; detail: string }> => {
     const connectors = deps.connectors ?? connectableConnectors();
     const connector = connectors.find((c) => c.connectorId === payload.connectorId);
@@ -5109,7 +5147,7 @@ export function createLabGrantRevokeHandler(
   };
 }
 
-export const labGrantRevokeHandler: WorkerHandler<'lab:grant-revoke'> = createLabGrantRevokeHandler();
+export const labGrantRevokeHandler: WorkerHandler<'lab:grant-revoke', LabGrantRevokeResult> = createLabGrantRevokeHandler();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
@@ -5832,7 +5870,7 @@ const runSuiteVerify = async (
  * be recorded must not report success. Ownership-misuse throws inside the
  * runner happen before any verdict exists and stay exceptions, not outcomes.
  */
-export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify'> = async (
+export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify', GuaranteeSuiteVerifyResult> = async (
   payload: GuaranteeSuiteVerifyPayload,
   ctx: JobContext,
 ): Promise<GuaranteeSuiteVerifyResult> =>
@@ -6120,7 +6158,7 @@ const runSuiteCertify = async (
 
 /** Chokepoint wrapper (the 0029 shape): EVERY outcome — certified, failed,
  * or refused — writes exactly one durable suite_certifications row. */
-export const suiteCertifyHandler: WorkerHandler<'suite:certify'> = async (
+export const suiteCertifyHandler: WorkerHandler<'suite:certify', SuiteCertifyResult> = async (
   payload: SuiteCertifyPayload,
   ctx: JobContext,
 ): Promise<SuiteCertifyResult> =>

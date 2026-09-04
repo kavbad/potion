@@ -5,9 +5,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { roundCost, type EvalItem, type ScoringMethod, sha256 } from '@potion/core';
+import { roundCost, type EvalItem, type PriceTable, type ProviderId, type ScoringMethod, sha256 } from '@potion/core';
 import { createDb, createOrg, getEvalResultByCacheKey, migrate, type DbHandle } from '@potion/db';
-import { createMockProvider, evalTaskById, hashString } from '@potion/providers';
+import { createMockProvider, evalTaskById, hashString, type Provider } from '@potion/providers';
 import { BudgetCapError, estimateItemCostUsd } from './estimate.js';
 import { createRunProviders, MockAliasInLiveRunError, SimulatedSuiteError, cacheKeyOf, runEval, type RunDeps } from './runner.js';
 import type { SpendCall } from './metered-providers.js';
@@ -729,12 +729,18 @@ describe('providerTimeoutMs — declared, not inherited from the environment', (
 
 describe('cacheKeyOf — Observatory canary salt', () => {
   it('an unsalted key is unchanged, a salted key differs, and different salts differ', () => {
-    const item = { id: 'it-1', prompt: 'p', reference: 'r', scoring: { kind: 'exact' } } as never;
-    const prices = { version: 'v-test', updatedAt: '2026-01-01', entries: [] } as never;
-    const base = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live' });
-    const again = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live', cacheSalt: '' });
-    const w1 = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live', cacheSalt: '2026-W35' });
-    const w2 = cacheKeyOf('sh', item, (item as { scoring: never }).scoring, prices, { providerMode: 'live', cacheSalt: '2026-W36' });
+    const item: EvalItem = {
+      id: 'it-1',
+      clusterId: 'extraction',
+      prompt: [{ role: 'user', content: 'p' }],
+      reference: 'r',
+      scoring: { kind: 'exact' },
+    };
+    const prices: PriceTable = { version: 'v-test', updatedAt: '2026-01-01', entries: [] };
+    const base = cacheKeyOf('sh', item, item.scoring, prices, { providerMode: 'live' });
+    const again = cacheKeyOf('sh', item, item.scoring, prices, { providerMode: 'live', cacheSalt: '' });
+    const w1 = cacheKeyOf('sh', item, item.scoring, prices, { providerMode: 'live', cacheSalt: '2026-W35' });
+    const w2 = cacheKeyOf('sh', item, item.scoring, prices, { providerMode: 'live', cacheSalt: '2026-W36' });
     expect(again).toBe(base);
     expect(w1).not.toBe(base);
     expect(w2).not.toBe(w1);

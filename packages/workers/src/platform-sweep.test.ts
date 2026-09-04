@@ -29,7 +29,7 @@ import {
   upsertBudget,
   type DbHandle,
 } from '@potion/db';
-import { loadSuite, loadSuiteV2, runEval } from '@potion/harness';
+import { loadSuite, loadSuiteV2, runEval, type RunOptions } from '@potion/harness';
 import {
   aggregatesFromEvalResults,
   computeFrontier,
@@ -135,7 +135,7 @@ async function armThrough(stage: 'belt' | 'keys'): Promise<void> {
   process.env.POTION_EVAL_PROVIDER = 'live';
   if (stage === 'keys') {
     await createOrg(db.db, { id: PLATFORM_OPS_ORG_ID, name: 'Platform operations' });
-    await upsertBudget(db.db, { orgId: PLATFORM_OPS_ORG_ID, monthlyCapUsd: 60, hardStop: true });
+    await upsertBudget(db.db, { orgId: PLATFORM_OPS_ORG_ID, monthlyCapUsd: 60, hardStop: true, warnPct: 80 });
   }
 }
 
@@ -271,7 +271,7 @@ describe('refusal ladder — each refuses BEFORE any spend, for its named reason
     await expectRefusal({ clusterId: 'summarization', capUsd: 6 }, 'belt-missing');
     // A soft (non-hardStop) belt is not a belt.
     await createOrg(db.db, { id: PLATFORM_OPS_ORG_ID, name: 'Platform operations' });
-    await upsertBudget(db.db, { orgId: PLATFORM_OPS_ORG_ID, monthlyCapUsd: 60, hardStop: false });
+    await upsertBudget(db.db, { orgId: PLATFORM_OPS_ORG_ID, monthlyCapUsd: 60, hardStop: false, warnPct: 80 });
     await expectRefusal({ clusterId: 'summarization', capUsd: 6 }, 'belt-missing');
   });
 
@@ -339,13 +339,13 @@ describe('containment — platform rows stay platform (the F12 lesson, sweep-sha
    * three scopes the aggregation must distinguish. $0: mock provider; the
    * live stamp rides the runner's providerModeOverride seam. */
   async function plantAdversarialRows(): Promise<void> {
-    const base = {
+    const base: RunOptions = {
       suiteIds: [CLUSTER],
       strategies,
       budgetCapUsd: 1000,
       resume: true,
       itemSampleN: 3,
-    } as const;
+    };
     // 1. Platform MOCK (the seed's shape — SIMULATED evidence).
     await runEval({ ...base }, { db, pricesPath });
     // 2. ORG-attributed LIVE-stamped (a tenant's paid evidence).
@@ -798,7 +798,7 @@ describe('frontier-regression — the code-gen v3 blind spot, by strategy hash',
   it('catches every composite shape, not just cascade', () => {
     const composites: StrategyConfig[] = [
       CASCADE('mock-cheap', 'mock-frontier'),
-      { type: 'ensemble', models: ['mock-cheap', 'mock-mid'], fusion: { method: 'majority-vote' } },
+      { type: 'ensemble', models: ['mock-cheap', 'mock-mid'], fusion: { method: 'concat-rank' } },
       { type: 'draft-verify', draftModel: 'mock-cheap', verifierModel: 'mock-frontier' },
       { type: 'best-of-n', model: 'mock-mid', n: 3, judge: { model: 'mock-judge' } },
       { type: 'composite', startModel: 'mock-cheap', upgradeModel: 'mock-frontier', upgradeIf: { confidenceBelow: 0.5 } },

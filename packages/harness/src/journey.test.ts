@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { EvalItem } from '@potion/core';
+import type { EvalItem, ScoringMethod } from '@potion/core';
 import { createDb, migrate, type DbHandle } from '@potion/db';
 import { estimateItemCostUsd } from './estimate.js';
 import { executeJourney, templateJourneyPrompt } from './journey.js';
@@ -32,7 +32,7 @@ describe('templateJourneyPrompt', () => {
 describe('executeJourney', () => {
   const item: EvalItem = {
     id: 'j-unit',
-    clusterId: 'journey' as never,
+    clusterId: 'journey',
     prompt: [{ role: 'user', content: 'step one' }],
     journeySteps: [
       { clusterId: 'classification', prompt: 'classify: {{prev}}' },
@@ -60,10 +60,10 @@ describe('executeJourney', () => {
 });
 
 describe('scoreFieldContains (the journey end-artifact check)', () => {
-  const scoring = {
+  const scoring: Extract<ScoringMethod, { kind: 'field-contains' }> = {
     kind: 'field-contains',
     fields: { 'extract.order_ref': '88231', priority: ['standard', 'std'] },
-  } as const;
+  };
   it('dotted paths + accepted alternatives + case-insensitive contains', () => {
     const answer = '{"extract":{"order_ref":"order 88231"},"priority":"Standard"}';
     expect(scoreFieldContains(answer, scoring)).toBe(1);
@@ -78,9 +78,9 @@ describe('scoreFieldContains (the journey end-artifact check)', () => {
   it('dispatches through scoreAnswer with scorer name field-contains', async () => {
     const item: EvalItem = {
       id: 'fc-01',
-      clusterId: 'journey' as never,
+      clusterId: 'journey',
       prompt: [{ role: 'user', content: 'x' }],
-      scoring: scoring as never,
+      scoring,
     };
     const out = await scoreAnswer(item, '{"extract":{"order_ref":"88231"},"priority":"standard"}');
     expect(out).toEqual({ quality: 1, scorer: 'field-contains' });
@@ -113,7 +113,7 @@ describe('journey preflight projection (the belt must price every step)', () => 
   it('a journey projects strictly MORE than its first step alone', () => {
     const single: EvalItem = {
       id: 'p-01',
-      clusterId: 'journey' as never,
+      clusterId: 'journey',
       prompt: [{ role: 'user', content: 'step one prompt' }],
       scoring: { kind: 'exact' },
     };
@@ -125,8 +125,8 @@ describe('journey preflight projection (the belt must price every step)', () => 
       ],
     };
     const strategy = { type: 'single', model: 'm1' } as const;
-    const one = estimateItemCostUsd(strategy as never, single, prices as never);
-    const chain = estimateItemCostUsd(strategy as never, journey, prices as never);
+    const one = estimateItemCostUsd(strategy, single, prices);
+    const chain = estimateItemCostUsd(strategy, journey, prices);
     expect(chain).toBeGreaterThan(one * 2.5); // 3 steps, refs bounded at a full answer each
   });
 });

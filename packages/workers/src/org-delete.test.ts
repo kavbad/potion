@@ -160,13 +160,13 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     await insertApiKey(db.db, { id: 'key_casc', keyHash: sha256('pk_casc'), name: 'k', orgId: ORG, policyId: 'pol_casc' });
     await insertRequestLog(db.db, { orgId: ORG, clusterId, status: 'ok', usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.01, latencyMs: 1 } });
     await insertQualitySample(db.db, { orgId: ORG, strategyHash: 'h', quality: 0.5, clusterId, policyId: 'pol_casc' });
-    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 10, hardStop: false });
+    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 10, hardStop: false, warnPct: 80 });
     await db.db.execute(sql.raw(`INSERT INTO budget_events (org_id, kind, day) VALUES ('${ORG}', 'budget_warning', '2026-08-07')`));
     const ruleRes = await db.db.execute(sql.raw(
       `INSERT INTO alert_rules (org_id, kind, target_url, events) VALUES ('${ORG}', 'webhook', 'https://x.example/hook?token=s3cret', ARRAY['recipe_promoted']) RETURNING id`,
     ));
     const ruleId = String((ruleRes.rows[0] as { id: string }).id);
-    await insertAlertDelivery(db.db, { ruleId, event: 'recipe_promoted', ok: true, status: 200 });
+    await insertAlertDelivery(db.db, { ruleId, event: 'recipe_promoted', status: 'delivered', attempts: 1, deliveredAt: new Date() });
     await db.db.execute(sql.raw(
       `INSERT INTO share_tokens (org_id, kind, token_hash) VALUES ('${ORG}', 'frontier', '${sha256('share_casc')}')`,
     ));

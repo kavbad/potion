@@ -127,7 +127,7 @@ describe('frontier:live-sweep (G1.7)', () => {
   it('budget refusal: fail-CLOSED before any spend when the hard-stop cap would be exceeded', async () => {
     const clusterId = await seedCluster();
     process.env.POTION_EVAL_PROVIDER = 'live';
-    await upsertBudget(db.db, { orgId: 'org_ls', monthlyCapUsd: 1, hardStop: true });
+    await upsertBudget(db.db, { orgId: 'org_ls', monthlyCapUsd: 1, hardStop: true, warnPct: 80 });
     // existing MTD spend near the cap
     await insertRequestLog(db.db, {
       orgId: 'org_ls',
@@ -147,7 +147,7 @@ describe('frontier:live-sweep (G1.7)', () => {
   it('RATCHET (post-capstone item 1): a run KILLED mid-flight already metered its spend, so the retry is refused at the cap', async () => {
     const clusterId = await seedCluster();
     process.env.POTION_EVAL_PROVIDER = 'live';
-    await upsertBudget(db.db, { orgId: 'org_ls', monthlyCapUsd: 1, hardStop: true });
+    await upsertBudget(db.db, { orgId: 'org_ls', monthlyCapUsd: 1, hardStop: true, warnPct: 80 });
     // A prior attempt died mid-run AFTER two provider calls. Per-call
     // metering made both durable as they occurred — no completion, no
     // aggregate row, no run row. Pre-fix this spend was INVISIBLE to the

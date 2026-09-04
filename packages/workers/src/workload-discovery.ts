@@ -171,7 +171,7 @@ export interface WorkloadsDiscoverResult {
 }
 
 /** workloads:discover — one org when named, else every org with spans. */
-export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover'> = async (payload, ctx) => {
+export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover', WorkloadsDiscoverResult> = async (payload, ctx) => {
   const embedder = ctx.embedder;
   if (embedder === undefined) {
     throw new Error('workloads:discover requires JobContext.embedder (platform embedder)');

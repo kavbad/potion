@@ -754,7 +754,7 @@ describe('X4 — fan-out: one fuel tree, one trace (integration)', () => {
 describe('X6 — the browser hand: reads free, every act at the pore', () => {
   function scriptedBrowser(): typeof fetch {
     let sessions = 0;
-    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const path = String(input).replace(/^https?:\/\/[^/]+/, '');
       if (path === '/session' && init?.method === 'POST') {
         sessions += 1;

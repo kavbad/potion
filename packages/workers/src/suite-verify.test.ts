@@ -350,7 +350,7 @@ describe('guarantee:suite-verify handler (mock mode)', () => {
     const clusterId = await seedCluster();
     await seedPolicyAndStrategies(guaranteeWith());
     await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
-    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true });
+    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true, warnPct: 80 });
     process.env.POTION_EVAL_PROVIDER = 'live';
     const r = await verify(clusterId);
     expect(r.outcome).toBe('budget-refused');
@@ -446,7 +446,7 @@ describe('G2.2 incident SLAs', () => {
     await seedPolicyAndStrategies(guaranteeWith());
     await designateIncumbent(db.db, ORG, clusterId, H_INCUMBENT);
     const advisoryId = await backdatedAdvisory(clusterId, 1);
-    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true });
+    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true, warnPct: 80 });
     process.env.POTION_EVAL_PROVIDER = 'live';
     const r = await verify(clusterId, { advisoryIncidentId: advisoryId });
     expect(r.outcome).toBe('budget-refused');
@@ -921,7 +921,7 @@ describe('suite:certify + contractual gating (post-capstone item 3, Decision 2)'
     expect(r1.outcome).toBe('no-incumbent');
     // budget refusal (live, fail-closed, recorded)
     await designateIncumbent(db.db, ORG, clusterId, H_SERVING);
-    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true });
+    await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 0.01, hardStop: true, warnPct: 80 });
     process.env.POTION_EVAL_PROVIDER = 'live';
     const r2 = await suiteCertifyHandler({ orgId: ORG, clusterId }, ctx());
     expect(r2.outcome).toBe('budget-refused');

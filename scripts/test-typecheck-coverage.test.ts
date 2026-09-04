@@ -31,16 +31,12 @@ const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
  * delete the row.
  */
 const PENDING: Record<string, string> = {
-  workers:
-    '154 errors at survey (2026-09-02). The largest surface and the one under ' +
-    'active concurrent development (research fleet, frontier notes), so fixing it ' +
-    'in the same pass would collide with work in flight.',
-  harness:
-    '16 errors at survey (2026-09-02). Small enough to clear next; deferred only ' +
-    'to keep this change reviewable.',
   'lab-runtime':
-    '18 errors at survey (2026-09-02), and its loop/replay modules are being ' +
-    'edited concurrently — enabling it here would fight that work.',
+    '18 errors at survey (2026-09-02), and its loop/replay modules are under ' +
+    'concurrent edit by another session — enabling it here would fight that ' +
+    'work. Known shape: 6 of the errors are the DOM-only `RequestInfo` type ' +
+    '(web-tools, browser-tools, git-tools); `Parameters<typeof fetch>[0]` is ' +
+    'the fix used everywhere else in this repo.',
 };
 
 interface Pkg {
@@ -110,6 +106,47 @@ function surveyPackages(): Pkg[] {
   return out;
 }
 
+/**
+ * THE ESCAPE-HATCH RATCHET.
+ *
+ * Typechecking tests only means something if the tests are not casting their
+ * way out of it. `as never` and `as unknown as X` are assignable to anything,
+ * so a fixture behind one is checked against nothing — which is exactly how
+ * the bugs this sweep found stayed hidden: an EvalItem with a string `prompt`
+ * and no clusterId, a Usage missing the very field production aggregates on,
+ * a strategy config with a fusion method that does not exist.
+ *
+ * Some remaining uses are legitimate (deliberately injecting a bad value to
+ * prove a runtime guard rejects it), so this is not zero and is not a
+ * deadline. It is a RATCHET: the count may fall, never rise. Cleaning one up
+ * means lowering this number in the same commit.
+ */
+const ESCAPE_HATCH_BUDGET = 223;
+
+function countEscapeHatches(): { total: number; byFile: Array<[string, number]> } {
+  const roots = [path.join(REPO_ROOT, 'packages'), path.join(REPO_ROOT, 'apps')];
+  const byFile: Array<[string, number]> = [];
+  let total = 0;
+  const visit = (d: string): void => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.next') continue;
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) visit(full);
+      else if (/\.test\.tsx?$/.test(entry.name)) {
+        const src = readFileSync(full, 'utf8');
+        const n = (src.match(/as never\b|as unknown as\b/g) ?? []).length;
+        if (n > 0) {
+          byFile.push([path.relative(REPO_ROOT, full), n]);
+          total += n;
+        }
+      }
+    }
+  };
+  for (const r of roots) if (existsSync(r)) visit(r);
+  byFile.sort((a, b) => b[1] - a[1]);
+  return { total, byFile };
+}
+
 describe('test-typecheck coverage', () => {
   const pkgs = surveyPackages();
 
@@ -138,6 +175,20 @@ describe('test-typecheck coverage', () => {
     expect(orphanConfigs, 'tsconfig.test.json exists but the typecheck script never runs it').toEqual([]);
     const wiredWithoutConfig = pkgs.filter((p) => p.scriptRunsTestConfig && !p.hasTestConfig).map((p) => p.name);
     expect(wiredWithoutConfig, 'typecheck references a tsconfig.test.json that does not exist').toEqual([]);
+  });
+
+  it('type-escape hatches in tests never increase', () => {
+    const { total, byFile } = countEscapeHatches();
+    expect(
+      total,
+      total > ESCAPE_HATCH_BUDGET
+        ? `New \`as never\` / \`as unknown as\` in test files: ${total} vs a budget of ` +
+          `${ESCAPE_HATCH_BUDGET}. A fixture behind one of these is checked against ` +
+          `NOTHING, which is how the shape bugs this sweep found stayed hidden. Fix ` +
+          `the type instead. Worst offenders: ${byFile.slice(0, 5).map(([f, n]) => `${f} (${n})`).join(', ')}`
+        : `The budget is stale — ${total} remain, below ${ESCAPE_HATCH_BUDGET}. Lower ` +
+          `ESCAPE_HATCH_BUDGET to ${total} to lock the gain in.`,
+    ).toBe(ESCAPE_HATCH_BUDGET);
   });
 
   it('PENDING names only packages that actually exist and still have tests', () => {

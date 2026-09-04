@@ -3,9 +3,9 @@
 // protocol-capped, labeled, spend-accounted. Never Jaccard.
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import type { PriceTable, Provider, ProviderId } from '@potion/core';
+import type { PriceTable, ProviderId } from '@potion/core';
 import { PROTOCOL_MAX_TOKENS } from '@potion/core';
-import { createMockProvider, loadPrices } from '@potion/providers';
+import { createMockProvider, loadPrices, type Provider } from '@potion/providers';
 import {
   DEFAULT_SERVE_JUDGE_MODELS,
   defaultServeJudgeModel,

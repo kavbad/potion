@@ -198,6 +198,7 @@ export {
   AGENT_SUITE_ITEM_CAP,
   type TracesClusterResult,
   type TracesPurgeResult,
+  type TracesRedactResult,
   type AgentClusterOutcome,
   ALERT_DISPATCH_ATTEMPTS,
   ALERT_DISPATCH_TIMEOUT_MS,

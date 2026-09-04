@@ -59,31 +59,14 @@ const GUARANTEE = { minQuality: 0.99, windowMin: 60, sampleRate: 1, action: 'ale
 let app: FastifyInstance;
 const db = () => app.potion.db.db;
 
-/** `suiteCertifyHandler` is declared as a `WorkerHandler`, whose contract
- *  resolves `unknown`; the implementation resolves a `SuiteCertifyResult`.
- *  Narrow it back through a REAL runtime check rather than a cast, so a
- *  handler that ever stopped returning one would fail loudly right here. */
-function isSuiteCertifyResult(r: unknown): r is SuiteCertifyResult {
-  return (
-    typeof r === 'object' &&
-    r !== null &&
-    'status' in r &&
-    (r.status === 'certified' || r.status === 'failed') &&
-    'outcome' in r &&
-    typeof r.outcome === 'string'
-  );
-}
-
-async function certify(
+/** Was a hand-written type guard, because `WorkerHandler` erased every
+ *  handler's result to `unknown`. WorkerHandler now carries the result type
+ *  (`WorkerHandler<K, R>`), so `suiteCertifyHandler` resolves a real
+ *  `SuiteCertifyResult` and the narrowing dance is gone. */
+const certify = (
   payload: Parameters<typeof suiteCertifyHandler>[0],
   ctx: JobContext,
-): Promise<SuiteCertifyResult> {
-  const r = await suiteCertifyHandler(payload, ctx);
-  if (!isSuiteCertifyResult(r)) {
-    throw new Error(`suite:certify did not return a SuiteCertifyResult: ${JSON.stringify(r)}`);
-  }
-  return r;
-}
+): Promise<SuiteCertifyResult> => suiteCertifyHandler(payload, ctx);
 
 const today = new Date().toISOString().slice(0, 10);
 // Fixture times RELATIVE to the test run (base = 24h ago): the clustering

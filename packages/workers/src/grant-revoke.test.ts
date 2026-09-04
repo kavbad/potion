@@ -33,7 +33,14 @@ function connector(revocationUrl: string | undefined): ConnectorDef {
       clientSecretEnv: 'REVOKE_CLIENT_SECRET',
       scopesOffered: [],
     },
-    toolScopeMap: { get_me: [] },
+    tools: {
+      get_me: {
+        scopes: [],
+        action: 'read',
+        description: 'Return the authenticated user.',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    },
     ...(revocationUrl !== undefined ? { revocationUrl } : {}),
   };
 }

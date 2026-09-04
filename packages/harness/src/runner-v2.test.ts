@@ -7,9 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EvalItem } from '@potion/core';
-import {
-  createOrg,
-  upsertDerivedSuite, createDb, createOrg, migrate, type DbHandle } from '@potion/db';
+import { createDb, createOrg, migrate, upsertDerivedSuite, type DbHandle } from '@potion/db';
 import { runEval, unrunnableReason, type RunDeps } from './runner.js';
 
 const PRICES_PATH = fileURLToPath(new URL('../../../prices.json', import.meta.url));

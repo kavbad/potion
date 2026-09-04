@@ -15,7 +15,7 @@ export interface OrgDeleteHandlerOpts {
 
 export function createOrgDeleteHandler(
   opts: OrgDeleteHandlerOpts = {},
-): WorkerHandler<'org:delete'> {
+): WorkerHandler<'org:delete', OrgDeleteReport> {
   return async (payload: OrgDeletePayload, ctx: JobContext): Promise<OrgDeleteReport> => {
     // deleteOrgCascade refuses DEFAULT_ORG_ID and is idempotent; the report
     // (per-table counts) is the job result — status + evidence, always.

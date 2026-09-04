@@ -24,7 +24,7 @@ function item(patch: Partial<EvalItem> = {}): EvalItem {
     reference: { vendor: 'Acme Corp' },
     scoring: { kind: 'field-match', schema: { vendor: 'string' } },
     ...patch,
-  } as EvalItem;
+  };
 }
 
 function toJsonl(...items: EvalItem[]): string {
@@ -89,7 +89,7 @@ describe('convertAuthoredJsonl', () => {
 
   it('cross-check: missing reference when scoring requires it is rejected', () => {
     const i = item({ reference: undefined });
-    delete (i as Record<string, unknown>).reference;
+    delete i.reference;
     expect(() => convertAuthoredJsonl(toJsonl(i), { manifest: MANIFEST })).toThrow(
       /scoring kind 'field-match' requires a reference/,
     );
