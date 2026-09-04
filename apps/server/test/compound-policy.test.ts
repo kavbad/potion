@@ -33,10 +33,23 @@ import { ORG_A, ORG_B, seedIsolationOrgs } from './fixtures/orgs.js';
 
 // ---- the M1b frontier shape ----
 const CFG_CHEAP = { type: 'single', model: 'mock-cheap' } as const;
+// The REAL CascadeConfig shape (core types.ts): stages[] + confidenceMethod.
+// This fixture used to say `models: [...]` with a top-level
+// confidenceThreshold — a shape runCascade cannot execute, since it reads
+// `strategy.stages`. It survived because the server package typechecks only
+// src/ (tsconfig `include: ["src"]`), and because every test here served
+// under a bound tight enough to prune this SLOW point before execution. The
+// moment a test relaxed the bound past 2100ms the cascade became feasible,
+// got selected, and execution died with "Cannot read properties of
+// undefined (reading 'length')" — surfacing as a 503 that looked like a
+// broken auto-resolve.
 const CFG_CASCADE = {
   type: 'cascade',
-  models: ['mock-cheap', 'mock-frontier'],
-  confidenceThreshold: 0.7,
+  stages: [
+    { model: 'mock-cheap', escalateIf: { confidenceBelow: 0.7 } },
+    { model: 'mock-frontier' },
+  ],
+  confidenceMethod: 'self-report-calibrated',
 } as const;
 const CFG_STRONG = { type: 'single', model: 'mock-frontier' } as const;
 
@@ -135,6 +148,16 @@ beforeAll(async () => {
       name: s.id,
       orgId: ORG_A,
       policyId: s.id,
+      // These tests DELIBERATELY burst one key — the dedupe test alone sends
+      // five requests in a loop, and KEY_IMPOSSIBLE serves a dozen across the
+      // file. Against the 10 rps default that exhausts the bucket mid-file,
+      // and the 429 arrives as a MISSING side effect rather than an error:
+      // no trace, so `latency_violated` is undefined; no serve, so the
+      // policy-condition maintenance never runs and the standing condition
+      // is never cleared. The failure then reads as "auto-resolve is broken"
+      // while the serving path is fine. Same fixture treatment as
+      // openai-parity.test.ts, and rate limiting has its own suite.
+      rateRps: 1000,
     });
   }
   await insertApiKey(db(), {
@@ -144,6 +167,7 @@ beforeAll(async () => {
     orgId: ORG_A,
     policyId: 'pol-tight',
     scopes: 'serve+admin',
+    rateRps: 1000,
   });
 }, 90_000);
 
@@ -355,7 +379,14 @@ describe('unmeetable bound — the labeled violation', () => {
       .set({ config: compound(0.8, 5000) })
       .where((await import('drizzle-orm')).eq((await import('@potion/db')).policies.id, 'pol-impossible'));
 
-    const t = trace(await chat(KEY_IMPOSSIBLE));
+    // Prove the request actually SERVED before reading anything from it. A
+    // throttled or refused request has no trace, which makes the violation
+    // assertion below pass vacuously and leaves the condition untouched —
+    // the failure would then point at auto-resolution instead of at the
+    // request that never happened.
+    const relaxed = await chat(KEY_IMPOSSIBLE);
+    expect(relaxed.statusCode, relaxed.body.slice(0, 200)).toBe(200);
+    const t = trace(relaxed);
     expect(t.latency_violated).toBeUndefined();
     const open = (await listOpenPolicyConditions(db(), ORG_A)).filter(
       (r) => (r.detail as PolicyInfeasibleDetail).policyId === 'pol-impossible',

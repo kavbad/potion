@@ -103,8 +103,17 @@ export async function runCascade(
   messages: ChatMessage[],
   ctx: ExecContext,
 ): Promise<StrategyResult> {
-  if (strategy.stages.length === 0) {
-    throw new Error("cascade requires at least one stage");
+  // `stages` absent is a MALFORMED config, not an empty one — a stored
+  // strategy from an older shape, or one a generator produced wrong. It
+  // used to reach `.length` and die as "Cannot read properties of undefined",
+  // which surfaces to the caller as an opaque 503 and sends whoever debugs
+  // it looking at routing instead of at the config. Name it instead.
+  if (!Array.isArray(strategy.stages) || strategy.stages.length === 0) {
+    throw new Error(
+      `cascade requires at least one stage (got ${
+        strategy.stages === undefined ? 'no stages field — malformed config' : `${String(strategy.stages)}`
+      })`,
+    );
   }
   const trace: StageTrace[] = [];
   const total = zeroUsage();
