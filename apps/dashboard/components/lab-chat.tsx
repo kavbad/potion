@@ -185,8 +185,25 @@ export function LabChat({
     };
   }, [runId, terminal]);
 
-  // Follow the conversation as it grows.
-  const turns = useMemo(() => (run?.steps ?? []).filter((s) => s.hidden !== true), [run]);
+  // Follow the conversation as it grows. While PARKED, the trailing turns
+  // that merely restate the pending question are dropped: the ask card
+  // below says it once, properly. Before this the operator read the same
+  // question three times — the stop, the check-in row, and the card.
+  const turns = useMemo(() => {
+    const all = (run?.steps ?? []).filter((s) => s.hidden !== true);
+    const q = run?.state === 'awaiting-human' ? (run.pendingQuestion ?? null) : null;
+    if (q === null) return all;
+    const norm = (t: string) => t.replace(/\s+/g, ' ').trim();
+    const question = norm(q);
+    let end = all.length;
+    while (end > 0) {
+      const t = all[end - 1]!;
+      const body = norm(`${t.detail ?? ''} ${t.excerpt ?? ''}`).slice(0, 60);
+      if (body.length < 12 || !question.includes(body)) break;
+      end -= 1;
+    }
+    return all.slice(0, end);
+  }, [run]);
   useEffect(() => {
     if (turns.length > seen.current && threadRef.current !== null) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
@@ -270,8 +287,11 @@ export function LabChat({
   const quick = useMemo(() => (askQuestion === null ? [] : quickReplies(askQuestion)), [askQuestion]);
   // The moment it starts waiting, the cursor is already where the answer
   // goes — nobody should have to hunt for the reply box.
+  const askRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (parked) inputRef.current?.focus();
+    if (!parked) return;
+    askRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    inputRef.current?.focus({ preventScroll: true });
   }, [parked]);
   const composerHint = parked
     ? 'your answer resumes the run and lands on the permission record'
@@ -321,7 +341,7 @@ export function LabChat({
             choices when it truly offers them, and the reply box below it
             already focused. */}
         {askQuestion !== null ? (
-          <div className="mt-3 border-2 border-warn bg-[#fffdf7]" data-testid="chat-ask">
+          <div ref={askRef} className="mt-3 border-2 border-warn bg-[#fffdf7]" data-testid="chat-ask">
             <div className="flex items-center gap-2 border-b border-warn/40 bg-warn/10 px-4 py-2">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-60" />
