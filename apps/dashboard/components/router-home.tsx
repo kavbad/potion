@@ -23,6 +23,7 @@ import { TodayPulse } from '@/components/today-pulse';
 import { BarProposal } from '@/components/bar-proposal';
 import { ChallengerProposal } from '@/components/challenger-proposal';
 import { DiscoveredWorkloads } from '@/components/discovered-workloads';
+import { OutcomesNudge } from '@/components/outcomes-nudge';
 import { WeeklyBrief } from '@/components/weekly-brief';
 import { RouterPriorities } from '@/components/router-priorities';
 import { RouterArc } from '@/components/router-arc';
@@ -407,6 +408,10 @@ export function RouterHome({
           )}
 
           {doc && <AssignmentsTable assignments={doc.assignments} />}
+          <OutcomesNudge
+            routedRequests={activity?.summary?.routed ?? 0}
+            assignments={doc?.assignments ?? null}
+          />
           <DiscoveredWorkloads />
           {router && <Versions history={router.history} />}
 

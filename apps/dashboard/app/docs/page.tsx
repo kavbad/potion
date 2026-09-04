@@ -63,12 +63,18 @@ const CONTENTS = [
   ['auth', 'Authentication'],
   ['model', 'The model field is a label'],
   ['trace', 'The decision header'],
+  ['receipts', 'Receipts and the kept line'],
+  ['outcomes', 'Outcomes — tell it what good means'],
   ['policies', 'Policies'],
+  ['first-weeks', 'The first two weeks'],
+  ['controls', 'Your bar, your floor, your pins'],
   ['workloads', 'Workload types'],
   ['compat', 'Streaming and compatibility'],
   ['errors', 'Errors'],
   ['limits', 'Limits and budgets'],
+  ['pricing', 'What this costs'],
   ['api', 'API reference'],
+  ['traces-api', 'Agent traces'],
   ['honest', 'Things worth knowing'],
 ] as const;
 
@@ -290,6 +296,60 @@ export default async function DocsPage() {
         </p>
       </Section>
 
+      <Section id="outcomes" title="Outcomes — tell it what good means">
+        <p className="text-sm leading-relaxed text-soft">
+          Everything above measures quality with a <span className="font-medium text-ink">judge</span>{' '}
+          — a model scoring another model against a rubric. That is the best anyone can do without
+          you. But your application already knows the truth: the SQL ran or it didn&rsquo;t, the
+          validator passed, the person accepted the draft or rewrote it. Send that back and your own
+          traffic becomes the measurement instrument.
+        </p>
+        <p className="text-sm leading-relaxed text-soft">
+          <code className="font-mono text-xs text-ink">request_id</code> is the{' '}
+          <code className="font-mono text-xs">id</code> every completion already carries. Potion
+          looks up the request you were served, copies its cluster, strategy and router version onto
+          the outcome at ingest, and the evidence shows up on your{' '}
+          <a href="/router" className="text-accent underline">router</a> as your app&rsquo;s verdicts
+          — on its own scale, never averaged into judge scores.
+        </p>
+        <CopyBlock
+          label="Report an outcome"
+          text={`curl -X POST ${base}/v1/outcomes \\\n  -H "Authorization: Bearer $POTION_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"request_id":"chatcmpl-abc123","success":true,"validator":"sql_executed"}'`}
+        />
+        <CopyBlock
+          label="TypeScript"
+          text={`const resp = await client.chat.completions.create({ /* … */ });\n\n// later, where your app already knows the answer was good:\nawait client.outcome(resp.id, { success: true, validator: 'sql_executed' });`}
+        />
+        <CopyBlock
+          label="Python"
+          text={`resp = client.chat.completions.create(...)\n\n# later, when the generated SQL has actually run:\nclient.outcome(resp.id, success=True, validator="sql_executed")`}
+        />
+        <p className="text-sm leading-relaxed text-soft">Any one of these counts as a signal:</p>
+        <table className="w-full border-collapse text-left">
+          <tbody>
+            <Row k="success" v="Boolean — did this answer do its job?" />
+            <Row k="score" v="Your own number in [0, 1]. Bounded so the scale stays honest." />
+            <Row k="human" v={<><code className="font-mono text-xs">accepted</code>, <code className="font-mono text-xs">edited</code>, <code className="font-mono text-xs">rejected</code> or <code className="font-mono text-xs">regenerated</code> — what a person actually did with it.</>} />
+            <Row k="validator" v="Name of the check that ran, e.g. sql_executed, tests_passed, schema_valid." />
+            <Row k="label" v="A free-text label from your own taxonomy." />
+            <Row k="failure_reason" v="What went wrong, when something did." />
+          </tbody>
+        </table>
+        <p className="text-xs leading-relaxed text-faint">
+          Append-only: send the validator result now and the human verdict an hour later as a second
+          call — the latest signal of each kind wins, so a correction is one more POST and never an
+          edit. Unknown fields are rejected rather than silently dropped, and an outcome for a
+          request Potion did not serve is a 404.
+        </p>
+        <p className="border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3 text-sm leading-relaxed text-soft">
+          <span className="text-xs uppercase tracking-wide text-faint">Why it is worth the ten minutes</span>
+          <br />
+          Outcomes are the only signal that can move routing on evidence a judge cannot produce. Wire
+          one validator you already run and the router starts optimising for the thing you actually
+          care about, instead of the thing a rubric can see.
+        </p>
+      </Section>
+
       <Section id="policies" title="Policies">
         <p className="text-sm leading-relaxed text-soft">
           A policy is the rule Potion optimises under. It is bound per key, and applies to every
@@ -449,6 +509,7 @@ export default async function DocsPage() {
           <Endpoint method="POST" path="/v1/embeddings" note="Platform embedder." />
           <Endpoint method="GET" path="/v1/models" note="The catalogue, with potion.measured marking what is actually routable." />
           <Endpoint method="GET / POST" path="/v1/policies" note="Read or rebind the calling key's own policy." />
+          <Endpoint method="POST" path="/v1/outcomes" note="Report what actually happened after an answer — your app's verdict becomes routing evidence." />
           <Endpoint method="POST" path="/api/plan" note="Describe what you're building → workload type + measured options. member+" />
           <Endpoint method="GET" path="/api/connection" note="Base URL, bound policy, keys, per-cluster routing readiness." />
           <Endpoint method="GET" path="/api/routing-activity" note="Recent requests with the routing decision each one got." />

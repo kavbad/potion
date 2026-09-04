@@ -30,6 +30,7 @@ ${issues.map((i) => `- [${i.title}](${origin}/research/${i.slug})`).join('\n')}
 
 - [How the numbers are made](${origin}/research/methodology): scoring, intervals, saturation, negatives
 - [Docs](${origin}/docs): OpenAI-compatible API, quickstart
+- [Outcomes API](${origin}/docs#outcomes): POST /v1/outcomes — report whether a served answer actually worked (validator result, human accept/edit/reject, your own score). The application becomes the measurement instrument, and the evidence routes on its own scale rather than a judge's.
 - [Product](${origin}/home): measured model routing with receipts
 
 ## Markdown mirrors
