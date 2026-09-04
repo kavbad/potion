@@ -21,6 +21,19 @@
 // Atlas can add judgment ON TOP of this candidate space later — but the
 // space itself, and the reasons, must be checkable by a human first.
 
+// THE DISCLOSURE COLLISION (found live 2026-09-04, the first agenda piece):
+// the agenda's BEST stories are about the models Potion actually routes to,
+// and those names are withheld by the disclosure policy — so the first
+// piece it produced was correctly refused by the redaction pass, naming
+// "or-solar-pro4" six times. The standing law resolves it and the weekly
+// has followed it for weeks: THE NUMBERS ARE PUBLISHED, SOME NAMES ARE NOT.
+// Every model name the agenda emits is mapped through publicName here, so
+// a candidate is publishable by construction rather than refused at the
+// gate. A head-to-head is the one shape that cannot survive it — comparing
+// "name withheld" to "name withheld" says nothing — so those candidates are
+// dropped when either side is protected.
+import { publicName } from './compose.js';
+
 /** One measured point on a cluster's economic frontier. */
 export interface AgendaPoint {
   model: string;
@@ -182,7 +195,10 @@ export function generateAgenda(input: AgendaInput): AgendaCandidate[] {
   };
 
   for (const s of input.signals) {
-    const pts = [...s.points].filter((p) => Number.isFinite(p.quality) && Number.isFinite(p.costPer1K) && p.costPer1K > 0);
+    const pts = [...s.points]
+      .filter((p) => Number.isFinite(p.quality) && Number.isFinite(p.costPer1K) && p.costPer1K > 0)
+      // Publishable by construction (see THE DISCLOSURE COLLISION above).
+      .map((p) => ({ ...p, model: publicName(p.model) }));
     if (pts.length < 2) continue;
     const demandBase = CLUSTER_DEMAND[s.clusterId] ?? 0.5;
     const byQuality = [...pts].sort((a, b) => b.quality - a.quality);
@@ -267,7 +283,7 @@ export function generateAgenda(input: AgendaInput): AgendaCandidate[] {
     }
 
     // ── 3. HEAD TO HEAD — the comparison people type by name.
-    const named = byQuality.filter((p) => !/^[0-9a-f]{8}$/.test(p.model)).slice(0, 3);
+    const named = byQuality.filter((p) => !/^[0-9a-f]{8}$/.test(p.model) && p.model !== 'name withheld').slice(0, 3);
     if (named.length >= 2) {
       const [a, b] = [named[0]!, named[1]!];
       const factor = Math.max(a.costPer1K, b.costPer1K) / Math.min(a.costPer1K, b.costPer1K);
@@ -430,7 +446,9 @@ export interface CatalogueInput {
 export function generateCatalogueAgenda(input: CatalogueInput): AgendaCandidate[] {
   const now = input.now;
   const windowDays = input.windowDays ?? 30;
-  const priced = input.entries.filter((e) => Number.isFinite(cataloguePricePer1M(e)) && cataloguePricePer1M(e) > 0);
+  const priced = input.entries
+    .filter((e) => Number.isFinite(cataloguePricePer1M(e)) && cataloguePricePer1M(e) > 0)
+    .map((e) => ({ ...e, alias: publicName(e.alias) }));
   if (priced.length < 10) return [];
   const out: AgendaCandidate[] = [];
 

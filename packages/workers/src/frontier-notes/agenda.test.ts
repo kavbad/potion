@@ -34,8 +34,19 @@ describe('the agenda', () => {
     // Every number in the headline is in the evidence the writer will get.
     expect(a[0]!.evidence.factor).toBe(295.6);
     expect(a[0]!.evidence.topModel).toBe('or-grok-4.6');
-    expect(a[0]!.evidence.cheapModel).toBe('or-solar-pro4');
+    // THE DISCLOSURE LAW: a routed pick's NAME is withheld while its
+    // numbers publish — so the agenda emits the public name, and the
+    // piece is publishable by construction instead of dying at the gate.
+    expect(a[0]!.evidence.cheapModel).toBe('name withheld');
+    expect(a[0]!.evidence.cheapCostPer1K).toBe(0.023159680851063822);
     expect(a[0]!.demandQuery).toMatch(/how much does the best code gen model cost/);
+  });
+
+  it('never emits a withheld model name in any candidate', () => {
+    for (const c of generateAgenda({ signals: [CODE_GEN, CREATIVE], now: NOW })) {
+      const text = `${c.headline} ${c.dek} ${JSON.stringify(c.evidence)}`;
+      expect(text).not.toContain('solar-pro4');
+    }
   });
 
   it('every candidate carries a demand query and provable evidence — no opinions', () => {
