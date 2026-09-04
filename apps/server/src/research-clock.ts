@@ -238,9 +238,13 @@ export function registerFrontierNotesClock(
     }
     measureRunning = { week, startedAt: now.toISOString() };
     const logPath = join(envDir!, 'artifacts', `observatory-${week}${opts.dry ? '-dry' : ''}.log`);
-    const args = ['node_modules/.bin/tsx', 'scripts/observatory-week.ts', ...(opts.dry ? ['--dry'] : [])];
+    // The .bin/tsx entry is a SHELL wrapper, not a JS module — handing it
+    // to node fails with a syntax error (found by driving the real command
+    // in the container). Spawn the wrapper itself; its shebang runs it.
+    const tsx = join('/app', 'node_modules', '.bin', 'tsx');
+    const args = ['scripts/observatory-week.ts', ...(opts.dry ? ['--dry'] : [])];
     app.log.info({ week, dry: opts.dry === true }, 'observatory: starting the weekly measurement');
-    const child = spawn(process.execPath, args, {
+    const child = spawn(tsx, args, {
       cwd: '/app',
       env: {
         ...process.env,
