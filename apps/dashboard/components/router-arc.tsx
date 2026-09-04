@@ -87,8 +87,11 @@ export function RouterArc({ hasTraffic }: { hasTraffic: boolean }) {
       body: (
         <>
           When coverage fills for a kind of work, Potion <span className="text-ink">proposes your
-          own quality bar for it</span> — you accept or ignore; nothing changes silently. Accepted
-          bars recompile the router as a new version with the change written on it.
+          own quality bar for it</span> — and, where your traffic proves a cheaper route holds that
+          bar, <span className="text-ink">a router built from your own measurements</span>. Potion
+          also finds the kinds of work the standard taxonomy cannot see inside your traffic and
+          offers to route them separately. You accept or ignore; nothing changes silently, and
+          every acceptance is reversible.
           {openProposals > 0 ? (
             <>
               {' '}<span className="text-kept">{openProposals} proposal{openProposals === 1 ? '' : 's'} open now</span> —{' '}
@@ -105,7 +108,11 @@ export function RouterArc({ hasTraffic }: { hasTraffic: boolean }) {
           Every response carries a receipt: what routed, what it cost, what your alternative would
           have cost. <Link href="/receipts" className="text-accent underline">Receipts</Link> name
           the router version that served each request;{' '}
-          <Link href="/usage" className="text-accent underline">Savings</Link> totals what you kept.
+          <Link href="/usage" className="text-accent underline">Savings</Link> totals it up. That
+          total is an <span className="text-ink">estimate</span> until you switch on a live
+          baseline — a small slice of traffic served by your old model, which turns the estimate
+          into a <span className="text-ink">measured</span> number with a confidence interval. Only
+          the measured one is ever billed against.
         </>
       ),
     },

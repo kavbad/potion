@@ -24,6 +24,7 @@ import { BarProposal } from '@/components/bar-proposal';
 import { ChallengerProposal } from '@/components/challenger-proposal';
 import { DiscoveredWorkloads } from '@/components/discovered-workloads';
 import { OutcomesNudge } from '@/components/outcomes-nudge';
+import { LoopStatus } from '@/components/loop-status';
 import { WeeklyBrief } from '@/components/weekly-brief';
 import { RouterPriorities } from '@/components/router-priorities';
 import { RouterArc } from '@/components/router-arc';
@@ -408,6 +409,10 @@ export function RouterHome({
           )}
 
           {doc && <AssignmentsTable assignments={doc.assignments} />}
+          <LoopStatus
+            hasOutcomes={doc === null ? null : doc.assignments.some((a) => a.outcomes != null)}
+            hasShadow={doc === null ? null : doc.assignments.some((a) => a.shadow != null)}
+          />
           <OutcomesNudge
             routedRequests={activity?.summary?.routed ?? 0}
             assignments={doc?.assignments ?? null}
