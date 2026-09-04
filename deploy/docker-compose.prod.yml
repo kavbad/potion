@@ -162,6 +162,12 @@ services:
       POTION_RESEARCH_ORG: ${POTION_RESEARCH_ORG:-org-research}
       POTION_RESEARCH_DELTA_HARNESS: ${POTION_RESEARCH_DELTA_HARNESS:-8aec3d6c5a07825815f9057c9987072397dd188cef9187347e6157f0b83429b9}
       POTION_RESEARCH_AUDITOR_HARNESS: ${POTION_RESEARCH_AUDITOR_HARNESS:-03ba206596c75edfcc888f5a093c0214428141fdfdff2a8893f4fe98757cc06a}
+      # F5 — THE MEASUREMENT LANE SPENDS REAL MONEY and is therefore
+      # DISARMED unless this carries a date (the same dated risk-acceptance
+      # scripts/observatory-week.ts demands by hand). Deliberately NOT
+      # defaulted: the clock's ON state is safe to commit, spending is not.
+      # Set POTION_OBSERVATORY_ARM=YYYY-MM-DD in .env.prod to arm Mondays.
+      POTION_OBSERVATORY_ARM: ${POTION_OBSERVATORY_ARM:-}
     # F4: the research mount (rw — the clock writes notes + its state files;
     # the dashboard keeps its own ro mount of artifacts/notes).
     volumes:

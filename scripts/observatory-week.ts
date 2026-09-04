@@ -279,7 +279,14 @@ if (!DRY && process.env.NOTION_API_KEY && process.env.NOTION_PAGE_ID) {
 // dashboard serves that directory. Held (never published) on any redaction
 // hit or when FRONTIER_NOTES_GATE=1. Writer cost is ledgered like every
 // other research dollar.
-if (!DRY) {
+// F5 (2026-09-03): when the FLEET owns publication — Delta drafts, Auditor
+// verifies, the gateway allows — the measurement script must not publish a
+// note of its own behind their backs. FRONTIER_NOTES_SKIP=1 stops here and
+// leaves the week's run file for the clock to pick up on Tuesday.
+if (!DRY && process.env.FRONTIER_NOTES_SKIP === '1') {
+  console.log('frontier notes: skipped — the research fleet owns publication (FRONTIER_NOTES_SKIP=1)');
+}
+if (!DRY && process.env.FRONTIER_NOTES_SKIP !== '1') {
   try {
     const key = process.env.OPENROUTER_API_KEY;
     const writer = key

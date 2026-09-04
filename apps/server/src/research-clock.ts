@@ -11,7 +11,10 @@
 //   POTION_RESEARCH_ORG              (org-research)
 //   POTION_RESEARCH_DELTA_HARNESS    (the author generation)
 //   POTION_RESEARCH_AUDITOR_HARNESS  (the verifier generation)
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { sha256 } from '@potion/core';
@@ -187,6 +190,87 @@ export function registerFrontierNotesClock(
     });
   };
 
+  // ══ F5 — THE MONDAY TICK: the measurement half ══════════════════════
+  //
+  // This lane SPENDS REAL MONEY, so it does not reimplement anything: it
+  // runs the proven scripts/observatory-week.ts — the same orchestration,
+  // the same envelope belt (a monthly cap written as a hard-stop budget on
+  // the platform-ops org), the same per-lane caps — inside this container,
+  // where the whole tree and tsx already live.
+  //
+  // The belts, in order:
+  //   1. DISARMED by default. POTION_OBSERVATORY_ARM must carry a date —
+  //      the same dated risk-acceptance the script demands by hand. No
+  //      value, no spending, ever.
+  //   2. One run per ISO week: an exclusive state file plus the run-file
+  //      guard, so a restart storm cannot double-spend.
+  //   3. The script's own envelope remains the real ceiling.
+  //   4. FRONTIER_NOTES_SKIP=1 — the measurement never publishes; the
+  //      fleet's Tuesday chain owns the byline.
+  const armDate = process.env.POTION_OBSERVATORY_ARM ?? '';
+  const measureArmed = armed && /^\d{4}-\d{2}-\d{2}$/.test(armDate);
+  let measureRunning: { week: string; startedAt: string } | null = null;
+
+  /** Monday 06:00–23:59 PT — before the notes window opens on Tuesday. */
+  function inMondayWindow(d: Date): boolean {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', hour12: false }).formatToParts(d);
+    return parts.find((p) => p.type === 'weekday')?.value === 'Mon' && Number(parts.find((p) => p.type === 'hour')?.value ?? '0') >= 6;
+  }
+
+  async function observatoryTick(opts: { dry?: boolean; force?: boolean } = {}): Promise<string | null> {
+    if (!measureArmed) return null;
+    if (measureRunning !== null) return null; // one at a time, always
+    const now = new Date();
+    if (!opts.force && !inMondayWindow(now)) return null;
+    const week = isoWeekOf(now);
+    const io = buildIo(envDir!);
+    if (!opts.dry && io.readObservatoryRun(week) !== null) return null; // measured already
+    const stateDir = join(envDir!, 'artifacts', 'observatory-state');
+    const marker = join(stateDir, `${week}.json`);
+    if (!opts.dry) {
+      mkdirSync(stateDir, { recursive: true });
+      try {
+        // Exclusive create IS the lock: a second replica loses the race.
+        writeFileSync(marker, JSON.stringify({ week, startedAt: now.toISOString(), arm: armDate }, null, 1), { flag: 'wx' });
+      } catch {
+        return null;
+      }
+    }
+    measureRunning = { week, startedAt: now.toISOString() };
+    const logPath = join(envDir!, 'artifacts', `observatory-${week}${opts.dry ? '-dry' : ''}.log`);
+    const args = ['node_modules/.bin/tsx', 'scripts/observatory-week.ts', ...(opts.dry ? ['--dry'] : [])];
+    app.log.info({ week, dry: opts.dry === true }, 'observatory: starting the weekly measurement');
+    const child = spawn(process.execPath, args, {
+      cwd: '/app',
+      env: {
+        ...process.env,
+        KEY_RISK_ACCEPTED: armDate,
+        OBSERVATORY_DB: join(envDir!, 'store'),
+        OBSERVATORY_ARTIFACTS: join(envDir!, 'artifacts'),
+        // The fleet publishes; the measurement never does.
+        FRONTIER_NOTES_SKIP: '1',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const log = createWriteStream(logPath, { flags: 'a' });
+    child.stdout.pipe(log);
+    child.stderr.pipe(log);
+    child.on('close', (code) => {
+      measureRunning = null;
+      app.log.info({ week, code, logPath }, `observatory: measurement exited ${code}`);
+      if (!opts.dry && code !== 0) {
+        // A failed week must not wedge the lane: clear the marker so the
+        // next Monday tick (or an operator trigger) can retry.
+        try {
+          rmSync(marker, { force: true });
+        } catch {
+          /* the marker is a convenience, never a correctness boundary */
+        }
+      }
+    });
+    return `observatory:${week}${opts.dry ? ' (dry)' : ''}`;
+  }
+
   // ---- the tick ----
   const tick = async (): Promise<void> => {
     for (const dir of dirs) {
@@ -195,6 +279,12 @@ export function registerFrontierNotesClock(
       } catch (err) {
         app.log.warn({ err, dir }, 'frontier-notes tick failed — swallowed');
       }
+    }
+    // F5: the measurement half — Mondays, money-armed only.
+    try {
+      await observatoryTick();
+    } catch (err) {
+      app.log.warn({ err }, 'observatory tick failed — swallowed');
     }
     // F6: the daily ledger — every day, on the primary dir only.
     if (armed) {
@@ -232,6 +322,9 @@ export function registerFrontierNotesClock(
     if (!armed) return reply.code(409).send({ error: 'clock_disarmed', message: 'POTION_RESEARCH_* env not set' });
     const body = z
       .object({
+        /** F5: 'dry' plans the measurement without spending a cent; 'run'
+         * starts the real one (still refused unless money-armed). */
+        measure: z.enum(['dry', 'run']).optional(),
         week: z.string().regex(/^\d{4}-W\d{2}$/).optional(),
         /** A rehearsal dir under the research mount — the full chain runs
          * against it without touching the public notes. */
@@ -239,6 +332,13 @@ export function registerFrontierNotesClock(
       })
       .safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: 'invalid_body', message: body.error.issues.map((i) => i.message).join('; ') });
+    if (body.data.measure !== undefined) {
+      if (!measureArmed) {
+        return reply.code(409).send({ error: 'measurement_disarmed', message: 'set POTION_OBSERVATORY_ARM=YYYY-MM-DD to arm the spending lane' });
+      }
+      const started = await observatoryTick({ dry: body.data.measure === 'dry', force: true });
+      return reply.send({ measurement: started ?? 'not started (already running, or already measured this week)', arm: armDate });
+    }
     const dir = body.data.dir ?? envDir!;
     if (dir !== envDir && !dir.startsWith(`${envDir}/`)) {
       return reply.code(400).send({ error: 'invalid_body', message: `dir must live under ${envDir}` });
@@ -256,6 +356,17 @@ export function registerFrontierNotesClock(
   app.get('/api/research/frontier-notes', { preHandler: [requireRole('admin')] }, async (_req: FastifyRequest, reply) => {
     const week = isoWeekOf(new Date());
     const states = [...dirs].map((dir) => ({ dir, week, state: buildIo(dir).readState(week), issue: buildIo(dir).readIssue(week)?.status ?? null }));
-    return reply.send({ armed, week, states });
+    return reply.send({
+      armed,
+      week,
+      states,
+      // F5: the measurement lane — armed separately because it spends.
+      measurement: {
+        armed: measureArmed,
+        arm: measureArmed ? armDate : null,
+        running: measureRunning,
+        measuredThisWeek: armed ? buildIo(envDir!).readObservatoryRun(week) !== null : null,
+      },
+    });
   });
 }
