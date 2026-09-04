@@ -70,8 +70,6 @@ export function permittedNumbers(f: DailyFacts): Set<string> {
     f.measured.length,
     f.promoted,
     f.registrySize,
-    f.spendUsd,
-    n2(f.spendUsd),
     ...f.cycles.map((c) => c.candidates),
     f.cycles.reduce((a, c) => a + c.candidates, 0),
     // The day itself and its parts are not claims.
@@ -125,7 +123,7 @@ export function dailyLedgerBody(f: DailyFacts): string[] {
     const live = f.cycles.filter((c) => c.provenance === 'live').length;
     out.push(
       `${f.cycles.length} measurement ${f.cycles.length === 1 ? 'cycle' : 'cycles'} ran in the last 24 hours` +
-        `${live > 0 ? ` (${live} against live providers)` : ''}, sweeping ${f.cycles.reduce((a, c) => a + c.candidates, 0)} candidate configurations for $${n2(f.spendUsd)}.`,
+        `${live > 0 ? ` (${live} against live providers)` : ''}, sweeping ${f.cycles.reduce((a, c) => a + c.candidates, 0)} candidate configurations.`,
     );
     if (f.measured.length > 0) {
       out.push(`Newly listed models measured today: ${f.measured.join(', ')}.`);

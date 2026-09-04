@@ -2,7 +2,7 @@
 // must not produce content-farm output: no echoes, no thin duplicates, and
 // nothing it cannot prove.
 import { describe, expect, it } from 'vitest';
-import { claimKey, generateAgenda, renderAgenda, type ClusterSignal } from './agenda.js';
+import { claimKey, generateAgenda, generateCatalogueAgenda, renderAgenda, type ClusterSignal } from './agenda.js';
 
 const NOW = new Date('2026-09-04T12:00:00Z');
 
@@ -110,5 +110,76 @@ describe('the agenda', () => {
     expect(text).toMatch(/THE AGENDA/);
     expect(text).toMatch(/asks: "/);
     expect(text).toMatch(/demand .*magnitude/);
+  });
+});
+
+describe('the catalogue generators (price economics)', () => {
+  const entries = [
+    ...Array.from({ length: 12 }, (_, i) => ({
+      alias: `cheap-tool-${i}`,
+      provider: 'or',
+      inputPer1M: 0.1 + i * 0.05,
+      outputPer1M: 0.3 + i * 0.05,
+      contextLength: 128_000,
+      supportsTools: true,
+      source: 'seed',
+      firstSeen: '2026-01-01T00:00:00Z',
+    })),
+    {
+      alias: 'premium-tool',
+      provider: 'or',
+      inputPer1M: 30,
+      outputPer1M: 120,
+      contextLength: 400_000,
+      supportsTools: true,
+      source: 'seed',
+      firstSeen: '2026-01-01T00:00:00Z',
+    },
+    ...Array.from({ length: 6 }, (_, i) => ({
+      alias: `long-ctx-${i}`,
+      provider: 'or',
+      inputPer1M: 4 + i,
+      outputPer1M: 12 + i,
+      contextLength: 1_000_000,
+      supportsTools: false,
+      source: 'seed',
+      firstSeen: '2026-01-01T00:00:00Z',
+    })),
+    ...Array.from({ length: 7 }, (_, i) => ({
+      alias: `arrival-${i}`,
+      provider: 'or',
+      inputPer1M: 0.2,
+      outputPer1M: 0.6,
+      contextLength: 128_000,
+      supportsTools: true,
+      source: 'scan',
+      firstSeen: '2026-08-20T00:00:00Z',
+    })),
+  ];
+
+  it('prices the same declared capability across the market', () => {
+    const a = generateCatalogueAgenda({ entries, now: NOW });
+    const disp = a.find((c) => c.id === 'catalogue:tool-price-dispersion')!;
+    expect(disp.headline).toMatch(/Tool-calling models are priced .*apart/);
+    expect(disp.evidence.dearestModel).toBe('premium-tool');
+    expect(Number(disp.evidence.factor)).toBeGreaterThan(5);
+    expect(disp.demandQuery).toMatch(/how much do tool calling models cost/);
+  });
+
+  it('reports the arrivals and the long-context premium', () => {
+    const a = generateCatalogueAgenda({ entries, now: NOW });
+    expect(a.find((c) => c.id.startsWith('catalogue:arrivals'))!.headline).toMatch(/models entered the catalogue in 30 days/);
+    const ctx = a.find((c) => c.id === 'catalogue:long-context-premium');
+    expect(ctx?.headline).toMatch(/long-context model costs/);
+  });
+
+  it('respects the cooldown like every other candidate', () => {
+    const told = new Map([['catalogue:tool-price-dispersion', '2026-09-03T00:00:00Z']]);
+    const a = generateCatalogueAgenda({ entries, now: NOW, published: told });
+    expect(a.some((c) => c.id === 'catalogue:tool-price-dispersion')).toBe(false);
+  });
+
+  it('stays silent on a catalogue too small to say anything', () => {
+    expect(generateCatalogueAgenda({ entries: entries.slice(0, 4), now: NOW })).toEqual([]);
   });
 });

@@ -9,7 +9,7 @@ const rows = [
   { focusAlias: 'or-stale', status: 'complete', provenance: 'live', candidates: 3, spendUsd: 9, createdAt: '2026-08-20T20:00:00Z' }, // outside window
 ];
 
-const busy = composeDailyFacts({ now: NOW, cycles: rows, promoted: 1, registrySize: 322, pricesVersion: 'p-2026-09-01', spendUsd: 0 } as never);
+const busy = composeDailyFacts({ now: NOW, cycles: rows, promoted: 1, registrySize: 322, pricesVersion: 'p-2026-09-01' });
 const quiet = composeDailyFacts({ now: NOW, cycles: [], promoted: 0, registrySize: 322, pricesVersion: 'p-2026-09-01' });
 
 describe('composing the day', () => {
@@ -34,7 +34,9 @@ describe('composing the day', () => {
     const body = dailyLedgerBody(busy).join(' ');
     expect(body).toContain('2 measurement cycles');
     expect(body).toContain('10 candidate configurations');
-    expect(body).toContain('$1.25');
+    // THE OWN-SPEND LAW: what the sweep cost US is no longer printed.
+    expect(body).not.toContain('$1.25');
+    expect(body).not.toMatch(/\$\d/);
     expect(body).toContain('322 models');
   });
 });
@@ -70,9 +72,14 @@ describe('THE NUMBER LAW', () => {
     expect(auditDailyNumbers(times, busy)).toMatch(/derived ratio/);
   });
 
-  it('allows the ledger’s own spend spelling and the date parts', () => {
-    const ok = { ...deterministicDailyDraft(busy), plain: 'On 2026-09-03 the instruments spent $1.25 across 2 cycles.' };
+  it('allows the date parts, and no longer permits our own spend figure', () => {
+    const ok = { ...deterministicDailyDraft(busy), plain: 'On 2026-09-03 the instruments measured 2 cycles.' };
     expect(auditDailyNumbers(ok, busy)).toBeNull();
+    // The spend is not in the ledger any more, so stating it is a
+    // fabrication as far as the number law is concerned — belt and braces
+    // with the own-spend law itself.
+    const spendy = { ...deterministicDailyDraft(busy), plain: 'The instruments spent $1.25 today.' };
+    expect(auditDailyNumbers(spendy, busy)).toMatch(/"1\.25"/);
   });
 });
 

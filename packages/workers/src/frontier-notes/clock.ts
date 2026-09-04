@@ -25,7 +25,7 @@ import { randomUUID } from 'node:crypto';
 import type { ObservatoryRun } from '../observatory.js';
 import { composeFactSheet } from './compose.js';
 import { parseDailyDraft, utcDay } from './daily.js';
-import { generateAgenda, type ClusterSignal } from './agenda.js';
+import { generateAgenda, generateCatalogueAgenda, type CatalogueEntry, type ClusterSignal } from './agenda.js';
 import { assemblePieceIssue, auditPieceNumbers, deterministicPiece } from './piece.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
@@ -47,6 +47,9 @@ export interface DailyIo {
   now(): Date;
   /** The measured corpus the agenda reasons over. */
   agendaSignals(): Promise<readonly ClusterSignal[]>;
+  /** The priced catalogue — keeps the agenda fed on days nothing was
+   * measured: 375 models move even when the instruments are quiet. */
+  catalogueEntries?(): Promise<readonly CatalogueEntry[]>;
   /** Claims the published corpus already spent — the cooldown's memory. */
   publishedClaims(): Promise<ReadonlyMap<string, string>>;
   /** Today's measurement activity, for the provenance footer only. */
@@ -80,11 +83,11 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   if (io.readIssue(day) !== null) return null; // today is filed
   const state = io.readState(day);
 
-  const agenda = generateAgenda({
-    signals: await io.agendaSignals(),
-    published: await io.publishedClaims(),
-    now: io.now(),
-  });
+  const published = await io.publishedClaims();
+  const agenda = [
+    ...generateAgenda({ signals: await io.agendaSignals(), published, now: io.now() }),
+    ...(io.catalogueEntries ? generateCatalogueAgenda({ entries: await io.catalogueEntries(), published, now: io.now() }) : []),
+  ].sort((a, b) => b.score - a.score);
   const candidate = agenda[0];
   if (candidate === undefined) {
     if (state === null) io.log(`fnotes daily ${day}: the agenda is empty — nothing provable left unsaid. Publishing nothing.`);
@@ -128,7 +131,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
         ? `writing overdue (run ${state.deltaRunId})`
         : parsed === null
           ? `no usable piece.json (run ended ${terminal})`
-          : auditPieceNumbers(parsed, candidate, io.now());
+          : (auditPieceNumbers(parsed, candidate, io.now()) ?? lintDraft({ ...parsed, faq: [] }));
     if (parsed !== null && violation === null && io.deltaHarness !== null) {
       draft = { ...parsed, mixingNote: '', auditionNote: footer, faq: [] };
       writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };

@@ -143,7 +143,7 @@ export function renderMarkdown(i: Issue): string {
     '',
     '## Numbers',
     '',
-    `${f.numbers.canaries} canaries · ${f.numbers.clustersHeld} held · ${f.numbers.clustersMoved} drifted · ${f.numbers.inconclusive} inconclusive · ${f.numbers.itemsGraded} items graded · ${f.numbers.candidatesScreened} listings screened · ${f.numbers.candidatesMeasured} measured · $${f.numbers.spendUsd.toFixed(2)}`,
+    `${f.numbers.canaries} canaries · ${f.numbers.clustersHeld} held · ${f.numbers.clustersMoved} drifted · ${f.numbers.inconclusive} inconclusive · ${f.numbers.itemsGraded} items graded · ${f.numbers.candidatesScreened} listings screened · ${f.numbers.candidatesMeasured} measured`,
     '',
     '## Questions',
     '',

@@ -33,6 +33,7 @@ import {
   listLabSteps,
   listRecentlyPromoted,
   listResearchCycles,
+  models,
   migrate,
   upsertLabRunFile,
 } from '@potion/db';
@@ -50,6 +51,7 @@ import {
   PLATFORM_SUITE_BY_CLUSTER,
   PUBLISH_ACTION_CLASS,
   type ClockIO,
+  type CatalogueEntry,
   type ClusterSignal,
   type DailyFacts,
   type Issue,
@@ -222,6 +224,36 @@ export function registerFrontierNotesClock(
     return out;
   };
 
+  // F8: the priced catalogue — 375 models with capabilities and first-seen
+  // dates. Keeps the agenda fed on days nothing was measured.
+  const catalogueEntries = async (): Promise<CatalogueEntry[]> => {
+    // The registry LOADER returns a price table (no capabilities, no dates),
+    // so the catalogue reads the rows themselves — first-seen and declared
+    // capability are exactly what the price pieces reason over.
+    const rows = await db
+      .select({
+        alias: models.alias,
+        provider: models.provider,
+        inputPer1M: models.inputPer1M,
+        outputPer1M: models.outputPer1M,
+        contextLength: models.contextLength,
+        supportsTools: models.supportsTools,
+        source: models.source,
+        createdAt: models.createdAt,
+      })
+      .from(models);
+    return rows.map((r) => ({
+      alias: r.alias,
+      provider: r.provider,
+      inputPer1M: r.inputPer1M,
+      outputPer1M: r.outputPer1M,
+      contextLength: r.contextLength,
+      supportsTools: r.supportsTools,
+      source: r.source ?? 'seed',
+      ...(r.createdAt ? { firstSeen: new Date(r.createdAt).toISOString() } : {}),
+    }));
+  };
+
   // F6, demoted: the day's measurement activity is now a provenance FOOTER.
   const dailyFacts = async (): Promise<DailyFacts> => {
     const cycles = await listResearchCycles(db, 200);
@@ -351,6 +383,7 @@ export function registerFrontierNotesClock(
         await dailyPieceTick({
           now: io.now,
           agendaSignals,
+          catalogueEntries,
           publishedClaims: async () => publishedClaims(readPublishedIssues(envDir!)),
           measurementFooter: async () => measurementFooter(await dailyFacts()),
           readIssue: io.readIssue,

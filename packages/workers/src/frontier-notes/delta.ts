@@ -151,8 +151,12 @@ export function auditDraftCounts(draft: Draft, facts: FactSheet): string | null 
  * the band string carries everything they are allowed to say. The real
  * FactSheet — and the deterministic guards that read it — are untouched. */
 export function redactFactsForWriter(f: FactSheet): unknown {
+  // THE OWN-SPEND LAW: what we spent running the week never reaches a
+  // writer, so it can never reach a page.
+  const { spendUsd: _ourSpend, ...numbers } = f.numbers;
   return {
     ...f,
+    numbers,
     mixing: f.mixing.map((m) => {
       if (!m.vague) return m;
       const { costSaving: _hidden, ...rest } = m;

@@ -376,3 +376,177 @@ export function renderAgenda(candidates: readonly AgendaCandidate[], limit = 12)
   }
   return lines.join('\n');
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// THE CATALOGUE GENERATORS (2026-09-04) — price economics from the model
+// registry: 375 priced models with capabilities and first-seen dates.
+//
+// An honesty note about the name: we do not retain per-model price DELTAS
+// (a scan overwrites an alias's price), so these are CATALOGUE-history
+// pieces — what entered the market when, at what price, against what was
+// already there — not "model X dropped 40%" claims we cannot prove. When
+// price-change tracking exists, the delta generators belong here too.
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface CatalogueEntry {
+  alias: string;
+  provider: string;
+  inputPer1M: number;
+  outputPer1M: number;
+  contextLength?: number | null;
+  supportsTools?: boolean | null;
+  /** 'seed' (committed table) | 'scan' (discovered live). */
+  source?: string;
+  firstSeen?: string;
+}
+
+/** A blended per-1M price: the number a buyer compares vendors on.
+ * (Named for the agenda to avoid colliding with the observatory's own.) */
+export function cataloguePricePer1M(e: CatalogueEntry): number {
+  return e.inputPer1M * 0.75 + e.outputPer1M * 0.25;
+}
+
+const median = (xs: number[]): number => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+};
+
+export interface CatalogueInput {
+  entries: readonly CatalogueEntry[];
+  published?: ReadonlyMap<string, string>;
+  now: Date;
+  cooldownDays?: number;
+  /** Window for "recently listed" (days). */
+  windowDays?: number;
+}
+
+/**
+ * Catalogue pieces: what the market charges, and what just arrived.
+ * These do not depend on a measurement sweep, so they keep the agenda fed
+ * on days when nothing was measured — the corpus is 375 priced models and
+ * it moves every day.
+ */
+export function generateCatalogueAgenda(input: CatalogueInput): AgendaCandidate[] {
+  const now = input.now;
+  const windowDays = input.windowDays ?? 30;
+  const priced = input.entries.filter((e) => Number.isFinite(cataloguePricePer1M(e)) && cataloguePricePer1M(e) > 0);
+  if (priced.length < 10) return [];
+  const out: AgendaCandidate[] = [];
+
+  const mk = (
+    c: Omit<AgendaCandidate, 'scores' | 'score' | 'why'>,
+    parts: { demand: number; magnitude: number; evidence: number },
+  ) => {
+    const last = input.published?.get(c.id);
+    const days = last === undefined ? Number.POSITIVE_INFINITY : (now.getTime() - Date.parse(last)) / 86_400_000;
+    if (days < (input.cooldownDays ?? 21)) return;
+    const novelty = Number.isFinite(days) ? Math.max(0, Math.min(1, days / 60)) : 1;
+    const scores = { ...parts, novelty };
+    out.push({
+      ...c,
+      scores,
+      score: Number((scores.demand * 0.3 + scores.magnitude * 0.35 + scores.evidence * 0.15 + scores.novelty * 0.2).toFixed(4)),
+      why: `demand ${scores.demand.toFixed(2)} (${c.kind}, catalogue), magnitude ${scores.magnitude.toFixed(2)}, evidence ${scores.evidence.toFixed(2)}, novelty ${scores.novelty.toFixed(2)}`,
+    });
+  };
+
+  // ── PRICE DISPERSION: what the same declared capability costs across the
+  //    market. The buyer's question, answered from the whole catalogue.
+  const tools = priced.filter((e) => e.supportsTools === true);
+  if (tools.length >= 8) {
+    const sorted = [...tools].sort((a, b) => cataloguePricePer1M(a) - cataloguePricePer1M(b));
+    const cheap = sorted[0]!;
+    const dear = sorted[sorted.length - 1]!;
+    const factor = cataloguePricePer1M(dear) / cataloguePricePer1M(cheap);
+    if (factor > 5) {
+      mk(
+        {
+          id: 'catalogue:tool-price-dispersion',
+          kind: 'price-outlier',
+          clusterId: 'agentic-tool-use',
+          headline: `Tool-calling models are priced ${ratio(factor)} apart for the same declared capability`,
+          dek: `Across ${tools.length} models that declare tool support, blended prices run from ${money(cataloguePricePer1M(cheap))} to ${money(cataloguePricePer1M(dear))} per million tokens.`,
+          demandQuery: 'how much do tool calling models cost compared to each other',
+          evidence: {
+            modelsCounted: tools.length,
+            cheapestModel: cheap.alias,
+            cheapestPerMillion: Number(cataloguePricePer1M(cheap).toFixed(4)),
+            dearestModel: dear.alias,
+            dearestPerMillion: Number(cataloguePricePer1M(dear).toFixed(2)),
+            medianPerMillion: Number(median(tools.map(cataloguePricePer1M)).toFixed(4)),
+            factor: Number(factor.toFixed(1)),
+            n: tools.length,
+          },
+        },
+        { demand: 0.9, magnitude: magnitudeScore(factor), evidence: evidenceScore(tools.length) },
+      );
+    }
+  }
+
+  // ── THE LONG-CONTEXT PREMIUM: capability priced against capability.
+  const longCtx = priced.filter((e) => (e.contextLength ?? 0) >= 200_000);
+  const shortCtx = priced.filter((e) => (e.contextLength ?? 0) > 0 && (e.contextLength ?? 0) < 200_000);
+  if (longCtx.length >= 5 && shortCtx.length >= 5) {
+    const longMed = median(longCtx.map(cataloguePricePer1M));
+    const shortMed = median(shortCtx.map(cataloguePricePer1M));
+    const factor = longMed / shortMed;
+    if (factor > 1.5) {
+      mk(
+        {
+          id: 'catalogue:long-context-premium',
+          kind: 'price-outlier',
+          clusterId: 'rag-answer',
+          headline: `The median long-context model costs ${ratio(factor)} the median short-context one`,
+          dek: `${longCtx.length} models declare a context window of at least 200,000 tokens at a median ${money(longMed)} per million tokens, against ${shortCtx.length} smaller-window models at ${money(shortMed)}.`,
+          demandQuery: 'do long context models cost more per token',
+          evidence: {
+            longContextModels: longCtx.length,
+            longContextMedianPerMillion: Number(longMed.toFixed(4)),
+            shortContextModels: shortCtx.length,
+            shortContextMedianPerMillion: Number(shortMed.toFixed(4)),
+            factor: Number(factor.toFixed(1)),
+            n: longCtx.length + shortCtx.length,
+          },
+        },
+        { demand: 0.8, magnitude: magnitudeScore(factor), evidence: evidenceScore(longCtx.length + shortCtx.length) },
+      );
+    }
+  }
+
+  // ── THE ARRIVALS: what entered the catalogue lately, and at what price
+  //    against the field. The launch-cadence story, monthly.
+  const recent = priced.filter((e) => {
+    if (e.firstSeen === undefined) return false;
+    const d = (now.getTime() - Date.parse(e.firstSeen)) / 86_400_000;
+    return Number.isFinite(d) && d >= 0 && d <= windowDays;
+  });
+  if (recent.length >= 5) {
+    const recentMed = median(recent.map(cataloguePricePer1M));
+    const fieldMed = median(priced.map(cataloguePricePer1M));
+    const cheaper = recentMed < fieldMed;
+    const factor = cheaper ? fieldMed / recentMed : recentMed / fieldMed;
+    mk(
+      {
+        id: `catalogue:arrivals:${windowDays}d`,
+        kind: 'category-explainer',
+        clusterId: 'code-gen',
+        headline: `${recent.length} models entered the catalogue in ${windowDays} days, priced ${ratio(factor)} ${cheaper ? 'below' : 'above'} the field median`,
+        dek: `Newly listed models carry a median blended price of ${money(recentMed)} per million tokens against ${money(fieldMed)} across all ${priced.length} priced models.`,
+        demandQuery: 'how many new AI models launch each month and what do they cost',
+        evidence: {
+          arrivals: recent.length,
+          windowDays,
+          arrivalsMedianPerMillion: Number(recentMed.toFixed(4)),
+          fieldMedianPerMillion: Number(fieldMed.toFixed(4)),
+          pricedModels: priced.length,
+          factor: Number(factor.toFixed(1)),
+          n: recent.length,
+        },
+      },
+      { demand: 0.75, magnitude: Math.max(0.35, magnitudeScore(factor)), evidence: evidenceScore(recent.length) },
+    );
+  }
+
+  return out.sort((a, b) => b.score - a.score);
+}
