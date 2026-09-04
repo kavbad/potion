@@ -279,12 +279,28 @@ const PROMISE_PARTICIPLE =
 export function isIntentionStop(text: string): boolean {
   const t = text.trim();
   if (t.length === 0) return false;
-  const tail = t.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '').pop() ?? '';
+  // The trailing CLAUSE, not merely the trailing sentence: a promise often
+  // rides after a dash or colon ("One more thing — let me finish the chart",
+  // "Fixed the status issue — now writing it up"), and reading only from a
+  // full stop misses every one of those.
+  const tail = t
+    .split(/(?<=[.!?])\s+|\n+|\s+[\u2014\u2013-]\s+|:\s+/)
+    .map((x) => x.trim())
+    .filter((x) => x !== '')
+    .pop() ?? '';
   if (tail.length < 4) return false;
   // "Let me know if you want more" offers help; it does not promise work.
   if (/\blet me know\b/i.test(tail)) return false;
   return PROMISE_OPENS.test(tail) || PROMISE_PARTICIPLE.test(tail);
 }
+
+/** Nudges allowed per run. ONE was not enough: the 20-file proof caught a
+ * worker that promised at step 9 (repaired, did real work), then promised
+ * again at step 12 and completed with nothing — scoring 0 on a run that was
+ * otherwise going well. A nudge is not an authorization: fuel and the leg
+ * cap still bound the run, so a small budget is safe where a single shot is
+ * merely unlucky. */
+export const INTENTION_STOP_MAX_REPAIRS = 3;
 
 export const INTENTION_STOP_REPAIR =
   'You stopped immediately after saying what you were about to do — but you did not do it. ' +
@@ -536,7 +552,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     let fileClaimFiredThisLeg = false;
     let doneFileFiredThisLeg = false;
     let emptyStopFiredThisLeg = false;
-    let intentionStopFiredThisLeg = false;
+    let intentionStopFiredThisLeg = 0;
     const askedBefore = priorSteps.some(
       (x) => x.kind === 'check-in' && (x.payload as StepPayload).checkInTrigger === 'worker-question',
     );
@@ -889,8 +905,8 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         result.finishReason === 'stop' &&
         result.toolCalls.length === 0 &&
         isIntentionStop(result.text ?? '') &&
-        !priorSteps.some((x) => (x.payload as StepPayload).intentionStopRepair !== undefined) &&
-        !intentionStopFiredThisLeg
+        priorSteps.filter((x) => (x.payload as StepPayload).intentionStopRepair === true).length
+          + intentionStopFiredThisLeg < INTENTION_STOP_MAX_REPAIRS
       ) {
         intentionStopRepair = true;
       }
@@ -1145,7 +1161,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         // THE INTENTION-STOP LAW (stamped above): it said what it was about
         // to do — send it back to do it.
         if (intentionStopRepair) {
-          intentionStopFiredThisLeg = true;
+          intentionStopFiredThisLeg += 1;
           messages.push(intentionStopRepairMessage());
           continue;
         }

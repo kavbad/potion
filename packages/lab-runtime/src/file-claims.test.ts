@@ -307,20 +307,25 @@ describe('THE INTENTION-STOP LAW: a promise is not a deliverable', () => {
     await h.close();
   }, 60_000);
 
-  it('once per run: a second promise-stop completes rather than looping forever', async () => {
+  it('BOUNDED, NOT ONCE (from the 20-file proof): it nudges up to three times, then lets the run end', async () => {
+    // A worker that promised at step 9, was nudged, did real work, then
+    // promised again at step 12 scored 0 under a one-shot guard. Three
+    // nudges convert that run; the fourth promise is allowed to end it.
     const { h, hash } = await fresh();
     const leg = await runLeg({
       db: h.db,
       client: scripted([
         ok({ text: 'Good. Let me run the analysis now.' }),
         ok({ text: 'Almost there. Let me run it now.' }),
+        ok({ text: 'One more thing — let me finish the chart now.' }),
+        ok({ text: 'Still not done. Let me try once more.' }),
         ok({ text: 'Wrap-up: it kept promising; the record says so.' }),
       ]),
       runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
     });
     expect(leg.status).toBe('completed');
     const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
-    expect(steps.filter((x) => (x.payload as { intentionStopRepair?: boolean }).intentionStopRepair === true).length).toBe(1);
+    expect(steps.filter((x) => (x.payload as { intentionStopRepair?: boolean }).intentionStopRepair === true).length).toBe(3);
     const rec = await recordOf(h);
     expect(replayRun(SPEC, rec.steps, rec.terminal).ok).toBe(true);
     await h.close();
