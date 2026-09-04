@@ -388,9 +388,6 @@ importers:
       '@potion/pareto':
         specifier: workspace:*
         version: link:../pareto
-      '@potion/server':
-        specifier: workspace:*
-        version: link:../../apps/server
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
@@ -425,9 +422,6 @@ importers:
       '@potion/pareto':
         specifier: workspace:*
         version: link:../pareto
-      '@potion/server':
-        specifier: workspace:*
-        version: link:../../apps/server
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
@@ -471,18 +465,9 @@ importers:
         specifier: workspace:*
         version: link:../lab-spec
     devDependencies:
-      '@potion/lab-dial':
-        specifier: workspace:*
-        version: link:../lab-dial
       '@potion/pareto':
         specifier: workspace:*
         version: link:../pareto
-      '@potion/server':
-        specifier: workspace:*
-        version: link:../../apps/server
-      '@potion/workers':
-        specifier: workspace:*
-        version: link:../workers
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
@@ -518,9 +503,6 @@ importers:
       '@potion/db':
         specifier: workspace:*
         version: link:../db
-      '@potion/lab-runtime':
-        specifier: workspace:*
-        version: link:../lab-runtime
       '@potion/lab-spec':
         specifier: workspace:*
         version: link:../lab-spec
@@ -776,6 +758,61 @@ importers:
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.43
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(@types/node@20.19.43)
+
+  tests/integration:
+    dependencies:
+      '@potion/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@potion/custody':
+        specifier: workspace:*
+        version: link:../../packages/custody
+      '@potion/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@potion/lab-dial':
+        specifier: workspace:*
+        version: link:../../packages/lab-dial
+      '@potion/lab-gen':
+        specifier: workspace:*
+        version: link:../../packages/lab-gen
+      '@potion/lab-mcp':
+        specifier: workspace:*
+        version: link:../../packages/lab-mcp
+      '@potion/lab-runtime':
+        specifier: workspace:*
+        version: link:../../packages/lab-runtime
+      '@potion/lab-spec':
+        specifier: workspace:*
+        version: link:../../packages/lab-spec
+      '@potion/lab-superpowers':
+        specifier: workspace:*
+        version: link:../../packages/lab-superpowers
+      '@potion/pareto':
+        specifier: workspace:*
+        version: link:../../packages/pareto
+      '@potion/server':
+        specifier: workspace:*
+        version: link:../../apps/server
+      '@potion/workers':
+        specifier: workspace:*
+        version: link:../../packages/workers
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.43
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/pg@8.20.3)(pg@8.22.0)
+      fastify:
+        specifier: ^5.0.0
+        version: 5.11.2
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

@@ -7,9 +7,9 @@ name: ci
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 # Cancel superseded runs on the same ref (saves runner minutes on rapid pushes).
 concurrency:
