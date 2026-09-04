@@ -153,6 +153,7 @@ export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
       name: 'run_python',
       description:
         'Run Python 3.12 in the Potion sandbox (pandas, numpy, openpyxl, matplotlib; no network). ' +
+        'Your code starts IN the working directory: use RELATIVE paths only (attached files are already there; /home/user and /mnt/data do not exist). ' +
         'FRESH PROCESS each call — no variable or import survives from a previous call; only FILES in the working ' +
         'directory persist (existing workspace files are placed there first; files you write are kept for later ' +
         'calls and delivered as artifacts). Do the whole job in one call when you can, or write intermediate data ' +
@@ -182,6 +183,7 @@ export function buildCodeLabTools(deps: CodeToolDeps): LabTool[] {
       // the world is thinking, not acting.
       description:
         'Run a bash script in the Potion sandbox (git, node, python available; NO network). ' +
+        'Relative paths only — you are already in the working directory. ' +
         'FRESH PROCESS each call — nothing survives except FILES in the working directory (the whole workspace tree ' +
         'is placed there first; files you write are kept). Use it to run tests, inspect the tree, and do local git ' +
         'operations on fetched repos.',

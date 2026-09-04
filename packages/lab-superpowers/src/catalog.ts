@@ -96,7 +96,8 @@ const CODE = pkg({
       'Code: run Python 3.12 (pandas, numpy, openpyxl, matplotlib) and bash in an isolated sandbox; NO network. ' +
       'CRITICAL — each run_python/run_shell call is a FRESH process: variables, imports, and in-memory data do NOT survive between calls. ONLY files you write to the working directory persist (they are restored into your next call and delivered as the run’s artifacts). ' +
       'So: do a self-contained job in ONE call when you can; if you must work in steps, WRITE intermediate results to a file and RELOAD them next call — never rely on a variable from a previous call. ' +
-      'Compute answers, never estimate them; write real deliverables (xlsx, csv, png, md) as files in the working directory. If you need outside data, fetch it with the web tools first, then paste it into your code or a file.',
+      'PATHS: your code STARTS in the working directory and the attached files are already there — always use RELATIVE paths (\'orders.csv\', \'deliverables/out.xlsx\'). Absolute paths such as /home/user, /mnt/data or /workspace do NOT exist here, and guessing one costs you a whole call. '
+      + 'Compute answers, never estimate them; write real deliverables (xlsx, csv, png, md) as files in the working directory. If you need outside data, fetch it with the web tools first, then paste it into your code or a file.',
     tokenBudget: DEFAULT_TOKEN_BUDGET,
   },
   tools: [
