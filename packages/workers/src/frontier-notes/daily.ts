@@ -255,3 +255,39 @@ export function assembleDailyIssue(
   }
   return { ...base, status: 'published' };
 }
+
+/** THE DAILY PARSER (2026-09-04): parseDraft is the WEEKLY shape and
+ * requires exactly three FAQ entries — a daily has none by design, so every
+ * daily framing would have failed its parse and the Delta byline was
+ * unreachable no matter what the writer produced. Found by the test written
+ * for the read-after-write race, one layer down from it. Same discipline as
+ * parseDraft otherwise: the title and the plain-words opening must be the
+ * model's own; secondary fields fall back to the composed ledger. */
+export function parseDailyDraft(text: string, fallback: Draft): Draft | null {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const o = JSON.parse(m[0]) as Partial<Draft>;
+    const s = (k: keyof Draft): string | null => {
+      const v = o[k];
+      return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+    };
+    const title = s('title');
+    const plain = s('plain');
+    if (title === null || plain === null) return null;
+    return {
+      title,
+      plain,
+      summary: s('summary') ?? fallback.summary,
+      lede: s('lede') ?? fallback.lede,
+      frontierNote: s('frontierNote') ?? fallback.frontierNote,
+      auditionNote: s('auditionNote') ?? fallback.auditionNote,
+      // A daily carries no mixing note and no FAQ, ever.
+      mixingNote: '',
+      takeaway: s('takeaway') ?? fallback.takeaway,
+      faq: [],
+    };
+  } catch {
+    return null;
+  }
+}

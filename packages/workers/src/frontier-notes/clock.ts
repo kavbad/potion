@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ObservatoryRun } from '../observatory.js';
 import { composeFactSheet } from './compose.js';
-import { assembleDailyIssue, auditDailyNumbers, deterministicDailyDraft, type DailyFacts } from './daily.js';
+import { assembleDailyIssue, auditDailyNumbers, deterministicDailyDraft, parseDailyDraft, type DailyFacts } from './daily.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
 import { lintDraft } from './lint.js';
@@ -107,9 +107,18 @@ export async function dailyLedgerTick(io: DailyIo): Promise<string | null> {
     // and publish — a slow or wedged run must never cost the day.
     if (terminal === null && !overdue) return null;
     const text = terminal === 'completed' ? await io.readRunFile(state.deltaRunId, 'daily.json') : null;
-    const parsed = text !== null ? parseDraft(normalizeDraftText(text), draft) : null;
+    // READ-AFTER-WRITE (2026-09-04, run-be133d02): the tick caught the run
+    // 889ms after it completed and read daily.json before the write was
+    // visible — the framing was declared missing while the file was right
+    // there, costing the byline. A completed run whose deliverable is not
+    // yet readable gets the remaining deadline to become readable; past it
+    // the ledger publishes as composed, so the day is still never missed.
+    if (terminal === 'completed' && text === null && !overdue) return null;
+    // The DAILY parser: a daily has no FAQ, so the weekly shape rules
+    // would reject every framing (found 2026-09-04).
+    const parsed = text !== null ? parseDailyDraft(normalizeDraftText(text), draft) : null;
     const violation =
-      terminal === null ? `framing overdue (run ${state.deltaRunId})` : parsed === null ? `no daily.json (run ended ${terminal})` : auditDailyNumbers(parsed, facts);
+      terminal === null ? `framing overdue (run ${state.deltaRunId})` : parsed === null ? `no usable daily.json (run ended ${terminal})` : auditDailyNumbers(parsed, facts);
     if (parsed !== null && violation === null && io.deltaHarness !== null) {
       draft = { ...parsed, faq: [] };
       writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };

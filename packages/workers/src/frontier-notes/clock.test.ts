@@ -201,6 +201,22 @@ describe('the state machine', () => {
     expect(await dailyLedgerTick(late)).toBe('daily-published');
     expect(slow.log.join(' ')).toMatch(/framing overdue/);
 
+    // 2b. A completed run whose file is not visible YET waits (the 889ms
+    // read-after-write race), then frames when it appears.
+    const racy = world();
+    await dailyLedgerTick(base(racy, 'dd'.repeat(32)));
+    const rid = racy.started[0]!;
+    racy.runs.get(rid)!.state = 'completed'; // completed, file not yet readable
+    expect(await dailyLedgerTick(base(racy, 'dd'.repeat(32)))).toBeNull();
+    expect(racy.issues.size).toBe(0);
+    racy.runs.get(rid)!.files.set(
+      'daily.json',
+      JSON.stringify({ title: 'A quiet day.', summary: 's', plain: 'p', lede: 'l', frontierNote: 'f', auditionNote: 'a', mixingNote: '', takeaway: 't', faq: [] }),
+    );
+    expect(await dailyLedgerTick(base(racy, 'dd'.repeat(32)))).toBe('daily-published');
+    expect(racy.issues.get('2026-09-04')!.byline).toBe('Delta');
+    expect(racy.issues.get('2026-09-04')!.writer?.runId).toBe(rid);
+
     // 3. NO framing generation configured: the ledger publishes unframed.
     const bare = world();
     expect(await dailyLedgerTick(base(bare, null))).toBe('daily-published');
