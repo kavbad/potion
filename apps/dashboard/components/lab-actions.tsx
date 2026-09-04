@@ -227,7 +227,7 @@ const ACCOUNT_ALIASES: Record<string, string[]> = {
 
 /** Deterministic account detection from the job text: direct catalog-name
  * mentions first, then aliases. Pure — same goal, same suggestions. */
-function detectAccounts(goal: string, catalog: Array<{ connectorId: string; displayName: string }>): string[] {
+export function detectAccounts(goal: string, catalog: Array<{ connectorId: string; displayName: string }>): string[] {
   const text = ` ${goal.toLowerCase()} `;
   const hits = new Set<string>();
   for (const c of catalog) {
@@ -242,7 +242,7 @@ function detectAccounts(goal: string, catalog: Array<{ connectorId: string; disp
   return [...hits].sort();
 }
 
-const STANDING_HINT = /\b(daily|weekly|hourly|every|each|monitor|monitors|watch|watches|ongoing|continuously|whenever|keep)\b/i;
+export const STANDING_HINT = /\b(daily|weekly|hourly|every|each|monitor|monitors|watch|watches|ongoing|continuously|whenever|keep)\b/i;
 
 /** The showcase example (operator, 2026-08-28). An authored example ships
  * with its author's answer to the kind-of-work question: EXAMPLE_CLUSTER is

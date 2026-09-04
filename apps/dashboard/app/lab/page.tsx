@@ -1,14 +1,16 @@
-// /lab — THE ROSTER (LAB-DESIGN.md v2, 2026-08-27): your workers, in
-// daylight. The hire card is the hero — especially at day 2, when the
-// roster is one newborn or none. Every chip on a specimen card is data:
-// cluster, born date, and the trust-at-a-glance line from the grant record.
+// /lab — ONE BOX (2026-09-03, operator: "a single prompt box, everything
+// else auto-filled by AI; the best premade examples are the prompt area").
+//
+// What this page was: a theater, a fourteen-field interview, a species
+// gallery, and a roster — four sections before a first-time visitor could
+// act. What it is now: a sentence box, the examples inside it, and the
+// roster underneath. Advanced settings are one click inside the box, and
+// they are the same form as before, not a second implementation.
 import Link from 'next/link';
 import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
-import { InterviewForm } from '@/components/lab-actions';
-import { MissionGallery } from '@/components/lab-gallery';
-import { RunTheater } from '@/components/lab-theater';
-import { BenchLabel, CARD, LabStage, SpecimenMark, TrustLine } from '@/components/lab-bench';
+import { LabCompose } from '@/components/lab-compose';
+import { CARD, LabStage, TrustLine } from '@/components/lab-bench';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,17 +34,19 @@ export default async function LabPage() {
   }
   return (
     <LabStage>
-      <div className="font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-        Workers · supervised first, trusted per action
+      <div className="pt-6">
+        <h1 className="text-[2rem] font-medium leading-[1.1] tracking-[-0.025em] text-ink">
+          What should it do?
+        </h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-soft">
+          Describe a job in one or two sentences. Potion builds the worker around it — what kind of
+          work it is, which measured models fit, and what done means.
+        </p>
+
+        <div className="mt-6">
+          <LabCompose />
+        </div>
       </div>
-      <h1 className="mt-3 text-[2.2rem] font-semibold leading-[1.05] tracking-[-0.025em] text-ink">
-        Your workers
-      </h1>
-      <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-soft">
-        Every worker is born supervised: it asks before every external action, and each answer you
-        give is evidence. Autonomy is earned per kind of action, proposed when the record clears the
-        bar, granted by you — and taken back automatically the moment performance slips.
-      </p>
 
       {unreachable && (
         <p className={`mt-8 ${CARD} px-5 py-4 text-sm text-soft`}>
@@ -50,58 +54,37 @@ export default async function LabPage() {
         </p>
       )}
 
-      {/* ---- the hire card: the hero, always first ---- */}
-      {/* H1 (2026-08-31): the machine, visibly working, before any form —
-           a real recorded run replayed. The first feeling is the product
-           doing real work, not a config page. */}
-      <RunTheater />
-
-      <section className={`mt-10 ${CARD} px-7 py-6 shadow-paper`}>
-        <BenchLabel right="born supervised · budgeted · revocable">Hire a worker</BenchLabel>
-        <InterviewForm />
-      </section>
-
-      {/* ---- the roster ---- */}
-      <MissionGallery />
-
-      <section className="mt-12">
-        <BenchLabel right={harnesses.length > 0 ? `${harnesses.length} on the roster` : undefined}>
-          The roster
-        </BenchLabel>
-        {harnesses.length === 0 ? (
-          <p className="py-6 font-mono text-[12px] text-faint" data-testid="no-harnesses">
-            No workers yet. The first one starts above — one sentence about the job.
-          </p>
-        ) : (
-          <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="harness-list">
+      {harnesses.length > 0 ? (
+        <section className="mt-16">
+          <div className="flex items-baseline justify-between border-b border-line pb-2 font-mono text-[12px] uppercase tracking-[0.13em] text-faint">
+            <span>your workers</span>
+            <span>{harnesses.length}</span>
+          </div>
+          <ul className="divide-y divide-line" data-testid="harness-list">
             {harnesses.map((h) => (
               <li key={h.harnessHash}>
                 <Link
-                  href={`/lab/harness/${h.harnessHash}`}
-                  className={`flex items-start gap-4 ${CARD} px-5 py-4 transition-shadow hover:shadow-paper`}
+                  href={`/lab/worker/${h.harnessHash}`}
+                  className="flex items-baseline justify-between gap-4 py-3 transition-colors hover:text-accent"
                 >
-                  <SpecimenMark hash={h.harnessHash} />
                   <span className="min-w-0">
-                    <span className="block truncate text-[15px] font-medium text-ink">
-                      {h.name}
+                    <span className="block truncate text-[15px] text-ink">{h.name}</span>
+                    <span className="mt-0.5 block font-mono text-[12px] text-faint" suppressHydrationWarning>
+                      {h.clusterId} · born {new Date(h.createdAt).toLocaleDateString('en-US')}
                     </span>
-                    <span className="mt-0.5 block font-mono text-[12px] text-faint">
-                      {h.clusterId} · born {new Date(h.createdAt).toLocaleDateString()} ·{' '}
-                      <code>{h.harnessHash.slice(0, 8)}</code>
-                    </span>
-                    <span className="mt-1.5 block">
-                      <TrustLine trust={h.trust ?? { autonomous: 0, supervised: 0, blocked: 0 }} />
-                    </span>
+                  </span>
+                  <span className="shrink-0">
+                    <TrustLine trust={h.trust ?? { autonomous: 0, supervised: 0, blocked: 0 }} />
                   </span>
                 </Link>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <p className="mt-14 font-mono text-[12px] leading-relaxed text-faint">
-        permission is the output of evidence — there is no trust score
+      <p className="mt-16 font-mono text-[12px] leading-relaxed text-faint">
+        every worker is born supervised · permission is the output of evidence · there is no trust score
       </p>
     </LabStage>
   );
