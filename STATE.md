@@ -131,8 +131,30 @@ adopted centroids at the discovery-stored threshold; trace carries
 `;parent=`, hint path never sub-assigns, guard-blocked/empty workload
 frontiers fail OPEN to the parent; discovery snapshots preserve adopted
 rows and skip their territory; adopted assignments ride the router
-artifact + serve-time stamping; sampling stays parent-grain). Next:
-generations (shadow/canary/promote/rollback). Eval-quality queue (second
+artifact + serve-time stamping; sampling stays parent-grain). **GAP PASS
+2026-09-02** (six gaps, ranked by what most raises the odds): (1) the
+Outcome API was UNDOCUMENTED — the deepest instrument, invisible to every
+customer; /docs gains an Outcomes section, llms.txt indexes it, and a
+dashboard invitation appears on proven routed traffic with no verdicts
+(also fixed: five docs sections existed but were missing from the nav).
+(2) RouterArc rendered ONLY in the no-traffic branch, so the loop went
+dark exactly when it started running — components/loop-status.tsx now
+reports live state per mechanism, and the arc's stale copy (bar proposals
+only; "Savings totals what you kept") was corrected to name challenger
+promotion, adoption, and estimate-vs-measured. (3) `evidence_ready`
+alert event: challengers and measured workloads were landing silently.
+(4) scripts/deploy-prod.sh — every rule that bit us made executable
+(.env* exclusion, one service at a time, pipefail, committed-tree gate
+incl. UNTRACKED files, dry-run default, --rollback). (5) boot gate report
+(apps/server/src/boot-report.ts) — the 2026-08-27 scaffolded-empty
+SELF_SERVE class, closed: every security/billing gate logs resolved state
++ whether it came from an explicit value, unset, or EMPTY. (6) HA
+remaining work VERIFIED bounded, not built: checkBudgetHardStop reads
+shared DB state and caches only the answer, so N replicas cost one TTL of
+staleness, never an N× cap; the real multiplier (F18) is fixed, and a
+prod box without REDIS_URL now warns at boot. Next: generations
+(shadow/canary/promote/rollback); Stripe is engineering-complete and
+waits only on the operator's account. Eval-quality queue (second
 external review, adopted 2026-08-25):
 boundary-honest intervals DONE (generalized-Jeffreys [lo,hi] pair on every
 aggregate + frontier evidence; qualityCi95 kept as the conservative
