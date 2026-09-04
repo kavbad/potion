@@ -215,18 +215,25 @@ describe('the law in the loop', () => {
     await h.close();
   }, 60_000);
 
-  it('one round only: a second false claim completes anyway (the judge takes it from there)', async () => {
+  it('BOUNDED, NOT ONCE: three false claims are corrected, the fourth is allowed to end the run', async () => {
+    // A run in the 20-file proof wrote its deliverables, verified them in
+    // the sandbox and named them in the report — and the run held none,
+    // because file-claims had spent its single shot earlier in the run.
     const { h, hash } = await fresh();
     const leg = await runLeg({
       db: h.db,
       client: scripted([
         ok({ text: 'The workbook results.xlsx has been produced with everything computed inside it.' }),
         ok({ text: 'I checked again and results.xlsx definitely exists with all the computed numbers in it.' }),
+        ok({ text: 'Confirming once more that results.xlsx is present and complete on disk.' }),
+        ok({ text: 'Final answer: results.xlsx holds every figure the mission asked for.' }),
         ok({ text: 'Wrap-up: reported; done.' }),
       ]),
       runId: 'run-fc', orgId: ORG_A, spec: SPEC, harnessHash: hash, tools: [],
     });
     expect(leg.status).toBe('completed');
+    const steps = await listLabSteps(h.db, 'run-fc', ORG_A);
+    expect(steps.filter((x) => (x.payload as { fileClaimRepair?: string[] }).fileClaimRepair !== undefined).length).toBe(3);
     const rec = await recordOf(h);
     const res = replayRun(SPEC, rec.steps, rec.terminal);
     expect(res.ok, JSON.stringify(!res.ok ? res.divergences : [])).toBe(true);

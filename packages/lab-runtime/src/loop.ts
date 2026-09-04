@@ -302,6 +302,14 @@ export function isIntentionStop(text: string): boolean {
  * merely unlucky. */
 export const INTENTION_STOP_MAX_REPAIRS = 3;
 
+/** The same budget, for the same reason, on the claim laws. The 20-file
+ * proof produced a run that wrote its deliverables, verified them in the
+ * sandbox, reported them by name — and the run held none of them, because
+ * file-claims had already spent its single shot earlier. A worker that can
+ * be corrected twice should be. Fuel and the leg cap remain the real
+ * bounds; these only decide whether a nudge is still allowed. */
+export const CLAIM_MAX_REPAIRS = 3;
+
 export const INTENTION_STOP_REPAIR =
   'You stopped immediately after saying what you were about to do — but you did not do it. ' +
   'Carry out the action you just announced now, then report what you actually produced. ' +
@@ -549,8 +557,8 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
     // not asking — converting its report into a question parks a finished
     // mission. The law fires only on work-free stops.
     let sawToolStep = priorSteps.some((x) => x.kind === 'tool');
-    let fileClaimFiredThisLeg = false;
-    let doneFileFiredThisLeg = false;
+    let fileClaimFiredThisLeg = 0;
+    let doneFileFiredThisLeg = 0;
     let emptyStopFiredThisLeg = false;
     let intentionStopFiredThisLeg = 0;
     const askedBefore = priorSteps.some(
@@ -854,13 +862,14 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
       if (opts.spec.mission.kind === 'task' && result.finishReason === 'stop' && result.toolCalls.length === 0) {
         const wantFileClaim =
           (result.text ?? '').trim().length >= 40 &&
-          !priorSteps.some((x) => (x.payload as StepPayload).fileClaimRepair !== undefined) &&
-          !fileClaimFiredThisLeg;
+          priorSteps.filter((x) => (x.payload as StepPayload).fileClaimRepair !== undefined).length
+            + fileClaimFiredThisLeg < CLAIM_MAX_REPAIRS;
         // THE DONE-DEFINITION LAW: the mission's own done-definition is a
         // standing file claim — checked at ANY text length, because the
         // hollow case ("Now let me read both fully") names nothing at all.
         const wantDoneFile =
-          !priorSteps.some((x) => (x.payload as StepPayload).doneFileRepair !== undefined) && !doneFileFiredThisLeg;
+          priorSteps.filter((x) => (x.payload as StepPayload).doneFileRepair !== undefined).length
+            + doneFileFiredThisLeg < CLAIM_MAX_REPAIRS;
         if (wantFileClaim || wantDoneFile) {
           const names = (await listLabRunFiles(opts.db, opts.orgId, opts.runId)).map((f) => f.name);
           if (wantFileClaim) fileClaimMissing = missingClaimedFiles(result.text ?? '', names);
@@ -1138,7 +1147,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         // run does not hold — one repair round, then honesty either way
         // (the judge scores whatever survives).
         if (fileClaimMissing.length > 0) {
-          fileClaimFiredThisLeg = true;
+          fileClaimFiredThisLeg += 1;
           messages.push(fileClaimRepairMessage(fileClaimMissing));
           continue;
         }
@@ -1147,7 +1156,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         // repair round. This is the law the hollow mid-thought stop needs:
         // it claims nothing, so the file-claims law never sees it.
         if (doneFileMissing.length > 0) {
-          doneFileFiredThisLeg = true;
+          doneFileFiredThisLeg += 1;
           messages.push(doneFileRepairMessage(doneFileMissing));
           continue;
         }
@@ -1254,7 +1263,7 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
             });
             stepsThisLeg += 1;
             if (wrapClaimMissing.length > 0) {
-              fileClaimFiredThisLeg = true;
+              fileClaimFiredThisLeg += 1;
               messages.push({ role: 'assistant', content: wrap.text });
               messages.push(fileClaimRepairMessage(wrapClaimMissing));
               continue;
