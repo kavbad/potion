@@ -24,6 +24,7 @@ import { registerUsageRoutes } from './routes/usage.js';
 import { registerKeyRoutes } from './routes/keys.js';
 import { registerConnectionRoutes } from './routes/connection.js';
 import { registerPlanRoutes } from './routes/plan.js';
+import { logBootGates } from './boot-report.js';
 // ---- M3 #26 observability (m3-observability) — appended imports ----
 import {
   REQUEST_ID_HEADER,
@@ -202,6 +203,11 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   app.addHook('onRequest', dashboardAuthHook(ctx));
   registerAuthRoutes(app, ctx);
   app.log.info({ transport: sendEmailFromEnv().transport }, 'email transport');
+  // The 2026-08-27 hardening: every security- and billing-relevant gate
+  // reports its RESOLVED state and where that state came from, because a
+  // scaffolded-empty variable reads as unset, takes a default nobody chose,
+  // and is invisible to any check that tests presence. See boot-report.ts.
+  logBootGates(app.log, process.env, ctx.providerMode);
 
   // ---- M2 Wave 2 metering (ROADMAP #17/#18): append-only registration ----
   // Rate limiting runs as an onRequest hook matched on routeOptions.url, so
