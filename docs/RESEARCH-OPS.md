@@ -85,6 +85,17 @@ run-record box, and the verification line.
 - CTAs: `apps/dashboard/lib/research-ctas.ts` — a CTA resolves to a LIVE
   surface or it does not exist (E7).
 
+## The daily ledger (F6 — live)
+
+`dailyLedgerTick` runs on the same 60s clock, once per UTC day: it
+composes the day's facts from `research_cycles` and `recipe_status`
+(24h window), starts ONE Delta framing run, and publishes
+`<YYYY-MM-DD>.{json,md}` into the notes dir. The framing is an
+improvement attempt, never a gate — a refused framing (THE NUMBER LAW,
+or no `daily.json`) publishes the code-composed ledger instead, so the
+day is never missed. A daily needs no gate ask: its content is
+code-composed and the publish grant covers the class.
+
 ## The clock (F4 — live)
 
 The Tuesday chain runs INSIDE the server: a 60-second tick
@@ -111,24 +122,26 @@ generation is promoted.
 
 - **F5 — automate Monday**: the observatory measurement as a scheduled
   tick, closing the last manual step.
-- **F6 — the daily cadence**: new content on /research every single day
-  (operator directive). The honest shape: a **daily ledger note**
-  (Issue kind 'daily' already exists) composed from what the instruments
-  actually did in the last 24 hours — the nightly scan's screenings,
-  auditions measured, price moves, frontier changes, answer updates —
-  drafted by Delta, guarded, verified, gated like everything else. A
-  quiet day publishes a short true ledger, never a forced finding: the
-  calendar never outranks the evidence, so the DAILY unit is the ledger
-  (always true), and findings ride it only when real.
-- **F7 — the reading experience**: make /research much nicer. Target
-  STRUCTURE: review.firstround.com (editorial magazine — dominant
-  featured piece, generous hierarchy, browsable article grid with
-  topic tags, strong masthead). Structure only — the landing design
-  directives bind: serif veto is permanent, mono labels ≥12px, no
-  floating tiles. Study the target live at build time.
-- **The done-verifier law** (runtime, all workers): a task run whose
-  done-definition names a missing deliverable file must not complete on
-  a mid-thought message — the hollow class taxed the Auditor ~50%.
+- **F6 — the daily cadence — SHIPPED (05026b3)**: `dailyLedgerTick`
+  runs beside the weekly on the same 60s clock. The daily UNIT is the
+  ledger of what the instruments did in 24h (cycles, candidates swept,
+  aliases measured, promotions, spend), composed BY CODE from the day's
+  rows — true by construction, so a quiet day publishes a short quiet
+  ledger and never a manufactured finding. The model writes only the
+  framing; THE NUMBER LAW (`auditDailyNumbers`) refuses any figure not
+  in the ledger and any derived ratio outright. Files land as
+  `<YYYY-MM-DD>.json` beside the weeks. If the framing is refused the
+  deterministic ledger ships — the day is never missed.
+- **F7 — the reading experience — SHIPPED (05026b3)**: /research is an
+  editorial magazine — featured issue, live DAILY LEDGER rail, a "why
+  these numbers are different" band, archive grid with kind tags and
+  linked bylines. Structure borrowed from review.firstround.com; the
+  standing design law held (no serif, mono labels ≥12px, ledger
+  masthead kept).
+- **The done-verifier law — SHIPPED (05026b3)**: a task whose
+  doneDefinition names a deliverable file the run does not hold cannot
+  complete, even on a stop that names nothing (`doneFileRepair`, one
+  round, replay-mirrored). Platform-wide, not fleet-only.
 
 ## Filed follow-ups
 
@@ -138,14 +151,5 @@ generation is promoted.
 - **runx- sessions on the dashboard run route**: the gate session's
   recorded resolutions are read via `DATABASE_URL` by the release script
   because `GET /api/lab/runs/:id` rejects the id shape; serve them.
-- **PASS WITH REQUIRED CHANGES**: the fleet doc's middle verdict state;
-  the v1 record collapses to pass/fail.
-- **Done-verifier hollow class**: run-8a3ec460 completed on a mid-thought
-  message with its doneDefinition unmet — a runtime bug the client-side
-  laws cannot reach (it also cost the F4 rehearsal two of its four draft
-  attempts via verdict-less Auditor completions).
-- **deterministicDraft still says 'moved'** (write.ts) — the fallback
-  writer predates the verdict-semantics law; its title/prose should say
-  'drifted' like everything else (seen live in the F4 rehearsal issue).
 - Stray pre-fix W36 copies sit in the unused `/opt/potion/research/notes/`
   — remove at leisure.
