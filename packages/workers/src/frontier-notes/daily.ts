@@ -50,6 +50,18 @@ export interface DailyFacts {
 
 const n2 = (x: number) => (Math.round(x * 100) / 100).toFixed(2);
 
+/** THE PRICES LABEL (2026-09-04, found on the first live daily): the prices
+ * version is an APPEND LOG — a 6,000-character concatenation of every alias
+ * ever added ("2026-08-04-or2+tranche-…+or-solar-pro4+…"). Printed whole it
+ * is unreadable AND it carries withheld model names, so the redaction pass
+ * correctly HELD the day's first ledger. A version is provenance, not prose:
+ * print its base and count the revisions. */
+export function shortPricesLabel(version: string): string {
+  const [base, ...rest] = version.split('+');
+  const b = (base ?? version).slice(0, 40);
+  return rest.length === 0 ? b : `${b} plus ${rest.length} revisions`;
+}
+
 /** Every number a daily draft is ALLOWED to state: the facts' own values,
  * in the spellings a writer would naturally use. */
 export function permittedNumbers(f: DailyFacts): Set<string> {
@@ -107,7 +119,7 @@ export function dailyLedgerBody(f: DailyFacts): string[] {
   const out: string[] = [];
   if (f.cycles.length === 0) {
     out.push(
-      `No measurement cycle ran in the last 24 hours. The registry stands at ${f.registrySize} models on prices ${f.pricesVersion}. A quiet day is a real result: the instruments looked and found nothing worth measuring.`,
+      `No measurement cycle ran in the last 24 hours. The registry stands at ${f.registrySize} models on prices ${shortPricesLabel(f.pricesVersion)}. A quiet day is a real result: the instruments looked and found nothing worth measuring.`,
     );
   } else {
     const live = f.cycles.filter((c) => c.provenance === 'live').length;
@@ -125,7 +137,7 @@ export function dailyLedgerBody(f: DailyFacts): string[] {
     );
   }
   out.push(
-    `Registry: ${f.registrySize} models, prices ${f.pricesVersion}. Every figure here is the instrument's own count for the day; nothing is estimated.`,
+    `Registry: ${f.registrySize} models, prices ${shortPricesLabel(f.pricesVersion)}. Every figure here is the instrument's own count for the day; nothing is estimated.`,
   );
   return out;
 }

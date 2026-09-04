@@ -1,6 +1,6 @@
 // The daily ledger (F6) — the number law, the quiet day, and the shape.
 import { describe, expect, it } from 'vitest';
-import { assembleDailyIssue, auditDailyNumbers, composeDailyFacts, dailyLedgerBody, deterministicDailyDraft, utcDay } from './daily.js';
+import { assembleDailyIssue, auditDailyNumbers, composeDailyFacts, dailyLedgerBody, deterministicDailyDraft, shortPricesLabel, utcDay } from './daily.js';
 
 const NOW = new Date('2026-09-03T12:00:00Z');
 const rows = [
@@ -36,6 +36,19 @@ describe('composing the day', () => {
     expect(body).toContain('10 candidate configurations');
     expect(body).toContain('$1.25');
     expect(body).toContain('322 models');
+  });
+});
+
+describe('the prices label', () => {
+  it('never prints the append log — it carries withheld names and held the first live daily', () => {
+    const real = '2026-08-04-or2+tranche-2026-08-19+or-solar-pro4+or-hy4-preview+or-glm-latest';
+    expect(shortPricesLabel(real)).toBe('2026-08-04-or2 plus 4 revisions');
+    expect(shortPricesLabel(real)).not.toContain('or-solar-pro4');
+    expect(shortPricesLabel('p-2026-09-01')).toBe('p-2026-09-01');
+    const facts = composeDailyFacts({ now: NOW, cycles: [], promoted: 0, registrySize: 375, pricesVersion: real });
+    const body = dailyLedgerBody(facts).join(' ');
+    expect(body).not.toContain('or-solar-pro4');
+    expect(body).toContain('375 models');
   });
 });
 
