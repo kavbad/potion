@@ -38,6 +38,7 @@ import {
   apiKeys,
   authEvents,
   budgetEvents,
+  demandCellContributors,
   budgets,
   clusterExemplars,
   clusterIncumbents,
@@ -90,6 +91,7 @@ import {
   frontierPins,
   invoiceCharges,
   invites,
+  jobExecutions,
   learningProposals,
   orgIncumbents,
 } from '../schema.js';
@@ -336,10 +338,27 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
     'usage_daily',
     db.delete(usageDaily).where(eq(usageDaily.orgId, orgId)).returning({ orgId: usageDaily.orgId }),
   );
-  // budget_events: bare-text org column, no FK — the OTHER silent-orphan.
+  // THE SILENT-ORPHAN CLASS: an org_id column with NO foreign key. Nothing
+  // aborts when these are missed and no assertion can reveal it — the row
+  // simply outlives the org it belongs to. Found 2026-09-04 by deriving the
+  // e2e's table list over every org_id column rather than over FKs alone;
+  // budget_events was the known one, these two were not.
   await count(
     'budget_events',
     db.delete(budgetEvents).where(eq(budgetEvents.orgId, orgId)).returning({ orgId: budgetEvents.orgId }),
+  );
+  await count(
+    'demand_cell_contributors',
+    db
+      .delete(demandCellContributors)
+      .where(eq(demandCellContributors.orgId, orgId))
+      .returning({ orgId: demandCellContributors.orgId }),
+  );
+  // job_executions.org_id is NULLABLE (platform jobs carry no org), so this
+  // deletes only the org's own rows and leaves platform history alone.
+  await count(
+    'job_executions',
+    db.delete(jobExecutions).where(eq(jobExecutions.orgId, orgId)).returning({ jobId: jobExecutions.jobId }),
   );
   await count('budgets', db.delete(budgets).where(eq(budgets.orgId, orgId)).returning({ orgId: budgets.orgId }));
   await count(

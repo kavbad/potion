@@ -318,17 +318,18 @@ describe('the serve-path guards, on a fixture where each is load-bearing', () =>
     // stamped 'org-incumbent'.
     expect(row.baselineBasis).not.toBe('org-incumbent');
     expect(row.baselineBasis).not.toBe('cluster-incumbent');
-    // KNOWN GAP, found by this fixture (2026-09-04): the guard removes only
-    // the incumbent DESIGNATION. baselineCostUsd's silent best-of-frontier
-    // fallback still fires whenever the held-out model is itself a point on
-    // the frontier, so this row records a baseline against mock-mid — 10× the
-    // incumbent's measured cost — where schema.ts promises "such rows carry
-    // baseline NULL". Nulled only incidentally elsewhere in this file, where
-    // the incumbent is off-frontier and baselineCostUsd bails at its own
-    // `chosen` lookup. Asserted as it IS so the lie is visible, not pinned as
-    // correct: the fix is for chat.ts to skip baselineFields entirely on a
-    // holdout row.
-    expect(row.baselineBasis).toBe('best-of-frontier');
+    // FIXED 2026-09-04, and this fixture is what found it. Nulling the
+    // incumbent designation was not enough: baselineCostUsd read the null
+    // hash as "none named" and fell through to its silent best-of-frontier
+    // fallback, so this row recorded a baseline against mock-mid — 10× the
+    // incumbent's measured cost — for the very request that IS the
+    // comparator. It was invisible everywhere else in this file because the
+    // incumbent sits off-frontier there and baselineCostUsd bails at its own
+    // `chosen` lookup. The rollup sums baseline_cost_usd with no holdout
+    // filter, so the number reached the invoice's projected savings.
+    // schema.ts's promise, now kept: such rows carry baseline NULL.
+    expect(row.baselineCostUsd).toBeNull();
+    expect(row.baselineBasis).toBeNull();
     // GUARD 3 (`heldOut !== null ? null : await stampedRouterVersion(...)`):
     // the coin decided this request, not the router — even though the minted
     // artifact does contain exactly this assignment.

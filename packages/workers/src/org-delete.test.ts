@@ -211,6 +211,13 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     await insertQualitySample(db.db, { orgId: ORG, strategyHash: 'h', quality: 0.5, clusterId, policyId: 'pol_casc' });
     await upsertBudget(db.db, { orgId: ORG, monthlyCapUsd: 10, hardStop: false, warnPct: 80 });
     await db.db.execute(sql.raw(`INSERT INTO budget_events (org_id, kind, day) VALUES ('${ORG}', 'budget_warning', '2026-08-07')`));
+    // The other two bare-org_id tables (no FK, so nothing aborts if the
+    // cascade misses them). Seeded so their "is empty after" assertions
+    // below are non-vacuous — an empty table proves nothing.
+    await db.db.execute(sql.raw(`INSERT INTO demand_cell_contributors (cell_key, org_id) VALUES ('cell-casc', '${ORG}')`));
+    await db.db.execute(sql.raw(
+      `INSERT INTO job_executions (job_id, job_kind, org_id) VALUES ('job-casc', 'eval:run', '${ORG}')`,
+    ));
     const ruleRes = await db.db.execute(sql.raw(
       `INSERT INTO alert_rules (org_id, kind, target_url, events) VALUES ('${ORG}', 'webhook', 'https://x.example/hook?token=s3cret', ARRAY['recipe_promoted']) RETURNING id`,
     ));
@@ -351,14 +358,14 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     expect(new Set(await bareOrgIdTables())).toEqual(
       new Set(['budget_events', 'clusters', 'demand_cell_contributors', 'job_executions']),
     );
-    for (const table of ['budget_events', 'clusters']) {
+    // All four, now that the cascade clears all four. `demand_cell_contributors`
+    // and `job_executions` were the open gap this block recorded on
+    // 2026-09-04: org-attributed rows outliving the org, with no FK for
+    // Postgres to object to and no assertion able to reveal it. Fixed in
+    // deleteOrgCascade; the seeds above make these checks non-vacuous.
+    for (const table of ['budget_events', 'clusters', 'demand_cell_contributors', 'job_executions']) {
       expect(await orgCount(table), table).toBe(0);
     }
-    // NOT asserted, because they are NOT cleared: `demand_cell_contributors`
-    // and `job_executions` keep org-attributed rows after the org is gone
-    // (open gap found 2026-09-04 by the sweep that wrote this block). Closing
-    // it is a cascade change, not a test change — recorded here rather than
-    // asserted-as-fine so the next reader sees the gap instead of inheriting it.
 
     expect(await totalCount('derived_suite_items')).toBe(0); // rides the derived_suites cascade
     expect(await totalCount('cluster_exemplars')).toBe(0); // transitive via org clusters

@@ -911,6 +911,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // saying "vs your incumbent" must be provable from the row, and the
     // silent best-of-frontier fallback must be distinguishable from it.
     const baselineFields = (sh2: string, costUsd: number | undefined) => {
+      // A HOLDOUT ROW IS THE BASELINE, so it can never carry one (0086, and
+      // schema.ts says so on the column). Nulling `baseline` above is NOT
+      // enough: baselineCostUsd treats a null hash as "no incumbent named"
+      // and falls through to its silent best-of-frontier fallback, so a
+      // holdout whose incumbent also sits on the served frontier recorded a
+      // savings claim against the frontier's premium point — for the very
+      // request that IS the comparator. usage_daily's rollup sums
+      // baseline_cost_usd with no holdout filter, so that number reached
+      // projectedSavedUsd on the invoice. Refuse at the field, not at the
+      // hash. (2026-09-04, found by the mutation audit.)
+      if (heldOut !== null) return { baselineCostUsd: null, baselineBasis: null };
       const cost = baselineCostUsd(op.frontier, sh2, costUsd, baseline?.hash ?? null);
       return { baselineCostUsd: cost, baselineBasis: cost === null ? null : (baseline?.basis ?? 'best-of-frontier') };
     };
