@@ -310,6 +310,28 @@ export function registerFrontierNotesClock(
     if (!opts.force && !inMondayWindow(now)) return null;
     const week = isoWeekOf(now);
     const io = buildIo(envDir!);
+    // TWO TRIGGERS, ONE RUN — and this line is the whole of it (2026-09-05).
+    //
+    // The weekly measurement has a SECOND trigger that is not in this tree:
+    // /etc/cron.d/potion-observatory on the prod host (Etc/UTC, `0 6 * * 1`)
+    // runs the compose observatory profile, whose command is the same
+    // `tsx scripts/observatory-week.ts`. It is the one that has actually been
+    // firing — the W34/W35/W36 records were written by it.
+    //
+    // Nothing shares a mutex between the two. The lock below is created by
+    // THIS path only; the cron never takes it, and observatory-week.ts has no
+    // week guard of its own (its only refusals are KEY_RISK_ACCEPTED and the
+    // publish invariants). So the single thing preventing a double spend is
+    // this check reading the record the OTHER trigger wrote.
+    //
+    // That works because the record is keyed on the ISO WEEK rather than on
+    // which trigger fired — keyed on the trigger, each side would see "not me
+    // yet" and both would spend. It ALSO depends on separation in time, which
+    // is the fragile half: observatory-week.ts writes its record at the END of
+    // the run, so this check is blind while a run is in flight. The cron fires
+    // 06:00 UTC and has taken ~32 minutes; inMondayWindow opens at 06:00
+    // PACIFIC (13:00 UTC). The ~6.5h gap is doing real work here, and a run
+    // that ever overran it would be met by a tick that sees no record yet.
     if (!opts.dry && io.readObservatoryRun(week) !== null) return null; // measured already
     const stateDir = join(envDir!, 'artifacts', 'observatory-state');
     const marker = join(stateDir, `${week}.json`);
