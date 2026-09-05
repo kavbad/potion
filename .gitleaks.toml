@@ -41,13 +41,12 @@ paths = [
   # exists to strip what it embeds, and `grant-absence-sweep.test.ts` asserts
   # every route answers without token material.
   #
-  # RESIDUAL RISK, stated rather than buried: a REAL credential pasted into a
-  # test file or a fixtures/ directory will NOT be caught by this gate. That is
-  # accepted deliberately — the alternative is 35 permanent findings, and a
-  # gate that is always red is a gate nobody reads. Everything outside these
-  # patterns is still scanned, which is where a real leak would land.
-  '''\.test\.ts$''',
-  '''(^|/)fixtures/''',
+  # The 33 fixture findings are allowlisted INDIVIDUALLY in .gitleaksignore, by
+  # commit:path:rule:line — deliberately NOT as a path class. A class rule
+  # switches this gate off for every test file and fixture written from now on,
+  # which is the worst category to blind in a repo whose tests are about
+  # credential handling. Verified: a freshly planted key in a test file is
+  # caught under the fingerprints and missed under the class rule.
   # Documented in the file itself, directly above the constant: "Not a
   # credential: a fixture value the in-process mock provider issues."
   '''scripts/step10-live-mcp\.ts$''',
