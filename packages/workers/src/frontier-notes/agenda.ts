@@ -203,6 +203,11 @@ export function generateAgenda(input: AgendaInput): AgendaCandidate[] {
     const demandBase = CLUSTER_DEMAND[s.clusterId] ?? 0.5;
     const byQuality = [...pts].sort((a, b) => b.quality - a.quality);
     const top = byQuality[0]!;
+    // No cluster-wide `nMin` here. It read like a sample-size publish gate and
+    // was never one — the value was computed and discarded. Each candidate
+    // scores its evidence from `Math.min` over the points IT cites (below),
+    // which is the correctly scoped number: a cluster-wide floor would dock a
+    // candidate for a thin point it never refers to.
 
     // ── 1. THE QUALITY PREMIUM — the category's defining question:
     //      what do the last points of quality actually cost?

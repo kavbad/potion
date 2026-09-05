@@ -166,6 +166,24 @@ function surveyPackages(): Pkg[] {
  * narrow before use, so it is the safe idiom, and counting it would push
  * people back toward `any`. Four `JSON.parse(...) as unknown` in the harness
  * and pareto suites are exactly that, and the text scan was blind to them.
+ *
+ * WHAT IT DOES NOT COUNT, said plainly because a guard that reports a number
+ * gets read as coverage of the whole family. A PLAIN `as T` is invisible
+ * here, and one hid a real defect on 2026-09-05: mixing-verdict.test.ts built
+ * its fixture behind `as MixingFact`, which concealed `family: 'extractive'`
+ * — not a ClusterFamily at all — plus three required fields omitted. Seven
+ * tests passed the whole time. "The ratchet is at 4" said nothing about it.
+ *
+ * That omission is deliberate, and the line a peer drew for it is the right
+ * one: a cast on a value the RUNTIME produced (`JSON.parse(x) as Shape`,
+ * `server.address() as AddressInfo`) is checked by whatever you assert about
+ * it next; a cast on a fixture you CONSTRUCT is checked by nothing at all.
+ * Counting both would price them the same and push people toward `any`.
+ *
+ * So this ratchet covers the laundering spellings only. The thing that
+ * catches a mis-shaped fixture is the TYPECHECK — which is why the inventory
+ * above exists, and why it is worth running as often as the tests rather
+ * than trusting a green suite.
  */
 const ESCAPE_HATCH_BUDGET = 4;
 

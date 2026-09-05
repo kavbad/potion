@@ -11,20 +11,36 @@ import { describe, expect, it } from 'vitest';
 import { auditMixingVerdicts } from './lint.js';
 import type { MixingFact } from './types.js';
 
-// `Partial<T>` under exactOptionalPropertyTypes lets a key be ABSENT but not
-// explicitly `undefined`, and this builder spreads defaults — so a test cannot
-// express "no cluster" by omitting the key, only by overriding it to undefined
-// (which is what MixingFact.clusterId documents: "Absent when the finding is
-// vague"). Widen the OVERRIDE type, not MixingFact itself.
-const fact = (over: { [K in keyof MixingFact]?: MixingFact[K] | undefined }): MixingFact => ({
+// No `as MixingFact` here. The cast was load-bearing in the worst way: it
+// let the fixture set `family: 'extractive'`, which is not a ClusterFamily
+// at all ('structured output' is), and it let n/vague/costBand be omitted
+// though the type requires them. A fixture behind a cast is checked against
+// nothing — the same class of hole the test-typecheck sweep spent the day
+// closing, and one the escape-hatch ratchet does NOT catch, because a plain
+// `as T` launders less than `as never` and is not counted.
+const fact = (over: Partial<MixingFact> = {}): MixingFact => ({
   clusterId: 'classification',
-  family: 'extractive',
+  family: 'structured output',
   kind: 'cheaper-and-as-good',
   meanQuality: 0.9,
   qualityDeltaVsBestSingle: 0.01,
   costSaving: 0.4,
+  n: 84,
+  vague: false,
+  costBand: 'mid',
   ...over,
-} as MixingFact);
+});
+
+/**
+ * A vague finding OMITS clusterId; it does not set it to undefined. With
+ * `exactOptionalPropertyTypes` those are different types, and they are
+ * different on the wire too — which is the whole reason the distinction is
+ * turned on. Building it by deletion keeps the fixture honest.
+ */
+const vagueFact = (over: Partial<MixingFact> = {}): MixingFact => {
+  const { clusterId: _omitted, ...rest } = fact({ ...over, vague: true });
+  return rest;
+};
 
 describe('auditMixingVerdicts', () => {
   it('passes an honest win and an honest loss', () => {
@@ -62,7 +78,7 @@ describe('auditMixingVerdicts', () => {
   it('names WHERE, so an operator can find the row', () => {
     expect(auditMixingVerdicts([fact({ clusterId: 'rewrite-edit', costSaving: -1 })])).toContain('rewrite-edit');
     // A vague finding has no cluster; the family still locates it.
-    expect(auditMixingVerdicts([fact({ clusterId: undefined, costSaving: -1 })])).toContain('extractive');
+    expect(auditMixingVerdicts([vagueFact({ costSaving: -1 })])).toContain('structured output');
   });
 
   it('is vacuously fine on an empty sheet', () => {

@@ -310,6 +310,64 @@ export function registerFrontierNotesClock(
     if (!opts.force && !inMondayWindow(now)) return null;
     const week = isoWeekOf(now);
     const io = buildIo(envDir!);
+    // TWO TRIGGERS, ONE RUN — and this line is the whole of it (2026-09-05).
+    //
+    // The weekly measurement has a SECOND trigger that is not in this tree:
+    // /etc/cron.d/potion-observatory on the prod host (Etc/UTC, `0 6 * * 1`)
+    // runs the compose observatory profile, whose command is the same
+    // `tsx scripts/observatory-week.ts`. It is the one that has actually been
+    // firing — the W34/W35/W36 records were written by it.
+    //
+    // Nothing shares a mutex between the two. The lock below is created by
+    // THIS path only; the cron never takes it, and observatory-week.ts has no
+    // week guard of its own (its only refusals are KEY_RISK_ACCEPTED and the
+    // publish invariants). So the single thing preventing a double spend is
+    // this check reading the record the OTHER trigger wrote.
+    //
+    // That works because the record is keyed on the ISO WEEK rather than on
+    // which trigger fired — keyed on the trigger, each side would see "not me
+    // yet" and both would spend. It ALSO depends on separation in time, which
+    // is the fragile half: observatory-week.ts writes its record at the END of
+    // the run (line 280, inside `if (!DRY)`), so this check is blind while a
+    // run is in flight. The cron fires 06:00 UTC and has taken ~32 minutes;
+    // inMondayWindow opens at 06:00 PACIFIC (13:00 UTC). The ~6.5h gap is
+    // doing real work here.
+    //
+    // THE LIKELY PATH IS A CRASH, NOT AN OVERRUN. An overrun needs a run 13x
+    // slower than ever observed. But observatory-week.ts's uncaughtException /
+    // unhandledRejection handlers (line 45) post one line and `process.exit(1)`
+    // WITHOUT writing a record — line 280 is on the success path only. So a
+    // cron run that dies after spending (a provider timeout mid-audition, an
+    // OOM) leaves no record, and this check waves the in-process trigger
+    // through to run the whole week again from the top. "Only if it fails at
+    // the wrong moment" is a much shorter odds than "only if it runs 13x
+    // slow".
+    //
+    // THE MONEY IS BELTED TWICE; THE EVIDENCE IS NOT BELTED AT ALL. Spend is
+    // ledgered PER LANE as it happens (ledgerAppend → appendFileSync), and a
+    // second run recomputes envelopeBefore from that same ledger — so the
+    // crashed run's spend is fully visible to it. That is not merely
+    // advisory: observatory-week.ts:103 installs a hard-stop budget on
+    // PLATFORM_OPS_ORG_ID capped at the envelope REMAINDER, so serving
+    // refuses mid-run once it binds, and lanes the plan cannot afford are
+    // recorded `error: 'skipped: envelope'` rather than run.
+    //
+    // The run RECORD has no such protection, and the asymmetry is the whole
+    // point: the ledger APPENDS, the record OVERWRITES (a plain writeFileSync
+    // at line 280). So a week that half-ran, crashed, and was re-run from the
+    // top keeps both spends in the ledger and publishes a single clean record
+    // as though it had run once — two sets of cache salts collapsed into one
+    // story. That is precisely the class of thing this lane exists NOT to do.
+    //
+    // So the fix is not a week guard keyed on the record, which still re-runs
+    // after a crash. It is the started-marker below, written at the START with
+    // exclusive-create and taken by BOTH triggers — genuine mutual exclusion
+    // rather than separation in time — plus an explicit --force for a crashed
+    // week that legitimately needs re-running.
+    //
+    // Write it up as an INTEGRITY control, not a budget one. Priced against
+    // the ~$8 a repeated week costs it looks not worth doing, and the money
+    // is the part that is already defended.
     if (!opts.dry && io.readObservatoryRun(week) !== null) return null; // measured already
     const stateDir = join(envDir!, 'artifacts', 'observatory-state');
     const marker = join(stateDir, `${week}.json`);
