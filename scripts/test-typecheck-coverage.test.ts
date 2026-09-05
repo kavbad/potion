@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
 
@@ -121,10 +122,29 @@ function surveyPackages(): Pkg[] {
  * naming the guard. That is the floor, not a deadline. It is a RATCHET: the
  * count may fall, never rise.
  *
- * NOTE on the pattern: the leading \b matters. Without it, "w-as never" in
- * ordinary prose ("the private hop was never fetched") counts as a cast —
- * which is exactly how the first version of this budget came to be 223 when
- * the true number of casts was far lower.
+ * IT COUNTS THE AST, NOT THE TEXT (2026-09-04). A text scan was wrong in
+ * both directions, and both errors cost someone a cycle:
+ *
+ *  - OVER. It read PROSE. "the private hop was never fetched" matched, which
+ *    is how this budget was born at 223 when the true count was 4. Adding a
+ *    word boundary fixed that case and not the general one: the sentence
+ *    "there is no longer a cast here" still scores as a cast, so a file
+ *    could not explain its own cleanup without appearing to fail, and THIS
+ *    file could not describe the pattern it counts without scoring five.
+ *  - UNDER. `x as unknown as T` matched, but a bare `as unknown` did not,
+ *    so the scan simply could not see one whole spelling.
+ *
+ * A parser cannot be talked around by prose: a cast in a comment or a string
+ * is not an AsExpression, so no wording makes one appear or disappear. That
+ * is strictly stricter than the text scan, which is why this replaces the
+ * file-level self-exemption the text version needed rather than keeping it —
+ * a real cast in THIS file is now counted like any other.
+ *
+ * WHAT COUNTS. `as never` always. `as unknown as T` once, at the inner cast.
+ * A LONE `as unknown` never: that one TIGHTENS `any` into a type you must
+ * narrow before use, so it is the safe idiom, and counting it would push
+ * people back toward `any`. Four `JSON.parse(...) as unknown` in the harness
+ * and pareto suites are exactly that, and the text scan was blind to them.
  */
 const ESCAPE_HATCH_BUDGET = 4;
 
@@ -141,20 +161,15 @@ const ESCAPE_HATCH_BUDGET = 4;
  */
 const TEST_ROOTS = ['packages', 'apps', 'scripts'];
 
-/**
- * This file quotes both counted patterns by construction — in the regex that
- * finds them and in the prose explaining why they are dangerous — so counting
- * itself would score its own documentation as five casts and force the budget
- * up to hide them. That is the same self-reference the mock-eligibility audit
- * already excludes for its own files.
- *
- * The exemption is deliberately as narrow as it can be: ONE file, and only
- * for the cast count. `scripts/` stays in TEST_ROOTS, so a genuine cast in
- * any other script test is still counted, and the raw-control-byte check
- * below still reads THIS file — which is the check it was actually hiding
- * from when it lived with a literal NUL in it.
- */
-const RATCHET_SELF = path.resolve(fileURLToPath(import.meta.url));
+/** An escape hatch as the PARSER sees it — see ESCAPE_HATCH_BUDGET above. */
+function isEscapeHatch(node: ts.Node): boolean {
+  if (!ts.isAsExpression(node) && !ts.isTypeAssertionExpression(node)) return false;
+  if (node.type.kind === ts.SyntaxKind.NeverKeyword) return true;
+  if (node.type.kind !== ts.SyntaxKind.UnknownKeyword) return false;
+  // Only the laundering form: `as unknown` feeding another cast.
+  const parent = node.parent as ts.Node | undefined;
+  return parent !== undefined && (ts.isAsExpression(parent) || ts.isTypeAssertionExpression(parent));
+}
 
 function countEscapeHatches(): { total: number; byFile: Array<[string, number]> } {
   const roots = TEST_ROOTS.map((r) => path.join(REPO_ROOT, r));
@@ -166,9 +181,20 @@ function countEscapeHatches(): { total: number; byFile: Array<[string, number]> 
       const full = path.join(d, entry.name);
       if (entry.isDirectory()) visit(full);
       else if (/\.test\.tsx?$/.test(entry.name)) {
-        if (path.resolve(full) === RATCHET_SELF) continue;
-        const src = readFileSync(full, 'utf8');
-        const n = (src.match(/\bas never\b|\bas unknown as\b/g) ?? []).length;
+        // setParentNodes: true — isEscapeHatch reads node.parent.
+        const sf = ts.createSourceFile(
+          full,
+          readFileSync(full, 'utf8'),
+          ts.ScriptTarget.Latest,
+          true,
+          full.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+        );
+        let n = 0;
+        const walk = (node: ts.Node): void => {
+          if (isEscapeHatch(node)) n += 1;
+          ts.forEachChild(node, walk);
+        };
+        walk(sf);
         if (n > 0) {
           byFile.push([path.relative(REPO_ROOT, full), n]);
           total += n;
