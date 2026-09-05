@@ -114,7 +114,23 @@ jobs:
       # job below — see that job for why.
       - name: Test
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        # Coverage rides the ONE suite run CI already does — ~11% slower
+        # (packages/db 45s -> 50s), against ~6 minutes for a second pass.
+        #
+        # The command is the SPLIT one, not `pnpm test`: @potion/workers runs
+        # on a runner of its own (see that job) because sharing one exhausted
+        # the process budget. That means this job's coverage tree does NOT
+        # include workers, and the ratchet below is scoped to match.
+        env:
+          POTION_COVERAGE: '1'
         run: pnpm --filter '!@potion/workers' -r test && pnpm test:scripts
+
+      # Two-sided, like the escape-hatch ratchet: a fall must be explained, a
+      # RISE must be locked in. A number policed in one direction only drifts in
+      # the other for free, and then nobody knows what the floor is (P1.4).
+      - name: Coverage ratchet
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: node scripts/coverage-ratchet.mjs
 
       # The Python SDK is not a pnpm package, so `pnpm -r test` cannot reach it
       # — it sat outside every repo-level command until 2026-09-05 (P1.2). The

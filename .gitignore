@@ -57,3 +57,5 @@ invoices/
 
 # campaign run logs are records, not source
 .tranche/*.log
+
+# coverage output (P1.4) — the ratchet reads it, git does not carry it

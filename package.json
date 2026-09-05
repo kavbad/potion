@@ -21,7 +21,9 @@
     "test:scripts": "vitest run scripts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test:sdk-python": "bash scripts/test-python-sdk.sh",
-    "prepare": "node scripts/install-hooks.mjs"
+    "prepare": "node scripts/install-hooks.mjs",
+    "coverage": "POTION_COVERAGE=1 pnpm -r test && node scripts/coverage-ratchet.mjs",
+    "coverage:baseline": "node scripts/coverage-ratchet.mjs --write"
   },
   "devDependencies": {
     "@potion/cluster": "workspace:*",
@@ -43,6 +45,7 @@
     "@potion/strategies": "workspace:*",
     "@potion/workers": "workspace:*",
     "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "2.1.9",
     "eslint": "^9.8.0",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4",
