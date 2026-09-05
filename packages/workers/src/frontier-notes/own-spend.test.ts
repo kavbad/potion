@@ -132,21 +132,33 @@ describe('the say-it-once law', () => {
   });
 
   it('refuses the piece after it: paragraph three re-ran the comparison', () => {
-    expect(auditRepetition(second)).toMatch(/third paragraph restates the finding/);
+    expect(auditRepetition(second)).toMatch(/reports the comparison instead of deciding/);
   });
 
   it('lets a later paragraph REFER to a figure while making its own point', () => {
     expect(auditRepetition({ ...first, lede: 'Price is set by what a provider can charge, not by what a model scores. The extra 8.7 points are the only thing the premium buys.' })).toBeNull();
   });
 
-  it('lets the decision name the one figure that decides it', () => {
+  // run-568e5d33, refused by the paragraph-level count and it should NOT have
+  // been: every figure sits inside a decision. Counting was the wrong test.
+  it('lets the decision paragraph name the trade-off it is deciding', () => {
     expect(
       auditRepetition({
         ...second,
         takeaway:
-          'Decide by how much wrong tool use the workflow tolerates. If it is forgiving, ling-3.0-flash at $0.1094 per thousand requests carries most of the score; this is one suite for one kind of work.',
+          'An engineer paying per request should reach for ling-3.0-flash unless the 8.7-point quality gap on tool use is worth 404 times the cost. The one figure that decides it is the $44.15 per thousand requests for gpt-5.6-terra-pro against $0.1094 for ling-3.0-flash. This would not apply when the task is not agentic tool use or when the cheaper model\'s 0.886 score is below what the work can tolerate.',
       }),
     ).toBeNull();
+  });
+
+  it('still refuses a sentence that only re-reports the comparison', () => {
+    expect(
+      auditRepetition({
+        ...second,
+        takeaway:
+          'The tooling matters here. On this measured suite, ling-3.0-flash runs at $0.1094 per thousand requests where gpt-5.6-terra-pro runs at $44.1479 per thousand requests, and the gap is 403.7 times.',
+      }),
+    ).toMatch(/reports the comparison instead of deciding/);
   });
 
   it('catches the same sentence used in two paragraphs', () => {

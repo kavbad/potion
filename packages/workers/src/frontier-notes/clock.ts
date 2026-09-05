@@ -36,7 +36,7 @@ import { loadReplaysFromStore, type StoreLike } from './replay-source.js';
 import type { FactSheet, Issue } from './types.js';
 import { deterministicDraft, parseDraft, type Draft } from './write.js';
 
-export type ClockPhase = 'delta' | 'auditor' | 'gate-held' | 'done' | 'skipped' | 'awaiting-writer';
+export type ClockPhase = 'delta' | 'auditor' | 'gate-held' | 'done' | 'skipped' | 'awaiting-writer' | 'awaiting-auditor';
 
 /** F8: the DAILY PIECE tick — Atlas picks, Delta writes, the corpus
  * remembers. The daily post is the top item on the agenda: a question
@@ -67,6 +67,12 @@ export interface DailyIo {
   framingDeadlineMs?: number;
   /** How long a merely-LATE writer keeps its claim on the day (default 6h). */
   lateWriterCeilingMs?: number;
+  /** The verifier for a Delta-written daily. Null = no verification is
+   * available, and Delta's prose does not publish unverified — the composed
+   * piece does (fleet R2: model prose ships only with pass evidence). */
+  auditorHarness?: string | null;
+  /** How long a verdict may take before no-verdict-is-a-fail (default 6h). */
+  auditorCeilingMs?: number;
   log(line: string): void;
 }
 
@@ -83,9 +89,76 @@ export interface DailyIo {
 export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   const day = utcDay(io.now());
   const state = io.readState(day);
-  // Today is filed — unless it was filed WITHOUT its writer, in which case
-  // the day stays open for the upgrade below (see THE LATE WRITER).
-  if (io.readIssue(day) !== null && state?.phase !== 'awaiting-writer') return null;
+  // Today is filed — unless the day still owes work on it: a writer that has
+  // not landed yet (THE LATE WRITER) or a verdict that has not come back
+  // (THE VERDICT COMES AFTER). Both finish AFTER the piece is on the page.
+  const OPEN_AFTER_PUBLISH = new Set<ClockPhase>(['awaiting-writer', 'awaiting-auditor']);
+  if (io.readIssue(day) !== null && !OPEN_AFTER_PUBLISH.has(state?.phase ?? 'done')) return null;
+
+  // THE VERDICT COMES AFTER (operator, 2026-09-05: "wire the auditor into
+  // the daily path").
+  //
+  // The weekly holds its issue until Auditor passes it. The daily cannot:
+  // holding for a verdict is the queue-latency trap that already cost this
+  // lane a day of writing, and a piece nobody can read is not research. So
+  // the order is inverted — publish, then verify — and the RECORD, not the
+  // schedule, decides whether the prose stays up.
+  //
+  // Fleet R2 is unchanged in substance: Delta's prose stands only with pass
+  // evidence on record. Anything else — a fail, a verdict that never lands,
+  // a run that dies, an unparseable record — retracts the prose and puts the
+  // composed piece in its place, which is written from the evidence by code
+  // and needs no verifier. The day keeps its piece either way; only the
+  // byline is at stake.
+  if (state?.phase === 'awaiting-auditor') {
+    const filed = io.readIssue(day);
+    const assigned = state.assignment;
+    const auditor = io.auditorHarness ?? null;
+    if (filed === null || assigned === undefined || auditor === null) {
+      io.writeState({ ...state, phase: 'done' });
+      return null;
+    }
+    const retract = (why: string): string => {
+      const composed = assemblePieceIssue(assigned, deterministicPiece(assigned, filed.auditionNote), day, {
+        publishedAt: filed.publishedAt,
+        writer: null,
+      });
+      io.writeIssueFiles(composed);
+      io.writeState({ ...state, phase: 'done', note: `retracted: ${why}` });
+      io.log(`fnotes daily ${day}: RETRACTED Delta's prose — ${why}. The composed piece stands.`);
+      return 'daily-retracted';
+    };
+
+    if (state.auditorRunId === undefined) {
+      const runId = await io.startWorkerRun(
+        auditor,
+        { name: 'assignment.json', content: JSON.stringify({ headline: assigned.headline, dek: assigned.dek, question: assigned.demandQuery, clusterId: assigned.clusterId, evidence: assigned.evidence }, null, 1) },
+        { name: 'piece.json', content: JSON.stringify({ title: filed.title, summary: filed.summary, plain: filed.plain, lede: filed.lede, takeaway: filed.takeaway }, null, 1) },
+      );
+      io.writeState({ ...state, auditorRunId: runId });
+      io.log(`fnotes daily ${day}: Auditor verifying the published piece in ${runId}`);
+      return `daily-auditor:${runId}`;
+    }
+
+    const startedMs = Date.parse(state.startedAt);
+    const overdue = Number.isFinite(startedMs) && io.now().getTime() - startedMs > (io.auditorCeilingMs ?? 6 * 60 * 60_000);
+    const terminal = await io.runTerminalState(state.auditorRunId);
+    if (terminal === null) return overdue ? retract(`no verdict from ${state.auditorRunId} within the window`) : null;
+    const text = terminal === 'completed' ? await io.readRunFile(state.auditorRunId, 'verdict.json') : null;
+    if (terminal === 'completed' && text === null && !overdue) return null; // read-after-write
+    const verdict = text !== null ? parseVerdict(text) : null;
+    if (verdict === null) return retract(`no verification record (run ${state.auditorRunId} ended ${terminal})`);
+    if (verdict.verdict !== 'pass') return retract(`Auditor says ${verdict.verdict}: ${verdict.requiredChanges[0] ?? 'see the record'}`);
+
+    const verified: Issue = {
+      ...filed,
+      writer: filed.writer === null ? null : { ...filed.writer, verifiedBy: { runId: state.auditorRunId, costUsd: 0 } },
+    };
+    io.writeIssueFiles(verified);
+    io.writeState({ ...state, phase: 'done', note: `${state.note ?? ''} · verified by ${state.auditorRunId}`.trim() });
+    io.log(`fnotes daily ${day}: VERIFIED — ${verdict.checks.length} checks passed (${state.auditorRunId})`);
+    return 'daily-verified';
+  }
 
   // THE LATE WRITER (found live 2026-09-04, run-d21f0a1b). The writer's run
   // did 95 seconds of work — after sitting 29 MINUTES in a queue that runs
@@ -137,6 +210,12 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
       writer: { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId },
     });
     io.writeIssueFiles(upgraded);
+    // A late writer's prose is prose like any other: it publishes now and
+    // earns its byline from the record, same as one that arrived on time.
+    if ((io.auditorHarness ?? null) !== null) {
+      io.writeState({ ...state, phase: 'awaiting-auditor', assignment: assigned, note: `written by Delta (${runId}): ${assigned.id}` });
+      delete (state as { auditorRunId?: string }).auditorRunId;
+    }
     io.log(`fnotes daily ${day}: ${upgraded.status.toUpperCase()} — the late writer's piece replaces the composed one (${runId})`);
     return 'daily-upgraded';
   }
@@ -208,9 +287,15 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
     ...(writer !== null ? { byline: 'Delta' } : {}),
   });
   io.writeIssueFiles(issue);
+  // A Delta-written piece is published but NOT yet verified: the day is
+  // never held for a verdict (that is the queue-latency trap again), so the
+  // prose goes up and Auditor checks it next. The byline earns its
+  // "verified" line, or the prose comes down. See THE VERDICT COMES AFTER.
+  const verifying = writer !== null && (io.auditorHarness ?? null) !== null;
   io.writeState({
     week: day, startedAt: state?.startedAt ?? io.now().toISOString(), attempts: state?.attempts ?? 1, ...state,
-    phase: late ? 'awaiting-writer' : 'done', note, ...(late ? { assignment: candidate } : {}),
+    phase: late ? 'awaiting-writer' : verifying ? 'awaiting-auditor' : 'done', note,
+    ...(late || verifying ? { assignment: candidate } : {}),
   });
   io.log(`fnotes daily ${day}: ${issue.status.toUpperCase()} — "${issue.title}" (${note})`);
   return 'daily-published';

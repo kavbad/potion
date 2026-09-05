@@ -67,6 +67,12 @@ export function lintDraft(draft: Draft): string | null {
  * evidence. */
 const RESTATEMENT_FLOOR = 3;
 
+/** A sentence that asks the reader to do something. Deliberately a small,
+ * boring list of choice verbs and conditionals — the point is to separate
+ * "here are the numbers again" from "here is what to do about them", not
+ * to judge the argument. */
+const DECIDES = /\b(should|would|could|can|unless|if |when |whether|choose|pick|reach for|use |prefer|reserve|switch|stay|avoid|worth|tolerat\w+|accept\w*|depends?)\b/i;
+
 /** Figures a paragraph states, with identifiers (`gpt-5.6-terra-pro`) removed
  * first — a version number is not a claim. Mirrors THE PIECE NUMBER LAW. */
 function figuresIn(text: string): Set<string> {
@@ -86,21 +92,31 @@ function sentencesIn(text: string): string[] {
 
 /** Returns the repetition violation, or null. */
 export function auditRepetition(draft: Pick<Draft, 'plain' | 'lede' | 'takeaway'>): string | null {
-  // The rule applies to BOTH later paragraphs. It was scoped to the lede at
-  // first, on the reasoning that a recommendation legitimately names its
-  // options and their prices — and the very next piece (run-564edfaf) used
-  // that permission to re-run the entire comparison, both prices and the
-  // ratio, in a paragraph whose job was to say what to DO. Naming one or two
-  // figures to make the decision concrete still passes; restating the
-  // finding does not, whichever paragraph does it.
+  // Both later paragraphs are policed, by different tests, because they fail
+  // differently — a lesson that cost two live refusals to learn.
   const plain = figuresIn(draft.plain);
-  const jobs: [string, Set<string>, string][] = [
-    ['second', figuresIn(draft.lede), 'It should say what the gap MEANS, not say it again'],
-    ['third', figuresIn(draft.takeaway), 'It should say what to DO about the gap, not state it again'],
-  ];
-  for (const [which, figures, job] of jobs) {
-    if (figures.size >= RESTATEMENT_FLOOR && [...figures].every((f) => plain.has(f))) {
-      return `the ${which} paragraph restates the finding — it states ${figures.size} figures and every one of them is already in the first. ${job}`;
+  const restates = (figures: Set<string>) => figures.size >= RESTATEMENT_FLOOR && [...figures].every((f) => plain.has(f));
+
+  // Paragraph two's whole job is non-numeric, so the count is the right test.
+  if (restates(figuresIn(draft.lede))) {
+    return `the second paragraph restates the finding — every figure it states is already in the first. It should say what the gap MEANS, not say it again`;
+  }
+
+  // Paragraph three is different, and counting figures there was WRONG (found
+  // live: run-568e5d33 refused). A decision paragraph names the trade-off it
+  // is deciding — "reach for the cheap one UNLESS the 8.7 points are worth
+  // 404× the cost" is the recommendation, not a restatement of it. What run-
+  // 564edfaf actually did wrong was end on a sentence that only re-reported
+  // the comparison: "...runs at $0.1094 where ... runs at $44.1479, and the
+  // gap is 403.7 times." No verb of choice anywhere in it.
+  //
+  // So the test is per SENTENCE, and a sentence that decides something is
+  // exempt however many figures it carries. A semantic judgment this is not:
+  // it asks only whether the sentence tells the reader to do anything.
+  for (const s of draft.takeaway.split(/(?<=[.!?])\s+/)) {
+    if (DECIDES.test(s)) continue;
+    if (restates(figuresIn(s))) {
+      return `the third paragraph reports the comparison instead of deciding anything: "${s.trim().slice(0, 70)}…" states ${figuresIn(s).size} figures already in the first paragraph and asks the reader to do nothing with them`;
     }
   }
   // A sentence repeated across paragraphs is wrong in any piece, anywhere.

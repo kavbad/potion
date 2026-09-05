@@ -313,6 +313,135 @@ describe('the state machine', () => {
     expect(await dailyPieceTick(io())).toBeNull();
   });
 
+  // THE VERDICT COMES AFTER (operator, 2026-09-05: "wire the auditor into
+  // the daily path"). The weekly HOLDS for its verdict; the daily cannot,
+  // so it publishes and then earns — or loses — the byline on the record.
+  const GOOD_PIECE = JSON.stringify({
+    title: 'The last 2.1 points of code gen quality cost 296 times more.',
+    summary: 'grok-4.6 scored 1.000; a withheld model scored 0.979.',
+    plain: 'grok-4.6 scored 1.000 across 94 items; the cheaper model scored 0.979.',
+    lede: 'The premium buys a thin slice of accuracy on this work.',
+    takeaway: 'Use the cheaper model unless the gap is worth it.',
+  });
+
+  const dailyWorld = (extra: Partial<DailyIo> = {}) => {
+    const w = world();
+    let clock = TUESDAY;
+    const io = (over: Partial<DailyIo> = {}): DailyIo => ({
+      now: () => clock,
+      agendaSignals: async () => [
+        {
+          clusterId: 'code-gen',
+          points: [
+            { model: 'or-grok-4.6', quality: 1, costPer1K: 6.846255319148936, n: 94 },
+            { model: 'or-solar-pro4', quality: 0.979456802063185, costPer1K: 0.023159680851063822, n: 94 },
+          ],
+        },
+      ],
+      publishedClaims: async () => new Map(),
+      measurementFooter: async () => '3 measurement cycles ran in the last 24 hours.',
+      readIssue: (d) => w.issues.get(d) ?? null,
+      writeIssueFiles: (i) => void w.issues.set(i.week, i),
+      startWorkerRun: async () => {
+        const id = `run-v${w.started.length + 1}`;
+        w.runs.set(id, { state: null, files: new Map() });
+        w.started.push(id);
+        return id;
+      },
+      runTerminalState: async (id) => (w.runs.has(id) ? w.runs.get(id)!.state : 'failed'),
+      readRunFile: async (id, n) => w.runs.get(id)?.files.get(n) ?? null,
+      readState: (d) => w.states.get(d) ?? null,
+      writeState: (st, o) => {
+        if (o?.exclusive && w.states.has(st.week)) return false;
+        w.states.set(st.week, st);
+        return true;
+      },
+      deltaHarness: 'dd'.repeat(32),
+      auditorHarness: 'aa'.repeat(32),
+      log: (l) => w.log.push(l),
+      ...extra,
+      ...over,
+    });
+    return { w, io, tick: (over: Partial<DailyIo> = {}) => dailyPieceTick(io(over)), at: (ms: number) => void (clock = new Date(TUESDAY.getTime() + ms)) };
+  };
+
+  it('publishes first, then sends the piece to Auditor and stamps the verdict', async () => {
+    const { w, tick } = dailyWorld();
+    expect(await tick()).toMatch(/^daily-delta:/);
+    const delta = w.started[0]!;
+    w.runs.get(delta)!.state = 'completed';
+    w.runs.get(delta)!.files.set('piece.json', GOOD_PIECE);
+
+    // The prose publishes IMMEDIATELY — the day is never held for a verdict.
+    expect(await tick()).toBe('daily-published');
+    expect(w.issues.get('2026-09-01')!.byline).toBe('Delta');
+    expect(w.issues.get('2026-09-01')!.writer?.verifiedBy).toBeUndefined();
+    expect(w.states.get('2026-09-01')!.phase).toBe('awaiting-auditor');
+
+    // ...and Auditor is dispatched against the PUBLISHED piece.
+    expect(await tick()).toMatch(/^daily-auditor:/);
+    const aud = w.started[1]!;
+    w.runs.get(aud)!.state = 'completed';
+    w.runs.get(aud)!.files.set('verdict.json', PASS_VERDICT);
+
+    expect(await tick()).toBe('daily-verified');
+    const verified = w.issues.get('2026-09-01')!;
+    expect(verified.byline).toBe('Delta');
+    expect(verified.writer?.verifiedBy?.runId).toBe(aud);
+    expect(w.states.get('2026-09-01')!.phase).toBe('done');
+    expect(await tick()).toBeNull();
+  });
+
+  it('RETRACTS the prose when the verdict fails — the composed piece stands', async () => {
+    const { w, tick } = dailyWorld();
+    await tick();
+    const delta = w.started[0]!;
+    w.runs.get(delta)!.state = 'completed';
+    w.runs.get(delta)!.files.set('piece.json', GOOD_PIECE);
+    await tick();
+    await tick();
+    const aud = w.started[1]!;
+    w.runs.get(aud)!.state = 'completed';
+    w.runs.get(aud)!.files.set(
+      'verdict.json',
+      JSON.stringify({ verdict: 'fail', checks: [{ claim: 'the takeaway reverses the finding', method: 'recomputed', ok: false }], requiredChanges: ['the takeaway reverses the finding'] }),
+    );
+
+    expect(await tick()).toBe('daily-retracted');
+    const stood = w.issues.get('2026-09-01')!;
+    expect(stood.byline).toBe('Potion Research');
+    expect(stood.writer).toBeNull();
+    expect(stood.title).toMatch(/last 2\.1 points of code gen quality cost 296×/);
+    expect(w.log.join(' ')).toMatch(/RETRACTED.*reverses the finding/);
+  });
+
+  it('treats a verdict that never lands as a fail (fleet R2)', async () => {
+    const { w, tick, at } = dailyWorld();
+    await tick();
+    const delta = w.started[0]!;
+    w.runs.get(delta)!.state = 'completed';
+    w.runs.get(delta)!.files.set('piece.json', GOOD_PIECE);
+    await tick();
+    await tick();
+    // The auditor run never reaches a terminal state.
+    expect(await tick({ auditorCeilingMs: 60_000 })).toBeNull();
+    at(120_000);
+    expect(await tick({ auditorCeilingMs: 60_000 })).toBe('daily-retracted');
+    expect(w.issues.get('2026-09-01')!.byline).toBe('Potion Research');
+    expect(w.log.join(' ')).toMatch(/no verdict from/);
+  });
+
+  it('does not verify the COMPOSED piece — code needs no verifier', async () => {
+    const { w, tick } = dailyWorld();
+    await tick();
+    const delta = w.started[0]!;
+    w.runs.get(delta)!.state = 'failed';
+    expect(await tick()).toBe('daily-published');
+    expect(w.issues.get('2026-09-01')!.byline).toBe('Potion Research');
+    expect(w.states.get('2026-09-01')!.phase).toBe('done');
+    expect(w.started).toHaveLength(1);
+  });
+
   it('an empty agenda publishes NOTHING — silence beats filler', async () => {
     const w = world();
     const io: DailyIo = {
