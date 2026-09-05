@@ -1,0 +1,57 @@
+# gitleaks fingerprints: commit:path:rule-id:startline — one line per finding
+# that was individually READ and cleared on 2026-09-05, when the secrets gate
+# ran for the first time in this repo's life (523 commits) and reported 35.
+#
+# WHY FINGERPRINTS AND NOT A PATH RULE. The first fix exempted `*.test.ts` and
+# `fixtures/` as CLASSES. That does not say "these 33 strings are fine" — it
+# says this gate no longer watches test files or fixtures, forever, including
+# ones written next year. Demonstrated: plant an `sk-or-v1-…` in
+# packages/core/src/redact.test.ts and the class rule reports NO LEAKS; these
+# fingerprints report it, while the 33 known ones stay quiet.
+#
+# That is the worst category to blind. These tests are ABOUT credential
+# handling — sealing, redaction, the grant-absence sweep that asserts no route
+# echoes token material — so a real key pasted in while debugging is both the
+# likeliest place a leak lands and, under a class rule, the one place nothing
+# looks.
+#
+# THE RULE: exempt the instance you have read, never the class it belongs to.
+# A class keeps admitting new members nobody reads.
+#
+# MAINTENANCE: a fingerprint pins a commit, so a history rewrite invalidates it.
+# main blocks force-pushes as of 2026-09-05, so these are stable. A NEW finding
+# is MEANT to fail the gate — read it, then add a line here with a reason.
+
+0af962b8b70b7526394d1254ccf1c0c56800720b:apps/server/test/connector-routes.test.ts:github-oauth:25
+0af962b8b70b7526394d1254ccf1c0c56800720b:apps/server/test/grant-absence-sweep.test.ts:github-oauth:35
+0af962b8b70b7526394d1254ccf1c0c56800720b:apps/server/test/grant-absence-sweep.test.ts:github-refresh-token:36
+0af962b8b70b7526394d1254ccf1c0c56800720b:apps/server/test/tenancy-sweep.test.ts:generic-api-key:284
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/custody/src/grants.test.ts:generic-api-key:25
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/custody/src/grants.test.ts:github-oauth:25
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/custody/src/grants.test.ts:github-refresh-token:26
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/db/src/lab-grants.test.ts:generic-api-key:132
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-mcp/fixtures/golden/01-spec-embeds-token.json:generic-api-key:6
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-mcp/fixtures/golden/01-spec-embeds-token.json:github-oauth:4
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-mcp/fixtures/golden/03-result-shaped-like-credentials.json:openrouter-api-key:4
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-mcp/src/redactor.test.ts:github-oauth:10
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-mcp/src/redactor.test.ts:github-refresh-token:11
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-runtime/src/exfiltration-corpus.test.ts:github-oauth:33
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-runtime/src/mcp-tools.test.ts:github-oauth:28
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/lab-runtime/src/walkthrough.test.ts:generic-api-key:354
+0af962b8b70b7526394d1254ccf1c0c56800720b:packages/workers/src/grant-revoke.test.ts:generic-api-key:21
+4862b78d66b570abed39c5c82164e957e72f7f89:packages/lab-spec/fixtures/adversarial/secret-openrouter.json:openrouter-api-key:20
+4862b78d66b570abed39c5c82164e957e72f7f89:packages/lab-spec/src/parse.test.ts:generic-api-key:39
+4862b78d66b570abed39c5c82164e957e72f7f89:packages/lab-spec/src/parse.test.ts:openrouter-api-key:19
+4e4b5b91f4365162d4e43c9001a8e5fbb03fa43c:apps/server/test/compound-policy.test.ts:generic-api-key:73
+56ea727b92ad95f157a3dfc081058859bca986f3:apps/server/test/custody.test.ts:generic-api-key:235
+56ea727b92ad95f157a3dfc081058859bca986f3:packages/observability/src/logger.test.ts:generic-api-key:14
+56ea727b92ad95f157a3dfc081058859bca986f3:packages/providers/src/resilience.test.ts:generic-api-key:426
+6ee05c412f7e2ab6b9bc7a2fbc05672326dad9b2:packages/lab-runtime/src/context-provenance.test.ts:generic-api-key:43
+7043fcacd048059cb8e38a2929f9347840c7f40f:scripts/claude-code-to-traces.test.ts:openrouter-api-key:24
+7ffff5f182eb57e790a9d4fcb645077e9fee3509:packages/lab-runtime/src/web-tools.test.ts:openrouter-api-key:43
+927162d9641a694253b1c72331b13b959926f35f:packages/lab-runtime/src/browser-tools.test.ts:aws-access-token:106
+927162d9641a694253b1c72331b13b959926f35f:packages/lab-runtime/src/browser-tools.test.ts:aws-access-token:99
+9eb42ee73d3ed610d3a8ae42733a8de9e63f3681:packages/core/src/redact.test.ts:jwt:16
+d3faa4b88d1d3581034bb09786872f6c222b1a13:packages/lab-runtime/src/code-tools.test.ts:aws-access-token:74
+d47586ad56c981cb32f6094b72149d900489002b:apps/server/test/billing-payments.test.ts:stripe-access-token:141
+fe5dd27ce272c8ccd087d55b0328ced8159f4f54:packages/lab-runtime/src/loop.test.ts:openrouter-api-key:191
