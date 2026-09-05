@@ -100,6 +100,9 @@ export const BUDGET_EVALUATE_INTERVAL_MS = 24 * 3600 * 1000;
 /** How often to look for parked runs owed a second ask (the run itself
  * only ever gets one reminder — see lab:parked-reminder). */
 const PARKED_REMINDER_SWEEP_MS = 60 * 60 * 1000;
+/** …and once this soon after boot, so a restart cannot starve the sweep.
+ * Long enough that the worker is consuming before the job lands. */
+const PARKED_REMINDER_BOOT_DELAY_MS = 60 * 1000;
 
 /** M4b #37: nightly new-model scan (SPEC §15.2 schedule trigger). */
 export const RESEARCH_SCAN_INTERVAL_MS = 24 * 3600 * 1000;
@@ -540,13 +543,29 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // one indexed read over a partial index and does nothing when nothing is
   // due. `sendNotify` is left default so it resolves the Resend transport
   // from env exactly as the run-event notification does.
-  const parkedReminder = setInterval(() => {
+  const enqueueParkedReminder = () => {
     queue.enqueue('lab:parked-reminder', {}).catch((err: unknown) => {
       app.log.warn(err, 'parked reminder enqueue failed — swallowed');
     });
-  }, PARKED_REMINDER_SWEEP_MS);
+  };
+  // ONCE SHORTLY AFTER BOOT, THEN HOURLY (2026-09-05, found while verifying
+  // it on production). A bare setInterval restarts its clock with the
+  // process, so on a box that is deployed more often than the interval the
+  // tick NEVER ARRIVES — and this box was redeployed four times in the hour
+  // I spent waiting for the first one. For the other sweeps a missed tick
+  // is deferred work; for this one it is a person who is never told, which
+  // is the entire defect it was written to fix.
+  //
+  // Running at every boot is safe by construction rather than by luck:
+  // reminded_at is claimed before the mail and only by the writer that wins
+  // the NULL guard, so a hundred restarts still produce at most one email
+  // per parked run. That property is why the stamp exists.
+  const parkedReminderKick = setTimeout(enqueueParkedReminder, PARKED_REMINDER_BOOT_DELAY_MS);
+  parkedReminderKick.unref();
+  const parkedReminder = setInterval(enqueueParkedReminder, PARKED_REMINDER_SWEEP_MS);
   parkedReminder.unref();
   app.addHook('onClose', () => {
+    clearTimeout(parkedReminderKick);
     clearInterval(parkedReminder);
   });
 

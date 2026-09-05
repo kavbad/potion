@@ -194,3 +194,35 @@ describe('the standing signal reads only YOUR waiting workers', () => {
     expect((await listWaitingLabRuns(db.db, ORG_A)).map((r) => r.id)).toEqual(['run-older', 'run-newer']);
   });
 });
+
+describe('restarts cannot starve the sweep, and cannot multiply the mail', () => {
+  it('a hundred boots still send exactly one reminder per parked run', async () => {
+    // The sweep now runs shortly after every boot as well as hourly,
+    // because a bare interval restarts its clock with the process — on a
+    // box deployed more often than the interval the tick never arrives,
+    // and for THIS sweep a missed tick is a person who is never told.
+    // Running at boot is only safe if it is idempotent, so that is pinned
+    // here rather than assumed: reminded_at is claimed before the mail and
+    // only by the writer that wins the NULL guard.
+    const now = new Date('2026-09-05T00:00:00Z');
+    await park('run-old', new Date('2026-08-31T00:00:00Z'), 'Which sheet?');
+    const sent: NotifyMessage[] = [];
+    const handler = handlerWith(sent);
+    for (let boot = 0; boot < 100; boot += 1) {
+      await handler({ now: now.toISOString() }, ctx());
+    }
+    expect(sent).toHaveLength(1);
+  });
+
+  it('two sweeps racing on the same run send one, not two', async () => {
+    const now = new Date('2026-09-05T00:00:00Z');
+    await park('run-old', new Date('2026-08-31T00:00:00Z'), 'Which sheet?');
+    const sent: NotifyMessage[] = [];
+    const handler = handlerWith(sent);
+    await Promise.all([
+      handler({ now: now.toISOString() }, ctx()),
+      handler({ now: now.toISOString() }, ctx()),
+    ]);
+    expect(sent).toHaveLength(1);
+  });
+});
