@@ -14,6 +14,18 @@ down cleanly (that part is [ROLLBACK-RUNBOOK.md](ROLLBACK-RUNBOOK.md)).
 > `--exclude ".env*"`. Values that must survive env churn belong as
 > committed compose defaults (`${VAR:-default}`) when they are not
 > secrets; secrets stay host-only.
+>
+> **The corollary (learned 2026-09-03): never `source` the CHECKOUT's
+> `.env.prod` for prod work either.** Its `DATABASE_URL` is the retired
+> Render Frankfurt instance, frozen at 2026-08-24 — a promotion import
+> run against it lands in a museum and reports success. Anything that
+> must touch the real prod database runs ON THE HOST through the
+> container's own env, e.g. the frontier promotion hop:
+> `cd /opt/potion/app && docker compose -f deploy/docker-compose.prod.yml
+> exec -T server node_modules/.bin/tsx scripts/promote-frontier.ts import
+> artifacts/observatory/<file>.json` (scp the gitignored artifacts up
+> first). Proven 2026-09-02 (tools v2) and 2026-09-03 (code-review v5 +
+> extraction v5, the kat-coder retire).
 
 > ## ⛔ STOP — DO NOT RUN MORE THAN ONE SERVER REPLICA
 >
