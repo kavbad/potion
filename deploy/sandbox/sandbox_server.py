@@ -48,61 +48,39 @@ MAX_OUTPUT_TOTAL = 64 * 1024 * 1024
 MAX_STREAM_BYTES = 64 * 1024  # stdout/stderr each, truncated with a marker
 RLIMIT_AS_BYTES = 768 * 1024 * 1024
 RLIMIT_CPU_S = 60
-RLIMIT_NPROC_HEADROOM = 64
+RLIMIT_NPROC = 64
 
-
-def _uid_process_count():
-    """How many processes this real UID already owns, or None if unknowable.
-
-    RLIMIT_NPROC is counted PER REAL UID across the whole host, not per
-    process tree. A fixed ceiling therefore says "this exec cannot fork-bomb"
-    only where the sandbox OWNS its uid — true in the prod container (its own
-    USER, a handful of processes), false anywhere the uid is shared. On a CI
-    runner the uid owns the entire box, so a ceiling of 64 is already spent
-    and the sandboxed shell cannot fork at all: `git` fails, `set -e` aborts,
-    and the exec produces nothing while looking like it ran. That is exactly
-    the Darwin failure this file already documents; Linux was never immune,
-    only usually lucky.
-    """
-    uid = os.getuid()
-    try:
-        n = 0
-        for entry in os.listdir("/proc"):
-            if not entry.isdigit():
-                continue
-            try:
-                if os.stat("/proc/" + entry).st_uid == uid:
-                    n += 1
-            except OSError:
-                pass  # the process exited mid-scan; it does not count
-        return n
-    except OSError:
-        return None  # no /proc (macOS): fall through to skipping the limit
-
-
-# Measured once at startup: the count drifts, the headroom absorbs it, and the
-# parent's wall-clock kill is the backstop that holds regardless.
-_NPROC_BASE = _uid_process_count()
+# RLIMIT_NPROC is counted PER REAL UID across the whole host, not per process
+# tree. A ceiling therefore means "this exec cannot fork-bomb" only where the
+# sandbox OWNS its uid — true in the container (its own `sandbox` USER, a
+# handful of processes), false anywhere the uid is shared. The Dockerfile
+# declares that invariant where it establishes it.
+#
+# Two earlier attempts, both measured wrong (2026-09-04):
+#   · `sys.platform != "darwin"` — a proxy for the invariant, true in the
+#     container and false on a CI runner where one uid owns the whole box.
+#     There the 64 ceiling is spent before the exec starts, and the shell dies
+#     on `fork: Resource temporarily unavailable` (exit 254) having written
+#     nothing.
+#   · headroom over a boot-time /proc count — the count drifts far more than
+#     the headroom when a parallel test suite is spawning vitest workers and
+#     PGlite instances around it.
+# The condition is not measurable from inside; it is a property of the
+# deployment, so the deployment states it.
+_DEDICATED_UID = os.environ.get("POTION_SANDBOX_DEDICATED_UID") == "1"
 
 
 def child_limits():
     # Each limit is best-effort: macOS dev refuses some (notably RLIMIT_AS).
-    # NPROC is applied as HEADROOM over the uid's existing processes wherever
-    # that count is knowable (/proc), and skipped where it is not (macOS) —
-    # the same outcome Darwin had before, now reached by the real condition
-    # rather than by a platform name. The wall-clock kill in the parent holds
-    # everywhere.
+    # NPROC applies only where the deployment declares a dedicated uid (see
+    # above); elsewhere the address-space cap, the CPU cap and the parent's
+    # wall-clock kill still hold, which is the posture macOS has always had.
     limits = [
         (resource.RLIMIT_AS, RLIMIT_AS_BYTES),
         (resource.RLIMIT_CPU, RLIMIT_CPU_S),
     ]
-    # HEADROOM, not an absolute: the cap is what this exec may add on top of
-    # what the uid already runs, which is the property actually wanted ("this
-    # snippet cannot fork-bomb") and is true whether or not the uid is
-    # dedicated. In the prod container _NPROC_BASE is a handful, so the
-    # effective ceiling stays ~64 — unchanged from before.
-    if _NPROC_BASE is not None:
-        limits.append((resource.RLIMIT_NPROC, _NPROC_BASE + RLIMIT_NPROC_HEADROOM))
+    if _DEDICATED_UID:
+        limits.append((resource.RLIMIT_NPROC, RLIMIT_NPROC))
     for lim, val in limits:
         try:
             resource.setrlimit(lim, (val, val))

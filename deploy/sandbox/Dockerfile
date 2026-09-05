@@ -15,6 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends git nodejs \
 
 COPY sandbox_server.py /opt/sandbox/sandbox_server.py
 
+# The sandbox OWNS this uid — nothing else runs as `sandbox` here. That is
+# precisely what makes a per-uid RLIMIT_NPROC ceiling mean "this exec cannot
+# fork-bomb", so the invariant is declared where it is established. Absent this,
+# the server skips NPROC rather than applying a ceiling it cannot justify.
+ENV POTION_SANDBOX_DEDICATED_UID=1
 USER sandbox
 ENV SANDBOX_PORT=8790
 EXPOSE 8790
