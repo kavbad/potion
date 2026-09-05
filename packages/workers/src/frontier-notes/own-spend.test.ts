@@ -102,37 +102,55 @@ describe('the own-spend law reaches the rendered page', () => {
   });
 });
 
-// THE SECOND-PARAGRAPH LAW (operator, 2026-09-05: "fix delta's repetitive
-// prose"). The fixture is the REAL published piece from run-5834835a.
-describe('the second-paragraph law', () => {
-  const published = {
+// THE SAY-IT-ONCE LAW (operator, 2026-09-05: "fix delta's repetitive
+// prose"). Both fixtures are REAL published pieces — the law was grown
+// from each in turn, which is why it covers two paragraphs and not one.
+describe('the say-it-once law', () => {
+  // run-5834835a: paragraph two was paragraph one, reworded.
+  const first = {
     plain:
       'The measurement compared two models on the same agentic-tool-use suite of 14 tasks. One model, gpt-5.6-terra-pro, scored 0.972 quality at $44.15 per thousand requests. The cheaper model, ling-3.0-flash, scored 0.886 quality at $0.1094 per thousand requests. The gap between them is 8.7 quality points and a 404× cost difference.',
     lede:
       'On a suite of 14 measured agentic-tool-use tasks, gpt-5.6-terra-pro reached 0.972 quality at $44.15 per thousand requests. ling-3.0-flash reached 0.886 quality at $0.1094 per thousand requests. The quality gap is 8.7 points and the cost ratio is about 404×.',
+    takeaway: 'Decide by how much wrong tool use the workflow tolerates, not by score alone.',
+  };
+
+  // run-564edfaf: paragraph two was fixed, and paragraph three inherited
+  // the fault — the whole comparison again, in the paragraph meant to
+  // say what to DO. Scoping the law to the lede alone had allowed it.
+  const second = {
+    plain:
+      'The measurement runs on a Potion agentic-tool-use suite of 14 scored items. gpt-5.6-terra-pro scored 0.972 on those items at $44.1479 per thousand requests. ling-3.0-flash scored 0.886 on the same items at $0.1094 per thousand requests. That is 403.7 times more per request for 8.7 points of quality.',
+    lede:
+      'The premium buys the last 8.7 points of score on this specific agentic-tool-use work, not a general upgrade across every task. The answer turns on how much wrong tool use you can absorb.',
     takeaway:
-      'An engineer paying per request should use ling-3.0-flash at $0.1094 per thousand requests when 0.886 quality is enough, and reserve gpt-5.6-terra-pro at $44.15 per thousand requests for the task fraction that needs the extra 8.7 points.',
+      'An engineer paying per request should decide by how much tool-use error the downstream workflow tolerates. On this measured suite, ling-3.0-flash runs at $0.1094 per thousand requests where gpt-5.6-terra-pro runs at $44.1479 per thousand requests, and the gap is 403.7 times.',
   };
 
   it('refuses the piece that shipped: paragraph two was paragraph one again', () => {
-    expect(auditRepetition(published)).toMatch(/second paragraph restates the finding/);
+    expect(auditRepetition(first)).toMatch(/second paragraph restates the finding/);
   });
 
-  it('lets the second paragraph REFER to a figure while making its own point', () => {
+  it('refuses the piece after it: paragraph three re-ran the comparison', () => {
+    expect(auditRepetition(second)).toMatch(/third paragraph restates the finding/);
+  });
+
+  it('lets a later paragraph REFER to a figure while making its own point', () => {
+    expect(auditRepetition({ ...first, lede: 'Price is set by what a provider can charge, not by what a model scores. The extra 8.7 points are the only thing the premium buys.' })).toBeNull();
+  });
+
+  it('lets the decision name the one figure that decides it', () => {
     expect(
       auditRepetition({
-        ...published,
-        lede: 'Price is set by what a provider can charge, not by what a model scores. The extra 8.7 points are the only thing the premium buys, and only on work resembling this suite.',
+        ...second,
+        takeaway:
+          'Decide by how much wrong tool use the workflow tolerates. If it is forgiving, ling-3.0-flash at $0.1094 per thousand requests carries most of the score; this is one suite for one kind of work.',
       }),
     ).toBeNull();
   });
 
-  it('does not punish a takeaway for naming the options it recommends', () => {
-    expect(auditRepetition({ ...published, lede: 'The gap is a property of the models, not of the test.' })).toBeNull();
-  });
-
   it('catches the same sentence used in two paragraphs', () => {
-    const s = 'The gap between them is 8.7 quality points and a 404 times cost difference.';
-    expect(auditRepetition({ plain: `A finding. ${s}`, lede: `${s} And more.`, takeaway: 't' })).toMatch(/same sentence appears/);
+    const echo = 'The gap between them is 8.7 quality points and a 404 times cost difference.';
+    expect(auditRepetition({ plain: `A finding. ${echo}`, lede: `${echo} And more.`, takeaway: 't' })).toMatch(/same sentence appears/);
   });
 });

@@ -44,7 +44,7 @@ export function lintDraft(draft: Draft): string | null {
   return null;
 }
 
-/** THE SECOND-PARAGRAPH LAW (operator, 2026-09-05: "fix delta's repetitive
+/** THE SAY-IT-ONCE LAW (operator, 2026-09-05: "fix delta's repetitive
  * prose").
  *
  * The first published daily said the same four numbers three times. That
@@ -54,7 +54,7 @@ export function lintDraft(draft: Draft): string | null {
  * now have distinct jobs (finding / meaning / decision), and this law keeps
  * them distinct when a future assignment drifts back.
  *
- * A second paragraph may REFER to a figure — "the extra 8.7 points" earns
+ * A later paragraph may REFER to a figure — "the extra 8.7 points" earns
  * its place in an argument. It may not RESTATE the finding: if every figure
  * it carries was already stated and it carries several, it is paragraph one
  * again in different words. Referring back is cheap, so the bar is the full
@@ -85,10 +85,22 @@ function sentencesIn(text: string): string[] {
 
 /** Returns the repetition violation, or null. */
 export function auditRepetition(draft: Pick<Draft, 'plain' | 'lede' | 'takeaway'>): string | null {
+  // The rule applies to BOTH later paragraphs. It was scoped to the lede at
+  // first, on the reasoning that a recommendation legitimately names its
+  // options and their prices — and the very next piece (run-564edfaf) used
+  // that permission to re-run the entire comparison, both prices and the
+  // ratio, in a paragraph whose job was to say what to DO. Naming one or two
+  // figures to make the decision concrete still passes; restating the
+  // finding does not, whichever paragraph does it.
   const plain = figuresIn(draft.plain);
-  const lede = figuresIn(draft.lede);
-  if (lede.size >= RESTATEMENT_FLOOR && [...lede].every((f) => plain.has(f))) {
-    return `the second paragraph restates the finding — it states ${lede.size} figures and every one of them is already in the first. It should say what the gap MEANS, not say it again`;
+  const jobs: [string, Set<string>, string][] = [
+    ['second', figuresIn(draft.lede), 'It should say what the gap MEANS, not say it again'],
+    ['third', figuresIn(draft.takeaway), 'It should say what to DO about the gap, not state it again'],
+  ];
+  for (const [which, figures, job] of jobs) {
+    if (figures.size >= RESTATEMENT_FLOOR && [...figures].every((f) => plain.has(f))) {
+      return `the ${which} paragraph restates the finding — it states ${figures.size} figures and every one of them is already in the first. ${job}`;
+    }
   }
   // A sentence repeated across paragraphs is wrong in any piece, anywhere.
   const seen = new Map<string, number>();
