@@ -18,6 +18,14 @@
 #                            code, so a failed build reported success.
 #   · COPYFILE_DISABLE=1     AppleDouble ._* files from macOS rsync fail the
 #     + --exclude "._*"      next lint inside the image build.
+#   · --exclude ".claude"    2026-09-05: four stale agent worktrees were found
+#                            living in /opt/potion/app on production — one of
+#                            them carrying a developer .env with provider API
+#                            keys and a 61 MB PGlite data directory. rsync
+#                            ships the TREE, and .claude is gitignored, so the
+#                            committed-tree gate never saw them. The agent
+#                            working directory is not part of the app and has
+#                            no business on the host.
 #   · committed-tree gate    the working tree carries several sessions' WIP
 #                            at once; shipping it deploys code nobody
 #                            reviewed. Migrations + server + workers must
@@ -139,7 +147,7 @@ say "Directory: $APP_DIR"
 say "Source   : $REPO"
 say "Services : ${SERVICES[*]}  (built ONE AT A TIME — combined builds have"
 say "           OOM-killed dockerd on this box and taken production down)"
-say "Excluded : .env*  node_modules  .next  dist  .git  .pglite  ._*  *.log"
+say "Excluded : .env*  node_modules  .next  dist  .git  .claude  .pglite  ._*  *.log"
 say "           .env* is excluded ALWAYS: the host copy is runtime truth."
 
 RSYNC_ARGS=(
@@ -147,6 +155,7 @@ RSYNC_ARGS=(
   --exclude ".env*"          # runtime truth lives on the host — never overwrite
   --exclude "._*"            # AppleDouble files break the image lint
   --exclude ".git"
+  --exclude ".claude"        # agent worktrees/settings — never part of the app
   --exclude "node_modules"
   --exclude ".next"
   --exclude "dist"
