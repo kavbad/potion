@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { priceVsBaseline } from '@/lib/price-words';
+import { heroDecision } from '@/lib/savings-hero';
 import { Stamp } from '@/components/primitives';
 import type { UsageCurrentResponse } from '@/lib/types';
 
@@ -95,6 +96,17 @@ export function TodayPulse() {
   const moneyCeil = (n: number) => { const f = n >= 1 ? 100 : 10_000; return `$${(Math.ceil(n * f) / f).toFixed(n >= 1 ? 2 : 4)}`; };
   const hasTraffic = (current?.mtd.requests ?? 0) > 0;
   const hasBaseline = spentWithout > 0;
+  // 2026-09-04 (operator: "i want it to say the $amount saved"). WHICH number
+  // may lead is a policy with a history, so it lives in lib/savings-hero.ts
+  // where the reasoning is written down and the branches are tested.
+  const hero = heroDecision({
+    actualSpend,
+    baselineSpend: spentWithout,
+    incumbentModels: learning?.incumbents?.models ?? [],
+    otherIncumbent: learning?.incumbents?.other ?? null,
+  });
+  const comparator = hero.comparator;
+  const dollarsHero = hero.mode === 'dollars';
 
   // ---- needs-you, composed; each ask carries its time cost ----
   const needs: Array<{ text: string; href: string; time: string }> = [];
@@ -194,14 +206,23 @@ export function TodayPulse() {
           dollars "kept" of money never committed is the wrong hero no
           matter how it rounds. The house formula (price-words, endorsed on
           the landing page) leads with the RATIO and NAMES the comparator:
-          "1/270th the price of the best scorer". The pulse now speaks the
-          same sentence: ratio hero, named comparator, real spend shown,
-          receipts claim carried. */}
+          "1/270th the price of the best scorer".
+          2026-09-04 (operator: "i dont want it to say 1/60th anymore, i want
+          it to say the $amount saved"): the money leads again — but only
+          where the objection above is answered. It is answered by a NAMED
+          incumbent: then the dollars are the gap between two models the
+          customer actually chose between, not a counterfactual against a
+          premium pick they were never going to buy. Both real numbers stay
+          in the sub-line, so the hero is a difference the reader can check,
+          and the rounding stays one-directional (kept floors, baseline
+          ceils) so this can never round up into a claim. */}
       <div className="mt-2 font-sans text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-kept tabular-nums sm:text-[3.4rem]">
-        {hasBaseline && actualSpend > 0 ? priceVsBaseline(actualSpend, spentWithout) : moneyFloor(shown)}
+        {hero.mode === 'ratio' ? priceVsBaseline(actualSpend, spentWithout) : moneyFloor(shown)}
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-soft">
-        {hasBaseline && actualSpend > 0 ? (
+        {dollarsHero ? (
+          <>saved against <span className="text-ink">{comparator}</span> on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, counted receipt by receipt</>
+        ) : hero.mode === 'ratio' ? (
           <>the price of the best scorer on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, counted receipt by receipt</>
         ) : hasBaseline ? (
           <>measured against the best scorer on your own requests — <span className="text-ink">{moneyCeil(spentWithout)}</span> of counterfactual, nothing spent yet</>
