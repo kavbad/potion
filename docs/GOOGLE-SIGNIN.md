@@ -75,11 +75,32 @@ only non-sensitive scopes, publishing does not require review.
 |---------------------------|----------------------------------------------------|
 | Application type          | **Web application**                                |
 | Name                      | `Potion dashboard`                                 |
-| Authorized redirect URI   | `https://withpotion.com/api/auth/google/callback`  |
+| Authorized redirect URI   | **read it off the server — see below**              |
 
-The redirect URI must match **exactly** — no trailing slash, `https` not
-`http`, apex not `www`. A mismatch is the single most common failure, and
-Google's error names it plainly (`redirect_uri_mismatch`).
+The redirect URI must match **exactly**, and it is DERIVED from this
+deployment's `POTION_APP_URL`, so do not copy it out of this document — a
+runbook that spells it out is a runbook that is wrong the moment that
+variable differs from what its author assumed. That already happened once:
+this file said `withpotion.com` while the production box carried
+`POTION_APP_URL=https://app.withpotion.com`, which would have cost a
+console trip and a `redirect_uri_mismatch` at the first click.
+
+Ask the server what it will send:
+
+```bash
+ssh root@178.105.98.174 'docker logs deploy-server-1 2>&1 | grep -i "sign in with Google" | tail -1'
+```
+
+It prints the exact string to paste. (Until the client id and secret are
+set it reports `off — email link only`; set them, restart, and it prints
+the URI.)
+
+While you are there, note which host it names. The apex `withpotion.com` is
+the canonical host — `app.withpotion.com` is the retired one, kept only for
+permanent redirects. If the URI comes back on `app.`, the cleaner fix is to
+set `POTION_APP_URL=https://withpotion.com` in `/opt/potion/app/.env.prod`
+and restart, which also puts sign-in emails and worker notification links
+back on the canonical host.
 
 Copy the **Client ID** and **Client secret** off the screen that appears.
 The secret is shown once.

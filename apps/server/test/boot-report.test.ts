@@ -103,6 +103,42 @@ describe('boot gate report', () => {
     expect(empty?.warn).toContain('secret missing');
   });
 
+  it('prints the EXACT Google redirect URI, derived from this box, not a doc', () => {
+    // Google matches redirect_uri exactly and refuses a mismatch at the
+    // first click. The runbook once spelled out withpotion.com while the
+    // box carried POTION_APP_URL=https://app.withpotion.com — a fifteen
+    // minute console job wasted on a wrong string. The log now states what
+    // the flow will actually send, resolved by the same reader.
+    const row = bootGateReport(
+      {
+        POTION_GOOGLE_CLIENT_ID: 'id',
+        POTION_GOOGLE_CLIENT_SECRET: 's',
+        POTION_APP_URL: 'https://app.withpotion.com',
+      },
+      'live',
+    ).find((r) => r.name === 'sign in with Google');
+    expect(row?.state).toContain('https://app.withpotion.com/api/auth/google/callback');
+
+    // Change the host, and the printed URI changes with it.
+    const apex = bootGateReport(
+      { POTION_GOOGLE_CLIENT_ID: 'id', POTION_GOOGLE_CLIENT_SECRET: 's', POTION_APP_URL: 'https://withpotion.com' },
+      'live',
+    ).find((r) => r.name === 'sign in with Google');
+    expect(apex?.state).toContain('https://withpotion.com/api/auth/google/callback');
+
+    // An explicit override wins, because that is what the flow sends.
+    const pinned = bootGateReport(
+      {
+        POTION_GOOGLE_CLIENT_ID: 'id',
+        POTION_GOOGLE_CLIENT_SECRET: 's',
+        POTION_APP_URL: 'https://withpotion.com',
+        POTION_GOOGLE_REDIRECT_URI: 'https://other.example/cb',
+      },
+      'live',
+    ).find((r) => r.name === 'sign in with Google');
+    expect(pinned?.state).toContain('https://other.example/cb');
+  });
+
   it('reports every gate on every boot, warning or not', () => {
     expect(bootGateReport({}, 'live').length).toBeGreaterThanOrEqual(8);
   });

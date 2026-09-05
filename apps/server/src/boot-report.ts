@@ -34,6 +34,8 @@ export interface GateReport {
 }
 
 /** Where a gate's value came from — the empty/unset split is the point. */
+import { googleConfigFromEnv } from './oidc.js';
+
 export function sourceOf(raw: string | undefined): GateSource {
   if (raw === undefined) return 'default-unset';
   if (raw.trim() === '') return 'default-empty';
@@ -52,6 +54,8 @@ export interface BootEnvView {
   POTION_OPERATOR_TOKEN?: string | undefined;
   POTION_GOOGLE_CLIENT_ID?: string | undefined;
   POTION_GOOGLE_CLIENT_SECRET?: string | undefined;
+  POTION_GOOGLE_REDIRECT_URI?: string | undefined;
+  POTION_APP_URL?: string | undefined;
   POTION_METRICS?: string | undefined;
 }
 
@@ -175,10 +179,19 @@ export function bootGateReport(env: BootEnvView, providerMode: 'live' | 'mock'):
   const gSecret = sourceOf(env.POTION_GOOGLE_CLIENT_SECRET);
   const googleOn = gId === 'explicit' && gSecret === 'explicit';
   const googleHalf = (gId === 'explicit') !== (gSecret === 'explicit');
+  // PRINT THE EXACT URI, do not let anyone infer it (2026-09-05). Google
+  // matches redirect_uri EXACTLY and answers a mismatch with
+  // redirect_uri_mismatch at the first click. The URI is DERIVED from
+  // POTION_APP_URL, so a doc that spells it out is a doc that is wrong the
+  // moment that variable differs from what the doc's author assumed — which
+  // is exactly what happened here: the runbook said withpotion.com while
+  // this box had POTION_APP_URL=https://app.withpotion.com. Resolved by the
+  // SAME reader the routes use, so the log and the flow cannot disagree.
+  const googleRedirect = googleConfigFromEnv(env as NodeJS.ProcessEnv)?.redirectUri;
   rows.push({
     name: 'sign in with Google',
     state: googleOn
-      ? 'on — the button is drawn'
+      ? `on — the button is drawn; register this redirect URI at Google, exactly: ${googleRedirect ?? '(unresolved — set POTION_APP_URL)'}`
       : googleHalf
         ? 'OFF — only half the pair is set'
         : 'off — email link only',
