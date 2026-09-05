@@ -26,7 +26,7 @@ import type {
   StrategyAggregate,
   StrategyConfig,
 } from '@potion/core';
-import { strategyHash } from '@potion/core';
+import { sha256, strategyHash } from '@potion/core';
 import { evalResults, type DbHandle, type PotionDb } from '@potion/db';
 import { aggregateResults, runEval, type RunSummary } from '@potion/harness';
 import { loadPrices } from '@potion/providers';
@@ -162,9 +162,56 @@ export function planRecompute(newModel: PriceEntry, prices: PriceTable): Strateg
 
 /** Merge `newModel` into a copy of `base` (same-alias entries replaced) with
  * a bumped version stamp. */
+/**
+ * The next price-table version after a model is added or re-priced.
+ *
+ * WHY THIS IS NOT `${base.version}+${alias}` (fixed 2026-09-05). It was, and
+ * every discovered model appended its own alias — so the live registry's
+ * version grew into a 6,549-character list of 333 model names. Two harms,
+ * one of them a live outage:
+ *
+ *   1. LEAK. `research:scan` discovered a sibling of the withheld winner and
+ *      wrote its alias into the version string. /api/public/answers publishes
+ *      pricesVersion, the redaction sweep found the embargoed name in it, and
+ *      the endpoint failed closed for every request — taking the public
+ *      answers pages and the daily Frontier Note with it. A version string is
+ *      published; it must therefore never carry a model's identity.
+ *   2. UNBOUNDED GROWTH. The version keys eval cache cells and rides on every
+ *      frontier row; it has no business being kilobytes long.
+ *
+ * WHAT THE REPLACEMENT PRESERVES. The contract this version has always had is
+ * cache invalidation: `cacheKey = sha256(strategyHash + itemId + judgeVersion
+ * + pricesVersion)`, so the version must move EXACTLY when the catalog
+ * changes and never otherwise. The digest below is taken over the previous
+ * version plus the entry's identity AND its prices, so:
+ *   · a newly discovered model moves it (new alias in the digest);
+ *   · re-pricing a known model moves it (new numbers in the digest) — the
+ *     `+n<count>` shape considered first would NOT have, silently serving
+ *     stale-priced cells;
+ *   · nothing else moves it, and it is chained, so history still matters.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO. It does not re-derive existing versions.
+ * A content hash over the whole table was rejected when the registry was
+ * built (see packages/db/src/repos/model-registry.ts) because it would change
+ * on first boot and invalidate evidence that cost real money to collect —
+ * that reasoning still holds. Only NEWLY MINTED versions take this shape;
+ * every version already stored, including the long one live today, is left
+ * exactly as it is. The public leak is closed on the publication side, where
+ * it can be closed for free.
+ */
+export function nextPricesVersion(baseVersion: string, entry: PriceEntry): string {
+  // One rolling segment, replaced rather than appended, so the string stays
+  // bounded however many scans run.
+  const head = baseVersion.replace(/\+r[0-9a-f]{10}$/, '');
+  const digest = sha256(
+    `${baseVersion}|${entry.alias}|${entry.provider}|${entry.model}|${entry.inputPer1M}|${entry.outputPer1M}`,
+  ).slice(0, 10);
+  return `${head}+r${digest}`;
+}
+
 export function mergePriceEntry(base: PriceTable, newModel: PriceEntry): PriceTable {
   return {
-    version: `${base.version}+${newModel.alias}`,
+    version: nextPricesVersion(base.version, newModel),
     updatedAt: new Date().toISOString().slice(0, 10),
     entries: [...base.entries.filter((e) => e.alias !== newModel.alias), newModel],
   };

@@ -17,6 +17,7 @@ import type { FastifyInstance } from 'fastify';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import type { StrategyConfig } from '@potion/core';
+import { sha256 } from '@potion/core';
 import { findLeaks } from '@potion/workers';
 import type { PotionContext } from '../context.js';
 
@@ -67,6 +68,36 @@ export function modelSlug(label: string): string {
 function hitsEmbargo(s: string): boolean {
   const low = s.toLowerCase();
   return findLeaks(low).length > 0;
+}
+
+/**
+ * The price-table version, as the public is allowed to see it.
+ *
+ * WHY THIS EXISTS (2026-09-05 outage). Every other string in this payload is
+ * either a masked label or a number; `pricesVersion` was the one field that
+ * went out verbatim, unswept. The live registry's version had grown into a
+ * list of 333 model aliases (see nextPricesVersion in @potion/pareto), one of
+ * which `research:scan` had discovered as a sibling of the withheld winner.
+ * The sweep at the end of this route did its job and refused the payload —
+ * correctly — and this endpoint 500'd for every caller until the field
+ * stopped carrying identities.
+ *
+ * WHAT CONSUMERS NEED from this field is identity, not inventory: "is this
+ * the same catalog I saw last time?" — the daily note diffs exactly that. So
+ * publish the readable head plus a digest of the WHOLE internal version. The
+ * digest changes whenever the catalog changes, which preserves change
+ * detection, and it reveals nothing.
+ *
+ * The head is the first two segments (the committed seed, e.g.
+ * "2026-08-04-or2+tranche-2026-08-19") kept only for readability — and it is
+ * swept before use, so a seed that ever carried an embargoed name is dropped
+ * rather than published. Correctness never depends on that heuristic; the
+ * digest alone is a complete identifier.
+ */
+export function publicPricesVersion(internal: string): string {
+  const digest = sha256(internal).slice(0, 10);
+  const head = internal.split('+').slice(0, 2).join('+');
+  return head.length > 0 && !hitsEmbargo(head) ? `${head}+r${digest}` : `r${digest}`;
 }
 
 /** Public display for one frontier point — masked unless it is a plain,
@@ -142,7 +173,8 @@ export function registerPublicAnswersRoutes(app: FastifyInstance, ctx: PotionCon
     const payload = {
       clusters,
       models: [...models.values()].sort((a, b) => a.slug.localeCompare(b.slug)),
-      pricesVersion: ctx.prices.version,
+      // NEVER ctx.prices.version raw — see publicPricesVersion above.
+      pricesVersion: publicPricesVersion(ctx.prices.version),
       generatedAt: new Date().toISOString(),
     };
     // The belt: nothing embargoed leaves this route, or nothing leaves at all.

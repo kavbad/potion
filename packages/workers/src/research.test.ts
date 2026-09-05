@@ -107,7 +107,13 @@ describe('research:scan', () => {
     expect(res.added).toEqual(['or-mock-nova-1', 'or-mock-apex-1']);
     expect(res.alreadyKnown).toBe(1); // mock-cheap-v1
     expect(res.skippedNoPricing).toEqual(['mock/mock-free-0']);
-    expect(res.pricesVersion).toContain('+or-mock-nova-1');
+    // The scan must MOVE the version (it keys eval cache cells) without
+    // naming what it found — the 2026-09-05 leak was exactly this assertion
+    // holding true in production for a withheld model.
+    expect(res.pricesVersion).not.toBe(loadPrices(pricesPath).table.version);
+    expect(res.pricesVersion).not.toContain('or-mock-nova-1');
+    expect(res.pricesVersion).not.toContain('or-mock-apex-1');
+    expect(res.pricesVersion).toMatch(/\+r[0-9a-f]{10}$/);
     expect(res.cyclesEnqueued).toEqual(['or-mock-nova-1', 'or-mock-apex-1']);
 
     // S5: the registry is the DATABASE now, not the file. A scan used to

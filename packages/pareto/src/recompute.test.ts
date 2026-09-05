@@ -95,7 +95,12 @@ describe('planRecompute', () => {
 
   it('mergePriceEntry bumps version and replaces same-alias entries', () => {
     const merged = mergePriceEntry(prices, NEW_MODEL);
-    expect(merged.version).toBe(`${prices.version}+mock-new-x`);
+    // The version bumps, but it no longer NAMES the model: that shape leaked a
+    // withheld alias into the published payload (2026-09-05). See
+    // prices-version.test.ts for the full contract.
+    expect(merged.version).not.toBe(prices.version);
+    expect(merged.version).not.toContain('mock-new-x');
+    expect(merged.version).toMatch(/\+r[0-9a-f]{10}$/);
     expect(merged.entries.filter((e) => e.alias === 'mock-new-x')).toHaveLength(1);
     expect(merged.entries).toHaveLength(prices.entries.length + 1);
     const again = mergePriceEntry(merged, { ...NEW_MODEL, inputPer1M: 1.1 });
@@ -147,7 +152,11 @@ describe('runRecompute (PGlite + memory queue + mock provider)', () => {
     expect(result.plan).toHaveLength(5);
     expect(result.evalSummaries).toHaveLength(1);
     expect(result.evalSummaries[0]!.aggregates).toHaveLength(5);
-    expect(result.pricesVersion).toBe(`${prices.version}+mock-new-x`);
+    // Moves (it keys eval cache cells) without naming the model — see
+    // prices-version.test.ts and the 2026-09-05 leak.
+    expect(result.pricesVersion).not.toBe(prices.version);
+    expect(result.pricesVersion).not.toContain('mock-new-x');
+    expect(result.pricesVersion).toMatch(/\+r[0-9a-f]{10}$/);
 
     // frontier v2 chained to v1
     expect(result.frontiers).toHaveLength(1);
