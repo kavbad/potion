@@ -97,6 +97,10 @@ import { createBudgetEvaluateHandler } from '@potion/workers';
 
 /** M4 #35: nightly budget:evaluate cadence (24h, SPEC §13.7). */
 export const BUDGET_EVALUATE_INTERVAL_MS = 24 * 3600 * 1000;
+/** How often to look for parked runs owed a second ask (the run itself
+ * only ever gets one reminder — see lab:parked-reminder). */
+const PARKED_REMINDER_SWEEP_MS = 60 * 60 * 1000;
+
 /** M4b #37: nightly new-model scan (SPEC §15.2 schedule trigger). */
 export const RESEARCH_SCAN_INTERVAL_MS = 24 * 3600 * 1000;
 /**
@@ -529,6 +533,23 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
     });
   }
   // ---- end S7 L2/L4 ----
+  // ---- the second ask (2026-09-05) ----
+  // A run parked on a person mails once and then goes silent; on production
+  // one has waited since 2026-08-31 because that single mail was missed.
+  // Hourly so the reminder lands close to its 24-hour mark; the sweep is
+  // one indexed read over a partial index and does nothing when nothing is
+  // due. `sendNotify` is left default so it resolves the Resend transport
+  // from env exactly as the run-event notification does.
+  const parkedReminder = setInterval(() => {
+    queue.enqueue('lab:parked-reminder', {}).catch((err: unknown) => {
+      app.log.warn(err, 'parked reminder enqueue failed — swallowed');
+    });
+  }, PARKED_REMINDER_SWEEP_MS);
+  parkedReminder.unref();
+  app.addHook('onClose', () => {
+    clearInterval(parkedReminder);
+  });
+
   const budgetSweep = setInterval(() => {
     queue.enqueue('budget:evaluate', {}).catch((err: unknown) => {
       app.log.warn(err, 'budget sweep enqueue failed — swallowed');

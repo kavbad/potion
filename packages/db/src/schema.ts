@@ -1819,6 +1819,10 @@ export const labRuns = pgTable('lab_runs', {
   claimExpiresAt: timestamp('claim_expires_at', { withTimezone: true }),
   pendingQuestion: text('pending_question'),
   pendingAnswer: text('pending_answer'),
+  /** When the SECOND ask went out for a run parked on a person (migration
+   * 0092). NULL = never reminded. The parked-reminder sweep stamps it, so
+   * a person is asked twice and never nagged. */
+  remindedAt: timestamp('reminded_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

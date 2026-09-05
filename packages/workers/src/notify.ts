@@ -43,6 +43,10 @@ export interface RunEvent {
   question?: string | undefined;
   reason?: string | undefined;
   hasDeliverable?: boolean;
+  /** Set on the SECOND ask for a run still parked a day later (see
+   * lab:parked-reminder). Sending the identical mail twice is how people
+   * learn to ignore both; this one says how long it has been waiting. */
+  waitingFor?: string | undefined;
 }
 
 function appUrl(env: NodeJS.ProcessEnv = process.env): string {
@@ -53,6 +57,16 @@ export function composeRunEvent(ev: RunEvent, env: NodeJS.ProcessEnv = process.e
   const link = `${appUrl(env)}/lab/run/${ev.runId}`;
   switch (ev.state) {
     case 'awaiting-human':
+      if (ev.waitingFor !== undefined) {
+        return {
+          subject: `${ev.harnessName} is still waiting (${ev.waitingFor})`,
+          text:
+            `Your worker has been waiting ${ev.waitingFor} for an answer, and stops here until it gets one.\n\n` +
+            (ev.question !== undefined ? `It asks: ${ev.question}\n\n` : '') +
+            `Answer here: ${link}\n\n` +
+            `This is the last email about this one — it stays listed on your Workers page until you answer it.\n\n— Potion`,
+        };
+      }
       return {
         subject: `${ev.harnessName} needs a decision`,
         text:

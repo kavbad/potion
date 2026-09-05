@@ -13,6 +13,7 @@ export type JobKind =
   | 'guarantee:evaluate'
   | 'alerts:dispatch'
   | 'budget:evaluate'
+  | 'lab:parked-reminder'
   // ---- M4b #37 autoresearcher (SPEC §15.2/§15.3) ----
   | 'research:scan'
   | 'research:cycle'
@@ -49,6 +50,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'guarantee:evaluate',
   'alerts:dispatch',
   'budget:evaluate',
+  'lab:parked-reminder',
   'research:scan',
   'research:cycle',
   'traces:cluster',
@@ -126,6 +128,7 @@ export interface JobPayloads {
   'guarantee:evaluate': GuaranteeEvaluatePayload;
   'alerts:dispatch': AlertsDispatchPayload;
   'budget:evaluate': BudgetEvaluatePayload;
+  'lab:parked-reminder': LabParkedReminderPayload;
   'research:scan': ResearchScanPayload;
   'research:cycle': ResearchCyclePayload;
   // ---- M5 #36 agent workloads (SPEC §14) ----
@@ -249,6 +252,21 @@ export interface AlertsDispatchPayload {
  */
 export interface BudgetEvaluatePayload {
   orgId?: string;
+}
+
+/**
+ * THE SECOND ASK (2026-09-05). A run that parks for a human mails once, at
+ * the moment it parks, and then never again — so a missed mail costs the
+ * whole run. On production one has been parked since 2026-08-31.
+ *
+ * This sweep asks a second time, once, for anything still waiting a day
+ * later, and stamps lab_runs.reminded_at so it can never become a third.
+ * Beyond two, the standing signal on the Workers page is the reminder, and
+ * it costs nobody an inbox.
+ */
+export interface LabParkedReminderPayload {
+  /** Test seam: the clock this sweep reads as "now". */
+  now?: string;
 }
 
 /**

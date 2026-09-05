@@ -54,6 +54,7 @@ import {
   insertPolicy,
   getPolicyById,
   listLabHarnesses,
+  listWaitingLabRuns,
   listLabMemoryEntries,
   listLabRunsForHarness,
   listLabRunChildren,
@@ -482,6 +483,14 @@ export function registerLabRoutes(
   app.get('/api/lab/harnesses', async (req: FastifyRequest, reply) => {
     const org = req.potionOrg!;
     const rows = await listLabHarnesses(db, org.orgId);
+    // WHO IS WAITING ON YOU (2026-09-05). A parked run emails once and then
+    // says nothing ever again; on production one has been waiting since
+    // 2026-08-31 because its owner missed that single mail. The roster is
+    // where someone looks when they think about their workers, so the
+    // roster is where "this one wants you" has to live. One indexed read
+    // for the whole org, not one per harness.
+    const waiting = await listWaitingLabRuns(db, org.orgId);
+    const waitingByHarness = new Map(waiting.map((w) => [w.harnessHash, w]));
     // L-G3+ (design brief): the roster's trust-at-a-glance line — grant
     // state counts per harness, straight from the trust record.
     const harnesses = [];
@@ -497,9 +506,29 @@ export function registerLabRoutes(
           supervised: grants.filter((g) => g.state === 'supervised').length,
           blocked: grants.filter((g) => g.state === 'blocked').length,
         },
+        ...(waitingByHarness.has(r.harnessHash)
+          ? {
+              waiting: {
+                runId: waitingByHarness.get(r.harnessHash)!.id,
+                question: waitingByHarness.get(r.harnessHash)!.question,
+                since: waitingByHarness.get(r.harnessHash)!.since.toISOString(),
+              },
+            }
+          : {}),
       });
     }
-    return reply.send({ harnesses });
+    return reply.send({
+      harnesses,
+      // Also flat, oldest first: the banner must be able to name the one
+      // that has waited longest without walking the roster.
+      waiting: waiting.map((w) => ({
+        runId: w.id,
+        harnessHash: w.harnessHash,
+        harnessName: w.harnessName,
+        question: w.question,
+        since: w.since.toISOString(),
+      })),
+    });
   });
 
   // ---- GET /api/lab/harnesses/:hash (viewer) — spec + sidecar + dial ----

@@ -9,7 +9,7 @@
 // expires and someone reclaims, the old winner's late writes are REJECTED,
 // not merged (review addition 1 — a dead winner must not hold the claim
 // forever, and a zombie winner must not corrupt the run it lost).
-import { isNull, and, desc, eq, gte, sql } from 'drizzle-orm';
+import { isNull, and, asc, desc, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { labDigests,
   labHarnessMemory,
@@ -493,6 +493,104 @@ export async function listLabRunsForHarness(
     .where(and(eq(labRuns.orgId, orgId), eq(labRuns.harnessHash, harnessHash), isNull(labRuns.parentRunId)))
     .orderBy(desc(labRuns.createdAt))
     .limit(limit);
+}
+
+/**
+ * EVERY WORKER OF THIS ORG THAT IS WAITING ON A PERSON (2026-09-05).
+ *
+ * A parked run sends one email and then goes quiet forever. On production
+ * one has been waiting since 2026-08-31 — its owner missed the mail, and
+ * nothing anywhere in the product says a worker wants them. This is the
+ * read behind the standing signal: cheap (indexed on state), org-scoped,
+ * and one row per waiting worker, oldest first, because the one that has
+ * waited longest is the one most likely to have been forgotten.
+ *
+ * Helpers are excluded for the same reason they are excluded from a
+ * harness's run list: a helper's question belongs to its parent's trace.
+ */
+export async function listWaitingLabRuns(
+  db: PotionDb,
+  orgId: string,
+  limit = 50,
+): Promise<Array<{ id: string; harnessHash: string; harnessName: string; question: string | null; since: Date }>> {
+  const rows = await db
+    .select({
+      id: labRuns.id,
+      harnessHash: labRuns.harnessHash,
+      harnessName: labRuns.harnessName,
+      question: labRuns.pendingQuestion,
+      since: labRuns.updatedAt,
+    })
+    .from(labRuns)
+    .where(
+      and(
+        eq(labRuns.orgId, orgId),
+        eq(labRuns.state, 'awaiting-human'),
+        isNull(labRuns.parentRunId),
+        // A shadow run is a rehearsal nobody is asked to answer.
+        ne(labRuns.shadow, true),
+      ),
+    )
+    .orderBy(asc(labRuns.updatedAt))
+    .limit(limit);
+  return rows;
+}
+
+/** How long a parked run waits before it asks a second time. A day: long
+ * enough that a person who saw the first mail and is thinking about it is
+ * not nagged, short enough that a missed one does not cost a week. */
+export const PARKED_REMINDER_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * PLATFORM-WIDE: parked runs old enough to deserve a second ask, that have
+ * never had one. Deliberately NOT org-scoped — this is a sweep, and the
+ * whole point is the org that is not looking.
+ *
+ * The `reminded_at IS NULL` half is what keeps this from becoming a nag:
+ * a run is asked about exactly twice, ever. Beyond that the standing
+ * signal on the roster is the reminder, and it costs nobody an inbox.
+ */
+export async function listParkedRunsDue(
+  db: PotionDb,
+  now: Date = new Date(),
+  limit = 100,
+): Promise<Array<{ id: string; orgId: string; harnessName: string; question: string | null; since: Date }>> {
+  return db
+    .select({
+      id: labRuns.id,
+      orgId: labRuns.orgId,
+      harnessName: labRuns.harnessName,
+      question: labRuns.pendingQuestion,
+      since: labRuns.updatedAt,
+    })
+    .from(labRuns)
+    .where(
+      and(
+        eq(labRuns.state, 'awaiting-human'),
+        isNull(labRuns.remindedAt),
+        isNull(labRuns.parentRunId),
+        ne(labRuns.shadow, true),
+        lt(labRuns.updatedAt, new Date(now.getTime() - PARKED_REMINDER_AFTER_MS)),
+      ),
+    )
+    .orderBy(asc(labRuns.updatedAt))
+    .limit(limit);
+}
+
+/** Stamp the second ask. Idempotent by the NULL guard: a concurrent sweep
+ * cannot produce a third mail. Returns whether THIS call did the stamping,
+ * so the caller only mails when it won. */
+export async function markParkedRunReminded(
+  db: PotionDb,
+  runId: string,
+  at: Date = new Date(),
+): Promise<boolean> {
+  const rows = await db
+    .update(labRuns)
+    .set({ remindedAt: at })
+    .where(and(eq(labRuns.id, runId), isNull(labRuns.remindedAt)))
+    .returning({ id: labRuns.id });
+  return rows.length === 1;
 }
 
 /** X3: attach the advisory judgment to a run (post-terminal, idempotent —

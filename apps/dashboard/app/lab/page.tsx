@@ -11,6 +11,7 @@ import { ApiUnreachable } from '@/lib/api';
 import { fetchOrRecover } from '@/lib/recover';
 import { LabCompose } from '@/components/lab-compose';
 import { CARD, LabStage, TrustLine } from '@/components/lab-bench';
+import { LabWaiting, type WaitingRun } from '@/components/lab-waiting';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,16 +25,24 @@ interface HarnessRow {
 
 export default async function LabPage() {
   let harnesses: HarnessRow[] = [];
+  let waiting: WaitingRun[] = [];
   let unreachable = false;
   try {
-    const res = await fetchOrRecover<{ harnesses: HarnessRow[] }>('/api/lab/harnesses');
+    const res = await fetchOrRecover<{ harnesses: HarnessRow[]; waiting?: WaitingRun[] }>(
+      '/api/lab/harnesses',
+    );
     harnesses = res.harnesses;
+    waiting = res.waiting ?? [];
   } catch (e) {
     if (e instanceof ApiUnreachable) unreachable = true;
     else throw e;
   }
   return (
     <LabStage>
+      {/* Above the box on purpose: answering a worker that is already
+          waiting finishes work that exists, which beats starting more. */}
+      <LabWaiting waiting={waiting} />
+
       <div className="pt-6">
         <h1 className="text-[2rem] font-medium leading-[1.1] tracking-[-0.025em] text-ink">
           What should it do?

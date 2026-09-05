@@ -8,6 +8,8 @@ import {
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
   type ChatMessage, type EvalItem, type Policy, type PriceTable, type StrategyConfig } from '@potion/core';
 import {
+  listParkedRunsDue,
+  markParkedRunReminded,
   addScannedModels,
   loadModelRegistry,
   listModelCatalog,
@@ -6412,6 +6414,60 @@ export const learningProbeHandler: WorkerHandler<'learning:probe'> = async (
     }
   });
 
+// ---------------------------------------------------------------------------
+// lab:parked-reminder — the second ask (2026-09-05)
+// ---------------------------------------------------------------------------
+// A run parked on a person mails once and then goes quiet forever, so one
+// missed mail costs the whole run. On production one has been waiting since
+// 2026-08-31. This asks a second time, once, and stamps the run so it can
+// never ask a third — the standing signal on the Workers page carries it
+// from there.
+//
+// The stamp is claimed BEFORE the mail and only by the writer that wins the
+// `reminded_at IS NULL` guard, so two sweeps racing produce one email, not
+// two. Losing a mail to a delivery error is the right side to fail on: a
+// silent worker is a bug, a nagging one is a reason to filter Potion into
+// spam.
+export function createLabParkedReminderHandler(deps: { sendNotify?: SendNotify } = {}): WorkerHandler<'lab:parked-reminder'> {
+  return async (payload, ctx) => {
+    const now = payload.now !== undefined ? new Date(payload.now) : new Date();
+    const due = await listParkedRunsDue(ctx.db, now);
+    let reminded = 0;
+    for (const run of due) {
+      if (!(await markParkedRunReminded(ctx.db, run.id, now))) continue; // another sweep won it
+      try {
+        await notifyRunEvent(
+          ctx.db,
+          {
+            orgId: run.orgId,
+            runId: run.id,
+            harnessName: run.harnessName,
+            state: 'awaiting-human',
+            ...(run.question !== null ? { question: run.question } : {}),
+            waitingFor: waitedWords(now.getTime() - run.since.getTime()),
+          },
+          deps.sendNotify,
+        );
+        reminded += 1;
+      } catch (e) {
+        console.warn(`[potion notify] parked reminder failed for ${run.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    return { due: due.length, reminded };
+  };
+}
+
+/** "2 days", "31 hours" — the roughest honest unit, matching what the
+ * Workers page prints beside the same run. */
+export function waitedWords(ms: number): string {
+  const hours = Math.max(1, Math.floor(ms / 3_600_000));
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+export const labParkedReminderHandler: WorkerHandler<'lab:parked-reminder'> = createLabParkedReminderHandler();
+
 export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'eval:run': evalRunHandler,
   'sweep:run': sweepRunHandler,
@@ -6420,6 +6476,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'guarantee:evaluate': guaranteeEvaluateHandler,
   'alerts:dispatch': alertsDispatchHandler,
   'budget:evaluate': budgetEvaluateHandler,
+  'lab:parked-reminder': labParkedReminderHandler,
   // ---- M4b #37 autoresearcher ----
   'research:scan': researchScanHandler,
   'research:cycle': researchCycleHandler,
