@@ -117,12 +117,18 @@ jobs:
           set -euo pipefail
           cd /tmp
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
-          curl -sSLf -o gitleaks.tgz "${base}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          # Keep the RELEASE filename: `sha256sum -c` resolves the file named
+          # in the manifest line, so renaming the download on the way in makes
+          # verification fail with "No such file or directory" — which is
+          # exactly what it did on run 33939918635, correctly refusing to run
+          # an unverified binary.
+          art="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSLf -o "$art" "${base}/${art}"
           curl -sSLf -o gitleaks.sums "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
           # Verify before executing: this is the tool that vouches for the
           # repo's secrets, so it does not get to arrive unchecked.
-          grep " gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz\$" gitleaks.sums | sha256sum -c -
-          tar -xzf gitleaks.tgz gitleaks
+          grep " ${art}\$" gitleaks.sums | sha256sum -c -
+          tar -xzf "$art" gitleaks
           cd "$GITHUB_WORKSPACE"
           /tmp/gitleaks detect --source . --config .gitleaks.toml --redact --no-banner
 
