@@ -225,13 +225,20 @@ describe('test-typecheck coverage', () => {
     ).toBe(ESCAPE_HATCH_BUDGET);
   });
 
-  // Found the hard way: two test files embedded RAW control bytes (NUL, ESC)
-  // as fixture data for control-character handling. That makes the file
-  // "binary" to every text tool — `grep` skips such files SILENTLY, so those
-  // two were invisible to every audit run across this whole sweep, including
-  // the escape-hatch counts above. The runtime value of the escape form is
-  // identical, so the escape form costs nothing and keeps the file greppable.
-  it('test files are text — no raw control bytes that make tools skip them', () => {
+  // Found the hard way, THREE times: two test files embedded RAW control
+  // bytes (NUL, ESC) as fixture data, this file carried a NUL in a comment
+  // about the hazard, and apps/server/src/routing/task-shape.ts used a raw
+  // SOH as a join separator. A file holding one is "binary" to every text
+  // tool — `grep` skips it SILENTLY, no warning, no non-zero exit — so it
+  // is invisible to every audit built on grep: the tenancy sweep, the
+  // mock-eligibility audit, the escape-hatch count above.
+  //
+  // Scope is EVERY source file, not just tests. The one that mattered most
+  // was production routing code holding org-scoped fingerprints, and a
+  // test-only check sailed past it. The escape form ('\u0001') is the same
+  // byte at runtime, so this costs nothing and keeps the file readable by
+  // the tools people actually audit with.
+  it('source files are text — no raw control bytes that make tools skip them', () => {
     const roots = TEST_ROOTS.map((r) => path.join(REPO_ROOT, r));
     const binary: string[] = [];
     const visit = (d: string): void => {
@@ -239,7 +246,7 @@ describe('test-typecheck coverage', () => {
         if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.next') continue;
         const full = path.join(d, entry.name);
         if (entry.isDirectory()) visit(full);
-        else if (/\.test\.tsx?$/.test(entry.name)) {
+        else if (/\.(tsx?|mjs|js)$/.test(entry.name)) {
           const buf = readFileSync(full);
           // Anything outside tab/LF/CR that a text tool treats as binary.
           if (buf.some((b) => b === 0 || (b < 9) || (b > 13 && b < 32))) {
@@ -251,7 +258,7 @@ describe('test-typecheck coverage', () => {
     for (const r of roots) if (existsSync(r)) visit(r);
     expect(
       binary,
-      `These test files contain raw control bytes, so grep and other text ` +
+      `These source files contain raw control bytes, so grep and other text ` +
         `tools skip them silently — they are invisible to every audit. Write ` +
         `the characters as escapes ('\\u0000', '\\u001b') instead; the runtime ` +
         `value is identical: ${binary.join(', ')}`,

@@ -149,7 +149,7 @@ export function promptFingerprint(orgId: string, body: unknown): string | null {
   if (!Array.isArray(b.messages) || b.messages.length === 0) return null;
   const text = (b.messages as Array<{ role?: unknown; content?: unknown }>)
     .map((m) => `${String(m.role ?? '')} ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')}`)
-    .join('');
+    .join('\u0001');
   return sha256(`fp1|${orgId}|${text}`).slice(0, 16);
 }
 
