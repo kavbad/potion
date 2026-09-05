@@ -138,6 +138,50 @@ describe('aggregateUsage rollup (hand-computed)', () => {
     expect(cg).toMatchObject({ requests: 3, inputTokens: 307, outputTokens: 153 });
     expect(cg.costUsd).toBeCloseTo(0.0307, 10);
   });
+
+  // G1 holdout (0086), second lock on the invoice door. A holdout row IS the
+  // baseline, so it can never contribute one — chat.ts refuses to write one,
+  // and this sum refuses to read one. Seeded on its own day/cluster so the
+  // hand-computed groups above stay untouched, and with a NON-NULL
+  // baseline_cost_usd on the holdout row: exactly the phantom a pre-fix serve
+  // path recorded whenever the held-out incumbent was itself a point on the
+  // served frontier. Unfiltered, that phantom reaches acc.baselineCostUsd in
+  // billing/invoice.ts and inflates the projected savings the customer is
+  // billed a share of.
+  it('excludes holdout rows from the baseline sum — and only from that sum', async () => {
+    await insertRequestLog(db(), {
+      ts: new Date('2026-08-09T09:00:00Z'),
+      orgId: ORG_A,
+      clusterId: 'holdout-basis',
+      status: 'ok',
+      usage: usage(100, 50, 0.02),
+      baselineCostUsd: 0.2,
+      baselineBasis: 'org-incumbent',
+    });
+    await insertRequestLog(db(), {
+      ts: new Date('2026-08-09T10:00:00Z'),
+      orgId: ORG_A,
+      clusterId: 'holdout-basis',
+      status: 'ok',
+      usage: usage(80, 40, 0.05),
+      holdout: true,
+      baselineCostUsd: 0.5,
+      baselineBasis: 'best-of-frontier',
+    });
+
+    await aggregateUsage(db(), { fromDay: '2026-08-09', toDay: '2026-08-09' });
+    const rows = await listUsageDaily(db(), ORG_A, { fromDay: '2026-08-09', toDay: '2026-08-09' });
+    const row = rows.find((r) => r.clusterId === 'holdout-basis')!;
+
+    // ONLY the routed row's baseline survives. Unfiltered this is 0.7.
+    expect(row.baselineCostUsd).toBeCloseTo(0.2, 10);
+    // The held-out request really was served and really cost money: it stays
+    // in requests, tokens and cost. Narrowing THOSE would understate real
+    // usage and under-bill the platform cost.
+    expect(row).toMatchObject({ requests: 2, inputTokens: 180, outputTokens: 90 });
+    expect(row.costUsd).toBeCloseTo(0.07, 10);
+    expect(row.platformCostUsd).toBeCloseTo(0.07, 10);
+  });
 });
 
 describe('usage read routes (org isolation)', () => {

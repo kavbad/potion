@@ -114,6 +114,16 @@ export interface UsageTotals {
  * a period with partial coverage under-reports the baseline rather than
  * fabricating it.
  *
+ * G1 holdout rows are excluded from THAT SUM ONLY (`AND NOT holdout`). A
+ * holdout row IS the baseline, so it can never contribute one — schema.ts
+ * says so on the column, and chat.ts refuses to write one. This is the second
+ * lock on the same door: the writer is one call site, this sum is the only
+ * reader that reaches an invoice, and a phantom baseline here becomes
+ * `projectedSavedUsd` on a customer's bill. It also REPAIRS: the upsert
+ * full-replaces the window, so re-rolling a period drops any phantom a
+ * pre-fix serve path already recorded. Requests, tokens and cost stay
+ * unfiltered — a held-out request really was served and really cost money.
+ *
  * `platform_cost_usd` deliberately stays equal to `cost_usd`. It is COGS —
  * what Potion paid the provider — and the two diverge at INVOICE time via
  * margin, not here. An earlier S3 pass filtered it to paid_by='platform' to
@@ -135,7 +145,7 @@ function rollupQuery(range: UsageRange, orgId?: string): SQL {
            coalesce(sum((usage->>'outputTokens')::numeric) FILTER (WHERE status = 'ok'), 0)::int AS output_tokens,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS cost_usd,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS platform_cost_usd,
-           coalesce(sum(baseline_cost_usd) FILTER (WHERE status = 'ok'), 0)::float8 AS baseline_cost_usd
+           coalesce(sum(baseline_cost_usd) FILTER (WHERE status = 'ok' AND NOT holdout), 0)::float8 AS baseline_cost_usd
     FROM request_logs
     WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen', 'eval_live')
       AND to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') BETWEEN ${range.fromDay} AND ${range.toDay}
