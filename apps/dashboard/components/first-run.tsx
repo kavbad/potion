@@ -48,6 +48,13 @@ interface InterpretResponse {
 
 const SAMPLE = 'Is this review positive, negative, or neutral? "Crashed twice, support never replied."';
 
+/** Which surfaces the router's first-run question may stand in front of.
+ * Exported so the exemption is a fact a test can hold, not a substring
+ * buried in an effect. */
+export function gateAppliesTo(pathname: string): boolean {
+  return !pathname.startsWith('/lab');
+}
+
 export const FIRST_RECEIPT_KEY = 'potion:first-receipt';
 
 type Beat = 'checking' | 'question' | 'reveal' | 'key' | 'try' | 'printed' | 'done';
@@ -72,6 +79,23 @@ export function FirstRunGate() {
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
   const check = useCallback(async () => {
+    // WORKERS IS NOT THE ROUTER (2026-09-05, from a cold walkthrough on
+    // production). This gate is a fixed, opaque, full-viewport overlay at
+    // z-50, mounted by app-shell on EVERY signed-in route, and beat 1 has
+    // no skip — Continue stays disabled until you name the AI provider your
+    // company already uses. That is a fair question to ask someone setting
+    // up a router. It is an absurd one to put in front of someone who came
+    // to have a worker read their spreadsheet, and it was unanswerable
+    // rather than merely annoying: /lab rendered UNDERNEATH it, the compose
+    // box physically unclickable (elementFromPoint hit the overlay).
+    //
+    // Two of the four outside accounts on production signed up and created
+    // nothing at all. This is the wall they hit.
+    //
+    // So the router's first-run question belongs to the router's surfaces.
+    // It is not skipped here, only deferred: /lab is exempt, and the gate
+    // is waiting on the router pages whenever they go there.
+    if (!gateAppliesTo(pathname)) return setBeat('done');
     const [me, inc] = await Promise.all([
       fetch('/api/auth/me', { cache: 'no-store' }).catch(() => null),
       fetch('/api/incumbents', { cache: 'no-store' }).catch(() => null),
@@ -83,7 +107,7 @@ export function FirstRunGate() {
     if (!inc?.ok) return setBeat('done'); // fail OPEN: a flaky read must not lock the app
     const body = (await inc.json()) as { designatedAt: string | null };
     setBeat(body.designatedAt === null ? 'question' : 'done');
-  }, []);
+  }, [pathname]);
   useEffect(() => { void check(); }, [check, pathname]);
 
   async function submitQuestion() {

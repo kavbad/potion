@@ -92,7 +92,11 @@ export const GALLERY: GallerySpecies[] = [
     prefill: {
       clusterId: 'agentic-tool-use',
      
-      goal: 'Analyze the data file I attach to the trial (or download the one at [OPTIONAL FILE URL]): totals, by-day patterns, outliers. Produce an xlsx of the numbers plus a labeled chart and a three-line summary.',
+      // 2026-09-05: this shipped with a literal `[OPTIONAL FILE URL]` in it —
+      // a fill-in-the-blank marker in the one example a first-time visitor is
+      // most likely to click, with nothing telling them to fill it in. It went
+      // into the worker's goal and its done-definition verbatim.
+      goal: 'Analyze the spreadsheet I attach: totals, patterns over time, and any outliers. Produce an xlsx of the numbers, a labeled chart, and a three-line summary.',
       kind: 'task', done: 'the xlsx and chart are in the run files and the summary states the three main findings',
       accounts: 'web, code', worth: '3', whenUnsure: 'ask-first',
       qualityBar: 'every number computed from the actual file, never estimated; the chart labeled and readable',

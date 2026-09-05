@@ -15,12 +15,26 @@
 // not a page: what it is, what it may touch, what it costs.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { HarnessDto, RunDto } from '@potion/lab-form';
 import { LabWorkbench } from './lab-workbench';
 import { askItems, quickReplies, RichText } from '@/lib/rich-text';
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(['completed', 'failed', 'killed-budget', 'killed-operator']);
+/** The terminal states that owe the reader a REASON (a completed run does
+ * not; a stopped one does). */
+const FAILED = new Set(['failed', 'killed-budget', 'killed-operator']);
+
+/** The sentence to print under the status line, or null when the run owes
+ * none. Exported so the rule is testable without mounting the page. */
+export function failureReason(
+  run: { state: string; stateReason: string | null } | null,
+): string | null {
+  if (run === null || !FAILED.has(run.state)) return null;
+  const reason = run.stateReason?.trim();
+  return reason === undefined || reason === '' ? null : reason;
+}
 const MONO = 'font-mono text-[12px]';
 
 function stateTone(state: string | undefined): { label: string; cls: string } {
@@ -86,8 +100,47 @@ function Turn({ step }: { step: NonNullable<RunDto['steps']>[number] }) {
   );
 }
 
-function SettingsPane({ harness }: { harness: HarnessDto }) {
+/** ENABLE IT WHERE YOU ARE READING ABOUT IT (2026-09-05).
+ *
+ * The old worker page carried a rail whose power chips were BUTTONS — a
+ * builtin turned on in place, one click. When this page replaced that one
+ * the chips became text, and the settings pane started reporting
+ * "code (not-connected)" as a fact about the world rather than a thing you
+ * could change. The runtime's own refusal message still said "enable it on
+ * the worker page — one click, no account needed", pointing at a click
+ * that no longer existed anywhere.
+ *
+ * That is why the flagship Spreadsheet analyst fails on every brand-new
+ * account: `code` is ungranted, both tools return superpowerUnavailable,
+ * and the page offers no way out. This restores the click, on the same
+ * endpoint the rail used — a builtin grants immediately, an external
+ * account still leaves for its own consent screen. */
+function SettingsPane({ harness, onChanged }: { harness: HarnessDto; onChanged: () => void }) {
   const spec = harness.spec;
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const enable = useCallback(
+    async (id: string) => {
+      setBusyId(id);
+      setNote(null);
+      try {
+        const res = await fetch(`/api/lab/connectors/${id}/oauth/start`, { method: 'POST' });
+        const body = (await res.json().catch(() => null)) as
+          | { granted?: boolean; authorizationUrl?: string; error?: { message?: string } }
+          | null;
+        if (res.ok && body?.granted === true) onChanged();
+        else if (res.ok && body?.authorizationUrl !== undefined) window.location.href = body.authorizationUrl;
+        else setNote(body?.error?.message ?? `could not enable ${id} (${res.status})`);
+      } catch {
+        setNote('the Potion API is unreachable.');
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [onChanged],
+  );
+
   if (spec === null) return null;
   const rows: Array<[string, React.ReactNode]> = [
     ['job', spec.mission.goal],
@@ -100,14 +153,33 @@ function SettingsPane({ harness }: { harness: HarnessDto }) {
       harness.superpowers.length === 0 ? (
         'nothing external — it thinks and writes'
       ) : (
-        <span>
-          {harness.superpowers.map((s, i) => (
-            <span key={s.id}>
-              {i > 0 ? ', ' : ''}
-              {s.id}
-              <span className={s.status === 'connected' ? 'text-kept' : 'text-warn'}> ({s.status})</span>
-            </span>
-          ))}
+        <span className="flex flex-wrap items-center gap-1.5">
+          {harness.superpowers.map((sp) =>
+            sp.status === 'connected' ? (
+              <span
+                key={sp.id}
+                className={`${MONO} inline-flex items-center gap-1 border border-[#c4bfb2] px-2 py-0.5 text-soft`}
+                data-testid={`power-${sp.id}`}
+                data-on="true"
+              >
+                <span className="text-accent">⏻</span> {sp.id}
+              </span>
+            ) : (
+              <button
+                key={sp.id}
+                type="button"
+                onClick={() => void enable(sp.id)}
+                disabled={busyId !== null}
+                className={`${MONO} inline-flex items-center gap-1 border border-warn bg-white px-2 py-0.5 text-ink hover:border-accent hover:text-accent disabled:opacity-40`}
+                data-testid={`power-${sp.id}`}
+                data-on="false"
+              >
+                <span className="text-warn">⏻</span>
+                {busyId === sp.id ? 'enabling…' : `enable ${sp.id}`}
+              </button>
+            ),
+          )}
+          {note !== null ? <span className={`${MONO} text-refuse`}>{note}</span> : null}
         </span>
       ),
     ],
@@ -146,6 +218,7 @@ export function LabChat({
   initialRunId: string | null;
   initialRun: RunDto | null;
 }) {
+  const router = useRouter();
   const [harness] = useState(initialHarness);
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [run, setRun] = useState<RunDto | null>(initialRun);
@@ -330,6 +403,25 @@ export function LabChat({
           </span>
         </div>
 
+        {/* WHY IT FAILED, IN WORDS (2026-09-05). The record has always
+            carried a plain-language reason — the old console printed it —
+            and this page, on the day it replaced that console, printed only
+            "failed" and left the raw tool notes to explain themselves. A
+            cold walkthrough hit exactly that: a brand-new account's first
+            run said `failed · $0.0000 metered` over two lines reading
+            `returned: superpowerUnavailable`, while the reason sitting in
+            the record read "this worker needs code — enable it on the
+            worker page, one click, no account needed". The person who can
+            act on that sentence is the one who never saw it. */}
+        {failureReason(run) !== null ? (
+          <p
+            className="mt-3 border-l-2 border-refuse bg-white px-3 py-2 text-[13.5px] leading-relaxed text-ink"
+            data-testid="run-failure-reason"
+          >
+            {failureReason(run)}
+          </p>
+        ) : null}
+
         <div ref={threadRef} className="min-h-0 flex-1 divide-y divide-line overflow-y-auto pr-1">
           {/* The job is the first message — the operator's own words. */}
           <div className="px-1 py-3">
@@ -509,7 +601,11 @@ export function LabChat({
             <span className={`${MONO} uppercase tracking-[0.13em] text-faint`}>settings</span>
             <span className={`${MONO} text-faint`}>{showSettings ? 'hide' : 'show'}</span>
           </button>
-          {showSettings ? <div className="mt-3">{<SettingsPane harness={harness} />}</div> : null}
+          {showSettings ? (
+            <div className="mt-3">
+              <SettingsPane harness={harness} onChanged={() => router.refresh()} />
+            </div>
+          ) : null}
         </div>
       </aside>
     </div>
