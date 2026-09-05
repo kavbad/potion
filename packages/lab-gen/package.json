@@ -20,7 +20,7 @@
     "@potion/lab-runtime": "workspace:*",
     "@potion/lab-spec": "workspace:*",
     "@potion/lab-superpowers": "workspace:*",
-    "zod": "^3.23.8"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@potion/db": "workspace:*",

@@ -20,7 +20,7 @@
   "dependencies": {
     "@potion/core": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "@electric-sql/pglite": "^0.2.0"
+    "@electric-sql/pglite": "^0.5.8"
   },
   "peerDependencies": {
     "pg": "^8.13.0"
