@@ -31,7 +31,6 @@ const { scoreCodeExec } = await import('@potion/strategies');
 const { selectPoint } = await import('@potion/core');
 const { createDb, getLatestFrontier } = await import('@potion/db');
 const { JOURNEYS } = await import('./journey-specs.js');
-type Check = import('./journey-specs.js').JourneyCheck;
 
 const { table: prices } = loadPrices(`${REPO}/prices.json`);
 const key = process.env.OPENROUTER_API_KEY;

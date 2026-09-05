@@ -13,7 +13,6 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   sha256,
-  strategyHash,
   PolicySchema,
   fastestQualityQualifyingPoint,
   selectPoint,
@@ -23,7 +22,6 @@ import {
   DEFAULT_ORG_ID,
   getApiKeyById,
   getFirstApiKeyWithPolicy,
-  listApiKeys,
   getPolicyById,
   listPolicies,
   insertApiKey,
