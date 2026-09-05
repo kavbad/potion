@@ -29,7 +29,7 @@ import { generateAgenda, generateCatalogueAgenda, type AgendaCandidate, type Cat
 import { assemblePieceIssue, auditPieceNumbers, deterministicPiece } from './piece.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
-import { lintDraft } from './lint.js';
+import { auditRepetition, lintDraft } from './lint.js';
 import { assembleIssue, writeIssue } from './publish.js';
 import { publishActionId, publishArgsHash } from './publisher.js';
 import { loadReplaysFromStore, type StoreLike } from './replay-source.js';
@@ -126,7 +126,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
     }
     const footer = await io.measurementFooter();
     const parsed = parseDailyDraft(normalizeDraftText(text), deterministicPiece(assigned, footer));
-    const violation = parsed === null ? 'no usable piece.json' : (auditPieceNumbers(parsed, assigned, io.now()) ?? lintDraft({ ...parsed, faq: [] }));
+    const violation = parsed === null ? 'no usable piece.json' : (auditPieceNumbers(parsed, assigned, io.now()) ?? auditRepetition(parsed) ?? lintDraft({ ...parsed, faq: [] }));
     if (parsed === null || violation !== null) {
       io.log(`fnotes daily ${day}: late writer refused (${violation}) — the composed piece stands`);
       return null;
@@ -190,7 +190,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
         ? `writing overdue (run ${state.deltaRunId})`
         : parsed === null
           ? `no usable piece.json (run ended ${terminal})`
-          : (auditPieceNumbers(parsed, candidate, io.now()) ?? lintDraft({ ...parsed, faq: [] }));
+          : (auditPieceNumbers(parsed, candidate, io.now()) ?? auditRepetition(parsed) ?? lintDraft({ ...parsed, faq: [] }));
     if (parsed !== null && violation === null && io.deltaHarness !== null) {
       draft = { ...parsed, mixingNote: '', auditionNote: footer, faq: [] };
       writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };

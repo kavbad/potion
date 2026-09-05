@@ -44,6 +44,64 @@ export function lintDraft(draft: Draft): string | null {
   return null;
 }
 
+/** THE SECOND-PARAGRAPH LAW (operator, 2026-09-05: "fix delta's repetitive
+ * prose").
+ *
+ * The first published daily said the same four numbers three times. That
+ * was OUR fault, not the writer's: the assignment asked `plain` for "what
+ * was compared, what the gap is" and then asked `lede` for "the key numbers
+ * with their sample size" — the same paragraph, ordered twice. The fields
+ * now have distinct jobs (finding / meaning / decision), and this law keeps
+ * them distinct when a future assignment drifts back.
+ *
+ * A second paragraph may REFER to a figure — "the extra 8.7 points" earns
+ * its place in an argument. It may not RESTATE the finding: if every figure
+ * it carries was already stated and it carries several, it is paragraph one
+ * again in different words. Referring back is cheap, so the bar is the full
+ * set, not any overlap.
+ *
+ * Deliberately scoped to the daily piece. The weekly issue's plain and lede
+ * sit under one heading with different jobs of their own and have not shown
+ * this failure; widening the law there is a separate change with its own
+ * evidence. */
+const RESTATEMENT_FLOOR = 3;
+
+/** Figures a paragraph states, with identifiers (`gpt-5.6-terra-pro`) removed
+ * first — a version number is not a claim. Mirrors THE PIECE NUMBER LAW. */
+function figuresIn(text: string): Set<string> {
+  const bare = text.replace(/[A-Za-z][A-Za-z0-9]*(?:[.-][A-Za-z0-9]+)*[.-]v?\d+(?:\.\d+)*[A-Za-z]*/g, ' ');
+  const out = new Set<string>();
+  for (const m of bare.matchAll(/(?<![\w.])(\d+(?:[.,]\d+)?)(?![\w])/g)) out.add(m[1]!.replace(/,/g, ''));
+  return out;
+}
+
+/** Normalized sentences, for the verbatim-echo check. */
+function sentencesIn(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter((s) => s.split(' ').length >= 6);
+}
+
+/** Returns the repetition violation, or null. */
+export function auditRepetition(draft: Pick<Draft, 'plain' | 'lede' | 'takeaway'>): string | null {
+  const plain = figuresIn(draft.plain);
+  const lede = figuresIn(draft.lede);
+  if (lede.size >= RESTATEMENT_FLOOR && [...lede].every((f) => plain.has(f))) {
+    return `the second paragraph restates the finding — it states ${lede.size} figures and every one of them is already in the first. It should say what the gap MEANS, not say it again`;
+  }
+  // A sentence repeated across paragraphs is wrong in any piece, anywhere.
+  const seen = new Map<string, number>();
+  for (const [i, para] of [draft.plain, draft.lede, draft.takeaway].entries()) {
+    for (const s of sentencesIn(para)) {
+      const first = seen.get(s);
+      if (first !== undefined && first !== i) return `the same sentence appears in two paragraphs: "${s.slice(0, 60)}…"`;
+      seen.set(s, i);
+    }
+  }
+  return null;
+}
+
 /** THE OWN-SPEND LAW (operator, 2026-09-04: "our pieces should never write
  * how much we spend").
  *

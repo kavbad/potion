@@ -22,7 +22,7 @@ import {
 import { and, eq, like } from 'drizzle-orm';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { materializeDialPolicy } from '@potion/lab-dial';
-import { ServingClient } from '@potion/lab-runtime';
+import type { ServingClientLike } from '@potion/lab-runtime';
 import type { ServingRequest, ServingResult, StepPayload } from '@potion/lab-runtime';
 
 /** lab_run_steps.payload is a jsonb column, so drizzle types it `unknown`.
@@ -91,35 +91,27 @@ function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): Serving
 /** Scripted client factory: pops one result per complete(); records the
  * apiKey the handler minted so tests can assert the raw is the one in use.
  *
- * A real SUBCLASS, not a cast object literal: ServingClient holds private
- * state, so a subclass is the only thing that can honestly stand in for one.
- * Both network-touching methods are overridden, so the base constructor's
- * stored baseUrl/apiKey are never dialled. */
+ * A plain object: the handler's clientFactory takes ServingClientLike, so a
+ * double no longer has to be a subclass of a class it will never use the
+ * private state of. Nothing can dial out, because there is no client. */
 function scriptedFactory(results: ServingResult[]): {
-  factory: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
+  factory: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClientLike;
   seen: { apiKey?: string; baseUrl?: string; requests: ServingRequest[] };
 } {
   const queue = [...results];
   const seen: { apiKey?: string; baseUrl?: string; requests: ServingRequest[] } = { requests: [] };
-  class ScriptedServingClient extends ServingClient {
-    override async complete(req: ServingRequest): Promise<ServingResult> {
-      seen.requests.push(req);
-      const next = queue.shift();
-      if (!next) throw new Error('scripted client exhausted');
-      return next;
-    }
-    override async emitSpans(): Promise<boolean> {
-      return true;
-    }
-  }
-  const factory = (opts: { baseUrl: string; apiKey: string; clusterHint?: string }): ServingClient => {
+  const factory = (opts: { baseUrl: string; apiKey: string; clusterHint?: string }): ServingClientLike => {
     seen.apiKey = opts.apiKey;
     seen.baseUrl = opts.baseUrl;
-    return new ScriptedServingClient({
-      baseUrl: opts.baseUrl,
-      apiKey: opts.apiKey,
-      ...(opts.clusterHint !== undefined ? { clusterHint: opts.clusterHint } : {}),
-    });
+    return {
+      complete: async (req: ServingRequest): Promise<ServingResult> => {
+        seen.requests.push(req);
+        const next = queue.shift();
+        if (!next) throw new Error('scripted client exhausted');
+        return next;
+      },
+      emitSpans: async (): Promise<boolean> => true,
+    };
   };
   return { factory, seen };
 }

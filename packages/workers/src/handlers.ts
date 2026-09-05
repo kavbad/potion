@@ -163,7 +163,7 @@ import {
   insertApiKey,
   revokeApiKey,
 } from '@potion/db';
-import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildShadowStub, buildWebLabTools, compileRubric, constitutionTierOverrides, extractDeliverable, extractReport, parseJudgment, recordedActOutputs, resumeRun, runGraduationPass, ServingClient, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
+import { buildCodeLabTools, buildJudgeMessages, buildMcpLabTools, buildShadowStub, buildWebLabTools, compileRubric, constitutionTierOverrides, extractDeliverable, extractReport, parseJudgment, recordedActOutputs, resumeRun, runGraduationPass, ServingClient, type ServingClientLike, type CodeToolDeps, type LegOutcome, type McpLegSetup, type WebToolDeps } from '@potion/lab-runtime';
 import { createMasterKeyProvider, openGrantToken, type MasterKeyProvider } from '@potion/custody';
 import type { ConnectorDef } from '@potion/lab-mcp';
 import { notifyRunEvent, type SendNotify } from './notify.js';
@@ -4479,7 +4479,7 @@ export interface LabRunHandlerResult {
 }
 
 export interface LabRunHandlerDeps {
-  clientFactory?: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClient;
+  clientFactory?: (opts: { baseUrl: string; apiKey: string; clusterHint?: string }) => ServingClientLike;
   masterKeyProvider?: MasterKeyProvider;
   connectors?: readonly ConnectorDef[];
   mcpFetch?: typeof fetch;

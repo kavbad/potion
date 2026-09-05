@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { auditNoOwnSpend, lintDraft } from './lint.js';
+import { auditNoOwnSpend, auditRepetition, lintDraft } from './lint.js';
 import { renderMarkdown, writeIssue } from './publish.js';
 import { redactFactsForWriter } from './delta.js';
 import type { FactSheet } from './types.js';
@@ -99,5 +99,40 @@ describe('the own-spend law reaches the rendered page', () => {
     const written = JSON.parse(readFileSync(join(dir, '2026-09-04.json'), 'utf8')) as { status: string; heldReason?: string };
     expect(written.status).toBe('held');
     expect(written.heldReason).toMatch(/never published/);
+  });
+});
+
+// THE SECOND-PARAGRAPH LAW (operator, 2026-09-05: "fix delta's repetitive
+// prose"). The fixture is the REAL published piece from run-5834835a.
+describe('the second-paragraph law', () => {
+  const published = {
+    plain:
+      'The measurement compared two models on the same agentic-tool-use suite of 14 tasks. One model, gpt-5.6-terra-pro, scored 0.972 quality at $44.15 per thousand requests. The cheaper model, ling-3.0-flash, scored 0.886 quality at $0.1094 per thousand requests. The gap between them is 8.7 quality points and a 404× cost difference.',
+    lede:
+      'On a suite of 14 measured agentic-tool-use tasks, gpt-5.6-terra-pro reached 0.972 quality at $44.15 per thousand requests. ling-3.0-flash reached 0.886 quality at $0.1094 per thousand requests. The quality gap is 8.7 points and the cost ratio is about 404×.',
+    takeaway:
+      'An engineer paying per request should use ling-3.0-flash at $0.1094 per thousand requests when 0.886 quality is enough, and reserve gpt-5.6-terra-pro at $44.15 per thousand requests for the task fraction that needs the extra 8.7 points.',
+  };
+
+  it('refuses the piece that shipped: paragraph two was paragraph one again', () => {
+    expect(auditRepetition(published)).toMatch(/second paragraph restates the finding/);
+  });
+
+  it('lets the second paragraph REFER to a figure while making its own point', () => {
+    expect(
+      auditRepetition({
+        ...published,
+        lede: 'Price is set by what a provider can charge, not by what a model scores. The extra 8.7 points are the only thing the premium buys, and only on work resembling this suite.',
+      }),
+    ).toBeNull();
+  });
+
+  it('does not punish a takeaway for naming the options it recommends', () => {
+    expect(auditRepetition({ ...published, lede: 'The gap is a property of the models, not of the test.' })).toBeNull();
+  });
+
+  it('catches the same sentence used in two paragraphs', () => {
+    const s = 'The gap between them is 8.7 quality points and a 404 times cost difference.';
+    expect(auditRepetition({ plain: `A finding. ${s}`, lede: `${s} And more.`, takeaway: 't' })).toMatch(/same sentence appears/);
   });
 });
