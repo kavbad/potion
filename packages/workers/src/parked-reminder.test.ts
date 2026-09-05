@@ -24,7 +24,12 @@ import {
   type DbHandle,
 } from '@potion/db';
 import { eq } from 'drizzle-orm';
-import { createLabParkedReminderHandler, waitedWords, type JobContext } from './handlers.js';
+import {
+  createLabParkedReminderHandler,
+  DEFAULT_PRICES_PATH,
+  waitedWords,
+  type JobContext,
+} from './handlers.js';
 import { composeRunEvent, type NotifyMessage } from './notify.js';
 
 let db: DbHandle;
@@ -57,7 +62,13 @@ function handlerWith(sent: NotifyMessage[]): ReturnType<typeof createLabParkedRe
   });
 }
 
-const ctx = (): JobContext => ({ db: db.db }) as unknown as JobContext;
+// A REAL JobContext, built rather than cast. Forcing a bare `{ db }` into
+// this type compiles and is checked against nothing: the day the handler
+// reaches for dbHandle or pricesPath, what would have been a type error
+// becomes a runtime undefined. The escape-hatch ratchet in
+// scripts/test-typecheck-coverage.test.ts caught the first draft doing
+// exactly that, and the three fields the type actually wants cost nothing.
+const ctx = (): JobContext => ({ db: db.db, dbHandle: db, pricesPath: DEFAULT_PRICES_PATH });
 
 beforeEach(async () => {
   db = await createDb();
