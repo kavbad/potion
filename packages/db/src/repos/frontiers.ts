@@ -114,9 +114,21 @@ export async function getServingFrontier(
    * generation capture the frontier the previous generation froze, so the
    * second generation could never advance past the first. Serving never
    * passes this: a pin means "do not move under me". */
-  opts: { ignorePins?: boolean } = {},
+  opts: {
+    ignorePins?: boolean;
+    /** G2 rung 4b: serve THIS frontier for this cluster — the canary slice
+     * routing on a candidate generation's pins. Outranks the promoted pin
+     * because it IS a pin, just a per-request one. A frontier id that no
+     * longer resolves falls through to the normal path rather than failing
+     * the request: a canary must never be able to break serving. */
+    overrideFrontierId?: string | undefined;
+  } = {},
 ): Promise<Frontier | null> {
   if (orgId === undefined) return getLatestFrontier(db, clusterId, null, instrument);
+  if (opts.overrideFrontierId !== undefined) {
+    const override = await getFrontierById(db, opts.overrideFrontierId);
+    if (override) return override;
+  }
   // R7: a PIN wins over every latest-version rule below. One indexed
   // primary-key lookup on a table most orgs have no row in — the cost of
   // honoring "don't move under me" on the serving path, paid per request

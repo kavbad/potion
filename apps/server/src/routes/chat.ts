@@ -46,6 +46,7 @@ import { stampedRouterVersion } from '../routing/router-stamp.js';
 // G1 (0086): randomized incumbent holdout — appended import.
 import { resolveHoldout } from '../routing/holdout.js';
 import { resolveWorkloadSubAssignment } from '../routing/workload-assignment.js';
+import { resolveCanary } from '../routing/canary.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { bindServingDegeneracy, loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
@@ -744,24 +745,36 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // taxonomy; revisit if assignment ever considers org clusters.
     // One resolution per candidate cluster: frontier → provenance guard →
     // serving-latency binding → operating point under the org's policy.
+    // ---- G2 rung 4b: the canary slice ----
+    // A fraction of traffic resolves each cluster to a CANDIDATE
+    // generation's frontier instead of the promoted one, so the evidence for
+    // promoting it comes from this org's own requests. Decided once per
+    // request, before any cluster resolves, so every cluster this request
+    // touches rides the SAME generation — a request routed half by one
+    // generation and half by another would be evidence for neither.
+    const canary = await resolveCanary(ctx, auth.org.orgId);
     const resolveFor = async (cid: string) => {
+      // The candidate names a frontier per cluster; a cluster it does not
+      // name resolves normally, which is what makes a partial generation
+      // safe to canary.
+      const canaryPin = canary?.pins[cid]?.frontierId;
       const clusterPolicy = policyForCluster(policy, cid);
       // MIXING M3: a tool-carrying request consults the cluster's frontier
       // measured ON TOOL USE when one exists (instrument 'tools'); otherwise
       // the default frontier, narrowed to points that can carry tools below.
       const modalFrontier =
         audioParts > 0
-          ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'audio')
+          ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'audio', { overrideFrontierId: canaryPin })
           : imageParts > 0
-            ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'vision')
+            ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'vision', { overrideFrontierId: canaryPin })
             : body.tools !== undefined
-              ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools')
+              ? await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'tools', { overrideFrontierId: canaryPin })
               : null;
       if ((audioParts > 0 || imageParts > 0) && (modalFrontier === null || modalFrontier.points.length === 0)) return null;
       const loaded =
         modalFrontier !== null && modalFrontier.points.length > 0
           ? modalFrontier
-          : await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId);
+          : await loadCurrentFrontier(ctx.db.db, cid, auth.org.orgId, 'default', { overrideFrontierId: canaryPin });
       const guarded = guardFrontierProvenance(loaded, ctx.providerMode, (msg) => app.log.warn(msg));
       const bound = await bindServingLatency(
         ctx,
@@ -899,6 +912,10 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       op = { ...op, config: { type: 'single', model: heldOut.model }, fallback: 0 as const };
       logBase.holdout = true;
     }
+    // The ledger records which generation's frontiers DECIDED this request —
+    // what happened, not what was configured. A holdout row leaves it null:
+    // the incumbent served it, so no generation routed it.
+    if (canary !== null && heldOut === null) logBase.generationId = canary.generationId;
     const sh = strategyHash(op.config);
     logBase.strategyHash = sh;
     // S2 (0060): the ledger's "served by" — stamped once here, rides every
@@ -956,6 +973,11 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // Appended only on sub-assigned requests: the cluster token names the
       // WORKLOAD that served; this names the taxonomy parent it sits under.
       (workloadParent !== null ? `;parent=${workloadParent}` : '') +
+      // Appended only when the canary ACTUALLY routed this request. A
+      // holdout serves the incumbent, so it was not routed by any
+      // generation and carries no canary label — same rule as the baseline
+      // and router-version fields below.
+      (canary !== null && heldOut === null ? `;canary=${canary.generationId}` : '') +
       (servedInstrument !== null ? `;instrument=${servedInstrument}` : '') +
       // Appended only when the org's own measured traffic excluded a
       // degenerate route — absent, the trace is byte-identical to before.

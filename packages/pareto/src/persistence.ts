@@ -119,8 +119,11 @@ export async function loadCurrentFrontier(
   clusterId: ClusterId,
   orgId?: string,
   instrument: 'default' | 'tools' | 'vision' | 'audio' = 'default',
+  /** G2 rung 4b: the canary slice passes the candidate generation's frontier
+   * for this cluster. Absent on every other path. */
+  opts: { overrideFrontierId?: string | undefined } = {},
 ): Promise<Frontier | null> {
-  return getServingFrontier(db, clusterId, orgId, instrument);
+  return getServingFrontier(db, clusterId, orgId, instrument, opts);
 }
 
 /** Load a specific frontier version by row id. */

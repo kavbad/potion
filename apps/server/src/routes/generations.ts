@@ -34,6 +34,7 @@ import {
   rollbackCandidates,
   rollbackTo,
   servingGeneration,
+  setCanaryRate,
   type GenerationPin,
 } from '@potion/db';
 import {
@@ -48,6 +49,7 @@ import { listClusters } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { compileAndMintRouter } from '../routing/compile-router.js';
+import { bustCanaryCache } from '../routing/canary.js';
 
 /** The org's bound policy, resolved exactly as the compiler resolves it. */
 async function orgPolicy(ctx: PotionContext, orgId: string): Promise<Policy> {
@@ -108,6 +110,7 @@ const dto = (g: Awaited<ReturnType<typeof listRouterGenerations>>[number]) => ({
   status: g.status,
   clusters: Object.keys(g.pins as Record<string, GenerationPin>).length,
   routerVersion: g.routerVersion,
+  canaryRate: g.canaryRate,
   note: g.note,
   createdAt: g.createdAt.toISOString(),
   promotedAt: g.promotedAt?.toISOString() ?? null,
@@ -151,6 +154,26 @@ export function registerGenerationRoutes(app: FastifyInstance, ctx: PotionContex
       note: typeof note === 'string' && note.trim() !== '' ? note.trim().slice(0, 200) : null,
     });
     return reply.code(201).send({ generation: dto(row), pins });
+  });
+
+  // Start, adjust or stop a canary. Rate 0 stops it; the generation stays a
+  // candidate either way — canarying is not a status, it is a dial.
+  app.post('/api/router/generations/:id/canary', { preHandler: [requireRole('admin')] }, async (req, reply) => {
+    const orgId = req.potionOrg!.orgId;
+    const { id } = req.params as { id: string };
+    const { rate } = (req.body ?? {}) as { rate?: unknown };
+    if (typeof rate !== 'number') {
+      return reply.code(400).send(openAiError('rate must be a number between 0 and 0.5', 'invalid_request_error', 'invalid_rate'));
+    }
+    const res = await setCanaryRate(db, orgId, id, rate);
+    if (!res.ok) {
+      const code = res.reason === 'unknown generation' ? 404 : 409;
+      return reply.code(code).send(openAiError(res.reason!, 'invalid_request_error', code === 404 ? 'not_found' : 'canary_refused'));
+    }
+    // In-process, so the next request binds the change rather than waiting
+    // out the cache — the same courtesy the holdout settings route pays.
+    bustCanaryCache(orgId);
+    return reply.send({ generation: dto(res.generation!), canaryRate: res.generation!.canaryRate });
   });
 
   app.post('/api/router/generations/:id/promote', { preHandler: [requireRole('admin')] }, async (req, reply) => {

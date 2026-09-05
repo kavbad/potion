@@ -13,7 +13,7 @@
 //   · nothing is deleted. A superseded or rolled-back generation keeps its
 //     pins so it can be promoted again — "put it back" must not depend on
 //     recomputing what used to be true.
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, ne } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   frontierPins,
@@ -132,7 +132,7 @@ export async function promoteGeneration(
   }
   const [updated] = await db
     .update(routerGenerations)
-    .set({ status: 'serving', promotedAt: new Date(), endedAt: null })
+    .set({ status: 'serving', promotedAt: new Date(), endedAt: null, canaryRate: 0 })
     .where(and(eq(routerGenerations.orgId, orgId), eq(routerGenerations.id, id)))
     .returning();
   return { ok: true, generation: updated!, previous };
@@ -166,10 +166,70 @@ export async function rollbackTo(
   }
   const [updated] = await db
     .update(routerGenerations)
-    .set({ status: 'serving', promotedAt: new Date(), endedAt: null })
+    .set({ status: 'serving', promotedAt: new Date(), endedAt: null, canaryRate: 0 })
     .where(and(eq(routerGenerations.orgId, orgId), eq(routerGenerations.id, id)))
     .returning();
   return { ok: true, generation: updated!, previous: current };
+}
+
+/**
+ * A canary is a fraction of traffic served by a CANDIDATE's frontiers.
+ *
+ * Capped, because this is a rollout dial and not a traffic splitter: half is
+ * already an aggressive slice for a routing change nobody has promoted, and
+ * an unbounded value here would let a typo move every request onto an
+ * unpromoted generation without anyone deciding to.
+ */
+export const CANARY_MAX_RATE = 0.5;
+
+/** At most ONE candidate canaries at a time. Two would make every request's
+ * routing depend on which coin landed first, and the evidence for promoting
+ * either would be measured against a moving comparator. */
+export async function setCanaryRate(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  rate: number,
+): Promise<GenerationTransition> {
+  const gen = await getRouterGeneration(db, orgId, id);
+  if (gen === null) return { ok: false, reason: 'unknown generation' };
+  if (gen.status !== 'candidate') {
+    return { ok: false, reason: `only a candidate can canary — this one is '${gen.status}'` };
+  }
+  if (!Number.isFinite(rate) || rate < 0 || rate > CANARY_MAX_RATE) {
+    return { ok: false, reason: `canary rate must be between 0 and ${CANARY_MAX_RATE}` };
+  }
+  if (rate > 0) {
+    const others = await db
+      .select({ id: routerGenerations.id })
+      .from(routerGenerations)
+      .where(and(eq(routerGenerations.orgId, orgId), ne(routerGenerations.id, id), gt(routerGenerations.canaryRate, 0)));
+    if (others.length > 0) {
+      return { ok: false, reason: `generation '${others[0]!.id}' is already canarying — stop it first` };
+    }
+  }
+  const [updated] = await db
+    .update(routerGenerations)
+    .set({ canaryRate: rate })
+    .where(and(eq(routerGenerations.orgId, orgId), eq(routerGenerations.id, id)))
+    .returning();
+  return { ok: true, generation: updated! };
+}
+
+/** The candidate currently taking a slice, if any. */
+export async function canaryingGeneration(db: PotionDb, orgId: string): Promise<RouterGenerationRow | null> {
+  const rows = await db
+    .select()
+    .from(routerGenerations)
+    .where(
+      and(
+        eq(routerGenerations.orgId, orgId),
+        eq(routerGenerations.status, 'candidate'),
+        gt(routerGenerations.canaryRate, 0),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /** Every generation an org could roll back TO: promoted at some point, not

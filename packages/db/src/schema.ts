@@ -399,6 +399,12 @@ export const requestLogs = pgTable('request_logs', {
    * rows carry baseline NULL (they never claim savings; they ARE the
    * baseline) and router_version NULL (the router did not decide them). */
   holdout: boolean('holdout').notNull().default(false),
+  /** G2 rung 4b (0093): which router GENERATION's frontiers decided this
+   * request. NULL on the ordinary path; set only when the canary slice
+   * actually served, so the column records what happened rather than what
+   * was configured. A holdout row clears it — that request served the
+   * incumbent, so no generation routed it. */
+  generationId: text('generation_id'),
   policyType: text('policy_type'),
   /** M4 #30 (SPEC §13.1, migration 0009): the policy row that SERVED the
    * request — the api key's bound policy by default, or the X-Potion-Policy
@@ -684,6 +690,9 @@ export const routerGenerations = pgTable(
     pins: jsonb('pins').$type<Record<string, GenerationPin>>().notNull(),
     /** The compiled router version captured, tying artifact to pins. */
     routerVersion: integer('router_version'),
+    /** G2 rung 4b (0093): the fraction of eligible traffic this CANDIDATE
+     * serves. 0 = not canarying. Only a candidate may carry a rate. */
+    canaryRate: doublePrecision('canary_rate').notNull().default(0),
     note: text('note'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     promotedAt: timestamp('promoted_at', { withTimezone: true }),

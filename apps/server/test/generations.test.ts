@@ -9,7 +9,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
-import { insertApiKey, insertPolicy, listFrontierPins } from '@potion/db';
+import { insertApiKey, insertPolicy, listFrontierPins, listRequestLogs } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 // R3: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the shared
@@ -52,7 +52,11 @@ beforeAll(async () => {
   await seedIsolationOrgs(db());
   for (const [orgId, key] of [[ORG, KEY], [ORG_B, KEY_B]] as const) {
     await insertPolicy(db(), { id: `pol-gen-${orgId}`, orgId, name: orgId, config: { type: 'min_cost', qualityFloor: 0.7 } });
-    await insertApiKey(db(), { id: `key-gen-${orgId}`, keyHash: sha256(key), name: 'admin', orgId, policyId: `pol-gen-${orgId}`, scopes: 'serve+admin' });
+    // rateRps: these tests deliberately send bursts to observe a RANDOM
+    // slice; against the 10 rps default the extras 429 and arrive as
+    // 'undefined' models, which reads as a routing bug rather than a
+    // throttle (the lesson from compound-policy.test.ts).
+    await insertApiKey(db(), { id: `key-gen-${orgId}`, keyHash: sha256(key), name: 'admin', orgId, policyId: `pol-gen-${orgId}`, scopes: 'serve+admin', rateRps: 1000 });
   }
   // v1: cheap is the cheapest point clearing the 0.7 floor.
   await saveFrontier(db(), CLUSTER, [point(CHEAP, 0.8, 0.2)], 'manual', app.potion.prices.version);
@@ -153,6 +157,106 @@ describe('router generations', () => {
     for (const url of ['/api/router/generations', '/api/router/generations/gen-x/promote']) {
       const res = await api('POST', url, 'pk_gen_serveonly');
       expect(res.statusCode, url).toBeGreaterThanOrEqual(403);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G2 rung 4b — THE CANARY SLICE
+// ---------------------------------------------------------------------------
+describe('the canary slice', () => {
+  it('a candidate can take a slice; the rest of traffic is untouched', async () => {
+    // Serving is back on cheap (the rollback above). Stage a candidate that
+    // captures the newer frontier, where mid wins.
+    const staged = (await api('POST', '/api/router/generations')).json() as { generation: { id: string } };
+    const on = await app.inject({
+      method: 'POST',
+      url: `/api/router/generations/${staged.generation.id}/canary`,
+      headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+      payload: { rate: 0.5 },
+    });
+    expect(on.statusCode, on.body).toBe(200);
+    expect((on.json() as { canaryRate: number }).canaryRate).toBe(0.5);
+
+    // Over many requests BOTH routes appear: the slice serves the candidate's
+    // frontier, everything else serves the promoted one. A canary that moved
+    // everything, or nothing, would fail here.
+    const models = new Set<string>();
+    const canaryTraces: string[] = [];
+    for (let i = 0; i < 40; i += 1) {
+      const res = await chat();
+      models.add(String(res.headers['x-potion-model']));
+      const trace = String(res.headers['x-frontier-trace']);
+      if (trace.includes('canary=')) canaryTraces.push(trace);
+    }
+    expect(models, 'both the promoted and the canary route must appear').toEqual(new Set(['mock-cheap', 'mock-mid']));
+    // Every canary-labeled request names the generation that routed it.
+    expect(canaryTraces.length).toBeGreaterThan(0);
+    for (const t of canaryTraces) expect(t).toContain(`canary=${staged.generation.id}`);
+
+    // And the ledger agrees with the trace — the row records what happened.
+    const rows = await listRequestLogs(db(), ORG, 60);
+    const labeled = rows.filter((r) => r.generationId === staged.generation.id);
+    expect(labeled.length).toBeGreaterThan(0);
+    expect(labeled.every((r) => r.servedModel === 'mock-mid')).toBe(true);
+  });
+
+  it('stopping the canary returns every request to the promoted routing', async () => {
+    const list = (await api('GET', '/api/router/generations')).json() as {
+      generations: Array<{ id: string; canaryRate: number }>;
+    };
+    const canarying = list.generations.find((g) => g.canaryRate > 0)!;
+    const off = await app.inject({
+      method: 'POST',
+      url: `/api/router/generations/${canarying.id}/canary`,
+      headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+      payload: { rate: 0 },
+    });
+    expect(off.statusCode).toBe(200);
+    for (let i = 0; i < 12; i += 1) {
+      const res = await chat();
+      expect(res.headers['x-potion-model']).toBe('mock-cheap');
+      expect(String(res.headers['x-frontier-trace'])).not.toContain('canary=');
+    }
+  });
+
+  it('refuses a rate above the cap, a non-candidate, and a second simultaneous canary', async () => {
+    const canary = (id: string, rate: unknown) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/router/generations/${id}/canary`,
+        headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+        payload: { rate },
+      });
+    const a = (await api('POST', '/api/router/generations')).json() as { generation: { id: string } };
+    const b = (await api('POST', '/api/router/generations')).json() as { generation: { id: string } };
+    expect((await canary(a.generation.id, 0.9)).statusCode).toBe(409); // over CANARY_MAX_RATE
+    expect((await canary(a.generation.id, 'half')).statusCode).toBe(400);
+    expect((await canary('gen-nope', 0.1)).statusCode).toBe(404);
+    expect((await canary(a.generation.id, 0.1)).statusCode).toBe(200);
+    // A second candidate cannot canary while the first is: two would make a
+    // request's routing depend on which coin landed first.
+    expect((await canary(b.generation.id, 0.1)).statusCode).toBe(409);
+    // The generation that is SERVING is not a candidate and cannot canary.
+    const serving = (await api('GET', '/api/router/generations')).json() as { servingId: string };
+    expect((await canary(serving.servingId, 0.1)).statusCode).toBe(409);
+    await canary(a.generation.id, 0); // leave the fixture quiet
+  });
+
+  it('promoting a canarying candidate clears its rate — it is the router now, not a slice', async () => {
+    const staged = (await api('POST', '/api/router/generations')).json() as { generation: { id: string } };
+    await app.inject({
+      method: 'POST',
+      url: `/api/router/generations/${staged.generation.id}/canary`,
+      headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+      payload: { rate: 0.2 },
+    });
+    const promoted = await api('POST', `/api/router/generations/${staged.generation.id}/promote`);
+    expect(promoted.statusCode).toBe(200);
+    expect((promoted.json() as { generation: { canaryRate: number } }).generation.canaryRate).toBe(0);
+    // Every request now rides it, and none is labeled a canary.
+    for (let i = 0; i < 8; i += 1) {
+      expect(String((await chat()).headers['x-frontier-trace'])).not.toContain('canary=');
     }
   });
 });
