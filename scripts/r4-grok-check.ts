@@ -36,7 +36,7 @@ await migrate(handle.db);
 const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never;
 
 console.log('grok-domination check: 3rd independent reading, gpt-full vs grok-4.6, full hard suite');
-const res = (await frontierPlatformSweepHandler(
+const res = await frontierPlatformSweepHandler(
   {
     clusterId: 'code-gen',
     auditionModels: PAIR,
@@ -44,11 +44,11 @@ const res = (await frontierPlatformSweepHandler(
     capUsd: Number(process.env.CHECK_CAP_USD ?? 2),
     publish: false,
     cacheSalt: 'grok-domination-c',
-  } as never,
+  },
   ctx,
-)) as Record<string, unknown>;
+);
 
-const per = (res.perCandidate ?? []) as Array<{ strategyHash: string; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number; aggregateQuality?: number }>;
+const per = res.perCandidate;
 console.log('\nmodel                    runQuality   n    $per1k      p95ms    (stale aggregate)');
 for (const p of per.sort((a, b) => (b.runQuality ?? -1) - (a.runQuality ?? -1))) {
   console.log(

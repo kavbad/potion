@@ -44,7 +44,7 @@ const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PR
 console.log(
   `r2 shapes leg: ${SHORTLIST.length} singles + grammar shapes on ${CLUSTER} · cap $${CAP} · p95Cap ${P95_CAP_MS}ms · sampleN ${SAMPLE_N} · publish=${PUBLISH}`,
 );
-const res = (await frontierPlatformSweepHandler(
+const res = await frontierPlatformSweepHandler(
   {
     clusterId: CLUSTER,
     auditionModels: SHORTLIST,
@@ -56,15 +56,15 @@ const res = (await frontierPlatformSweepHandler(
     sampleN: SAMPLE_N,
     publish: PUBLISH,
     cacheSalt: process.env.R2_SALT ?? `r2-shapes-${CLUSTER}-v1`,
-  } as never,
+  },
   ctx,
-)) as Record<string, unknown>;
+);
 
-const generated = (res.generatedShapes ?? []) as Array<{ template: string; strategyHash: string; type: string }>;
-const refused = (res.latencyRefused ?? []) as Array<{ strategyHash: string; type: string; projectedP95Ms: number }>;
-const unprojected = (res.latencyUnprojected ?? []) as string[];
-const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; type: string; evidenceSpendUsd: number; runQuality?: number; runN?: number }>;
-const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
+const generated = res.generatedShapes;
+const refused = res.latencyRefused;
+const unprojected = res.latencyUnprojected;
+const perCandidate = res.perCandidate;
+const sampled = res.sampled ?? [];
 
 const names = new Map<string, string>();
 for (const m of SHORTLIST) names.set(strategyHash({ type: 'single', model: m } as never), m);

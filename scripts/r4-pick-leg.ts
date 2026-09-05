@@ -53,7 +53,7 @@ await migrate(handle.db);
 const ctx = { db: handle.db, dbHandle: handle, pricesPath: process.env.POTION_PRICES_PATH! } as never;
 
 console.log(`r4 pick leg: ${MEMBERS.length} singles (cached) + ${SHAPES.length} pick ensembles · cap $${CAP} · p95Cap 30000ms · publish=${PUBLISH}`);
-const res = (await frontierPlatformSweepHandler(
+const res = await frontierPlatformSweepHandler(
   {
     clusterId: 'code-gen',
     auditionModels: MEMBERS,
@@ -62,14 +62,14 @@ const res = (await frontierPlatformSweepHandler(
     p95CapMs: 30000,
     capUsd: CAP,
     publish: PUBLISH,
-  } as never,
+  },
   ctx,
-)) as Record<string, unknown>;
+);
 
-const refused = (res.latencyRefused ?? []) as Array<{ strategyHash: string; type: string; projectedP95Ms: number }>;
+const refused = res.latencyRefused;
 for (const r of refused) console.log(`REFUSED pre-spend: ${NAMES.get(r.strategyHash) ?? r.type} projected p95 ${r.projectedP95Ms}ms`);
-const perCandidate = (res.perCandidate ?? []) as Array<{ strategyHash: string; type: string; evidenceSpendUsd: number; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number }>;
-const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
+const perCandidate = res.perCandidate;
+const sampled = res.sampled ?? [];
 const q = new Map(sampled.map((s) => [s.strategyHash, s.meanQuality]));
 for (const p of perCandidate) if (p.runQuality !== undefined) q.set(p.strategyHash, p.runQuality); // like-for-like: THIS run only
 console.log('\nstrategy                                             quality     $per1K     p95ms    evidence$');

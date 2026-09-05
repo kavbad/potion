@@ -266,6 +266,10 @@ export async function runSweepLoop(input: SweepLoopInput): Promise<SweepOutcome>
         `(${outcomes.length}/${input.suiteIds.length} suites completed)`;
       break;
     }
+    // Hoisted: the guard and the value must be the SAME expression for the
+    // narrowing to hold, or the spread reintroduces `number | undefined`
+    // against an exactOptionalPropertyTypes `maxOutputTokens?: number`.
+    const ceiling = ceilingFor(suiteId);
     const summary = await run(
       {
         suiteIds: [suiteId],
@@ -273,7 +277,7 @@ export async function runSweepLoop(input: SweepLoopInput): Promise<SweepOutcome>
         budgetCapUsd: remaining,
         provider: input.provider,
         ...(input.resume ? { resume: true } : {}),
-        ...(ceilingFor(suiteId) !== undefined ? { maxOutputTokens: ceilingFor(suiteId) } : {}),
+        ...(ceiling !== undefined ? { maxOutputTokens: ceiling } : {}),
       },
       {},
     );
@@ -386,6 +390,15 @@ async function main(argv: string[]): Promise<number> {
         executed: sweep.outcomes.reduce((a, o) => a + o.summary.executed, 0),
         cacheHits: sweep.outcomes.reduce((a, o) => a + o.summary.cacheHits, 0),
         skipped: sweep.outcomes.flatMap((o) => o.summary.skipped),
+        // These three were simply absent from the combined summary — RunSummary
+        // gained them and this literal never caught up, which nothing noticed
+        // because scripts/ was outside the typecheck. abandonedSpendUsd is the
+        // one that matters: its own doc says hiding abandoned spend is how a
+        // campaign "under budget" costs more than its ledger claims, and the
+        // COMBINED table is exactly where an operator reads the total.
+        executedSpendUsd: sweep.outcomes.reduce((a, o) => a + o.summary.executedSpendUsd, 0),
+        abandonedSpendUsd: sweep.outcomes.reduce((a, o) => a + o.summary.abandonedSpendUsd, 0),
+        failedStrategies: sweep.outcomes.flatMap((o) => o.summary.failedStrategies),
         results: [],
         simulated: false,
         providerMode: provider,

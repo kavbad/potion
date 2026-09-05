@@ -13,6 +13,10 @@ const { assertPublishable, writeIssue } = await import('@potion/workers');
 type Issue = import('@potion/workers').Issue;
 
 const w35 = JSON.parse(readFileSync(w35Path, 'utf8')) as Issue;
+// Issue.facts is nullable and this note is built by spreading it. Without
+// this the failure was a `Cannot read properties of null` from inside the
+// object literal below, naming neither the file nor the reason.
+if (w35.facts === null) throw new Error(`${w35Path} has no facts sheet — this note is composed from W35's facts`);
 
 const issue: Issue = {
   slug: 'the-mixing-verdict',
@@ -51,11 +55,17 @@ const issue: Issue = {
   facts: {
     ...w35.facts,
     mixing: [
-      { family: 'code', kind: 'judge-picked pair', meanQuality: 0.94, qualityDeltaVsBestSingle: -0.02, costSaving: 0, n: 84, vague: true, costBand: 'premium' },
-      { family: 'code', kind: 'execution-picked pair', meanQuality: 0.994, qualityDeltaVsBestSingle: -0.006, costSaving: -0.12, n: 84, vague: true, costBand: 'premium' },
-      { family: 'writing', kind: 'picked pair', meanQuality: 0.936, qualityDeltaVsBestSingle: -0.014, costSaving: 0, n: 28, vague: true, costBand: 'premium' },
-      { family: 'code', kind: 'confidence-escalated', meanQuality: 0.981, qualityDeltaVsBestSingle: -0.008, costSaving: 0, n: 336, vague: true, costBand: 'mid' },
-      { family: 'extraction', kind: 'structure-checked pair', meanQuality: 0.94, qualityDeltaVsBestSingle: 0.005, costSaving: 0, n: 144, vague: true, costBand: 'mid' },
+      // Every row here is a measured LOSS — that is the point of the close
+      // note. `kind` carries the verdict and `shape` what was tried; they used
+      // to be conflated in `kind`, which typechecked against nothing because
+      // scripts/ was outside the typecheck. 'extraction' is not a
+      // ClusterFamily either: the family for extraction work is
+      // 'structured output'.
+      { family: 'code', kind: 'no-win', shape: 'judge-picked pair', meanQuality: 0.94, qualityDeltaVsBestSingle: -0.02, costSaving: 0, n: 84, vague: true, costBand: 'premium' },
+      { family: 'code', kind: 'no-win', shape: 'execution-picked pair', meanQuality: 0.994, qualityDeltaVsBestSingle: -0.006, costSaving: -0.12, n: 84, vague: true, costBand: 'premium' },
+      { family: 'writing', kind: 'no-win', shape: 'picked pair', meanQuality: 0.936, qualityDeltaVsBestSingle: -0.014, costSaving: 0, n: 28, vague: true, costBand: 'premium' },
+      { family: 'code', kind: 'no-win', shape: 'confidence-escalated', meanQuality: 0.981, qualityDeltaVsBestSingle: -0.008, costSaving: 0, n: 336, vague: true, costBand: 'mid' },
+      { family: 'structured output', kind: 'no-win', shape: 'structure-checked pair', meanQuality: 0.94, qualityDeltaVsBestSingle: 0.005, costSaving: 0, n: 144, vague: true, costBand: 'mid' },
     ],
     caveats: [
       ...w35.facts.caveats,

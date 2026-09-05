@@ -28,7 +28,14 @@ export interface LedgerRow {
   /** ISO date-time of the run. */
   at: string;
   week: string;
-  lane: 'canary' | 'audition';
+  /**
+   * 'budget-canary' added 2026-09-04: observatory-week.ts has been writing
+   * that lane to the ledger, and the union never listed it. Nothing caught
+   * it because scripts/ was outside `pnpm -r typecheck`. The rows are real
+   * and already counted — envelopeFor sums spend across every lane — so the
+   * type was the half that was wrong.
+   */
+  lane: 'canary' | 'audition' | 'budget-canary';
   /** Live spend the lane actually incurred. */
   spendUsd: number;
   detail?: string;

@@ -15,6 +15,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Types only, so this is erased at runtime and the deferred `await import`
+// below still controls when the module is actually loaded. The aliases used
+// to be written `type LedgerRow = W.LedgerRow` off that dynamic import,
+// which cannot work: W is a const, and a value is not a namespace.
+import type { LedgerRow, CanaryResult, AuditionResult } from '@potion/workers';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DRY = process.argv.includes('--dry');
@@ -63,9 +68,6 @@ const {
   isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, saturationVerdict, rankCandidates, digestLine, isFreeTier, postObservatoryEntry,
   CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, OBSERVATORY_ENVELOPE_USD, runFrontierNotes, postNoteLine,
 } = W;
-type LedgerRow = W.LedgerRow;
-type CanaryResult = W.CanaryResult;
-type AuditionResult = W.AuditionResult;
 
 // ---- ledger + envelope ----
 const LEDGER = `${ART}/ledger.jsonl`;
@@ -226,13 +228,24 @@ try {
         ctx,
       );
       const measured = res.candidates.length > 0 && res.executed + res.cacheHits > 0;
-      let earned = (res.frontierPoints ?? []).some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
+      // `frontierPoints` is not a field on FrontierPlatformSweepResult and
+      // never was — the result was cast to Record<string, unknown>, so the
+      // read silently produced undefined and `earned` was ALWAYS false. An
+      // audition could therefore never be recognised as having earned a
+      // point, which is the one thing this loop exists to detect. The field
+      // is `frontierPointsFull`; narrowing on the union beats casting to a
+      // shape with an optional `model`, which would also have accepted junk.
+      let earned = res.frontierPointsFull.some(
+        (p) => p.strategyConfig.type === 'single' && p.strategyConfig.model === r.entry.alias,
+      );
       if (measured && earned) {
         res = await frontierPlatformSweepHandler(
           { clusterId: r.clusterId, capUsd: AUDITION_CAP_USD, maxAnswerers: 1, auditionModels: [r.entry.alias] },
           ctx,
         );
-        earned = (res.frontierPoints ?? []).some((p) => (p.strategyConfig as { model?: string }).model === r.entry.alias);
+        earned = res.frontierPointsFull.some(
+          (p) => p.strategyConfig.type === 'single' && p.strategyConfig.model === r.entry.alias,
+        );
       }
       if (!measured) {
         // Contained at the first call (provider error) — the candidate is not

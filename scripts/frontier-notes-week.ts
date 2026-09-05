@@ -74,8 +74,12 @@ const { issue, files, digest } = await runFrontierNotes({
   pricesVersion: process.env.PRICES_VERSION ?? prices.version,
   notesDir: `${ART}/notes`,
   now: new Date(),
-  writer,
-  byline: process.env.FRONTIER_NOTES_BYLINE,
+  // Both optionals are spread in only when set, the same way delta/auditor/
+  // publishGate above already are: under exactOptionalPropertyTypes, passing
+  // an explicit `undefined` is not the same as omitting the key, and
+  // `writer?: {...}` / `byline?: string` do not accept it.
+  ...(writer ? { writer } : {}),
+  ...(process.env.FRONTIER_NOTES_BYLINE !== undefined ? { byline: process.env.FRONTIER_NOTES_BYLINE } : {}),
   gate: process.env.FRONTIER_NOTES_GATE === '1',
   extraNeverName: (process.env.FRONTIER_NOTES_NEVER_NAME ?? '').split(',').map((s) => s.trim()).filter(Boolean),
 });

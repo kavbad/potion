@@ -60,6 +60,13 @@ function fakeRunEval(spendBySuite: Record<string, number>): {
       executed: 0,
       cacheHits: 0,
       skipped: [],
+      // The stub had drifted out of RunSummary's shape — these three were
+      // added to the type and never here. A double that does not match the
+      // real signature is a test that proves something about a shape nobody
+      // ships; it went unnoticed because scripts/ was outside the typecheck.
+      executedSpendUsd: 0,
+      abandonedSpendUsd: 0,
+      failedStrategies: [],
       results: [],
       simulated: false,
       providerMode: 'mock',

@@ -51,7 +51,7 @@ const readings = new Map<string, Reading[]>();
 
 async function leg(label: string, salt: string): Promise<number> {
   console.log(`\n=== ${label} ===`);
-  const res = (await frontierPlatformSweepHandler(
+  const res = await frontierPlatformSweepHandler(
     {
       clusterId: 'rewrite-edit',
       auditionModels: MEMBERS,
@@ -61,13 +61,13 @@ async function leg(label: string, salt: string): Promise<number> {
       capUsd: CAP,
       publish: false,
       cacheSalt: salt,
-    } as never,
+    },
     ctx,
-  )) as Record<string, unknown>;
-  for (const r of (res.latencyRefused ?? []) as Array<{ strategyHash: string; projectedP95Ms: number }>) {
+  );
+  for (const r of res.latencyRefused) {
     console.log(`  REFUSED pre-spend: ${NAMES.get(r.strategyHash) ?? r.strategyHash.slice(0, 8)} @ ${r.projectedP95Ms}ms`);
   }
-  const per = (res.perCandidate ?? []) as Array<{ strategyHash: string; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number }>;
+  const per = res.perCandidate;
   for (const p of per) {
     if (p.runQuality === undefined) continue;
     const r: Reading = { q: p.runQuality, n: p.runN ?? -1, ...(p.costPer1K !== undefined ? { cost: p.costPer1K } : {}), ...(p.latencyP95Ms !== undefined ? { p95: p.latencyP95Ms } : {}) };

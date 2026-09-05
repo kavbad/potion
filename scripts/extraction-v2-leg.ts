@@ -52,13 +52,11 @@ for (const clusterId of CLUSTERS) {
   for (const [i, salt] of (['exv2-a', 'exv2-b'] as const).entries()) {
     const label = `exv2-${clusterId}-run${i + 1}`;
     console.log(`\n=== ${label} (salt ${salt}) ===`);
-    const res = (await frontierPlatformSweepHandler(
-      { clusterId, auditionModels: MODELS, maxAnswerers: MODELS.length, capUsd: CAP, publish: false, cacheSalt: salt } as never,
+    const res = await frontierPlatformSweepHandler(
+      { clusterId, auditionModels: MODELS, maxAnswerers: MODELS.length, capUsd: CAP, publish: false, cacheSalt: salt },
       ctx,
-    )) as Record<string, unknown>;
-    const per = (res.perCandidate ?? []) as Array<{
-      strategyHash: string; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number;
-    }>;
+    );
+    const per = res.perCandidate;
     for (const p of per) {
       const model = NAME_BY_HASH.get(p.strategyHash);
       if (!model || p.runQuality === undefined) continue;

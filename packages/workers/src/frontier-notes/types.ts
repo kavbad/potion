@@ -30,8 +30,23 @@ export interface MixingFact {
   /** Absent when the finding is vague: the writer must not know which cluster. */
   clusterId?: string;
   family: ClusterFamily;
-  /** 'cheaper-and-as-good' beats or ties the best single on quality and is strictly cheaper. */
-  kind: 'cheaper-and-as-good' | 'frontier-candidate';
+  /**
+   * 'cheaper-and-as-good' beats or ties the best single on quality and is
+   * strictly cheaper.
+   *
+   * 'no-win' is a MEASURED NEGATIVE RESULT: a mixture that was run properly
+   * and did not beat the best single. compose.ts never produces one — it only
+   * looks at recipes that already won — but a close note reports the losses
+   * too, and the vocabulary had no way to say so. A union that can only
+   * express wins invites writing 'frontier-candidate' over a mixture whose
+   * costSaving is -0.12, which is the caption-vs-provenance failure the
+   * honest-numbers rule exists to stop. Read `shape` for what was tried and
+   * qualityDeltaVsBestSingle / costSaving for how it did.
+   */
+  kind: 'cheaper-and-as-good' | 'frontier-candidate' | 'no-win';
+  /** The strategy shape measured ('judge-picked pair', 'confidence-escalated').
+   *  Descriptive only — never identity, and never a substitute for `kind`. */
+  shape?: string;
   meanQuality: number;
   qualityDeltaVsBestSingle: number;
   /** Fraction cheaper than the best single model (0.38 = 38% cheaper). */

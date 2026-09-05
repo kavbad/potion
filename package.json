@@ -10,7 +10,7 @@
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",
     "test": "pnpm -r test && pnpm test:scripts",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && pnpm typecheck:scripts",
     "lint": "eslint .",
     "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test",
     "demo:mock-e2e": "tsx scripts/demo-mock-e2e.ts",
@@ -18,7 +18,8 @@
     "smoke:live": "tsx scripts/smoke-live.ts",
     "m1b:sweep": "tsx scripts/m1b-sweep.ts",
     "harness": "tsx packages/harness/src/cli.ts",
-    "test:scripts": "vitest run scripts"
+    "test:scripts": "vitest run scripts",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json"
   },
   "devDependencies": {
     "@potion/cluster": "workspace:*",

@@ -58,7 +58,7 @@ const readings = new Map<string, Reading[]>();
 
 async function leg(label: string, extra: Record<string, unknown>): Promise<number> {
   console.log(`\n=== ${label} ===`);
-  const res = (await frontierPlatformSweepHandler(
+  const res = await frontierPlatformSweepHandler(
     {
       clusterId: 'code-gen',
       auditionModels: MEMBERS,
@@ -68,17 +68,27 @@ async function leg(label: string, extra: Record<string, unknown>): Promise<numbe
       capUsd: CAP,
       publish: false,
       ...extra,
-    } as never,
+    },
     ctx,
-  )) as Record<string, unknown>;
-  for (const r of (res.latencyRefused ?? []) as Array<{ strategyHash: string; projectedP95Ms: number }>) {
+  );
+  for (const r of res.latencyRefused) {
     console.log(`  REFUSED pre-spend: ${NAMES.get(r.strategyHash) ?? r.strategyHash.slice(0, 8)} @ ${r.projectedP95Ms}ms`);
   }
-  const sampled = (res.sampled ?? []) as Array<{ strategyHash: string; meanQuality: number; n: number }>;
-  const per = (res.perCandidate ?? []) as Array<{ strategyHash: string; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number }>;
+  const sampled = res.sampled ?? [];
+  const per = res.perCandidate;
   const merged = new Map<string, Reading>();
   for (const s of sampled) merged.set(s.strategyHash, { q: s.meanQuality, n: s.n });
-  for (const p of per) if (p.runQuality !== undefined) merged.set(p.strategyHash, { q: p.runQuality, n: p.runN ?? -1, cost: p.costPer1K, p95: p.latencyP95Ms }); // like-for-like: THIS run only
+  // like-for-like: THIS run only. cost/p95 are spread in only when present —
+  // `exactOptionalPropertyTypes` distinguishes an absent optional from one
+  // explicitly set to undefined, and Reading declares `cost?: number`.
+  for (const p of per)
+    if (p.runQuality !== undefined)
+      merged.set(p.strategyHash, {
+        q: p.runQuality,
+        n: p.runN ?? -1,
+        ...(p.costPer1K !== undefined ? { cost: p.costPer1K } : {}),
+        ...(p.latencyP95Ms !== undefined ? { p95: p.latencyP95Ms } : {}),
+      });
   for (const [h, r] of merged) {
     readings.set(h, [...(readings.get(h) ?? []), r]);
     console.log(`  ${(NAMES.get(h) ?? h.slice(0, 10)).padEnd(44)} ${r.q.toFixed(4)}  n=${r.n}${r.cost !== undefined ? `  $${r.cost.toFixed(4)}/1k  ${Math.round(r.p95 ?? 0)}ms` : ''}`);

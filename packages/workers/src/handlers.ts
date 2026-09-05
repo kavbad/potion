@@ -3755,6 +3755,27 @@ export interface FrontierPlatformSweepResult {
     costPer1K?: number;
     latencyP95Ms?: number;
   }>;
+  /**
+   * False for publish:false runs (canaries, dry measurements).
+   *
+   * 2026-09-04: this and `sampled` below were RETURNED by the handler but
+   * never declared here. The literal is built inside the withDeliveryGuard
+   * callback, whose type is inferred, so the richer object stayed assignable
+   * to this narrower interface and nothing complained — the fields simply
+   * vanished from every caller's view. scripts/a3-validation-leg.ts asserts
+   * `if (res.published) throw` to prove a validation leg never publishes;
+   * that check works at runtime and was invisible to the compiler, so a
+   * rename of the field would have silently turned the invariant into a
+   * no-op instead of failing the build.
+   */
+  published: boolean;
+  /**
+   * publish:false only — per-strategy mean quality over the cells this run
+   * scored. Frontier aggregation requires FULL suite coverage, so a
+   * deliberate sample (a canary) never becomes a point; this is the canary's
+   * reading. Absent on publishing runs.
+   */
+  sampled?: Array<{ strategyHash: string; n: number; meanQuality: number }>;
 }
 
 /**

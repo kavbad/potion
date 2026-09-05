@@ -1,0 +1,42 @@
+{
+  // TYPECHECK THE SCRIPTS. `pnpm -r typecheck` walks the workspace, and
+  // scripts/ is not a workspace package, so ~60 files and 4 test files were
+  // checked by nothing at all. The root `typecheck` script runs this after
+  // the recursive pass.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"],
+    // A couple of scripts import a package's SOURCE with an explicit `.ts`
+    // extension on purpose — tsx resolves it directly, so a newly added
+    // export works before the next image build folds it into dist. That is
+    // only legal under this flag, and the flag is only legal under noEmit,
+    // which is exactly what this config is.
+    "allowImportingTsExtensions": true,
+    // Several scripts read the DB directly. They cannot `import 'drizzle-orm'`
+    // at the top level, because scripts/ lives in the ROOT package and neither
+    // drizzle-orm nor pg is a root dependency — so each one deliberately
+    // reaches them through @potion/db's own tree with createRequire, and then
+    // names the type as `typeof import('drizzle-orm')`. The RUNTIME half of
+    // that works (verified). Only the TYPE half fails, because tsc resolves
+    // the specifier from scripts/, where it is not reachable.
+    //
+    // These entries point the type lookup at the same copy the runtime
+    // already uses. `pg` maps to @types/pg because pg ships no types of its
+    // own and the scripts only ever name it in a type position.
+    //
+    // The bare specifiers name index.d.ts OUTRIGHT rather than the package
+    // directory: under NodeNext a `paths` substitution is resolved with the
+    // ESM algorithm, which has no directory or package.json "main" lookup, so
+    // a folder target silently fails to resolve. The wildcard entry can stay
+    // a folder — the subpath it produces is already an explicit file.
+    "baseUrl": ".",
+    "paths": {
+      "drizzle-orm": ["./packages/db/node_modules/drizzle-orm/index.d.ts"],
+      "drizzle-orm/*": ["./packages/db/node_modules/drizzle-orm/*"],
+      "pg": ["./packages/db/node_modules/@types/pg/index.d.ts"]
+    }
+  },
+  "include": ["scripts/**/*.ts"]
+}

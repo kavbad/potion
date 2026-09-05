@@ -59,7 +59,7 @@ const readings = new Map<string, Array<{ q: number; n: number; cost?: number; p9
 for (const [i, salt] of (['vp-a', 'vp-b'] as const).entries()) {
   const label = `t1-verifypick-run${i + 1}`;
   console.log(`\n=== ${label} (salt ${salt}) ===`);
-  const res = (await frontierPlatformSweepHandler(
+  const res = await frontierPlatformSweepHandler(
     {
       clusterId: 'extraction',
       auditionModels: MEMBERS,
@@ -69,13 +69,13 @@ for (const [i, salt] of (['vp-a', 'vp-b'] as const).entries()) {
       capUsd: CAP,
       publish: false,
       cacheSalt: salt,
-    } as never,
+    },
     ctx,
-  )) as Record<string, unknown>;
-  for (const r of (res.latencyRefused ?? []) as Array<{ strategyHash: string; projectedP95Ms: number }>) {
+  );
+  for (const r of res.latencyRefused) {
     console.log(`  REFUSED pre-spend: ${NAMES.get(r.strategyHash) ?? r.strategyHash.slice(0, 8)} @ ${r.projectedP95Ms}ms`);
   }
-  const per = (res.perCandidate ?? []) as Array<{ strategyHash: string; runQuality?: number; runN?: number; costPer1K?: number; latencyP95Ms?: number }>;
+  const per = res.perCandidate;
   for (const p of per) {
     const name = NAMES.get(p.strategyHash);
     if (!name || p.runQuality === undefined) continue;
@@ -112,7 +112,7 @@ const rows = (
 ).rows as Array<{ item_id: string; strategy_hash: string; q: number }>;
 for (const [si, h] of shapeHashes.entries()) {
   const misses = rows.filter((r) => r.strategy_hash === h && Number(r.q) < 1).sort((a, b) => a.item_id.localeCompare(b.item_id));
-  console.log(`\n${NAMES.get(SHAPES[si] && strategyHash(SHAPES[si] as never))?.trim()}: ${misses.length === 0 ? 'NO MISSES' : misses.map((m) => `${m.item_id} ${Number(m.q).toFixed(2)}`).join(', ')}`);
+  console.log(`\n${NAMES.get(h)?.trim()}: ${misses.length === 0 ? 'NO MISSES' : misses.map((m) => `${m.item_id} ${Number(m.q).toFixed(2)}`).join(', ')}`);
 }
 console.log(`\ntotal leg spend $${total.toFixed(4)}`);
 await handle.close?.();

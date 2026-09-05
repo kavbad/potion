@@ -215,6 +215,51 @@ describe('test-typecheck coverage', () => {
     expect(pkgs.filter((p) => p.hasTests).length).toBeGreaterThan(5);
   });
 
+  /**
+   * scripts/ IS NOT A WORKSPACE PACKAGE, so `pnpm -r typecheck` never walked
+   * it — 62 source files and 4 test files checked by nothing at all, this
+   * guard's own file among them. Turning it on surfaced 63 errors, and they
+   * were not cosmetic: observatory-week.ts read `res.frontierPoints`, a field
+   * that does not exist, so `earned` was ALWAYS false and an audition could
+   * never be recognised as having won a frontier slot; the m1b combined
+   * summary omitted abandonedSpendUsd, the number whose own doc says hiding
+   * it makes a campaign "under budget" cost more than its ledger says.
+   *
+   * The survey above cannot see any of that: it walks packages/ and apps/
+   * looking for package.json files. So this asserts the wiring directly.
+   */
+  it('scripts/ has tests too, and the root typecheck actually covers them', () => {
+    const scriptsDir = path.join(REPO_ROOT, 'scripts');
+    expect(walkForTests(scriptsDir), 'scripts/ has no test files — has this moved?').toBe(true);
+
+    const cfgPath = path.join(REPO_ROOT, 'tsconfig.scripts.json');
+    expect(existsSync(cfgPath), 'tsconfig.scripts.json is missing — scripts/ is unchecked again').toBe(true);
+    const cfg = readFileSync(cfgPath, 'utf8');
+    expect(cfg, 'tsconfig.scripts.json must include scripts/').toMatch(/"include"\s*:\s*\[[^\]]*scripts/);
+
+    // A config nothing runs is worse than none: it reads as coverage and
+    // checks nothing. Follow the root `typecheck` script through to the
+    // command that names the config.
+    const rootPkg = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    const scripts = rootPkg.scripts ?? {};
+    const seen = new Set<string>();
+    const runsConfig = (name: string): boolean => {
+      if (seen.has(name)) return false;
+      seen.add(name);
+      const body = scripts[name];
+      if (body === undefined) return false;
+      if (body.includes('tsconfig.scripts.json')) return true;
+      // `pnpm <script>` / `pnpm run <script>` delegation.
+      return [...body.matchAll(/pnpm (?:run )?([\w:-]+)/g)].some((m) => runsConfig(m[1]!));
+    };
+    expect(
+      runsConfig('typecheck'),
+      'the root "typecheck" script never reaches tsconfig.scripts.json, so CI does not check scripts/',
+    ).toBe(true);
+  });
+
   it('every package with tests either typechecks them or is a listed debt', () => {
     const unchecked = pkgs
       .filter((p) => p.hasTests && !p.typecheckCoversTests)
