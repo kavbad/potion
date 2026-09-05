@@ -22,6 +22,7 @@ export * from './repos/shadow.js';
 export * from './repos/outcomes.js';
 export * from './repos/challenger-proposals.js';
 export * from './repos/org-workloads.js';
+export * from './repos/router-generations.js';
 export * from './repos/guarantee.js';
 export * from './repos/verdicts.js';
 export * from './repos/judge-calibrations.js';

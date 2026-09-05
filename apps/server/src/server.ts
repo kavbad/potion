@@ -86,6 +86,7 @@ import { registerFrontierNotesClock } from './research-clock.js';
 import { registerTraceRoutes } from './routes/traces.js';
 // G2 rung 1: discovered org workloads — appended import.
 import { registerDiscoveryRoutes } from './routes/discovery.js';
+import { registerGenerationRoutes } from './routes/generations.js';
 import { registerRubricRoutes } from './routes/rubrics.js';
 import { registerCertificationRoutes } from './routes/certifications.js';
 import { registerLabRoutes } from './routes/lab.js';
@@ -447,6 +448,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   registerTraceRoutes(app, ctx, { queue });
   // G2 rung 1: discovered org workloads — observed structure + refresh.
   registerDiscoveryRoutes(app, ctx, { queue });
+  registerGenerationRoutes(app, ctx);
   // G1.5: per-cluster rubric review surface (generate/list/approve/reject).
   registerRubricRoutes(app, ctx, { queue });
   registerCertificationRoutes(app, ctx, { queue });

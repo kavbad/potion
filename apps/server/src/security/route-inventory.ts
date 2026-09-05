@@ -190,6 +190,13 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   // Also promoted out of 'skip' (2026-09-04): both look the row up through
   // the same org-scoped listOrgWorkloads, so the sweep can PROBE the claim
   // with ORG_A's real workload id instead of citing another file for it.
+  // G2 rung 4 (0092): router generations — staged routing with an undo. The
+  // list is org-scoped rows (org-list-absent, not skip — see the doc block
+  // on CrossOrgProbe); the transitions name an org-owned id.
+  { method: 'GET', path: '/api/router/generations', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'POST', path: '/api/router/generations', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "captures the CALLING org's own serving surface — no parameter, nothing to cross" } },
+  { method: 'POST', path: '/api/router/generations/:id/promote', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/router/generations/gen-x/promote', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: "org-scoped getRouterGeneration → a foreign org's id is a uniform 404 (pinned in generations.test.ts)" } },
+  { method: 'POST', path: '/api/router/generations/:id/rollback', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/router/generations/gen-x/rollback', tenancyClass: 'org-param', resourceParam: ':id', crossOrgProbe: { expect: 'skip', skipReason: "org-scoped getRouterGeneration → a foreign org's id is a uniform 404 (pinned in generations.test.ts)" } },
   { method: 'POST', path: '/api/workloads/:id/adopt', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/adopt', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'orgWorkload', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/workloads/:id/retire', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/workloads/wl-x/retire', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'orgWorkload', crossOrgProbe: { expect: 'uniform-404' } },
   // G1 holdout settings: the CALLING org's own consent + rate; the serving

@@ -279,6 +279,18 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
       'before), never into the default strategy.',
   },
   {
+    file: 'apps/server/src/routes/generations.ts',
+    symbol: 'captureServingPins (servingDecisionFor)',
+    kind: 'alias-guard',
+    mockPosture: 'excluded-live',
+    regressionTest: 'apps/server/test/generations.test.ts',
+    notes:
+      'G2 rung 4: a generation captures what ACTUALLY serves, resolved through the same ' +
+      'servingDecisionFor chain as serving — so the provenance guard inside it decides what is ' +
+      'capturable, and a mock-provenance frontier under live providers is never pinned into a ' +
+      'generation. It records frontier IDS, not strategies: nothing here resolves a provider.',
+  },
+  {
     file: 'apps/server/src/routes/discovery.ts',
     symbol: 'adopt (aggregatesFromEvalResults + servingDecisionFor)',
     kind: 'alias-guard',

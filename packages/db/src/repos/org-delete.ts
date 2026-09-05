@@ -67,6 +67,7 @@ import {
   labActionGrants,
   labEvidenceReports,
   routerVersions,
+  routerGenerations,
   labMissions,
   labRunFiles,
   labDigests,
@@ -346,6 +347,13 @@ export async function deleteOrgCascade(db: PotionDb, orgId: string): Promise<Org
   await count(
     'budget_events',
     db.delete(budgetEvents).where(eq(budgetEvents.orgId, orgId)).returning({ orgId: budgetEvents.orgId }),
+  );
+  await count(
+    'router_generations',
+    db
+      .delete(routerGenerations)
+      .where(eq(routerGenerations.orgId, orgId))
+      .returning({ id: routerGenerations.id }),
   );
   await count(
     'demand_cell_contributors',

@@ -655,6 +655,45 @@ export const shadowResults = pgTable('shadow_results', {
  * run; exemplar_text is the already-redacted medoid sample, never a
  * fabricated name.
  */
+/** One cluster's share of a generation: the exact frontier that served it. */
+export interface GenerationPin {
+  frontierId: string;
+  frontierVersion: number;
+  instrument: 'default' | 'tools' | 'vision' | 'audio';
+}
+
+/**
+ * G2 rung 4 (0092): a ROUTER GENERATION — an immutable, re-appliable set of
+ * per-cluster frontier ids with a lifecycle. Promoting one writes its pins;
+ * rolling back writes the previous one's. Serving needs no new concept,
+ * because getServingFrontier already honours a pin.
+ */
+export const routerGenerations = pgTable(
+  'router_generations',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    /** 'candidate' | 'serving' | 'superseded' | 'rolled-back'. At most one
+     * 'serving' row per org — enforced by the repo's transitions, which is
+     * where the invariant is testable. */
+    status: text('status').notNull().default('candidate'),
+    /** The WHOLE routing surface at capture time, never a diff: a generation
+     * must be re-appliable without replaying history. */
+    pins: jsonb('pins').$type<Record<string, GenerationPin>>().notNull(),
+    /** The compiled router version captured, tying artifact to pins. */
+    routerVersion: integer('router_version'),
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    promotedAt: timestamp('promoted_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+  },
+  (t) => [index('router_generations_org_status_idx').on(t.orgId, t.status)],
+);
+export type RouterGenerationRow = typeof routerGenerations.$inferSelect;
+export type NewRouterGeneration = typeof routerGenerations.$inferInsert;
+
 export const orgWorkloads = pgTable(
   'org_workloads',
   {

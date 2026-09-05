@@ -108,6 +108,13 @@ export async function getServingFrontier(
   clusterId: string,
   orgId?: string,
   instrument: 'default' | 'tools' | 'vision' | 'audio' = 'default',
+  /** G2 rung 4: resolve as if NO pin existed. Only one caller wants this —
+   * capturing a router generation, which must describe the routing the
+   * CURRENT EVIDENCE implies. Reading through the pin there would make a
+   * generation capture the frontier the previous generation froze, so the
+   * second generation could never advance past the first. Serving never
+   * passes this: a pin means "do not move under me". */
+  opts: { ignorePins?: boolean } = {},
 ): Promise<Frontier | null> {
   if (orgId === undefined) return getLatestFrontier(db, clusterId, null, instrument);
   // R7: a PIN wins over every latest-version rule below. One indexed
@@ -116,10 +123,12 @@ export async function getServingFrontier(
   // rather than cached, because a stale cache would serve a version the
   // customer already released. A pin whose frontier row has vanished is
   // ignored rather than fatal: serving the newest beats serving nothing.
-  const pin = await getFrontierPin(db, orgId, clusterId, instrument);
-  if (pin) {
-    const pinned = await getFrontierById(db, pin.frontierId);
-    if (pinned) return pinned;
+  if (opts.ignorePins !== true) {
+    const pin = await getFrontierPin(db, orgId, clusterId, instrument);
+    if (pin) {
+      const pinned = await getFrontierById(db, pin.frontierId);
+      if (pinned) return pinned;
+    }
   }
   const rows = await db
     .select()
