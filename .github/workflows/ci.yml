@@ -16,14 +16,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege, stated explicitly. gitleaks-action reads the PR's commit
-# list to scope its scan, which needs pull-requests:read — without it the step
-# dies on a 403 "Resource not accessible by integration" and scans nothing.
-# The repo default did not include it (found 2026-09-04, on the workflow's
-# second-ever execution).
+# Least privilege. Only contents:read is needed: the secrets scan now runs the
+# gitleaks binary over the checkout rather than gitleaks-action, so it wants no
+# PR metadata and no token at all. pull-requests:read was required only by the
+# action, and was dropped with it.
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   verify:
@@ -94,21 +92,39 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: pnpm test
 
-      # M2-security: secrets gate — scan working tree + full git history.
-      # Independent of the build, so it reports on its own merits.
+      # M2-security: secrets gate. Runs the gitleaks BINARY over the full
+      # history rather than gitleaks-action, which derives a COMMIT RANGE from
+      # the PR and produced four distinct failures here before it ever scanned
+      # a byte: wrong branch trigger, missing GITHUB_TOKEN, missing
+      # pull-requests:read, and finally
+      #
+      #   fatal: ambiguous argument '<base>^..<head>': unknown revision
+      #   failed to scan Git repository / scanned ~0 bytes
+      #
+      # because a force-push destroys the base the range was computed from.
+      # This branch is rebased constantly, so that is the normal case, not an
+      # edge one — and a scanner that fails on git plumbing tells you nothing
+      # about secrets either way.
+      #
+      # `detect` over checkout depth 0 is deterministic, needs no token and no
+      # extra permission, and matches what .gitleaks.toml's own header always
+      # claimed the CI step did: "runs `gitleaks git` (history)".
       - name: Secrets scan (gitleaks)
         if: ${{ !cancelled() }}
-        uses: gitleaks/gitleaks-action@v2
         env:
-          # gitleaks-action@v2 REFUSES to scan a pull_request without this and
-          # exits before scanning anything — which is how the secrets gate came
-          # to have never run either (2026-09-04, the workflow's first
-          # execution). Not optional, and not a secret you configure: it is the
-          # token GitHub mints for the run.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_ENABLE_COMMENTS: false
-          GITLEAKS_ENABLE_SUMMARY: false
+          GITLEAKS_VERSION: 8.24.3
+        run: |
+          set -euo pipefail
+          cd /tmp
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSLf -o gitleaks.tgz "${base}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSLf -o gitleaks.sums "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          # Verify before executing: this is the tool that vouches for the
+          # repo's secrets, so it does not get to arrive unchecked.
+          grep " gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz\$" gitleaks.sums | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          cd "$GITHUB_WORKSPACE"
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --redact --no-banner
 
       # Supply-chain gate (M2-security, re-triaged M3 #29): fail on any NEW
       # high/critical production advisory; accepted ones live in
