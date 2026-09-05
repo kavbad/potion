@@ -67,7 +67,14 @@ function walkForTests(dir: string): boolean {
 }
 
 function surveyPackages(): Pkg[] {
-  const roots = [path.join(REPO_ROOT, 'packages'), path.join(REPO_ROOT, 'apps')];
+  // The same roots the scans below use (TEST_ROOTS is declared later in the
+  // file; this runs at collection time, after the module body). It used to
+  // hardcode packages + apps, so tests/* — a real workspace root with a real
+  // package in it — was outside the inventory: adding an
+  // `exclude: ["src/**/*.test.ts"]` to tests/chaos would have turned its
+  // tests off with nothing to notice. A root that holds no package.json
+  // (scripts/) is skipped harmlessly by the loop below.
+  const roots = TEST_ROOTS.map((r) => path.join(REPO_ROOT, r));
   const out: Pkg[] = [];
   for (const root of roots) {
     if (!existsSync(root)) continue;
@@ -158,8 +165,20 @@ const ESCAPE_HATCH_BUDGET = 4;
  * skipped it silently, so the guard was unauditable by the tools anyone
  * would reach for. A checker that exempts its own directory is a checker
  * you cannot trust about that directory.
+ *
+ * `tests` is the third workspace root (pnpm-workspace.yaml: packages/*,
+ * apps/*, tests/*) and was missing for the same reason scripts/ was — the
+ * list was written from memory instead of from the workspace. It already
+ * holds @potion/chaos-tests' four files, and the branch on PR #8 relocates
+ * five cross-package integration tests into it to break seven devDependency
+ * cycles that made `pnpm build` fail from a clean checkout. A missing root
+ * fails SILENTLY, because it just yields a smaller number — which is the
+ * one way this ratchet can lie. PR #8 asserts the list against
+ * pnpm-workspace.yaml, which is the right fix and supersedes this note;
+ * this entry is here so the gap is closed before that lands, and so the
+ * rebase has nothing to drop.
  */
-const TEST_ROOTS = ['packages', 'apps', 'scripts'];
+const TEST_ROOTS = ['packages', 'apps', 'scripts', 'tests'];
 
 /** An escape hatch as the PARSER sees it — see ESCAPE_HATCH_BUDGET above. */
 function isEscapeHatch(node: ts.Node): boolean {
