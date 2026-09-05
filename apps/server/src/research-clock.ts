@@ -328,10 +328,33 @@ export function registerFrontierNotesClock(
     // which trigger fired — keyed on the trigger, each side would see "not me
     // yet" and both would spend. It ALSO depends on separation in time, which
     // is the fragile half: observatory-week.ts writes its record at the END of
-    // the run, so this check is blind while a run is in flight. The cron fires
-    // 06:00 UTC and has taken ~32 minutes; inMondayWindow opens at 06:00
-    // PACIFIC (13:00 UTC). The ~6.5h gap is doing real work here, and a run
-    // that ever overran it would be met by a tick that sees no record yet.
+    // the run (line 280, inside `if (!DRY)`), so this check is blind while a
+    // run is in flight. The cron fires 06:00 UTC and has taken ~32 minutes;
+    // inMondayWindow opens at 06:00 PACIFIC (13:00 UTC). The ~6.5h gap is
+    // doing real work here.
+    //
+    // THE LIKELY PATH IS A CRASH, NOT AN OVERRUN. An overrun needs a run 13x
+    // slower than ever observed. But observatory-week.ts's uncaughtException /
+    // unhandledRejection handlers (line 45) post one line and `process.exit(1)`
+    // WITHOUT writing a record — line 280 is on the success path only. So a
+    // cron run that dies after spending (a provider timeout mid-audition, an
+    // OOM) leaves no record, and this check waves the in-process trigger
+    // through to run the whole week again from the top. "Only if it fails at
+    // the wrong moment" is a much shorter odds than "only if it runs 13x
+    // slow".
+    //
+    // Bounded, though, and worth knowing which belt actually holds: spend is
+    // ledgered PER LANE as it happens (ledgerAppend, lines 148/197/...), and
+    // the second run recomputes envelopeBefore from that same ledger. So the
+    // already-spent money is visible to the envelope even though it is
+    // invisible to this guard — total exposure stays under the monthly cap;
+    // it is the WEEK that repeats, not the budget that escapes.
+    //
+    // The real fix is not a week guard keyed on the record, which still
+    // re-runs after a crash. It is the started-marker below, written at the
+    // START with exclusive-create, taken by BOTH triggers — genuine mutual
+    // exclusion rather than separation in time — plus an explicit --force for
+    // the case where a crashed week legitimately needs re-running.
     if (!opts.dry && io.readObservatoryRun(week) !== null) return null; // measured already
     const stateDir = join(envDir!, 'artifacts', 'observatory-state');
     const marker = join(stateDir, `${week}.json`);
