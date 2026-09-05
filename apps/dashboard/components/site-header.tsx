@@ -4,18 +4,19 @@
 // pages (landing, docs, sign-in) get this instead: mark, wordmark, two links.
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
+import { CODE_GEN } from '@/lib/evidence.generated';
 
 export function SiteHeader({ current }: { current?: 'docs' | 'research' }) {
   return (
     <>
       {/* exa-style announcement bar — ours carries the masked discovery */}
       <div className="border-b border-[#d9d5cb] bg-[#f4f2ec] px-4 py-2 text-center text-xs text-soft">
-        <span className="hidden sm:inline">Code generation, 30 tasks scored by running the code: </span>
+        <span className="hidden sm:inline">Code generation, {CODE_GEN.items} tasks scored by running the code: </span>
         <span className="sm:hidden">Code generation: </span>
         <Link href="/home#evidence" className="font-medium text-ink underline decoration-[#b8b3a6] underline-offset-2 hover:decoration-ink">
-          a model at 1/270th the price of the best scorer, at 99% of its quality
+          a model at {CODE_GEN.ratioWords} of the best scorer, at {CODE_GEN.qualityRetainedPct}% of its quality
         </Link>
-        <span className="hidden md:inline"> ($0.02 vs $6.26 per 1,000 requests)</span>.
+        <span className="hidden md:inline"> (${CODE_GEN.minCost.toFixed(2)} vs ${CODE_GEN.maxCost.toFixed(2)} per 1,000 requests)</span>.
       </div>
       <header className="sticky top-0 z-40 border-b border-[#d9d5cb] bg-[#f4f2ec]/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:py-4">

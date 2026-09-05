@@ -4,24 +4,34 @@
 // all warm-light panels; this is its counter-weight — ink ground, paper type,
 // the one teal doing the same job it does everywhere else.
 //
-// Data: the code-gen-hard-v1 frontier, measured 2026-08-20 (.tranche/legs/
-// code-gen.json, frontier v4, 30 retrieval-hostile items scored by EXECUTING
-// the code — no judge). Hardcoded with provenance because the landing page
-// tracks committed evidence, not live state; re-quote when the baseline
-// republishes.
+// Data: the code-gen-hard-v1 frontier, DERIVED from the committed baseline by
+// scripts/gen-landing-evidence.ts (2026-09-04). It used to be transcribed by
+// hand, and the transcription was wrong in three ways at once: the date said
+// 2026-08-20 when the frontier that produced these rows was created
+// 2026-08-21, the ratio was quoted as 270x against a measured 270.9x, and the
+// quality share was quoted as 99% against a measured 97.8%. The page now
+// computes all three from the rows it draws, so the prose and the bars cannot
+// disagree again.
+//
 // The winner's IDENTITY is deliberately withheld (operator, 2026-08-20):
 // the famous expensive names are just the market, but WHICH small model wins
 // is the finding customers pay for. The masked string never enters the DOM —
-// a CSS blur would leave it copy-pasteable in the page source.
-const ROWS = [
-  { model: 'or-grok-4.6', vendor: 'xAI', q: 1.0, cost: 6.2568, masked: false },
-  { model: 'or-gemini-flash', vendor: 'Google', q: 0.9961, cost: 0.5506, masked: false },
-  { model: 'or-gpt-mini', vendor: 'OpenAI', q: 0.99, cost: 0.2509, masked: false },
-  { model: 'or-deepseek', vendor: 'DeepSeek', q: 0.98, cost: 0.1904, masked: false },
-  { model: 'or-████████████', vendor: 'name withheld', q: 0.9785, cost: 0.0231, masked: true },
-] as const;
+// a CSS blur would leave it copy-pasteable in the page source — and the mask
+// is now applied in the generator, at the source, so nothing downstream has
+// to remember to do it.
+import { CODE_GEN } from '@/lib/evidence.generated';
 
-const MAX_COST = 6.2568;
+/** Dearest first: the argument reads top-down from what the market charges
+ * to what the measurement actually buys. */
+const ROWS = [...CODE_GEN.rows].reverse();
+
+const MAX_COST = CODE_GEN.maxCost;
+
+/** House style spells small numbers in prose ("Five models…"), and a sentence
+ * never opens with a numeral. The count is still derived. */
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const spell = (n: number) => WORDS[n] ?? String(n);
+const Spelled = ({ n }: { n: number }) => <>{spell(n).replace(/^./, (c) => c.toUpperCase())}</>;
 
 export function EvidenceBand() {
   // exa's benchmark section, structurally: a hard edge-to-edge split — solid
@@ -37,20 +47,21 @@ export function EvidenceBand() {
           <h2 className="mt-4 text-[2rem] font-medium leading-[1.12] tracking-[-0.02em] sm:text-[2.5rem]">
             The same work.
             <br />
-            A 270× price range.
+            A {CODE_GEN.ratio}× price range.
           </h2>
           <p className="mt-6 text-sm leading-relaxed text-[#d6d3cb]">
-            Five models writing code to specification — scored by running their code, not by
-            opinion. The quality difference across this table is two points in a hundred. The price
-            difference is <span className="font-medium text-[#efece4]">two hundred and seventy fold</span>.
+            <Spelled n={ROWS.length} /> models writing code to specification — scored by running their code, not by
+            opinion. The quality difference across this table is {CODE_GEN.qualityGapPoints} points in a
+            hundred. The price difference is{' '}
+            <span className="font-medium text-[#efece4]">{CODE_GEN.ratio}-fold</span>.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-[#d6d3cb]">
             This is why routing pays: most kinds of work are served from the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
           <p className="mt-6 font-mono text-[12px] leading-relaxed text-[#a8a29e]">
-            measured 2026-08-20 · retrieval-hostile suite · scored by execution · error bars on the
-            full table in the docs
+            measured {CODE_GEN.measuredAt} · frontier v{CODE_GEN.version} · retrieval-hostile suite ·
+            scored by execution · error bars on the full table in the docs
           </p>
         </div>
       </div>
@@ -58,19 +69,19 @@ export function EvidenceBand() {
       <div className="bg-[#f4f2ec] px-6 py-20 sm:px-12 lg:py-28">
         <div className="max-w-2xl space-y-5 lg:mt-6">
           {ROWS.map((r) => {
-            const w = Math.max(1.2, (r.cost / MAX_COST) * 100);
+            const w = Math.max(1.2, (r.costPer1K / MAX_COST) * 100);
             const star = r.masked;
             return (
-              <div key={r.model}>
+              <div key={r.label}>
                 <div className="flex items-baseline justify-between font-mono text-xs">
                   <span>
                     <span className={star ? 'font-medium text-accent' : 'text-ink'}>
-                      {r.model}
+                      {r.label}
                     </span>
                     <span className="ml-2 text-faint">{r.vendor}</span>
                   </span>
                   <span className="text-faint">
-                    quality {r.q.toFixed(3)} · ${r.cost.toFixed(4)}/1k
+                    quality {r.quality.toFixed(3)} · ${r.costPer1K.toFixed(4)}/1k
                   </span>
                 </div>
                 <div className="mt-1.5 h-5 overflow-hidden rounded-sm bg-[#e4e0d6]">
@@ -81,16 +92,16 @@ export function EvidenceBand() {
                 </div>
                 {star && (
                   <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-accent">
-                    ↑ the routed pick — 99% of the top row&apos;s quality at 1/270th the price.
-                    The name? That&apos;s the product.
+                    ↑ the routed pick — {CODE_GEN.qualityRetainedPct}% of the top row&apos;s quality at{' '}
+                    {CODE_GEN.ratioWords}. The name? That&apos;s the product.
                   </p>
                 )}
               </div>
             );
           })}
           <p className="pt-1 font-mono text-[12px] text-faint">
-            <span className="text-ink">Figure 3.</span> The code-gen-hard frontier, measured 2026-08-20, 30 items scored by execution. Bars show cost per 1,000 requests · <span className="text-accent">teal</span> = what
-            a 0.95 quality floor actually buys
+            <span className="text-ink">Figure 3.</span> The code-gen-hard frontier, measured {CODE_GEN.measuredAt}, {CODE_GEN.items} items scored by execution ({CODE_GEN.gradedCells} graded runs per point). Bars show cost per 1,000 requests · <span className="text-accent">teal</span> = what
+            a {CODE_GEN.floor} quality floor actually buys{CODE_GEN.belowFloor > 0 ? ` · ${CODE_GEN.belowFloor} further frontier point${CODE_GEN.belowFloor === 1 ? '' : 's'} measured below that floor and are not drawn` : ''}
           </p>
         </div>
       </div>

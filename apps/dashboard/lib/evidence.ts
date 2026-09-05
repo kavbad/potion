@@ -1,3 +1,5 @@
+import { CLUSTERS as GENERATED_CLUSTERS, type LandingPoint as GeneratedPoint } from './evidence.generated';
+
 // THE NUMBERS THE LANDING PAGE IS ALLOWED TO SAY.
 //
 // A marketing page is exactly where invented numbers go, so these are not
@@ -21,18 +23,7 @@
 //     for m in sc.get('models',[]) or []: ms.add(m)
 //   print(len(d['frontiers']), len(pts), len(ms), sum((p.get('evidence') or {}).get('n',0) for p in pts))"
 //
-export const EVIDENCE = {
-  /** Taxonomy clusters with a published platform frontier. */
-  workloadTypes: 10,
-  /** Points that survived three-dimensional domination across all clusters. */
-  measuredStrategies: 72,
-  /** Distinct models appearing on at least one frontier. */
-  routableModels: 22,
-  /** Graded item-level evaluations behind those points. */
-  gradedEvaluations: 4936,
-  /** Source of every number above. */
-  source: 'packages/db/baseline/platform-frontiers.json',
-} as const;
+export { EVIDENCE, BASELINE_META, CODE_GEN, CLUSTERS } from './evidence.generated';
 
 /**
  * The honesty example, quoted verbatim from the same baseline.
@@ -61,14 +52,7 @@ export const TOO_CLOSE_EXAMPLE = {
 // cost and p95 all verbatim. The landing page demos compute on these rows
 // with the real policy semantics; nothing is staged.
 
-export interface LandingPoint {
-  label: string;
-  hash8: string;
-  quality: number;
-  ci: number;
-  costPer1K: number;
-  p95Ms: number;
-}
+export type { LandingPoint } from './evidence.generated';
 
 /**
  * The interactive explorer ships the multi-step-reasoning frontier because it
@@ -76,24 +60,7 @@ export interface LandingPoint {
  * 0.98 against CIs of ~0.13) — a 104x cost range where the trade-off is real,
  * not noise. n=50 items per point.
  */
-export const EXPLORER = {
-  cluster: 'multi-step-reasoning',
-  frontierVersion: 3,
-  items: 50,
-  points: [
-    // The cheapest row is the masked discovery — its NAME never enters the
-    // DOM (operator rule; a CSS blur would leave it copy-pasteable).
-    { label: 'or-████████████', hash8: '220a2558', quality: 0.5, ci: 0.14, costPer1K: 0.0093, p95Ms: 7160 },
-    { label: 'or-deepseek-v4-flash-0731', hash8: '1fd419ee', quality: 0.98, ci: 0.0392, costPer1K: 0.0304, p95Ms: 9702 },
-    { label: 'or-nemotron-3.5-lightning', hash8: '238db164', quality: 0.76, ci: 0.1196, costPer1K: 0.0845, p95Ms: 2739 },
-    { label: 'or-gpt-full', hash8: '819f1ab8', quality: 0.56, ci: 0.139, costPer1K: 0.1482, p95Ms: 1126 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.66, ci: 0.1326, costPer1K: 0.1656, p95Ms: 2293 },
-    { label: 'or-inkling-small', hash8: '07c9d6a7', quality: 0.92, ci: 0.076, costPer1K: 0.1906, p95Ms: 4009 },
-    { label: 'or-gemini-3.7-flash', hash8: 'ffe46bc9', quality: 1, ci: 0, costPer1K: 0.2929, p95Ms: 3242 },
-    { label: 'or-inkling', hash8: '8ad63a4e', quality: 0.94, ci: 0.0665, costPer1K: 0.5657, p95Ms: 2449 },
-    { label: 'or-kimi-k3', hash8: '7b918ab8', quality: 0.96, ci: 0.0549, costPer1K: 1.6482, p95Ms: 2422 },
-  ] as LandingPoint[],
-} as const;
+export { EXPLORER } from './evidence.generated';
 
 /**
  * Hero demo reel. The PROMPTS are authored examples; the ROUTE each one shows
@@ -122,64 +89,11 @@ export const ROUTE_DEMO = [
     cluster: 'creative', label: 'or-sonnet', hash8: '07b4dc72', costPer1K: 7.56, p95Ms: 9464, quality: 0.9071,
     note: 'full price: nothing cheaper measures good enough, and the receipt says so' },
 ] as const;
-// REAL frontier points per demo cluster, from packages/db/baseline/platform-frontiers.json
-// (masked names never enter the DOM). Regenerate when the baseline republishes.
-export const FIELD: Record<string, LandingPoint[]> = {
-  'classification': [
-    { label: 'or-████████', hash8: '220a2558', quality: 0.975, ci: 0, costPer1K: 0.0041, p95Ms: 3489 },
-    { label: 'or-deepseek-v4-flash-0731', hash8: '1fd419ee', quality: 0.9875, ci: 0, costPer1K: 0.0201, p95Ms: 10645 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.9875, ci: 0, costPer1K: 0.0263, p95Ms: 1080 },
-    { label: 'or-gpt-mini', hash8: '4e2fc860', quality: 0.9875, ci: 0, costPer1K: 0.0354, p95Ms: 1053 },
-    { label: 'or-gemini-3.7-flash', hash8: 'ffe46bc9', quality: 1, ci: 0, costPer1K: 0.358, p95Ms: 3367 },
-    { label: 'or-opus', hash8: '10b2d052', quality: 1, ci: 0, costPer1K: 0.5378, p95Ms: 2132 },
-  ],
-  'code-gen': [
-    { label: 'or-████████', hash8: '220a2558', quality: 0.9785, ci: 0, costPer1K: 0.0231, p95Ms: 15351 },
-    { label: 'or-ling-3.0-flash', hash8: 'e4263e18', quality: 0.5759, ci: 0, costPer1K: 0.1232, p95Ms: 12731 },
-    { label: 'or-deepseek', hash8: '6efe8a56', quality: 0.98, ci: 0, costPer1K: 0.1904, p95Ms: 15110 },
-    { label: 'or-nemotron-3.5-lightning', hash8: '238db164', quality: 0.7017, ci: 0, costPer1K: 0.2157, p95Ms: 12943 },
-    { label: 'or-gpt-mini', hash8: '4e2fc860', quality: 0.99, ci: 0, costPer1K: 0.2509, p95Ms: 4383 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.9961, ci: 0, costPer1K: 0.5506, p95Ms: 2372 },
-    { label: 'or-grok-4.6', hash8: 'e0a2f554', quality: 1, ci: 0, costPer1K: 6.2568, p95Ms: 44582 },
-  ],
-  'extraction': [
-    { label: 'or-████████', hash8: '220a2558', quality: 0.9497, ci: 0, costPer1K: 0.0216, p95Ms: 11097 },
-    { label: 'or-deepseek', hash8: '6efe8a56', quality: 0.9504, ci: 0, costPer1K: 0.1846, p95Ms: 11344 },
-    { label: 'or-gpt-mini', hash8: '4e2fc860', quality: 0.9454, ci: 0, costPer1K: 0.2537, p95Ms: 2990 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.947, ci: 0, costPer1K: 0.3343, p95Ms: 1379 },
-    { label: 'or-inkling-small', hash8: '07c9d6a7', quality: 0.9733, ci: 0, costPer1K: 0.5931, p95Ms: 14420 },
-    { label: 'or-gpt-full', hash8: '819f1ab8', quality: 0.9486, ci: 0, costPer1K: 1.2921, p95Ms: 2536 },
-    { label: 'or-gemini-3.7-flash', hash8: 'ffe46bc9', quality: 0.9587, ci: 0, costPer1K: 1.6493, p95Ms: 10919 },
-    { label: 'or-inkling', hash8: '8ad63a4e', quality: 0.9771, ci: 0, costPer1K: 1.7633, p95Ms: 6668 },
-    { label: 'or-opus', hash8: '10b2d052', quality: 0.9782, ci: 0, costPer1K: 3.6813, p95Ms: 3214 },
-  ],
-  'rag-answer': [
-    { label: 'or-████████', hash8: '220a2558', quality: 0.92, ci: 0, costPer1K: 0.0059, p95Ms: 4864 },
-    { label: 'or-ling-3.0-flash', hash8: 'e4263e18', quality: 0.96, ci: 0, costPer1K: 0.008, p95Ms: 1660 },
-    { label: 'or-deepseek-v4-flash-0731', hash8: '1fd419ee', quality: 0.98, ci: 0, costPer1K: 0.0273, p95Ms: 10095 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.94, ci: 0, costPer1K: 0.0455, p95Ms: 754 },
-    { label: 'or-inkling-small', hash8: '07c9d6a7', quality: 0.98, ci: 0, costPer1K: 0.0961, p95Ms: 1061 },
-  ],
-  'multi-step-reasoning': [
-    { label: 'or-████████', hash8: '220a2558', quality: 0.5, ci: 0, costPer1K: 0.0093, p95Ms: 7160 },
-    { label: 'or-deepseek-v4-flash-0731', hash8: '1fd419ee', quality: 0.98, ci: 0, costPer1K: 0.0304, p95Ms: 9702 },
-    { label: 'or-nemotron-3.5-lightning', hash8: '238db164', quality: 0.76, ci: 0, costPer1K: 0.0845, p95Ms: 2739 },
-    { label: 'or-gpt-full', hash8: '819f1ab8', quality: 0.56, ci: 0, costPer1K: 0.1482, p95Ms: 1126 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.66, ci: 0, costPer1K: 0.1656, p95Ms: 2293 },
-    { label: 'or-inkling-small', hash8: '07c9d6a7', quality: 0.92, ci: 0, costPer1K: 0.1906, p95Ms: 4009 },
-    { label: 'or-gemini-3.7-flash', hash8: 'ffe46bc9', quality: 1, ci: 0, costPer1K: 0.2929, p95Ms: 3242 },
-    { label: 'or-inkling', hash8: '8ad63a4e', quality: 0.94, ci: 0, costPer1K: 0.5657, p95Ms: 2449 },
-    { label: 'or-kimi-k3', hash8: '7b918ab8', quality: 0.96, ci: 0, costPer1K: 1.6482, p95Ms: 2422 },
-  ],
-  'creative': [
-    { label: 'or-ling-3.0-flash', hash8: 'e4263e18', quality: 0.4286, ci: 0, costPer1K: 3.8959, p95Ms: 43146 },
-    { label: 'or-laguna-s-2.1', hash8: '2e70d6e2', quality: 0.5571, ci: 0, costPer1K: 3.9706, p95Ms: 23248 },
-    { label: 'or-deepseek', hash8: '6efe8a56', quality: 0.8214, ci: 0, costPer1K: 4.0105, p95Ms: 22494 },
-    { label: 'or-nemotron-3.5-lightning', hash8: '238db164', quality: 0.4286, ci: 0, costPer1K: 4.0719, p95Ms: 15060 },
-    { label: 'or-haiku', hash8: '88ed8b9c', quality: 0.7429, ci: 0, costPer1K: 4.9024, p95Ms: 7786 },
-    { label: 'or-gemini-flash', hash8: '41a39732', quality: 0.7857, ci: 0, costPer1K: 5.2254, p95Ms: 3156 },
-    { label: 'or-gpt-full', hash8: '819f1ab8', quality: 0.8286, ci: 0, costPer1K: 5.5725, p95Ms: 6012 },
-    { label: 'or-gpt-mini', hash8: '4e2fc860', quality: 0.7929, ci: 0, costPer1K: 5.7032, p95Ms: 4978 },
-    { label: 'or-sonnet', hash8: '07b4dc72', quality: 0.9071, ci: 0, costPer1K: 7.56, p95Ms: 9464 },
-  ],
-};
+// REAL frontier points per demo cluster, DERIVED from the committed baseline
+// by scripts/gen-landing-evidence.ts. These rows used to be transcribed here
+// with ci: 0 on every point — the intervals were real in the baseline and
+// flattened to zero in the copy. They now carry their measured CIs.
+const DEMO_CLUSTERS = ['classification', 'code-gen', 'extraction', 'rag-answer', 'multi-step-reasoning', 'creative'] as const;
+export const FIELD: Record<string, GeneratedPoint[]> = Object.fromEntries(
+  DEMO_CLUSTERS.map((c) => [c, GENERATED_CLUSTERS[c]!.points]),
+);

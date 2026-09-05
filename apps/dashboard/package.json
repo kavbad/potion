@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "walkthrough": "tsx scripts/walkthrough.ts",
-    "lab-walkthrough": "tsx scripts/lab-walkthrough.ts"
+    "lab-walkthrough": "tsx scripts/lab-walkthrough.ts",
+    "gen:evidence": "tsx scripts/gen-landing-evidence.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.46",
