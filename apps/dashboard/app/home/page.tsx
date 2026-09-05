@@ -16,7 +16,7 @@ import { SiteShell } from '@/components/site-header';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Potion — the compiler for inference',
+  title: 'Potion — The Compiler for Inference',
 };
 
 export default function HomePage() {

@@ -32,9 +32,9 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL((process.env.POTION_APP_URL ?? 'https://withpotion.com').replace(/\/$/, '')),
-  title: 'Potion — the compiler for inference',
+  title: 'Potion — The Compiler for Inference',
   description:
-    'Your inference is unique. Your compiler should be too. Potion compiles an execution plan from your actual workload, quality bar, and economics — measured, receipted, versioned. OpenAI-compatible.',
+    'You set the quality bar. Potion measures every model on your actual work, then compiles the cheapest way to clear it — request by request, with a receipt on every answer. OpenAI-compatible.',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

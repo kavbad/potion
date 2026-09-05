@@ -597,7 +597,8 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
 
   // ======================= R1/R2 — THE PLAN =============================
   // GET /api/router — the org's compiled PLAN, MINTED as a versioned artifact.
-  // "Your inference is unique. Your compiler should be too."
+  // "The Compiler for Inference" — the landing page's headline since
+  // 2026-09-05; this endpoint is the thing it names.
   // The path keeps its /router spelling on purpose (a live wire contract the
   // 2026-09-04 rename does not get to break); the product's NAME is the
   // compiler. Assembly, hashing, minting, and change narration live in
