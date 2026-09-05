@@ -24,8 +24,8 @@
     "fengari": "^0.1.5",
     "fengari-interop": "^0.1.4",
     "ioredis-mock": "^8.13.1",
-    "msgpackr": "^2.0.5",
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "msgpackr": "^2.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   }
 }

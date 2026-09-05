@@ -14,8 +14,8 @@
     "@potion/core": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^2.0.5",
-    "typescript": "^5.5.4",
-    "@types/node": "^20.14.0"
+    "vitest": "^4.1.11",
+    "typescript": "^7.0.2",
+    "@types/node": "^26.4.1"
   }
 }

@@ -25,9 +25,9 @@
     "@potion/lab-runtime": "workspace:*",
     "@potion/lab-spec": "workspace:*",
     "@potion/custody": "workspace:*",
-    "@types/node": "^20.14.0",
-    "tsx": "^4.16.2",
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   }
 }

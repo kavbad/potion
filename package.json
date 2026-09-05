@@ -40,12 +40,12 @@
     "@potion/server": "workspace:*",
     "@potion/strategies": "workspace:*",
     "@potion/workers": "workspace:*",
-    "@types/node": "^20.14.0",
-    "eslint": "^9.8.0",
-    "tsx": "^4.16.2",
-    "typescript": "^5.5.4",
-    "typescript-eslint": "8.65.0",
-    "vitest": "^2.0.5"
+    "@types/node": "^26.4.1",
+    "eslint": "^10.9.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "8.69.0",
+    "vitest": "^4.1.11"
   },
   "pnpm": {
     "overrides": {
