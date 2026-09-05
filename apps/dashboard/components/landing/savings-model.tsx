@@ -4,7 +4,7 @@
 //
 // Two inputs a buyer already understands: how much you spend on AI, and how
 // good the answers have to be. Everything else is computed from the committed
-// frontier using the router's real min_cost rule (lib/economics.ts), so this
+// frontier using the compiler's real min_cost rule (lib/economics.ts), so this
 // is a model of measured points, not a marketing calculator with invented
 // multipliers.
 //

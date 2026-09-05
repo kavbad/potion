@@ -511,7 +511,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const entry = ctx.prices.entries.find((e) => e.alias === body.model || e.model === body.model);
       const orgRow = await getOrgById(ctx.db.db, auth.org.orgId);
       // R1 (Router direction, 2026-08-27): `potion/<slug>` is the org's
-      // NAMED router — an exact alias of potion-auto, resolved only against
+      // NAMED model id — an exact alias of potion-auto, resolved only against
       // the caller's own org (never a lookup across tenants). The right name
       // routes; a wrong potion/* name is a 400 that says the right one.
       if (entry === undefined && body.model.startsWith('potion/')) {
@@ -522,7 +522,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           await logRequest({ ...logBase, status: 'unknown_model', latencyMs: elapsed() });
           return reply.code(400).send(
             openAiError(
-              `unknown router '${body.model}' — this org's router is '${routerName}' (or use 'potion-auto', the same thing)`,
+              `unknown model '${body.model}' — this org's model id is '${routerName}' (or use 'potion-auto', the same thing)`,
               'invalid_request_error',
               'unknown_model',
               'model',

@@ -15,8 +15,9 @@ fast. Throw those away. What remains is the **Pareto frontier** — the short li
 you only ever trade up: every step along it buys measurably more quality for measurably more money.
 Nothing on the frontier is a bad deal; nothing off it is worth buying.
 
-A router chooses a model by guesswork. Potion chooses a point on a measured frontier — so when you
-spend more, you can see exactly what the extra money bought.
+A router picks a road; a compiler designs the route. A router chooses a model by guesswork. Potion
+compiles a plan around a point on a measured frontier — so when you spend more, you can see exactly
+what the extra money bought.
 
 ## How it's computed
 

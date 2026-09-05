@@ -139,7 +139,7 @@ function BirthSequence({ body }: { body: GenerateResponse }) {
     {
       k: 'brain, per step',
       v: basis
-        ? `your router picks per step · anchor: frontier v${basis.frontierVersion} · strategy ${(basis.strategyHash ?? '').slice(0, 8)}`
+        ? `your compiler picks per step · anchor: frontier v${basis.frontierVersion} · strategy ${(basis.strategyHash ?? '').slice(0, 8)}`
         : '—',
     },
     ...(mission?.kind === 'task' && mission.doneDefinition !== undefined

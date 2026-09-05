@@ -213,21 +213,21 @@ export default async function DocsPage() {
         </p>
         <p className="text-xs leading-relaxed text-faint">
           You do not bring provider keys. Potion serves every request from its own, across
-          providers — which is also what lets the router reach the whole catalogue rather than the
+          providers — which is also what lets the compiler reach the whole catalogue rather than the
           one account you happened to have.
         </p>
       </Section>
 
       <Section id="model" title="The model field means what it says">
         <p className="text-sm leading-relaxed text-soft">
-          <span className="font-medium text-ink">Your router has a name</span>:{' '}
+          <span className="font-medium text-ink">Your plan has a name</span>:{' '}
           <code className="font-mono text-xs">potion/&lt;your-org&gt;</code> — shown on your{' '}
-          <a href="/router" className="text-accent underline">Router page</a> and first in{' '}
+          <a href="/" className="text-accent underline">Compiler page</a> and first in{' '}
           <code className="font-mono text-xs">GET /v1/models</code>. It is the model id to put in
-          your code: Potion compiles that router from your workload, quality bar, and the measured
+          your code: Potion compiles that plan from your workload, quality bar, and the measured
           frontiers, versions it as the evidence moves, and your receipts name the version each
           request rode. <code className="font-mono text-xs">potion-auto</code> is the plain alias —
-          the two route identically.
+          the two serve identically.
         </p>
         <p className="text-sm leading-relaxed text-soft">
           Three cases, no surprises. <code className="font-mono text-xs">potion/&lt;your-org&gt;</code>{' '}
@@ -253,7 +253,7 @@ export default async function DocsPage() {
       <Section id="trace" title="The decision header">
         <p className="text-sm leading-relaxed text-soft">
           Every response carries <code className="font-mono text-xs">x-frontier-trace</code>, which
-          is the routing decision in full. A router you cannot audit is a router you cannot trust,
+          is the serving decision in full. A compiler you cannot audit is a compiler you cannot trust,
           so this ships on every request rather than behind a debug flag.
         </p>
         <CopyBlock
@@ -307,9 +307,9 @@ export default async function DocsPage() {
         <p className="text-sm leading-relaxed text-soft">
           <code className="font-mono text-xs text-ink">request_id</code> is the{' '}
           <code className="font-mono text-xs">id</code> every completion already carries. Potion
-          looks up the request you were served, copies its cluster, strategy and router version onto
+          looks up the request you were served, copies its cluster, strategy and plan version onto
           the outcome at ingest, and the evidence shows up on your{' '}
-          <a href="/router" className="text-accent underline">router</a> as your app&rsquo;s verdicts
+          <a href="/" className="text-accent underline">Compiler page</a> as your app&rsquo;s verdicts
           — on its own scale, never averaged into judge scores.
         </p>
         <CopyBlock
@@ -344,8 +344,8 @@ export default async function DocsPage() {
         <p className="border border-[#d9d5cb] bg-[#fbfaf7] px-4 py-3 text-sm leading-relaxed text-soft">
           <span className="text-xs uppercase tracking-wide text-faint">Why it is worth the ten minutes</span>
           <br />
-          Outcomes are the only signal that can move routing on evidence a judge cannot produce. Wire
-          one validator you already run and the router starts optimising for the thing you actually
+          Outcomes are the only signal that can move the compiler on evidence a judge cannot produce.
+          Wire one validator you already run and it starts optimising for the thing you actually
           care about, instead of the thing a rubric can see.
         </p>
       </Section>
@@ -380,16 +380,16 @@ export default async function DocsPage() {
 
       <Section id="first-weeks" title="The first two weeks">
         <p className="text-sm leading-relaxed text-soft">
-          <span className="font-medium text-ink">Your router works on day one</span> — v1 routes
+          <span className="font-medium text-ink">Your plan works on day one</span> — v1 serves
           every request on Potion&rsquo;s own live measurements, under your quality bar. Then, over
           your first week or two of traffic, Potion reads a small, redacted, capped sample of your
           requests (an explicit setting, off with one switch) and measures models on{' '}
           <em>your</em> actual work. When coverage fills for a kind of work, Potion{' '}
           <span className="font-medium text-ink">proposes your own quality bar</span> for it — you
-          accept or ignore; nothing changes silently. Each accepted bar recompiles your router as a
+          accept or ignore; nothing changes silently. Each accepted bar recompiles your plan as a
           new version with the change written on it. Starting from scratch, with no incumbent to
           measure against, the arc is identical — your work is measured against a strong default
-          bar instead. The <a href="/router" className="text-accent underline">Router page</a>{' '}
+          bar instead. The <a href="/" className="text-accent underline">Compiler page</a>{' '}
           shows live where you are in this arc.
         </p>
       </Section>

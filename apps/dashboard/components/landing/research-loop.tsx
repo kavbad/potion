@@ -17,7 +17,7 @@ const STATIONS: Array<{ x: number; label: string; accent?: boolean }> = [
   { x: 143, label: 'replay' },
   { x: 234, label: 'audition' },
   { x: 325, label: 'publish' },
-  { x: 416, label: 'route', accent: true },
+  { x: 416, label: 'serve', accent: true },
 ];
 
 export function ResearchLoop() {
@@ -28,7 +28,7 @@ export function ResearchLoop() {
       </div>
       <div className="px-5 py-6 sm:px-7">
         <svg viewBox="0 0 468 132" className="w-full" role="img" fontFamily={MONO}
-          aria-label="Potion's weekly research loop: measure, replay, audition, publish, route; receipts feed the next measurement">
+          aria-label="Potion's weekly research loop: measure, replay, audition, publish, serve; receipts feed the next measurement">
           <defs>
             <marker id="rlk" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto">
               <path d="M0 0.5 L7 4 L0 7.5" fill="none" stroke={INK} strokeWidth="1" />

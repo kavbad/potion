@@ -296,7 +296,7 @@ the evidence moves. "A compiler or optimizer for inference" is only credible
 if the optimizer has measurements; we are the ones with the instrument.
 
 **3. The honest scorecard (2026-08-28), by the doctrine's own checklist:**
-- STRONG (and hard to fake): model management (the router), permissions &
+- STRONG (and hard to fake): model management (the compiler), permissions &
   governance (evidence-earned autonomy, custody, before-external-action),
   observability (durable checkpoints, receipts, traces), reliability
   primitives (fences, replay, fuel hard stop, stall law), prompt/spec

@@ -2,7 +2,7 @@
 //
 // Under EXPLICIT consent (default off, rate capped, always visible on the
 // Savings page), a small randomized slice of eligible requests serves the
-// org's NAMED incumbent instead of the router's pick. Two things nothing
+// org's NAMED incumbent instead of the compiler's pick. Two things nothing
 // else can provide come from that slice:
 //   · the LIVE BASELINE verified savings are measured against — measured
 //     actuals on both sides, the billing basis pricing v2's

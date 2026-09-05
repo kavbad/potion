@@ -147,7 +147,7 @@ export function bootGateReport(env: BootEnvView, providerMode: 'live' | 'mock'):
       : {}),
   });
 
-  // ---- what the router will actually call ----
+  // ---- what the compiler will actually call ----
   rows.push({
     name: 'provider mode',
     state: providerMode === 'live' ? 'LIVE — real providers, real spend' : 'mock — no external calls, no spend',

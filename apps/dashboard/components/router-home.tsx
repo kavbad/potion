@@ -1,11 +1,15 @@
 'use client';
 
-// THE ROUTER HOME (signed-in redesign, 2026-08-27). One protagonist: the
-// router. Opening Potion reads, in order — who your router is, what it
+// THE COMPILER HOME (signed-in redesign, 2026-08-27). One protagonist: the
+// compiler. Opening Potion reads, in order — what your plan is, what it
 // saved, what needs you, what changed, how to steer it, how it decides,
 // and every version it has been. Nothing here appears twice elsewhere;
 // every element states money, needs a decision, invites play, or shows
 // evidence. The old Today/Router split is gone.
+//
+// NAMING (2026-09-04): the product is a COMPILER; the artifact it emits is
+// your PLAN. The `router*` symbols and /api/router path below are storage and
+// wire spellings, deliberately left alone — see docs/NAMING.md.
 //
 // Taste rules (operator brief, 2026-08-27): typography carries the header —
 // no boxes above the fold; ONE hero number; the composition is a single
@@ -356,7 +360,7 @@ export function RouterHome({
       <header>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="font-mono text-[1.9rem] font-semibold tracking-[-0.02em] text-ink sm:text-[2.2rem]">
-            {router?.name ?? conn.router?.name ?? 'your router'}
+            {router?.name ?? conn.router?.name ?? 'your plan'}
           </h1>
           {router && (
             <span className="border border-accent px-2 py-0.5 font-mono text-[11.5px] uppercase tracking-[0.08em] text-accent">
@@ -438,7 +442,7 @@ export function RouterHome({
         <>
           {/* ============ pre-traffic: ready for its first request ============ */}
           <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-soft">
-            Your router is compiled and waiting for its first request. Point your client at it —
+            Your plan is compiled and waiting for its first request. Point your client at it —
             everything below is the whole integration.
           </p>
 

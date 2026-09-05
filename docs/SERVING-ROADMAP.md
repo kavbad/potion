@@ -309,7 +309,8 @@ identical.
 listed every alias like `potion-auto`, implying you could pick one. You cannot
 — `body.model` is a **label**, and the strategy comes from cluster + policy +
 frontier. A test now proves it by sending two different `model` values and
-requiring the same resolved strategy. Each entry carries `potion.role` and
+requiring the same resolved strategy. Each entry carries `potion.role` (the
+plan's own entries say `compiler` since the 2026-09-04 rename) and
 `potion.measured`; the OpenAI fields are untouched.
 
 The benchmarks refusal is now **pinned by test**, not just stated: adding it

@@ -938,7 +938,7 @@ export type AlertEvent =
   // human — a challenger proved on this org's own traffic, or a discovered
   // workload finished measuring and can be routed. Everything the evidence
   // plane earns is inert until someone accepts it, and until now the only
-  // way to discover that was to visit the router page. Same TS-only
+  // way to discover that was to visit the Compiler page. Same TS-only
   // widening as the events above (alert_rules.events is text[], no DB
   // CHECK), so no migration.
   | 'evidence_ready';

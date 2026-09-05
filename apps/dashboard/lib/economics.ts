@@ -2,8 +2,8 @@
 //
 // Every (quality, cost) pair below is a REAL measured point from the committed
 // platform frontier — packages/db/baseline/platform-frontiers.json, the same
-// evidence the router selects from. The page computes savings in the browser
-// from these rows using the router's real min_cost rule, so the number a
+// evidence the compiler selects from. The page computes savings in the browser
+// from these rows using the compiler's real min_cost rule, so the number a
 // visitor sees is derived, never typed.
 //
 // Recompute after any campaign that republishes the baseline: see the script
@@ -54,7 +54,7 @@ export interface ClusterSaving {
 }
 
 /**
- * The router's real min_cost rule, applied at a floor: cheapest point at or
+ * The compiler's real min_cost rule, applied at a floor: cheapest point at or
  * above the floor, compared against the highest-quality point.
  *
  * Returns `unmet` when nothing clears the floor — which the page renders

@@ -117,7 +117,7 @@ export function ReceiptsLedger() {
                       {r.servedModel ?? (r.strategy ? r.strategy.slice(0, 8) : '—')}
                       {r.policyType === 'pinned' && <> <Stamp kind="pinned">pinned</Stamp></>}
                       {r.fallback === 1 && <span className="text-faint"> · default (not measured yet)</span>}
-                      {r.routerVersion !== null && <span className="font-mono text-[12px] text-faint"> · router v{r.routerVersion}</span>}
+                      {r.routerVersion !== null && <span className="font-mono text-[12px] text-faint"> · plan v{r.routerVersion}</span>}
                     </>
                   ) : (
                     <span className="text-warn">{r.status}</span>
@@ -152,7 +152,7 @@ export function ReceiptsLedger() {
         <p className="mt-5 font-mono text-[12px] leading-relaxed text-faint">
           {data.summary.routed} of {data.summary.withRoutingDecision} recent requests routed on a measured frontier
           {data.summary.defaulted > 0 ? ` · ${data.summary.defaulted} served the default` : ''}
-          {data.router ? <> · served by <a href="/router" className="text-accent underline">{data.router.name} v{data.router.version}</a></> : ''} · rows read back from each response&rsquo;s own trace.
+          {data.router ? <> · served by <a href="/" className="text-accent underline">{data.router.name} v{data.router.version}</a></> : ''} · rows read back from each response&rsquo;s own trace.
         </p>
       )}
     </div>

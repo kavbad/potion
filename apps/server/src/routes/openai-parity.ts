@@ -108,7 +108,7 @@ function registerModelsRoute(app: FastifyInstance, ctx: PotionContext): void {
     // exists to remove. Falls back to the boot table if the read fails.
     const catalogue = await liveCatalogue(ctx);
     const routable = new Set(await routableAliases(ctx));
-    // R1: the org's NAMED router — same router, your name on it.
+    // R1: the org's NAMED model id — the same compiler, your name on it.
     const orgRow = await getOrgById(ctx.db.db, auth.org.orgId);
     const routerId = routerModelName(orgRow?.name ?? 'org');
     return {
@@ -120,10 +120,13 @@ function registerModelsRoute(app: FastifyInstance, ctx: PotionContext): void {
           created,
           owned_by: 'potion',
           potion: {
-            role: 'router',
+            // 2026-09-04: 'router' retired as a name for Potion. This value is
+            // customer-visible in /v1/models; models-catalog.test.ts and
+            // router.test.ts pin it.
+            role: 'compiler',
             note:
-              `Your router — an exact alias of potion-auto, compiled from your policy and ` +
-              `the measured frontiers. Inspect it in the dashboard under Router.`,
+              `Your plan — an exact alias of potion-auto, compiled from your policy and ` +
+              `the measured frontiers. Inspect it in the dashboard under Compiler.`,
           },
         },
         {
@@ -132,7 +135,7 @@ function registerModelsRoute(app: FastifyInstance, ctx: PotionContext): void {
           created,
           owned_by: 'potion',
           potion: {
-            role: 'router',
+            role: 'compiler',
             note:
               'The only id that means anything here. Potion picks the model (or ' +
               'combination) per request from your policy and the measured frontier; ' +

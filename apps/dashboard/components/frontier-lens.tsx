@@ -4,7 +4,7 @@
 //
 // The playground below lets you chat against frontier points you already
 // chose. This is the missing front half: paste the prompt you actually have,
-// and see what the ROUTER would see — which kind of work it reads as, how
+// and see what the COMPILER would see — which kind of work it reads as, how
 // sure it is, what else it nearly was, and the measured frontier for that
 // work with every real point on it. It is /api/plan (the same call behind
 // the /build flow) with the prompt as a SAMPLE, so the classification is the
@@ -97,7 +97,7 @@ export function FrontierLens() {
       <div>
         <h2 className="text-sm font-medium text-ink">What would Potion do with this?</h2>
         <p className="mt-1 text-xs leading-relaxed text-faint">
-          Paste a real prompt. You see exactly what the router sees — the kind of work it reads,
+          Paste a real prompt. You see exactly what the compiler sees — the kind of work it reads,
           and the measured frontier for it. Nothing is sent to a model; classification only.
         </p>
       </div>

@@ -56,7 +56,7 @@ export function EvidenceBand() {
             <span className="font-medium text-[#efece4]">{CODE_GEN.ratio}-fold</span>.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-[#d6d3cb]">
-            This is why routing pays: most kinds of work are served from the bottom row, a few genuinely need
+            This is why the compiler pays: most kinds of work are served from the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
           <p className="mt-6 font-mono text-[12px] leading-relaxed text-[#a8a29e]">
@@ -92,7 +92,7 @@ export function EvidenceBand() {
                 </div>
                 {star && (
                   <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-accent">
-                    ↑ the routed pick — {CODE_GEN.qualityRetainedPct}% of the top row&apos;s quality at{' '}
+                    ↑ the compiled pick — {CODE_GEN.qualityRetainedPct}% of the top row&apos;s quality at{' '}
                     {CODE_GEN.ratioWords}. The name? That&apos;s the product.
                   </p>
                 )}

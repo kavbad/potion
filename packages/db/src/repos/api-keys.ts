@@ -156,7 +156,7 @@ export function isInternalPolicyRow(row: Pick<PolicyRow, 'id' | 'name'>): boolea
     row.id.startsWith('pol-lab-') ||
     // The onboarding interpret call's ephemeral-key policy (floor ZERO) —
     // the row that actually hit the operator: EVERY org that described its
-    // product minted one as its FIRST policy, and router page, connection
+    // product minted one as its FIRST policy, and Compiler page, connection
     // page and key mint all read it as the org's rule.
     row.id.startsWith('pol-onb-') ||
     row.name === 'lab-io' ||

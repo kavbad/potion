@@ -278,7 +278,7 @@ export function FrontierExplorer() {
         <p className="mt-2.5 font-sans text-[12px] leading-relaxed text-faint">
           Real measured points, quoted from the committed frontier; hover any point for its name and
           numbers. The cheapest row costs under a cent per 1k and measures 0.50, a coin flip, which
-          is why the router will not send reasoning work there: cheap only wins where the measurement
+          is why the compiler will not send reasoning work there: cheap only wins where the measurement
           clears your floor. Try <span className="font-mono">latency_bound</span> at 2,500 ms; the answer changes.
         </p>
       </div>

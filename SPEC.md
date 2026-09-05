@@ -603,7 +603,7 @@ _(renumbered from 0013: request_logs_policy took 0013 in M4 #30)_
   scale; never blended with serve-judge or suite-measured numbers), 30-day window, exact
   Jeffreys binomial over success verdicts + generalized Jeffreys over scores for the SERVING
   strategy, human-signal counts, other-strategy signals counted (never ranked). Rides
-  `RouterAssignment.outcomes` → GET /api/router → the router page's "your app's verdicts"
+  `RouterAssignment.outcomes` → GET /api/router → the Compiler page's "your app's verdicts"
   sub-row. Display-only: excluded from routerHash, so outcome churn never mints a version.
 - OBSERVATIONAL, by contract: routing chose which requests each strategy saw — outcome
   evidence is monitoring/evaluation, not causal proof; the randomized incumbent holdout

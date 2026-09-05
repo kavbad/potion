@@ -160,7 +160,7 @@ export function buildEndpointSnippets(baseUrl: string, policy: Policy, routerMod
     `  apiKey: process.env.POTION_API_KEY, // your pk_... key\n` +
     `});\n\n` +
     `const res = await client.chat.completions.create({\n` +
-    `  model: '${routerModel}', // your router, by name ('potion-auto' is the plain alias)\n` +
+    `  model: '${routerModel}', // your plan, by name ('potion-auto' is the plain alias)\n` +
     `  messages: [{ role: 'user', content: 'Write a python function that reverses a string' }],\n` +
     `});\n` +
     `console.log(res.choices[0].message.content);`;
@@ -595,10 +595,12 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     return reply.send({ policy, ...buildEndpointSnippets(baseUrlOf(req), policy, routerModelName(snippetOrg?.name ?? 'org')) });
   });
 
-  // ======================= R1/R2 — THE ROUTER ===========================
-  // GET /api/router — the org's router, MINTED as a versioned artifact.
-  // "Your inference is unique. Your router should be too."
-  // Assembly, hashing, minting, and change narration live in
+  // ======================= R1/R2 — THE PLAN =============================
+  // GET /api/router — the org's compiled PLAN, MINTED as a versioned artifact.
+  // "Your inference is unique. Your compiler should be too."
+  // The path keeps its /router spelling on purpose (a live wire contract the
+  // 2026-09-04 rename does not get to break); the product's NAME is the
+  // compiler. Assembly, hashing, minting, and change narration live in
   // routing/compile-router.ts — ONE compiler shared with the receipts'
   // attribution path (routes/connection.ts), so the two can never disagree.
   app.get('/api/router', async (req, reply) => {
@@ -724,7 +726,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
     const assignments = await assignmentsUnderPolicy(ctx, db, orgId, revealPolicy, (m) => app.log.warn(m));
     const expected = await expectedForMix(db, orgId, assignments, mix, (await getOrgIncumbents(db, orgId))?.models[0]);
     // The interpretation changed the document — mint the version now so the
-    // reveal and the Router page agree from the first second.
+    // reveal and the Compiler page agree from the first second.
     const compiled = await compileAndMintRouter(ctx, db, orgId, (m) => app.log.warn(m));
 
     return reply.send({

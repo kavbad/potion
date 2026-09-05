@@ -1,6 +1,6 @@
 'use client';
 
-// THE ROUTER ARC (comprehension pass, 2026-08-27): the one story every user
+// THE COMPILER ARC (comprehension pass, 2026-08-27): the one story every user
 // must be able to tell back — "it routes from day one on platform evidence;
 // it reads my traffic for a week or two; then it becomes mine, and I can
 // verify it." Operator directive: the user must understand how the product
@@ -40,7 +40,7 @@ export function RouterArc({ hasTraffic }: { hasTraffic: boolean }) {
 
   const steps: Array<{ title: string; body: React.ReactNode }> = [
     {
-      title: 'Day one — your router works immediately',
+      title: 'Day one — your plan works immediately',
       body: (
         <>
           v1 is compiled from Potion&rsquo;s own live measurements, under your quality bar. You are
@@ -56,7 +56,7 @@ export function RouterArc({ hasTraffic }: { hasTraffic: boolean }) {
           {consentOff ? (
             <>
               Workload measurement is <span className="text-ink">off</span> in your settings — the
-              router keeps routing on platform evidence, and this step waits until you turn{' '}
+              compiler keeps serving on platform evidence, and this step waits until you turn{' '}
               <Link href="/settings/controls" className="text-accent underline">measurement on</Link>.
             </>
           ) : (
@@ -83,12 +83,12 @@ export function RouterArc({ hasTraffic }: { hasTraffic: boolean }) {
       ),
     },
     {
-      title: 'Then — the router becomes yours',
+      title: 'Then — the plan becomes yours',
       body: (
         <>
           When coverage fills for a kind of work, Potion <span className="text-ink">proposes your
           own quality bar for it</span> — and, where your traffic proves a cheaper route holds that
-          bar, <span className="text-ink">a router built from your own measurements</span>. Potion
+          bar, <span className="text-ink">a plan built from your own measurements</span>. Potion
           also finds the kinds of work the standard taxonomy cannot see inside your traffic and
           offers to route them separately. You accept or ignore; nothing changes silently, and
           every acceptance is reversible.
@@ -107,7 +107,7 @@ export function RouterArc({ hasTraffic }: { hasTraffic: boolean }) {
         <>
           Every response carries a receipt: what routed, what it cost, what your alternative would
           have cost. <Link href="/receipts" className="text-accent underline">Receipts</Link> name
-          the router version that served each request;{' '}
+          the plan version that served each request;{' '}
           <Link href="/usage" className="text-accent underline">Savings</Link> totals it up. That
           total is an <span className="text-ink">estimate</span> until you switch on a live
           baseline — a small slice of traffic served by your old model, which turns the estimate

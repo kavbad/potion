@@ -212,7 +212,7 @@ export function FrontierChart({ data }: { data: FrontierResponse }) {
 // ---------------------------------------------------------------------------
 // WHY THIS POINT (2026-08-25, operator question rendered as product: "why are
 // we using the most expensive model based on the chart"). The marker is
-// selectPoint(policy) — the router obeying the org's own rule — but the chart
+// selectPoint(policy) — the compiler obeying the org's own rule — but the chart
 // compresses thousandths of quality into one visual band, so a max-quality
 // pick LOOKS like buying the same quality for more money. The page must say
 // what the rule chose and what the alternative costs; a chart that leaves the

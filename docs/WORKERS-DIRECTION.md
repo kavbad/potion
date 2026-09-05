@@ -216,7 +216,7 @@ operator promotes it from the Improve inbox.*
   transactions/compensate wait for a worker that needs them.
 - **Inference objectives per node** = the dialPolicy slot system
   generalized (brain/tools/judge slots already ship; nodes declare
-  quality/latency/cost envelopes and the router compiles the strategy).
+  quality/latency/cost envelopes and the compiler emits the strategy).
 - Machinery view renders the compiled graph (visualize, not author).
 
 *Surface proof: the same worker, same behavior, now explainable node-by-

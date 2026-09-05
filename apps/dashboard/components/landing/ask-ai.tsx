@@ -30,7 +30,7 @@ import { useState } from 'react';
 /** The question, in the visitor's voice — a task, not a quiz. */
 export const ASK_PROMPT =
   'Read withpotion.com and tell me what Potion does. Then be skeptical: ' +
-  'for a team spending real money on LLM APIs, is measured model routing worth it, ' +
+  'for a team spending real money on LLM APIs, is a measured inference compiler worth it, ' +
   'and what would you check before believing their savings numbers?';
 
 interface Assistant {

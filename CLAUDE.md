@@ -10,6 +10,15 @@ Next dashboard (`apps/dashboard`), packages for providers/strategies/
 harness/cluster/pareto/db/workers/etc. Repo: `~/Projects/potion` (git;
 history starts at the M1b-complete baseline commit).
 
+## Naming (2026-09-04, operator directive — read docs/NAMING.md)
+
+**Potion is a COMPILER, never a router — internally and externally.** Tagline:
+*The Compiler for Inference*. A router picks a road; a compiler designs the
+route. What Potion emits, per org and versioned, is the **plan** (shipped as
+the model id `potion/<org>`). Storage and wire spellings (`router_versions`,
+`routerVersion`, `/api/router`, `compileAndMintRouter`) are deliberately NOT
+renamed — `docs/NAMING.md` says why and lists them.
+
 ## Positioning (2026-08-06)
 
 Potion is a quality guarantee, not a router. Generic selection is a free

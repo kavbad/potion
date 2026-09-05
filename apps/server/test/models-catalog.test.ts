@@ -62,15 +62,15 @@ async function models() {
 }
 
 describe('the list says what each id actually IS', () => {
-  it('marks potion-auto as the router and says the other ids are labels', async () => {
+  it('marks potion-auto as the compiler and says the other ids are labels', async () => {
     const auto = (await models()).find((m) => m.id === 'potion-auto')!;
-    expect(auto.potion?.role).toBe('router');
+    expect(auto.potion?.role).toBe('compiler');
     expect(auto.potion?.note).toMatch(/label/i);
   });
 
   it('marks every catalogue entry as catalogue, NOT as something to select', async () => {
     // R1: both router ids (potion-auto and the org's potion/<slug>) are
-    // role 'router'; everything else stays catalogue.
+    // role 'compiler'; everything else stays catalogue.
     const rest = (await models()).filter((m) => m.id !== 'potion-auto' && !m.id.startsWith('potion/'));
     expect(rest.length).toBeGreaterThan(0);
     expect(rest.every((m) => m.potion?.role === 'catalog')).toBe(true);

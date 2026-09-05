@@ -110,7 +110,7 @@ snapshot.
 - **Escalation law:** a verify failure or low judge score triggers ONE retry
   of the failing step at a stronger operating point on the frontier, within
   fuel. This is the first place harness strategy visibly rides measured
-  evidence — the escalation target is chosen from the same curve the router
+  evidence — the escalation target is chosen from the same curve the compiler
   serves from. Ceremony applies.
 
 **Demo:** poison one source (a claim its page doesn't support); the brief
@@ -161,14 +161,14 @@ Feedback on deliverables becomes evidence, the way approvals on actions
 already are: act / edit / dismiss per item, distilled into durable
 preference rules — visible in the machinery, attributed ("learned from your
 edits, 2026-09-xx"), revocable. Weeks of use compound into a worker nobody
-could hire off the shelf; the personalization moat, same story as the router.
+could hire off the shelf; the personalization moat, same story as the compiler.
 
 **Demo:** dismiss crypto items three days running; day four's brief
 deprioritizes them and cites the learned rule — which you can delete.
 
 ### P8 — "It multiplies."
 Fan-out: a check decomposes into bounded sub-runs (one per entity), each
-routed by its own kind of work — the router shining per sub-task — then a
+routed by its own kind of work — the compiler shining per sub-task — then a
 synthesis pass; parent fuel bounds the whole tree; one tree, one trace.
 
 **Demo:** six companies researched in parallel sub-runs, six receipts, one
@@ -497,7 +497,7 @@ truly fired / the receipts truly joined):
 
 - **P-1 the routing dividend (SEE):** every run summary computes, from its
   own receipts, "this run: $0.04 · the premium path would have been $1.87";
-  step rows name the kind of work they rode. The router moat becomes
+  step rows name the kind of work they rode. The compiler moat becomes
   visible inside every agent run.
 - **P-2 law moments (FEEL):** when a law fires — hard stop, redaction,
   sandbox egress refusal, stall kill — a quiet feed line says so in house

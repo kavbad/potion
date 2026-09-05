@@ -1,4 +1,4 @@
-// WHICH NUMBER LEADS THE ROUTER PAGE, and why it is allowed to.
+// WHICH NUMBER LEADS THE COMPILER PAGE, and why it is allowed to.
 //
 // The history matters, because this rule has been reversed once and the
 // reasoning has to survive the next reversal:

@@ -42,11 +42,11 @@ const VERIFY = `## Verify
 export function block(s: Situation, baseUrl: string, routerModel = 'potion-auto'): string {
   const head = `# Route this app's AI requests through Potion
 
-You are integrating Potion, a measured model router with an OpenAI-compatible API.
+You are integrating Potion, a measured inference compiler with an OpenAI-compatible API.
 Base URL: ${baseUrl}/v1
 Key: read \`POTION_API_KEY\` from the environment. Do not ask for it, do not echo it; if it is unset at runtime, fail with a clear message BEFORE constructing a client. This matters: the OpenAI SDKs silently fall back to \`OPENAI_API_KEY\` and \`OPENAI_BASE_URL\` when given undefined, so an app migrating off OpenAI with those still set would quietly keep sending traffic to OpenAI while believing it is on Potion. Always pass both \`apiKey\` and \`baseURL\` explicitly.
 Retries: the SDK's default retries (on 408/409/429/5xx and connection errors) are safe to keep — those responses are refused before any model runs, so nothing is billed twice. A 200 is billed once.
-Model: \`${routerModel}\`${routerModel === 'potion-auto' ? " (or the org's NAMED router id \`potion/<org-slug>\` — shown on the dashboard's Router page; both route identically)" : " — this org's NAMED router (\`potion-auto\` is the plain alias; both route identically)"}. Routing is decided by the rule bound to the key, never by this field; the field is echoed back and recorded with the request as a label, so an existing per-tier label (e.g. \`fast\`, \`best\`) may be passed through unchanged as a free tag. The receipt (below) shows what answered.
+Model: \`${routerModel}\`${routerModel === 'potion-auto' ? " (or the org's NAMED model id \`potion/<org-slug>\` — shown on the dashboard's Compiler page; both serve identically)" : " — this org's NAMED model id (\`potion-auto\` is the plain alias; both serve identically)"}. Execution is decided by the rule bound to the key, never by this field; the field is echoed back and recorded with the request as a label, so an existing per-tier label (e.g. \`fast\`, \`best\`) may be passed through unchanged as a free tag. The receipt (below) shows what answered.
 Base URL: your Potion origin plus \`/v1\` — put it in \`POTION_BASE_URL\` (default \`${baseUrl}/v1\`) so it can be changed without a code edit (inside a private network the origin differs).
 ${RECEIPT}
 `;
@@ -66,7 +66,7 @@ ${VERIFY}`;
       return `${head}
 ## Steps
 1. Find the gateway's base URL and key in config/env (e.g. \`OPENROUTER_API_KEY\`, \`*_BASE_URL\`). Replace the base URL with \`${baseUrl}/v1\` and the key with \`POTION_API_KEY\`. Do not delete the old values; comment them so the human can roll back.
-2. Replace every hard-coded provider model id (e.g. \`openai/gpt-4.1\`, \`anthropic/claude-...\`) with \`${routerModel}\`. If the app lets users pick a model or tier: keep the control and pass its value through as the model label (it is recorded as a tag, not used for routing), and leave a one-line note for the human that routing now follows the key's rule; a per-request \`x-potion-policy\` header is the supported way to vary behaviour per tier.
+2. Replace every hard-coded provider model id (e.g. \`openai/gpt-4.1\`, \`anthropic/claude-...\`) with \`${routerModel}\`. If the app lets users pick a model or tier: keep the control and pass its value through as the model label (it is recorded as a tag, not used for selection), and leave a one-line note for the human that execution now follows the key's rule; a per-request \`x-potion-policy\` header is the supported way to vary behaviour per tier.
 3. Comment out gateway-specific headers (referer/title/ranking headers) like the other old values; Potion ignores them.
 4. Keep streaming and tool-call code exactly as it is.
 5. Read the receipt with \`.withResponse()\` (JS) / \`with_raw_response\` (Python), as above.
