@@ -29,7 +29,7 @@ import { generateAgenda, generateCatalogueAgenda, type AgendaCandidate, type Cat
 import { assemblePieceIssue, auditPieceNumbers, deterministicPiece } from './piece.js';
 import { auditDraftCounts, auditVagueRatios, normalizeDraftText, redactFactsForWriter } from './delta.js';
 import { parseVerdict } from './auditor.js';
-import { auditRepetition, lintDraft } from './lint.js';
+import { auditMixingVerdicts, auditRepetition, lintDraft } from './lint.js';
 import { assembleIssue, writeIssue } from './publish.js';
 import { publishActionId, publishArgsHash } from './publisher.js';
 import { loadReplaysFromStore, type StoreLike } from './replay-source.js';
@@ -346,7 +346,7 @@ export async function frontierNotesTick(io: ClockIO): Promise<string | null> {
     const violation =
       parsed === null
         ? `run ${state.deltaRunId} ended ${terminal}${text === null && terminal === 'completed' ? ' without draft.json' : ''}`
-        : (auditDraftCounts(parsed, facts) ?? lintDraft(parsed) ?? auditVagueRatios(parsed, facts));
+        : (auditMixingVerdicts(facts.mixing) ?? auditDraftCounts(parsed, facts) ?? lintDraft(parsed) ?? auditVagueRatios(parsed, facts));
     if (parsed === null || violation !== null) {
       io.log(`fnotes ${week}: draft refused — ${violation}`);
       state = { ...state, deltaRunId: undefined as never };

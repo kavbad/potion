@@ -5,6 +5,7 @@
 // what lints cannot. A slop-phrase regex costs nothing and never has an
 // off day.
 import type { Draft } from './write.js';
+import type { MixingFact } from './types.js';
 
 const BANNED_PHRASES = [
   'rapidly evolving',
@@ -145,6 +146,42 @@ const OWN_SPEND_PATTERNS: Array<{ re: RegExp; what: string }> = [
 export function auditNoOwnSpend(text: string): string | null {
   for (const p of OWN_SPEND_PATTERNS) {
     if (p.re.test(text)) return `the piece states ${p.what} — Potion's own operating spend is never published`;
+  }
+  return null;
+}
+
+/**
+ * A WIN LABEL MUST NAME A WIN (2026-09-05).
+ *
+ * MixingFact.kind is the VERDICT and `shape` is the description, a split
+ * made because a close note reports measured losses and the union could
+ * previously only say 'cheaper-and-as-good' or 'frontier-candidate'. Rows
+ * with costSaving -0.12 were being written under a winning label with the
+ * strategy's shape in the verdict field.
+ *
+ * The type now permits the honest answer; this makes the dishonest one
+ * impossible to publish. Deterministic and cheap, in the layer that already
+ * refuses inflated vocabulary — because the same instinct that reaches for
+ * "groundbreaking" is the one that files a loss as a candidate.
+ *
+ * It is deliberately one-directional: a 'no-win' with a positive saving is
+ * ALSO refused. Understating a real win is not a safe error — it is the
+ * same lie pointed the other way, and it would quietly bury the results
+ * this loop exists to find.
+ */
+export function auditMixingVerdicts(facts: readonly MixingFact[]): string | null {
+  for (const f of facts) {
+    const where = f.clusterId ?? f.family;
+    const win = f.kind === 'cheaper-and-as-good' || f.kind === 'frontier-candidate';
+    if (win && f.costSaving <= 0) {
+      return `mixing fact on ${where} is labelled '${f.kind}' but saved nothing (costSaving ${f.costSaving}) — a mixture that did not win is 'no-win'`;
+    }
+    if (win && f.qualityDeltaVsBestSingle < 0) {
+      return `mixing fact on ${where} is labelled '${f.kind}' but scored below the best single (quality delta ${f.qualityDeltaVsBestSingle}) — that is not a win`;
+    }
+    if (f.kind === 'no-win' && f.costSaving > 0 && f.qualityDeltaVsBestSingle >= 0) {
+      return `mixing fact on ${where} is labelled 'no-win' but beat the best single on both axes (costSaving ${f.costSaving}, quality delta ${f.qualityDeltaVsBestSingle}) — understating a win buries it`;
+    }
   }
   return null;
 }
