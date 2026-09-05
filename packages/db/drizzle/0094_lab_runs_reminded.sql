@@ -1,5 +1,13 @@
--- Potion 0092_lab_runs_reminded (2026-09-05): one email is a nudge, not a
+-- Potion 0094_lab_runs_reminded (2026-09-05): one email is a nudge, not a
 -- system.
+--
+-- RENUMBERED from 0092. Another session claimed 0092 for router generations
+-- in the same hour, and both files sat on main at once. The runner keys its
+-- ledger on the FILENAME, so nothing would have broken — but two migrations
+-- sharing a number means lexical order silently decides which runs first,
+-- and the next pair to collide might actually depend on that order. It had
+-- not reached any real database (production applied 0091, then the other
+-- 0092, then 0093), so renaming is free today and never again.
 --
 -- A run that parks for a human sends exactly one notification, at the
 -- moment it parks, and then goes silent for the rest of its life. On

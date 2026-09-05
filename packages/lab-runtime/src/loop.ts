@@ -709,9 +709,18 @@ export async function runLeg(opts: RunLegOptions): Promise<LegOutcome> {
         .filter((x): x is { connectorId?: string; detail?: string } => x !== undefined && x !== null);
       if (!realToolLoaded && unavailable.length > 0) {
         // The reason carries each power's OWN remediation (connect vs a
-        // deployment gap) so it is always actionable, never generic.
-        const parts = unavailable.map((u) => `${u.connectorId ?? 'a superpower'}${u.detail !== undefined ? ` (${u.detail})` : ''}`);
-        const reason = `not ready: this worker needs ${[...new Set(parts)].join('; ')} before it can work. Fix that, then run again — it will not spend a cent flailing without its tools.`;
+        // deployment gap) so it is always actionable, never generic — but
+        // when several powers share one remedy, it is SAID ONCE. Read on
+        // production the other way round it was a mouthful: "needs code
+        // (enable it on the worker page — one click, no account needed);
+        // web (enable it on the worker page — one click, no account
+        // needed)". The same sentence twice reads as noise, and noise is
+        // what a reader skips.
+        const names = [...new Set(unavailable.map((u) => u.connectorId ?? 'a superpower'))];
+        const remedies = [...new Set(unavailable.map((u) => u.detail).filter((d): d is string => d !== undefined))];
+        const needs = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+        const how = remedies.length === 1 ? ` — ${remedies[0]}` : remedies.length > 1 ? ` — ${remedies.join('; ')}` : '';
+        const reason = `not ready: this worker needs ${needs}${how}. Fix that, then run again — it will not spend a cent flailing without its tools.`;
         await fenced.transition('failed', reason);
         return { status: 'failed', reason: 'superpowers-unconnected', steps: 0 };
       }

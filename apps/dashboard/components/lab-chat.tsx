@@ -219,7 +219,15 @@ export function LabChat({
   initialRun: RunDto | null;
 }) {
   const router = useRouter();
-  const [harness] = useState(initialHarness);
+  // THE HARNESS IS STATE, NOT A FROZEN PROP (2026-09-05, caught verifying on
+  // production). It used to be `useState(initialHarness)` with no setter,
+  // which quietly means "capture the first render's prop and ignore every
+  // later one". Enabling a power then worked and looked broken: the grant
+  // landed (200 {granted:true}), the pane went on saying `enable code`, and
+  // the only way to see the truth was a full page reload. A control whose
+  // effect is invisible is a control people press twice and then distrust —
+  // which is the exact failure the button was restored to fix.
+  const [harness, setHarness] = useState(initialHarness);
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [run, setRun] = useState<RunDto | null>(initialRun);
   const [text, setText] = useState('');
@@ -236,6 +244,21 @@ export function LabChat({
   const parked = state === 'awaiting-human';
   const live = run !== null && !TERMINAL.has(state ?? '');
   const tone = stateTone(state);
+
+  /** Re-read the harness after something changed it (a power enabled).
+   * router.refresh() alone is not enough: it re-runs the server component,
+   * but this client component would keep rendering the harness it captured
+   * at mount. Both are called — the fetch updates what is on screen now,
+   * the refresh keeps the server's copy from serving a stale page later. */
+  const refreshHarness = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/lab/harnesses/${harness.harnessHash}`, { cache: 'no-store' });
+      if (res.ok) setHarness((await res.json()) as HarnessDto);
+    } catch {
+      /* the pane keeps the last good copy; a reload still tells the truth */
+    }
+    router.refresh();
+  }, [harness.harnessHash, router]);
 
   // The record poll — the same 1.5s read the console has always used.
   useEffect(() => {
@@ -603,7 +626,7 @@ export function LabChat({
           </button>
           {showSettings ? (
             <div className="mt-3">
-              <SettingsPane harness={harness} onChanged={() => router.refresh()} />
+              <SettingsPane harness={harness} onChanged={refreshHarness} />
             </div>
           ) : null}
         </div>

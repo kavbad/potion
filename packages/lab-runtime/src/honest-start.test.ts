@@ -98,6 +98,39 @@ describe('the honest-start fail-fast', () => {
     await h.close();
   }, 60_000);
 
+  it('TWO powers with the SAME remedy say it once — the sentence is read, not skipped', async () => {
+    // Production, 2026-09-05, verbatim: "this worker needs code (enable it
+    // on the worker page — one click, no account needed); web (enable it on
+    // the worker page — one click, no account needed)". The same clause
+    // twice is noise, and noise is what a reader's eye skips — which
+    // defeats a message whose whole job is to be acted on.
+    const s2 = standingContract({ superpowers: [{ id: 'code', scopes: [] }, { id: 'web', scopes: [] }] });
+    const h = await createDb();
+    await migrate(h.db);
+    await seedIsolationOrgs(h.db);
+    const hash = harnessSpecHash(s2);
+    await createLabRun(h.db, { id: 'run-two', orgId: ORG, harnessHash: hash, harnessName: s2.name, spec: s2 });
+    const detail = 'enable it on the worker page — one click, no account needed';
+    const out = await runLeg({
+      db: h.db, client: scripted([]), runId: 'run-two', orgId: ORG, spec: s2, harnessHash: hash,
+      legNotes: [
+        { toolName: 'code', note: { superpowerUnavailable: { connectorId: 'code', status: 'not-connected', detail } } },
+        { toolName: 'web', note: { superpowerUnavailable: { connectorId: 'web', status: 'not-connected', detail } } },
+      ],
+      tools: [],
+    });
+    expect(out.status).toBe('failed');
+    const run = await import('@potion/db').then((m) => m.getLabRun(h.db, 'run-two', ORG));
+    const reason = run!.stateReason!;
+    // Both powers are named…
+    expect(reason).toContain('code');
+    expect(reason).toContain('web');
+    expect(reason).toContain('code and web');
+    // …and the remedy they share appears exactly once.
+    expect(reason.split(detail).length - 1).toBe(1);
+    await h.close();
+  }, 60_000);
+
   it('a worker with even ONE connected power is not failed — it does partial work', async () => {
     const s = standingContract({ superpowers: [{ id: 'web', scopes: [] }, { id: 'code', scopes: [] }] });
     const h = await createDb();
