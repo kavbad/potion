@@ -369,6 +369,50 @@ describe('test-typecheck coverage', () => {
     ).toEqual([]);
   });
 
+  // TEST_ROOTS is a hand-written list, and everything in this file reads it.
+  // Twice now a directory has been outside it while holding real test files:
+  // `scripts/` (fixed in 8a8f996, "the guard could not see its own
+  // directory") and `tests/` — which this branch fills, by relocating five
+  // cross-package integration tests out of packages/ to break the
+  // devDependency cycles that made `pnpm build` fail from a clean checkout.
+  //
+  // A blind spot here is silent by construction: the counts simply come back
+  // smaller and every check above passes. The previous fix for that was one
+  // session asking another to remember a word, across a repo where several
+  // sessions edit this file. So it is asserted instead — pnpm-workspace.yaml
+  // already names every root that can hold a package, and any of them holding
+  // a *.test.ts must be scanned.
+  it('TEST_ROOTS covers every workspace root that actually holds tests', () => {
+    const ws = readFileSync(path.join(REPO_ROOT, 'pnpm-workspace.yaml'), 'utf8');
+    const declared = [...ws.matchAll(/^\s*-\s*["']?([^"'\n*]+)/gm)]
+      .map((m) => m[1]!.split('/')[0]!.trim())
+      .filter((r) => r.length > 0);
+    const holdsTests = (root: string): boolean => {
+      const dir = path.join(REPO_ROOT, root);
+      if (!existsSync(dir)) return false;
+      let found = false;
+      const visit = (d: string): void => {
+        if (found) return;
+        for (const e of readdirSync(d, { withFileTypes: true })) {
+          if (found) return;
+          if (e.name === 'node_modules' || e.name === 'dist' || e.name === '.next') continue;
+          const full = path.join(d, e.name);
+          if (e.isDirectory()) visit(full);
+          else if (/\.test\.tsx?$/.test(e.name)) found = true;
+        }
+      };
+      visit(dir);
+      return found;
+    };
+    const missing = [...new Set(declared)].filter((r) => holdsTests(r) && !TEST_ROOTS.includes(r));
+    expect(
+      missing,
+      `workspace root(s) holding test files that TEST_ROOTS does not scan: ${missing.join(', ')}. ` +
+        `Every check in this file walks TEST_ROOTS, so a root left out is not a smaller number — ` +
+        `it is an unwatched directory reporting success.`,
+    ).toEqual([]);
+  });
+
   it('PENDING names only packages that actually exist and still have tests', () => {
     for (const name of Object.keys(PENDING)) {
       const pkg = pkgs.find((p) => p.name === name);

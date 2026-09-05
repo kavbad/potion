@@ -50,18 +50,36 @@ RLIMIT_AS_BYTES = 768 * 1024 * 1024
 RLIMIT_CPU_S = 60
 RLIMIT_NPROC = 64
 
+# RLIMIT_NPROC is counted PER REAL UID across the whole host, not per process
+# tree. A ceiling therefore means "this exec cannot fork-bomb" only where the
+# sandbox OWNS its uid — true in the container (its own `sandbox` USER, a
+# handful of processes), false anywhere the uid is shared. The Dockerfile
+# declares that invariant where it establishes it.
+#
+# Two earlier attempts, both measured wrong (2026-09-04):
+#   · `sys.platform != "darwin"` — a proxy for the invariant, true in the
+#     container and false on a CI runner where one uid owns the whole box.
+#     There the 64 ceiling is spent before the exec starts, and the shell dies
+#     on `fork: Resource temporarily unavailable` (exit 254) having written
+#     nothing.
+#   · headroom over a boot-time /proc count — the count drifts far more than
+#     the headroom when a parallel test suite is spawning vitest workers and
+#     PGlite instances around it.
+# The condition is not measurable from inside; it is a property of the
+# deployment, so the deployment states it.
+_DEDICATED_UID = os.environ.get("POTION_SANDBOX_DEDICATED_UID") == "1"
+
 
 def child_limits():
-    # Each limit is best-effort: they all apply on the Linux prod container;
-    # macOS dev refuses some (notably RLIMIT_AS), and NPROC is skipped there
-    # outright — Darwin counts it PER USER, so a dev machine's hundreds of
-    # processes make bash unable to fork at all (X7 found this via the
-    # shell). The wall-clock kill in the parent holds everywhere.
+    # Each limit is best-effort: macOS dev refuses some (notably RLIMIT_AS).
+    # NPROC applies only where the deployment declares a dedicated uid (see
+    # above); elsewhere the address-space cap, the CPU cap and the parent's
+    # wall-clock kill still hold, which is the posture macOS has always had.
     limits = [
         (resource.RLIMIT_AS, RLIMIT_AS_BYTES),
         (resource.RLIMIT_CPU, RLIMIT_CPU_S),
     ]
-    if sys.platform != "darwin":
+    if _DEDICATED_UID:
         limits.append((resource.RLIMIT_NPROC, RLIMIT_NPROC))
     for lim, val in limits:
         try:

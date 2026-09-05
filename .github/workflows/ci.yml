@@ -7,14 +7,21 @@ name: ci
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 # Cancel superseded runs on the same ref (saves runner minutes on rapid pushes).
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+# Least privilege. Only contents:read is needed: the secrets scan now runs the
+# gitleaks binary over the checkout rather than gitleaks-action, so it wants no
+# PR metadata and no token at all. pull-requests:read was required only by the
+# action, and was dropped with it.
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -45,18 +52,85 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # M2-security: secrets gate — scan working tree + full git history.
-      - name: Secrets scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_ENABLE_COMMENTS: false
-          GITLEAKS_ENABLE_SUMMARY: false
+      # ORDER: cheapest and highest-signal first; every INDEPENDENT check runs
+      # even after an earlier failure (2026-09-04, P0.11).
+      #
+      # It used to read install → gitleaks → build → typecheck → lint → test →
+      # audit → SBOM, and steps stop the job on first failure. The secrets scan
+      # turned out to be the single most config-fragile step in the file —
+      # three separate defects, each findable only by running it — so for three
+      # consecutive runs a broken scanner meant NO test signal at all, and the
+      # audit gate and SBOM at the tail have never executed once in this
+      # repository's life.
+      #
+      # `if: !cancelled()` on a step means "run unless the job was cancelled" —
+      # it still FAILS the job, it just no longer hides everything behind it.
+      # Only steps that need nothing from earlier ones get it: build is a real
+      # prerequisite (workspace packages resolve through dist/), so typecheck
+      # and test stay gated behind it rather than cascading confusing errors.
 
-      - run: pnpm build
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
+      # Needs only node_modules, and it is the fastest check in the file (~5s).
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm lint
+
+      # A real prerequisite: typecheck and test resolve workspace deps through
+      # dist/, so a failed build makes their output noise, not signal. They
+      # therefore gate on THIS STEP specifically — `steps.build.outcome` — and
+      # NOT on the default `success()`, which means "every earlier step passed"
+      # and would let an unrelated lint error skip the entire test suite. It
+      # did exactly that on run 33916899845, one revision of this very block
+      # ago: I moved the fragile step first and made lint the new blocker.
+      - name: Build
+        id: build
+        if: ${{ !cancelled() }}
+        run: pnpm build
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm typecheck
+      - name: Test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm test
+
+      # M2-security: secrets gate. Runs the gitleaks BINARY over the full
+      # history rather than gitleaks-action, which derives a COMMIT RANGE from
+      # the PR and produced four distinct failures here before it ever scanned
+      # a byte: wrong branch trigger, missing GITHUB_TOKEN, missing
+      # pull-requests:read, and finally
+      #
+      #   fatal: ambiguous argument '<base>^..<head>': unknown revision
+      #   failed to scan Git repository / scanned ~0 bytes
+      #
+      # because a force-push destroys the base the range was computed from.
+      # This branch is rebased constantly, so that is the normal case, not an
+      # edge one — and a scanner that fails on git plumbing tells you nothing
+      # about secrets either way.
+      #
+      # `detect` over checkout depth 0 is deterministic, needs no token and no
+      # extra permission, and matches what .gitleaks.toml's own header always
+      # claimed the CI step did: "runs `gitleaks git` (history)".
+      - name: Secrets scan (gitleaks)
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS_VERSION: 8.24.3
+        run: |
+          set -euo pipefail
+          cd /tmp
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          # Keep the RELEASE filename: `sha256sum -c` resolves the file named
+          # in the manifest line, so renaming the download on the way in makes
+          # verification fail with "No such file or directory" — which is
+          # exactly what it did on run 33939918635, correctly refusing to run
+          # an unverified binary.
+          art="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSLf -o "$art" "${base}/${art}"
+          curl -sSLf -o gitleaks.sums "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          # Verify before executing: this is the tool that vouches for the
+          # repo's secrets, so it does not get to arrive unchecked.
+          grep " ${art}\$" gitleaks.sums | sha256sum -c -
+          tar -xzf "$art" gitleaks
+          cd "$GITHUB_WORKSPACE"
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --redact --no-banner
 
       # Supply-chain gate (M2-security, re-triaged M3 #29): fail on any NEW
       # high/critical production advisory; accepted ones live in
@@ -64,12 +138,15 @@ jobs:
       # after the next/drizzle-orm bumps). --registry pins the official
       # registry because some mirrors lack an audit endpoint (gate fails CLOSED).
       - name: Dependency audit gate (prod, high+)
+        if: ${{ !cancelled() }}
         run: node scripts/security/audit-gate.mjs --audit-level=high --registry=https://registry.npmjs.org
 
       # CycloneDX SBOM for release provenance (cdxgen pinned via scripts/sbom.sh).
       - name: Generate SBOM (CycloneDX)
+        if: ${{ !cancelled() }}
         run: bash scripts/sbom.sh
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: sbom
           path: artifacts/sbom.cyclonedx.json

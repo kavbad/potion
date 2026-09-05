@@ -48,8 +48,6 @@ export interface DailyFacts {
   caveats: string[];
 }
 
-const n2 = (x: number) => (Math.round(x * 100) / 100).toFixed(2);
-
 /** THE PRICES LABEL (2026-09-04, found on the first live daily): the prices
  * version is an APPEND LOG — a 6,000-character concatenation of every alias
  * ever added ("2026-08-04-or2+tranche-…+or-solar-pro4+…"). Printed whole it
@@ -80,7 +78,7 @@ export function permittedNumbers(f: DailyFacts): Set<string> {
     const s = String(v);
     out.add(s);
     if (/^\d+\.\d+$/.test(s)) out.add(s.replace(/0+$/, '').replace(/\.$/, ''));
-    if (/^\d+$/.test(s)) out.add(`${s}.0`), out.add(`${s}.00`);
+    if (/^\d+$/.test(s)) { out.add(`${s}.0`); out.add(`${s}.00`); }
   }
   // 0 and 1 are structural in prose ("no cycles", "one alias"); the words
   // are checked by the count law upstream, the digits are always safe.

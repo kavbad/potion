@@ -878,14 +878,20 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
     const { fileURLToPath } = await import('node:url');
     const serverPath = fileURLToPath(new URL('../../../deploy/sandbox/sandbox_server.py', import.meta.url));
     const port = 19000 + Math.floor(Math.random() * 200);
-    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: 'ignore' });
+    // stderr CAPTURED, not discarded: a sandbox integration test that cannot say
+    // WHY the sandbox failed can only be debugged by hypothesis, and this one
+    // cost two wrong ones (2026-09-04). Both the server's stderr and the
+    // shell's own output are surfaced in the assertion below.
+    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: ['ignore', 'ignore', 'pipe'] });
+    let sandboxErr = '';
+    proc.stderr?.on('data', (d: Buffer) => { sandboxErr += d.toString(); });
     try {
       let up = false;
       for (let i = 0; i < 40 && !up; i++) {
         await new Promise((r) => setTimeout(r, 150));
         up = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok).catch(() => false);
       }
-      expect(up, 'sandbox failed to start').toBe(true);
+      expect(up, `sandbox failed to start. stderr:\n${sandboxErr}`).toBe(true);
 
       const s = spec({
         name: 'dev hands harness',
@@ -910,7 +916,13 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
               'set -e',
               'test -f repo/src/lib.js',
               'mkdir -p out/report',
-              'git init -q workrepo && cd workrepo && git commit -q --allow-empty -m offline && cd ..',
+              // Identity passed EXPLICITLY: the sandbox sets HOME to the workdir, so no
+              // user gitconfig applies, and git's fallback (user@hostname) only resolves
+              // where the host has a domain. On a CI runner it does not, `git commit`
+              // fails, `set -e` aborts, and the assertion below saw the pre-seeded tree
+              // survive while the shell's own output never appeared. A sealed shell must
+              // not depend on ambient identity (found on the workflow's first green run).
+              'git init -q workrepo && cd workrepo && git -c user.email=lab@potion.test -c user.name=lab commit -q --allow-empty -m offline && cd ..',
               'echo "tree ok, git ok" > out/report/result.txt',
             ].join('\n'),
           }),
@@ -929,8 +941,22 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
 
       const files = await listLabRunFiles(db.db, ORG, runId);
       const names = files.map((f) => f.name);
-      expect(names).toContain('repo/src/lib.js');
-      expect(names).toContain('out/report/result.txt');
+      // What the shell ITSELF reported — exit code, stdout, stderr — so a
+      // failure names its cause instead of only its symptom.
+      const { listLabSteps: _steps } = await import('@potion/db');
+      const allSteps = await _steps(db.db, runId, ORG);
+      // The TOOL steps carry the result (exit code, stdout, stderr). The model
+      // step also mentions run_shell — it holds the CALL — so selecting by
+      // substring picks the wrong one, as it did on 33930537416.
+      const toolSteps = allSteps.filter((st) => st.kind === 'tool');
+      const shellSays =
+        `\n--- files that landed: ${JSON.stringify(names)}` +
+        `\n--- ${toolSteps.length} tool step(s):\n` +
+        toolSteps.map((st) => JSON.stringify(st.payload, null, 2).slice(0, 3000)).join('\n---\n') +
+        `\n--- step kinds in order: ${JSON.stringify(allSteps.map((st) => st.kind))}` +
+        `\n--- sandbox stderr:\n${sandboxErr.slice(0, 3000) || '(empty)'}`;
+      expect(names, shellSays).toContain('repo/src/lib.js');
+      expect(names, shellSays).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.
       expect(names.some((n) => n.includes('.git/'))).toBe(false);
       const { getLabRunFile } = await import('@potion/db');

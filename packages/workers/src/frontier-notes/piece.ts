@@ -11,7 +11,7 @@
 // PIECE NUMBER LAW refuses any figure in the prose that is not one of those
 // values (in any reasonable spelling). A piece cannot carry an invented
 // number, and it cannot reach past its own claim.
-import { claimKey, money, ratio, type AgendaCandidate } from './agenda.js';
+import { claimKey, ratio, type AgendaCandidate } from './agenda.js';
 import { assertPublishable } from './redact.js';
 import { publishableText } from './publish.js';
 import type { Issue } from './types.js';
@@ -102,7 +102,6 @@ export function measurementFooter(f: { cycles: unknown[]; measured: string[]; pr
  * semicolon-separated dict, which read like a stack trace in the middle of
  * a paragraph (found live 2026-09-04). Each kind now gets sentences. */
 const num = (v: unknown, f: (x: number) => string): string => (typeof v === 'number' ? f(v) : String(v ?? ''));
-const usd = (v: unknown) => num(v, money);
 
 /** The reading: how to hold the finding, in the writer's absence. */
 function reading(c: AgendaCandidate): string {

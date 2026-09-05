@@ -1,0 +1,31 @@
+{
+  "name": "@potion/integration-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@potion/core": "workspace:*",
+    "@potion/custody": "workspace:*",
+    "@potion/db": "workspace:*",
+    "@potion/lab-dial": "workspace:*",
+    "@potion/lab-gen": "workspace:*",
+    "@potion/lab-mcp": "workspace:*",
+    "@potion/lab-runtime": "workspace:*",
+    "@potion/lab-spec": "workspace:*",
+    "@potion/lab-superpowers": "workspace:*",
+    "@potion/pareto": "workspace:*",
+    "@potion/server": "workspace:*",
+    "@potion/workers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "drizzle-orm": "0.45.2",
+    "fastify": "^5.0.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

@@ -9,7 +9,6 @@ import { buildServer } from '../src/server.js';
 const ORG = 'org-invites';
 const ADMIN_KEY = 'pk_invites_admin';
 let app: FastifyInstance;
-let cookie = '';
 
 beforeAll(async () => {
   process.env.POTION_MAGIC_LINK_IN_RESPONSE = '1';
