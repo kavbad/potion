@@ -944,12 +944,17 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
       // What the shell ITSELF reported — exit code, stdout, stderr — so a
       // failure names its cause instead of only its symptom.
       const { listLabSteps: _steps } = await import('@potion/db');
-      const shellStep = (await _steps(db.db, runId, ORG)).find(
-        (st) => JSON.stringify(st.payload).includes('run_shell'),
-      );
+      const allSteps = await _steps(db.db, runId, ORG);
+      // The TOOL steps carry the result (exit code, stdout, stderr). The model
+      // step also mentions run_shell — it holds the CALL — so selecting by
+      // substring picks the wrong one, as it did on 33930537416.
+      const toolSteps = allSteps.filter((st) => st.kind === 'tool');
       const shellSays =
-        `\n--- run_shell recorded:\n${JSON.stringify(shellStep?.payload ?? null, null, 2).slice(0, 4000)}` +
-        `\n--- sandbox stderr:\n${sandboxErr.slice(0, 4000) || '(empty)'}`;
+        `\n--- files that landed: ${JSON.stringify(names)}` +
+        `\n--- ${toolSteps.length} tool step(s):\n` +
+        toolSteps.map((st) => JSON.stringify(st.payload, null, 2).slice(0, 3000)).join('\n---\n') +
+        `\n--- step kinds in order: ${JSON.stringify(allSteps.map((st) => st.kind))}` +
+        `\n--- sandbox stderr:\n${sandboxErr.slice(0, 3000) || '(empty)'}`;
       expect(names, shellSays).toContain('repo/src/lib.js');
       expect(names, shellSays).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.
