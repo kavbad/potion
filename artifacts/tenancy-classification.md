@@ -20,10 +20,10 @@ Every row here is **enforced by tests**, not asserted by prose:
 
 ## Summary
 
-- **174** routes classified.
-- **51** org-scoped routes probed for the uniform no-existence-oracle 404.
-- **41** org-scoped collections probed for cross-tenant absence.
-- Tenancy classes: non-tenant 11, operator 5, org-list 40, org-param 54, platform-job 1, public 8, self-scoped 47, shared-global 8.
+- **181** routes classified.
+- **54** org-scoped routes probed for the uniform no-existence-oracle 404.
+- **44** org-scoped collections probed for cross-tenant absence.
+- Tenancy classes: non-tenant 11, operator 5, org-list 43, org-param 58, platform-job 1, public 9, self-scoped 46, shared-global 8.
 
 ### What the tenancy classes mean
 
@@ -77,8 +77,8 @@ Every row here is **enforced by tests**, not asserted by prose:
 | PUT | `/api/budgets` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — upserts the CALLER’s org budget |
 | GET | `/api/certifications` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | POST | `/api/certifications/run` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
-| GET | `/api/challengers` | no | any org credential | self-scoped | not applicable — lists the CALLING org's own proposals — no parameter, nothing to cross |
-| POST | `/api/challengers/:id/apply` | yes | admin only (`serve+admin` key or admin session) | org-param | not applicable — org-scoped getChallengerProposal → a foreign org's id is a uniform 404 (pinned in challengers.test.ts) |
+| GET | `/api/challengers` | no | any org credential | org-list | absent from other orgs' responses (probed) |
+| POST | `/api/challengers/:id/apply` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
 | GET | `/api/connection` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/endpoint-snippet` | no | any org credential | non-tenant | not applicable — pure snippet rendering; reads no tenant state |
 | POST | `/api/evals` | yes | member+ (serve key or member session) | self-scoped | not applicable — suiteIds resolve to PLATFORM suite files only; the job is stamped with the caller’s org |
@@ -178,6 +178,12 @@ Every row here is **enforced by tests**, not asserted by prose:
 | GET | `/api/research/promotions` | no | any org credential | shared-global | not applicable — platform research promotions — a shared asset by design, no org dimension in the response |
 | POST | `/api/research/scan` | yes | admin only (`serve+admin` key or admin session) | non-tenant | not applicable — platform registry scan; the job carries the caller’s org for attribution only |
 | GET | `/api/router` | no | any org credential | org-list | absent from other orgs' responses (probed) |
+| GET | `/api/router/generations` | no | any org credential | org-list | absent from other orgs' responses (probed) |
+| POST | `/api/router/generations` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — captures the CALLING org's own serving surface — no parameter, nothing to cross |
+| POST | `/api/router/generations/:id/canary` | yes | admin only (`serve+admin` key or admin session) | org-param | not applicable — org-scoped getRouterGeneration → a foreign org's id is a uniform 404 (pinned in generations.test.ts) |
+| GET | `/api/router/generations/:id/evidence` | no | any org credential | org-param | not applicable — org-scoped getRouterGeneration → a foreign org's id is a uniform 404 (pinned in generations.test.ts) |
+| POST | `/api/router/generations/:id/promote` | yes | admin only (`serve+admin` key or admin session) | org-param | not applicable — org-scoped getRouterGeneration → a foreign org's id is a uniform 404 (pinned in generations.test.ts) |
+| POST | `/api/router/generations/:id/rollback` | yes | admin only (`serve+admin` key or admin session) | org-param | not applicable — org-scoped getRouterGeneration → a foreign org's id is a uniform 404 (pinned in generations.test.ts) |
 | POST | `/api/router/whatif` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/routing-activity` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/rubrics` | no | any org credential | org-list | absent from other orgs' responses (probed) |
@@ -201,10 +207,10 @@ Every row here is **enforced by tests**, not asserted by prose:
 | GET | `/api/usage/export.csv` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/usage/invoice` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | POST | `/api/workloads` | yes | member+ (serve key or member session) | non-tenant | not applicable — cluster ASSIGNMENT over the platform taxonomy; reads/writes no tenant rows |
-| POST | `/api/workloads/:id/adopt` | yes | admin only (`serve+admin` key or admin session) | org-param | not applicable — org-scoped listOrgWorkloads lookup → a foreign org's id is a uniform 404 (pinned in workload-adoption.test.ts) |
-| POST | `/api/workloads/:id/retire` | yes | admin only (`serve+admin` key or admin session) | org-param | not applicable — org-scoped listOrgWorkloads lookup → a foreign org's id is a uniform 404 (pinned in workload-adoption.test.ts) |
+| POST | `/api/workloads/:id/adopt` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
+| POST | `/api/workloads/:id/retire` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
 | POST | `/api/workloads/discover` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — enqueues discovery for the CALLING org only — no parameter, nothing to cross |
-| GET | `/api/workloads/discovered` | no | any org credential | self-scoped | not applicable — lists the CALLING org's own discovered workloads — no parameter, nothing to cross |
+| GET | `/api/workloads/discovered` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | POST | `/hooks/lab/:token` | yes | none (public by design) | public | not applicable — addressed by an unguessable 48-hex secret, not an org or resource id; the token IS the capability and hashes to exactly one armed mission |
 
 ### Authentication (`/auth`)
@@ -214,6 +220,7 @@ Every row here is **enforced by tests**, not asserted by prose:
 | POST | `/auth/invite` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — membership lands in the INVITER’s org |
 | POST | `/auth/logout` | yes | any org credential | self-scoped | not applicable — revokes the CALLER’s own session |
 | GET | `/auth/me` | no | any org credential | self-scoped | not applicable — reports the caller’s own credential; forged-header cases in tenant-isolation.test.ts |
+| GET | `/auth/providers` | no | none (public by design) | public | not applicable — pre-auth; deployment-wide configuration, carries no org or user data |
 | POST | `/auth/request-link` | yes | none (public by design) | public | not applicable — pre-auth; neutral response, self-serve gated (G2.7) |
 | GET | `/auth/verify` | yes | none (public by design) | public | not applicable — single-use token consumption; session pinned to the link’s org |
 | POST | `/auth/verify-code` | yes | none (public by design) | public | not applicable — single-use code consumption; session pinned to the code’s org |
@@ -251,6 +258,7 @@ grep-derived and enforced by `mock-eligibility.test.ts`.
 | `apps/server/src/routes/chat.ts` | guardFrontierProvenance | alias-guard | excluded-live | `apps/server/test/provenance.test.ts` |
 | `apps/server/src/routes/connection.ts` | clusterReadiness (guardFrontierProvenance) + providersForOrg | alias-guard | excluded-live | `apps/server/test/connection.test.ts` |
 | `apps/server/src/routes/discovery.ts` | adopt (aggregatesFromEvalResults + servingDecisionFor) | alias-guard | excluded-live | `apps/server/test/workload-adoption.test.ts` |
+| `apps/server/src/routes/generations.ts` | captureServingPins (servingDecisionFor) | alias-guard | excluded-live | `apps/server/test/generations.test.ts` |
 | `apps/server/src/routes/keys.ts` | PostKeyBodySchema (provider enum) | byok-validate | excluded-live | `apps/server/test/keys.test.ts` |
 | `apps/server/src/routes/plan.ts` | POST /api/plan (guardFrontierProvenance + selectPoint) | alias-guard | excluded-live | `apps/server/test/plan.test.ts` |
 | `apps/server/src/routes/playground.ts` | resolvePlaygroundPoint | default-strategy | excluded-live | — |
