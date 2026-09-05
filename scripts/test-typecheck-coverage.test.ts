@@ -128,8 +128,36 @@ function surveyPackages(): Pkg[] {
  */
 const ESCAPE_HATCH_BUDGET = 4;
 
+/**
+ * Every directory holding test files — `scripts/` included, which is where
+ * THIS file lives.
+ *
+ * It was omitted, and that was not harmless: the raw-control-byte check
+ * below could not see its own file, and this one had a literal NUL in a
+ * comment describing the hazard. `file` reported it as data and grep
+ * skipped it silently, so the guard was unauditable by the tools anyone
+ * would reach for. A checker that exempts its own directory is a checker
+ * you cannot trust about that directory.
+ */
+const TEST_ROOTS = ['packages', 'apps', 'scripts'];
+
+/**
+ * This file quotes both counted patterns by construction — in the regex that
+ * finds them and in the prose explaining why they are dangerous — so counting
+ * itself would score its own documentation as five casts and force the budget
+ * up to hide them. That is the same self-reference the mock-eligibility audit
+ * already excludes for its own files.
+ *
+ * The exemption is deliberately as narrow as it can be: ONE file, and only
+ * for the cast count. `scripts/` stays in TEST_ROOTS, so a genuine cast in
+ * any other script test is still counted, and the raw-control-byte check
+ * below still reads THIS file — which is the check it was actually hiding
+ * from when it lived with a literal NUL in it.
+ */
+const RATCHET_SELF = path.resolve(fileURLToPath(import.meta.url));
+
 function countEscapeHatches(): { total: number; byFile: Array<[string, number]> } {
-  const roots = [path.join(REPO_ROOT, 'packages'), path.join(REPO_ROOT, 'apps')];
+  const roots = TEST_ROOTS.map((r) => path.join(REPO_ROOT, r));
   const byFile: Array<[string, number]> = [];
   let total = 0;
   const visit = (d: string): void => {
@@ -138,6 +166,7 @@ function countEscapeHatches(): { total: number; byFile: Array<[string, number]> 
       const full = path.join(d, entry.name);
       if (entry.isDirectory()) visit(full);
       else if (/\.test\.tsx?$/.test(entry.name)) {
+        if (path.resolve(full) === RATCHET_SELF) continue;
         const src = readFileSync(full, 'utf8');
         const n = (src.match(/\bas never\b|\bas unknown as\b/g) ?? []).length;
         if (n > 0) {
@@ -200,10 +229,10 @@ describe('test-typecheck coverage', () => {
   // as fixture data for control-character handling. That makes the file
   // "binary" to every text tool — `grep` skips such files SILENTLY, so those
   // two were invisible to every audit run across this whole sweep, including
-  // the escape-hatch counts above. The runtime value of ' ' is
+  // the escape-hatch counts above. The runtime value of the escape form is
   // identical, so the escape form costs nothing and keeps the file greppable.
   it('test files are text — no raw control bytes that make tools skip them', () => {
-    const roots = [path.join(REPO_ROOT, 'packages'), path.join(REPO_ROOT, 'apps')];
+    const roots = TEST_ROOTS.map((r) => path.join(REPO_ROOT, r));
     const binary: string[] = [];
     const visit = (d: string): void => {
       for (const entry of readdirSync(d, { withFileTypes: true })) {
