@@ -343,18 +343,31 @@ export function registerFrontierNotesClock(
     // the wrong moment" is a much shorter odds than "only if it runs 13x
     // slow".
     //
-    // Bounded, though, and worth knowing which belt actually holds: spend is
-    // ledgered PER LANE as it happens (ledgerAppend, lines 148/197/...), and
-    // the second run recomputes envelopeBefore from that same ledger. So the
-    // already-spent money is visible to the envelope even though it is
-    // invisible to this guard — total exposure stays under the monthly cap;
-    // it is the WEEK that repeats, not the budget that escapes.
+    // THE MONEY IS BELTED TWICE; THE EVIDENCE IS NOT BELTED AT ALL. Spend is
+    // ledgered PER LANE as it happens (ledgerAppend → appendFileSync), and a
+    // second run recomputes envelopeBefore from that same ledger — so the
+    // crashed run's spend is fully visible to it. That is not merely
+    // advisory: observatory-week.ts:103 installs a hard-stop budget on
+    // PLATFORM_OPS_ORG_ID capped at the envelope REMAINDER, so serving
+    // refuses mid-run once it binds, and lanes the plan cannot afford are
+    // recorded `error: 'skipped: envelope'` rather than run.
     //
-    // The real fix is not a week guard keyed on the record, which still
-    // re-runs after a crash. It is the started-marker below, written at the
-    // START with exclusive-create, taken by BOTH triggers — genuine mutual
-    // exclusion rather than separation in time — plus an explicit --force for
-    // the case where a crashed week legitimately needs re-running.
+    // The run RECORD has no such protection, and the asymmetry is the whole
+    // point: the ledger APPENDS, the record OVERWRITES (a plain writeFileSync
+    // at line 280). So a week that half-ran, crashed, and was re-run from the
+    // top keeps both spends in the ledger and publishes a single clean record
+    // as though it had run once — two sets of cache salts collapsed into one
+    // story. That is precisely the class of thing this lane exists NOT to do.
+    //
+    // So the fix is not a week guard keyed on the record, which still re-runs
+    // after a crash. It is the started-marker below, written at the START with
+    // exclusive-create and taken by BOTH triggers — genuine mutual exclusion
+    // rather than separation in time — plus an explicit --force for a crashed
+    // week that legitimately needs re-running.
+    //
+    // Write it up as an INTEGRITY control, not a budget one. Priced against
+    // the ~$8 a repeated week costs it looks not worth doing, and the money
+    // is the part that is already defended.
     if (!opts.dry && io.readObservatoryRun(week) !== null) return null; // measured already
     const stateDir = join(envDir!, 'artifacts', 'observatory-state');
     const marker = join(stateDir, `${week}.json`);
