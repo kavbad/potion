@@ -204,8 +204,30 @@ three passed every test and logged success.
   *template* wrote it. `writeIssue` now runs the law over the rendered
   markdown and holds the issue if it trips.
 
+Two more the same day, both the same mistake in the other direction — a
+law reading OUR OWN output as if the model had written it:
+
+- **The late writer** (`run-d21f0a1b`). The writer's run did 95 seconds of
+  work after sitting **29 minutes** in the queue (one worker, concurrency
+  1). The 20-minute framing deadline was measuring queue latency, calling
+  it a slow writer, publishing the composed fallback and binning a
+  finished draft. Now: the day is filed on time AND the writer's prose
+  replaces it when the run lands (phase `awaiting-writer`, 6h ceiling).
+  Late is not wrong; only wrong is wrong. The draft is judged against the
+  assignment it was handed — carried on the state file — so a measurement
+  landing while it was queued cannot make its correct numbers look
+  invented.
+- **The footer is not a claim.** The piece number law scanned
+  `auditionNote`, which both publish paths overwrite with the
+  code-composed measurement footer, and refused every draft on the "24" in
+  "the last 24 hours". Found by the late-writer TEST, not by reading code:
+  a manual check of the same draft passed because it fed the raw
+  `piece.json` without the footer merged in.
+
 The general rule this keeps proving: **a guard that only sees the model's
-output cannot see what the code around it prints.** Lint the artifact.
+output cannot see what the code around it prints — and a guard that reads
+what the code printed as if the model wrote it is the same error mirrored.**
+Lint the artifact, and check the artifact the way production assembles it.
 
 ## Filed follow-ups
 - **runx- sessions on the dashboard run route**: the gate session's
