@@ -5,10 +5,21 @@
 // this one, so the guard covers them all; apps/dashboard carries the same
 // globalSetup in its own config.
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // The SAME phantom multiplier the eslint config carries an ignore for
+    // (P0.4): .claude/worktrees holds stale checkouts of this repo, and any
+    // tool that walks the tree finds each test once per worktree. `vitest run
+    // scripts` collected 4 real files and 12 copies, which then ENOENT on
+    // artifacts those worktrees do not have — a local-only failure, since
+    // .claude/ is in .git/info/exclude and CI never sees it, but the primary
+    // checkout is exactly where a person runs `pnpm test` before pushing.
+    //
+    // Spread `configDefaults.exclude` rather than passing --exclude: the flag
+    // REPLACES the default array and would pull node_modules back in.
+    exclude: [...configDefaults.exclude, '**/.claude/**'],
     // TIMEOUTS (2026-09-03). The suite ran on vitest's 5s/10s defaults while
     // real tests take 15-50s — PGlite boot, embedding, clustering. Under the
     // parallel load of `pnpm -r test` the borderline ones crossed the line and
