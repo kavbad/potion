@@ -116,6 +116,14 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: pnpm --filter '!@potion/workers' -r test && pnpm test:scripts
 
+      # The Python SDK is not a pnpm package, so `pnpm -r test` cannot reach it
+      # — it sat outside every repo-level command until 2026-09-05 (P1.2). The
+      # first run found the shipped package could not be IMPORTED on a clean
+      # install. Independent of the node build, so it reports on its own merits.
+      - name: SDK tests (python)
+        if: ${{ !cancelled() }}
+        run: pnpm test:sdk-python
+
       # M2-security: secrets gate. Runs the gitleaks BINARY over the full
       # history rather than gitleaks-action, which derives a COMMIT RANGE from
       # the PR and produced four distinct failures here before it ever scanned

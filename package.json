@@ -12,14 +12,16 @@
     "test": "pnpm -r test && pnpm test:scripts",
     "typecheck": "pnpm -r typecheck && pnpm typecheck:scripts",
     "lint": "eslint .",
-    "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test",
+    "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test && pnpm test:sdk-python",
     "demo:mock-e2e": "tsx scripts/demo-mock-e2e.ts",
     "demo:customer": "tsx scripts/demo-customer.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
     "m1b:sweep": "tsx scripts/m1b-sweep.ts",
     "harness": "tsx packages/harness/src/cli.ts",
     "test:scripts": "vitest run scripts",
-    "typecheck:scripts": "tsc -p tsconfig.scripts.json"
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json",
+    "test:sdk-python": "bash scripts/test-python-sdk.sh",
+    "prepare": "node scripts/install-hooks.mjs"
   },
   "devDependencies": {
     "@potion/cluster": "workspace:*",

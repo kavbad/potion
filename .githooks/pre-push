@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Pre-push: typecheck + lint. NOT the test suite — that is ~25 minutes and a
+# hook nobody can afford to wait for is a hook everyone bypasses.
+#
+# These two take ~25 seconds together and catch the cheap failures that would
+# otherwise burn a full CI cycle. `main` is protected, so a red push cannot
+# land anyway; this just tells you 25 minutes earlier.
+#
+# Escape hatch is git's own: `git push --no-verify`. Deliberately left working —
+# a hook you cannot skip when you genuinely need to gets deleted instead.
+set -e
+if [ -n "$POTION_SKIP_HOOKS" ]; then
+  echo "pre-push: skipped (POTION_SKIP_HOOKS set)"
+  exit 0
+fi
+echo "pre-push: typecheck + lint (skip with --no-verify)"
+pnpm typecheck
+pnpm lint
+echo "pre-push: ok"

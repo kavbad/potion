@@ -9,7 +9,12 @@ description = "Potion SDK — thin OpenAI-compatible client with per-request pol
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
-dependencies = ["openai>=1"]
+# httpx is imported directly by potion_ai/client.py. It used to arrive
+# transitively via openai, but openai 3.x depends on httpx2 instead — so an
+# undeclared dependency became a BROKEN INSTALL: `pip install potion-ai` then
+# `import potion_ai` raises ModuleNotFoundError. Declared because this package
+# imports it (found 2026-09-05, the first time anything ran this SDK's tests).
+dependencies = ["openai>=1", "httpx>=0.27"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
