@@ -11,7 +11,12 @@ import { describe, expect, it } from 'vitest';
 import { auditMixingVerdicts } from './lint.js';
 import type { MixingFact } from './types.js';
 
-const fact = (over: Partial<MixingFact>): MixingFact => ({
+// `Partial<T>` under exactOptionalPropertyTypes lets a key be ABSENT but not
+// explicitly `undefined`, and this builder spreads defaults — so a test cannot
+// express "no cluster" by omitting the key, only by overriding it to undefined
+// (which is what MixingFact.clusterId documents: "Absent when the finding is
+// vague"). Widen the OVERRIDE type, not MixingFact itself.
+const fact = (over: { [K in keyof MixingFact]?: MixingFact[K] | undefined }): MixingFact => ({
   clusterId: 'classification',
   family: 'extractive',
   kind: 'cheaper-and-as-good',
