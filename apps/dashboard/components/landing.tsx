@@ -44,7 +44,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
 import { Reveal } from '@/components/landing/reveal';
-import { TwoRoads } from '@/components/landing/two-roads';
+import { CompilePipeline } from '@/components/landing/compile-pipeline';
 import { EvidenceBand } from '@/components/landing/evidence-band';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
 import { ResearchLoop } from '@/components/landing/research-loop';
@@ -93,11 +93,10 @@ export function Landing() {
           layout — headline left, artefact box right — and swapped the box.
           The box always competed with the words. This one has no box: a
           centred editorial stage at display scale for the words (unchanged,
-          operator-endorsed), and the routing evidence as a full-bleed
-          instrument tape forming the section's bottom edge — an EDGE, not a
-          box. Scale carries the confidence; the tape carries the proof. */}
+          operator-endorsed), and the evidence as an instrument beneath them.
+          Scale carries the confidence; the instrument carries the proof. */}
       <section className="relative flex min-h-[calc(100vh-73px)] flex-col bg-[#f4f2ec]">
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
           {/* The eyebrow can no longer be the tagline — the tagline is the
               headline now — so it carries the one differentiator the whole
               page then spends six sections proving. */}
@@ -129,7 +128,7 @@ export function Landing() {
               stepped: clamp() ties it to the viewport and `whitespace-nowrap`
               forbids the break outright, which means the headline shrinks to
               stay whole instead of breaking to stay big. The 4.5rem ceiling
-              is the largest that still fits inside max-w-5xl at desktop. */}
+              is the largest that still fits inside the hero column at desktop. */}
           <h1 className="mt-8 whitespace-nowrap text-[clamp(1.5rem,6.1vw,4.5rem)] font-medium leading-[1.02] tracking-[-0.035em] text-ink">
             The Compiler for{' '}
             <span className="relative inline-block">
@@ -142,45 +141,52 @@ export function Landing() {
               </span>
             </span>
           </h1>
-          {/* The type steps down on phones. The headline can only be 24px at
-              375px if it stays on ONE line, so a 1.45rem second line of this
-              length outweighs it by sheer mass and the hierarchy inverts. */}
-          <p className="mt-6 text-[1.08rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.5rem] lg:text-[1.75rem]">
+          {/* TWO LINES, NOT THREE (operator, 2026-09-05). Measured on the live
+              page: the line wants 1017px per line and the max-w-5xl column
+              gave it 976 — 41px short, so it spilled four words onto a third
+              line. The column widened to 6xl and the type steps 28px → 26px,
+              which holds two lines down to ~1030px viewports.
+
+              The type also steps down on phones: the headline can only be
+              24px at 375px if it stays on ONE line, so a 1.45rem second line
+              of this length outweighs it by mass and the hierarchy inverts. */}
+          <p className="mx-auto mt-5 max-w-[62rem] text-[1.08rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.45rem] lg:text-[1.625rem]">
             Routers pick from a menu. A compiler builds the plan: every model measured on your
             work, every request compiled to the lowest price your quality bar allows.
           </p>
 
-          <div className="mt-8">
+          <div className="mt-9">
             <Link
               href="/login"
-              className="bg-ink px-6 py-3 text-sm font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
+              className="bg-ink px-7 py-3.5 text-[15px] font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
             >
               Compile your inference
             </Link>
           </div>
 
-          <ul className="mx-auto mt-9 max-w-md space-y-2 text-left">
-            {[
-              'A smaller bill, proven not promised. You never pay more than your quality bar requires.',
-              'Your rule, not ours: cost, quality, or speed. You state it; Potion holds it.',
-              'New models earn their place — or never touch your traffic.',
-              'One line of code. A receipt on every answer.',
-            ].map((li) => (
-              <li key={li} className="flex gap-3 text-[14.5px] leading-snug text-soft">
-                <span aria-hidden className="mt-[9px] flex shrink-0 items-end self-start">
-                  <span className="h-px w-3.5 bg-accent/70" />
-                  <span className="h-[5px] w-px bg-accent/70" />
-                </span>
-                <span>{li}</span>
-              </li>
-            ))}
-          </ul>
+          {/* NO SUPPORTING LIST. Two versions of one lived here — four
+              stacked bullets, then a horizontal row of three — and both were
+              the same mistake: a fourth block of text under a headline that
+              claims a category, saying things every API landing page says
+              ("one line of code"). Assertion where the page's whole argument
+              is measurement.
 
-          {/* exa's first page, whole: the product runs in the hero. Real
-              measured routes streaming into the table, receipt alongside. */}
-          <div className="mt-14 w-full max-w-4xl text-left">
-            <Figure n="1" caption="The same requests, twice: through a gateway (one model for everything) and through Potion (the measured field, your floor, the cheapest point above it). Every point and price is a committed measurement; tallies are means over the requests served so far.">
-              <TwoRoads />
+              It is not needed. The instrument directly below is the proof, and
+              it is running: the compiler taking one real request, weighing the
+              shapes it can emit, applying your rule to the measured field, and
+              printing what it saved. A hero that shows the product does not
+              also need to list it. What the bullets said is made where it
+              belongs —
+              the bill in the line above, the rule in §05, new models in §04.
+
+              Four blocks: eyebrow, headline, line, action. Then the machine. */}
+
+          {/* exa's first page, whole: the product RUNS in the hero. Not a
+              screenshot of the compiler — the compiler, on committed
+              measurements, deciding in front of you. */}
+          <div className="mt-16 w-full max-w-5xl text-left">
+            <Figure n="1" caption="One real request through the compiler: every measured point for its kind of work, drawn with its 95% interval and sized by its p95 latency. Your rule becomes a shape on that field — a quality floor, a cost ceiling, or a latency budget — everything that cannot satisfy it drops out, and the plan is whatever survives and wins. Every point, price and latency is a committed measurement.">
+              <CompilePipeline />
             </Figure>
           </div>
         </div>
