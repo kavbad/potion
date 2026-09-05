@@ -131,7 +131,18 @@ adopted centroids at the discovery-stored threshold; trace carries
 `;parent=`, hint path never sub-assigns, guard-blocked/empty workload
 frontiers fail OPEN to the parent; discovery snapshots preserve adopted
 rows and skip their territory; adopted assignments ride the router
-artifact + serve-time stamping; sampling stays parent-grain). **GAP PASS
+artifact + serve-time stamping; sampling stays parent-grain). **G2 rung 4
+STARTED — ROUTER GENERATIONS (0092, c96e979): rung 1 of 3 shipped.** A
+generation = the whole routing surface captured as frontier ids, with a
+lifecycle (candidate → serving → superseded | rolled-back). Serving needs no
+new concept — getServingFrontier already honours a pin — so promote writes
+the pin set atomically and rollback writes the previous one's; a generation
+stores the WHOLE surface (never a diff) so "put it back" needs no replay,
+and promoting RELEASES clusters it does not name. Capture uses a new
+`ignorePins` option (serving never passes it): reading through the pins
+would make each generation capture its predecessor, so promotion could never
+advance — caught by its own e2e. Remaining rungs: canary (a slice serves the
+candidate) → shadow proof + an evidence gate on promote. **GAP PASS
 2026-09-02** (six gaps, ranked by what most raises the odds): (1) the
 Outcome API was UNDOCUMENTED — the deepest instrument, invisible to every
 customer; /docs gains an Outcomes section, llms.txt indexes it, and a
