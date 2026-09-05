@@ -29,7 +29,7 @@ import { loadCurrentFrontier, saveFrontier } from '@potion/pareto';
 import type { FrontierPoint } from '@potion/core';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import { ServingClient, startRun } from '@potion/lab-runtime';
-import type { ServingResult } from '@potion/lab-runtime';
+import type { ServingClientLike, ServingResult } from '@potion/lab-runtime';
 import { buildServer } from '@potion/server/server';
 import { eq } from 'drizzle-orm';
 import { GEN_MAX_MODEL_CALLS } from './constants.js';
@@ -138,15 +138,17 @@ describe('Leg B — intent → valid spec → running harness (DoD)', () => {
       clusterHint: 'summarization',
     });
     const q = [extraction];
-    // A REAL ServingClient with complete() scripted (the class holds private
-    // state) — the scripted reply stays type-checked against ServingResult.
-    // The base URL is never dialled: complete() is replaced outright.
-    const scripted = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-    scripted.complete = async (): Promise<ServingResult> => ({
-      kind: 'ok', completionId: 'chatcmpl-wt-1', text: q.shift() ?? '', toolCalls: [],
-      finishReason: 'stop', usage: { promptTokens: 40, completionTokens: 30, totalTokens: 70 },
-      frontierTrace: 't',
-    });
+    // A plain object, checked against the real signatures: generateSpec takes
+    // ServingClientLike, so the scripted reply stays type-checked against
+    // ServingResult without a client that could ever dial out.
+    const scripted: ServingClientLike = {
+      complete: async (): Promise<ServingResult> => ({
+        kind: 'ok', completionId: 'chatcmpl-wt-1', text: q.shift() ?? '', toolCalls: [],
+        finishReason: 'stop', usage: { promptTokens: 40, completionTokens: 30, totalTokens: 70 },
+        frontierTrace: 't',
+      }),
+      emitSpans: async () => true,
+    };
 
     const r = await generateSpec(ANSWERS, {
       client: scripted,

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import type { Frontier, FrontierPoint } from '@potion/core';
-import { ServingClient, type ServingResult } from '@potion/lab-runtime';
+import type { ServingClientLike, ServingResult } from '@potion/lab-runtime';
 import { generateSpec, verifyChoicesBinding } from './generate.js';
 import type { InterviewAnswers } from './interview.js';
 
@@ -21,16 +21,18 @@ function okResult(text: string): ServingResult {
   } as ServingResult;
 }
 
-function scripted(responses: string[]): { client: ServingClient; calls: () => number } {
+function scripted(responses: string[]): { client: ServingClientLike; calls: () => number } {
   const q = [...responses];
   let n = 0;
-  // A REAL ServingClient with its outbound method scripted (the class holds
-  // private state, so no object literal can stand in for it) — the stub's
-  // replies stay type-checked against ServingResult.
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async () => {
-    n += 1;
-    return okResult(q.shift() ?? '');
+  // A plain object, checked against the real signatures: generateSpec takes
+  // ServingClientLike, so a double no longer has to be a real client pointed
+  // at an unroutable host.
+  const client: ServingClientLike = {
+    complete: async () => {
+      n += 1;
+      return okResult(q.shift() ?? '');
+    },
+    emitSpans: async () => true,
   };
   return { client, calls: () => n };
 }

@@ -218,6 +218,11 @@ describe('org:delete TRUE CASCADE (G2.7)', () => {
     await db.db.execute(sql.raw(
       `INSERT INTO job_executions (job_id, job_kind, org_id) VALUES ('job-casc', 'eval:run', '${ORG}')`,
     ));
+    // A router generation (0092) — a NO ACTION org FK, so an org holding one
+    // cannot be deleted until the cascade clears it.
+    await db.db.execute(sql.raw(
+      `INSERT INTO router_generations (id, org_id, status, pins) VALUES ('gen-casc', '${ORG}', 'serving', '{}'::jsonb)`,
+    ));
     const ruleRes = await db.db.execute(sql.raw(
       `INSERT INTO alert_rules (org_id, kind, target_url, events) VALUES ('${ORG}', 'webhook', 'https://x.example/hook?token=s3cret', ARRAY['recipe_promoted']) RETURNING id`,
     ));

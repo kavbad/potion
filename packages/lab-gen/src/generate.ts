@@ -12,7 +12,7 @@ import {
   SPEC_LIMITS,
   type HarnessSpec,
 } from '@potion/lab-spec';
-import type { ServingClient } from '@potion/lab-runtime';
+import type { ServingClientLike } from '@potion/lab-runtime';
 import { fillBrainSlot, type AutopilotChoice, type GenerationGap } from './autopilot.js';
 import { assignCluster } from './cluster.js';
 import { accountSlug, assembleSpec, recipeRules, sanitizeVerbatim, specToText } from './assemble.js';
@@ -62,7 +62,7 @@ export class GeneratorInvariantError extends Error {
 }
 
 export interface GenerateDeps {
-  client: ServingClient;
+  client: ServingClientLike;
   /** Injected frontier read (platform scope) — db wiring stays at the
    * edges (CLI/walkthrough); the generator core is pure of the database. */
   loadFrontier: (clusterId: TaxonomyCluster) => Promise<Frontier | null>;

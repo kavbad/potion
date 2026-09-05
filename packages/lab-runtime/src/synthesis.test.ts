@@ -27,7 +27,7 @@ import { orgHashOf, toolSignatureSlug, tracesClusterHandler, type JobContext } f
 import { runLeg, type LabTool } from './loop.js';
 import { ServingClient } from './serving-client.js';
 import { spansForSteps } from './spans.js';
-import type { ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingResult } from './serving-client.js';
 
 const ORG = 'org_lab_synth';
 const RAW_KEY = 'pk_lab_synth_key_0001';
@@ -135,11 +135,14 @@ describe('steps → eval items, zero converter changes', () => {
       },
     ];
     const q = [...scriptedResults];
-    // A REAL ServingClient with its outbound methods scripted, so the stub's
-    // replies are type-checked against ServingResult.
-    const scripted = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-    scripted.complete = async () => q.shift()!;
-    scripted.emitSpans = async () => true;
+    // A plain object, checked against the real signatures: runLeg takes
+    // ServingClientLike, so a double no longer has to be a real client
+    // pointed at an unroutable host. The REAL client above stays real: this
+    // suite ingests its spans over HTTP.
+    const scripted: ServingClientLike = {
+      complete: async () => q.shift()!,
+      emitSpans: async () => true,
+    };
 
     const runId = 'run-synth-1';
     await createLabRun(h.db, { id: runId, orgId: ORG, harnessHash: hash, harnessName: spec.name, spec });

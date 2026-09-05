@@ -23,6 +23,7 @@ import { inArray, eq } from 'drizzle-orm';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { buildServer } from '@potion/server/server';
 import { ServingClient } from './serving-client.js';
+import type { ServingClientLike } from './serving-client.js';
 import { startRun, resumeRun } from './cli.js';
 import type { StepPayload } from './checkpoint.js';
 
@@ -237,19 +238,21 @@ describe('DoD leg 3: spec drift refuses a resume (F7 applied to runs)', () => {
     // refuse as 'terminal' before drift is ever checked. The drift check
     // needs a genuinely NON-terminal run — a truncated ('length') response
     // parks the leg at its cap without completing it.
-    // A REAL ServingClient with its outbound methods scripted, so the stub's
-    // replies are type-checked against ServingResult.
-    const lengthClient = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-    lengthClient.complete = async () => ({
-      kind: 'ok' as const,
-      completionId: 'c-drift',
-      text: 'working…',
-      toolCalls: [],
-      finishReason: 'length',
-      usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
-      frontierTrace: 'cluster=summarization;strategy=x;frontier=v1;policy=compound;fallback=0;provenance=mock',
-    });
-    lengthClient.emitSpans = async () => true;
+    // A plain object, checked against the real signatures: startRun takes
+    // ServingClientLike, so a double no longer has to be a real client
+    // pointed at an unroutable host.
+    const lengthClient: ServingClientLike = {
+      complete: async () => ({
+        kind: 'ok',
+        completionId: 'c-drift',
+        text: 'working…',
+        toolCalls: [],
+        finishReason: 'length',
+        usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+        frontierTrace: 'cluster=summarization;strategy=x;frontier=v1;policy=compound;fallback=0;provenance=mock',
+      }),
+      emitSpans: async () => true,
+    };
     const { runId } = await startRun({
       db: h.db, client: lengthClient, orgId: ORG, specText: JSON.stringify(s), maxStepsPerLeg: 1,
     });

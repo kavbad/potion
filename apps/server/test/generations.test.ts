@@ -290,11 +290,11 @@ describe('the evidence gate', () => {
         orgId: ORG, clusterId: CLUSTER, strategyHash: 'h-canary', model: 'mock-mid', status: 'ok',
         usage: { inputTokens: 10, outputTokens: 10, costUsd: 0.05, latencyMs: 10 }, latencyMs: 10,
         generationId: id,
-      } as never);
+      });
       await insertRequestLog(db(), {
         orgId: ORG, clusterId: CLUSTER, strategyHash: 'h-control', model: 'mock-cheap', status: 'ok',
         usage: { inputTokens: 10, outputTokens: 10, costUsd: 0.001, latencyMs: 10 }, latencyMs: 10,
-      } as never);
+      });
     }
     const ev = (await api('GET', `/api/router/generations/${id}/evidence`)).json() as {
       verdict: { sufficient: boolean; adverse: boolean; canaryRequests: number };

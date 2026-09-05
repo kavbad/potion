@@ -5,7 +5,7 @@
 // @potion/db under the tenancy machinery (operator ruling 2026-08-11).
 // deps.test.ts makes "no provider-call paths" structural: @potion/providers
 // must not appear anywhere in this package's dependency tree.
-export { ServingClient, type ServingResult, type ServingRequest } from './serving-client.js';
+export { ServingClient, type ServingClientLike, type ServingResult, type ServingRequest } from './serving-client.js';
 export { contractRepairMessage, contractRepairsIn, CONTRACT_REPAIR_PREFIX, fileClaimRepairMessage, FILE_CLAIM_REPAIR_PREFIX, doneFileRepairMessage, DONE_FILE_REPAIR_PREFIX, missingClaimedFiles, runLeg, systemClock, WRAP_UP_PROMPT, wrapUpMessage, type Clock, type LabTool, type LegOutcome, type RunLegOptions } from './loop.js';
 export { extractDeliverable, extractReport, type DeliverableResult } from './deliverable.js';
 export { buildWebLabTools, checkUrl, htmlToText, isPrivateAddress, parseFeed, WEB_LIMITS, type WebToolDeps } from './web-tools.js';

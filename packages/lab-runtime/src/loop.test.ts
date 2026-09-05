@@ -20,7 +20,7 @@ import {
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { seedIsolationOrgs, ORG_A } from '@potion/db';
 import { runLeg, type LabTool } from './loop.js';
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 import { SecretInCheckpointError, buildStepPayload, type StepPayload } from './checkpoint.js';
 
 function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
@@ -39,22 +39,22 @@ function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
 }
 
 /** Scripted client: pops one result per complete() call. */
-function scripted(results: ServingResult[]): ServingClient & { calls: ServingRequest[] } {
+function scripted(results: ServingResult[]): ServingClientLike & { calls: ServingRequest[] } {
   const queue = [...results];
   const calls: ServingRequest[] = [];
-  // A REAL ServingClient with its outbound methods scripted, so the stub's
-  // replies are type-checked against ServingResult.
-  const client = Object.assign(
-    new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' }),
-    { calls },
-  );
-  client.complete = async (req: ServingRequest) => {
-    calls.push(req);
-    const next = queue.shift();
-    if (!next) throw new Error('scripted client exhausted');
-    return next;
+  // A plain object, checked against the real signatures: the runtime takes
+  // ServingClientLike, so a double no longer has to be a real client
+  // pointed at an unroutable host.
+  const client: ServingClientLike & { calls: ServingRequest[] } = {
+    calls,
+    complete: async (req: ServingRequest) => {
+      calls.push(req);
+      const next = queue.shift();
+      if (!next) throw new Error('scripted client exhausted');
+      return next;
+    },
+    emitSpans: async () => true,
   };
-  client.emitSpans = async () => true;
   return client;
 }
 
@@ -379,15 +379,17 @@ describe('X2 — the durable task ledger across legs', () => {
       ok({ text: 'check complete' }),
     ];
     const queue = [...script];
-    // A REAL ServingClient with its outbound methods scripted, so the stub's
-    // replies are type-checked against ServingResult.
+    // A plain object, checked against the real signatures: runLeg takes
+    // ServingClientLike, so a double no longer has to be a real client
+    // pointed at an unroutable host.
     const requests: string[][] = [];
-    const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-    client.complete = async (req: ServingRequest) => {
-      requests.push(req.messages.map((m) => m.content));
-      return queue.shift()!;
+    const client: ServingClientLike = {
+      complete: async (req: ServingRequest) => {
+        requests.push(req.messages.map((m) => m.content));
+        return queue.shift()!;
+      },
+      emitSpans: async () => true,
     };
-    client.emitSpans = async () => true;
     const leg1 = await runLeg({
       db: h.db, client, runId: 'run-x2', orgId: 'org_x2', spec, harnessHash: hash, maxStepsPerLeg: 2,
     });

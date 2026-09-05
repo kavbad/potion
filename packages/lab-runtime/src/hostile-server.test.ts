@@ -37,7 +37,7 @@ function awaitingHuman(o: LegOutcome): Extract<LegOutcome, { status: 'awaiting-h
   }
   return o;
 }
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 
 const MASTER = randomBytes(32);
 const TOKEN_A = 'gho_HOSTILEconnA_4X9mQ2vL7pK8rT3sW6zE';
@@ -77,13 +77,15 @@ function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
   };
 }
 
-function scripted(results: ServingResult[]): ServingClient {
+function scripted(results: ServingResult[]): ServingClientLike {
   const queue = [...results];
-  // A REAL ServingClient with its outbound methods scripted, so the stub's
-  // replies are type-checked against ServingResult.
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async (_req: ServingRequest) => queue.shift() ?? Promise.reject(new Error('exhausted'));
-  client.emitSpans = async () => true;
+  // A plain object, checked against the real signatures: the runtime takes
+  // ServingClientLike, so a double no longer has to be a real client
+  // pointed at an unroutable host.
+  const client: ServingClientLike = {
+    complete: async (_req: ServingRequest) => queue.shift() ?? Promise.reject(new Error('exhausted')),
+    emitSpans: async () => true,
+  };
   return client;
 }
 const ok = (over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult => ({

@@ -13,12 +13,12 @@ import {
 } from '@potion/db';
 import { parseHarnessSpecText, type HarnessSpec } from '@potion/lab-spec';
 import { runLeg, type LabTool, type LegOutcome } from './loop.js';
-import { ServingClient } from './serving-client.js';
+import { ServingClient, type ServingClientLike } from './serving-client.js';
 import { spansForSteps } from './spans.js';
 
 export interface StartRunOptions {
   db: Parameters<typeof createLabRun>[0];
-  client: ServingClient;
+  client: ServingClientLike;
   orgId: string;
   specText: string;
   tools?: LabTool[];

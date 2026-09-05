@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { createDb, createLabRun, migrate, seedIsolationOrgs, ORG_A, labRunSteps } from '@potion/db';
 import { harnessSpecHash, parseHarnessSpec, type HarnessSpec } from '@potion/lab-spec';
 import { runLeg, systemPrompt } from './loop.js';
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 import { allocateFanOut, deriveSubSpec, fanOutSpentFromSteps, validateFanOut } from './fanout.js';
 
 function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
@@ -116,13 +116,15 @@ describe('the fuel gate counts recorded helper spend', () => {
       },
       { runId: 'run-fanfuel', orgId: ORG_A, seq: 2, kind: 'tool', payload: { kind: 'tool', toolName: 'delegate', toolInput: { tasks: [{ goal: 'g', doneDefinition: 'd' }] }, toolOutput: { ok: true, helpers: [{ runId: 'sub-x-1', state: 'completed', estUsd: 0.6, result: 'r', goal: 'g' }] }, clockMs: 0, rngSample: 0 } },
     ]);
-    // A REAL ServingClient with its outbound methods scripted, so the stub's
-    // replies are type-checked against ServingResult.
-    const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-    client.complete = async (_req: ServingRequest): Promise<ServingResult> => {
-      throw new Error('the fuel gate must fire BEFORE any model call');
+    // A plain object, checked against the real signatures: runLeg takes
+    // ServingClientLike, so a double no longer has to be a real client
+    // pointed at an unroutable host.
+    const client: ServingClientLike = {
+      complete: async (_req: ServingRequest): Promise<ServingResult> => {
+        throw new Error('the fuel gate must fire BEFORE any model call');
+      },
+      emitSpans: async () => true,
     };
-    client.emitSpans = async () => true;
     const out = await runLeg({ db: h.db, client, runId: 'run-fanfuel', orgId: ORG_A, spec: s, harnessHash: hash });
     expect(out.status).toBe('killed-budget');
     await h.close();

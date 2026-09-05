@@ -36,7 +36,7 @@ import {
 } from '@potion/db';
 import { BRIEF_CONTRACT_PROMPT, parseBrief, type HarnessSpec } from '@potion/lab-spec';
 import { buildStepPayload, SecretInCheckpointError, type StepPayload } from './checkpoint.js';
-import type { ServingClient } from './serving-client.js';
+import type { ServingClientLike } from './serving-client.js';
 
 export interface LabTool {
   name: string;
@@ -122,7 +122,7 @@ export function toolResultMessage(toolName: string, output: unknown): ChatMessag
 
 export interface RunLegOptions {
   db: PotionDb;
-  client: ServingClient;
+  client: ServingClientLike;
   runId: string;
   orgId: string;
   spec: HarnessSpec;

@@ -13,7 +13,7 @@
 import { canonicalJson, sha256, type Policy } from '@potion/core';
 import { getFeltSample, insertFeltSample, requestLogs, type PotionDb } from '@potion/db';
 import { eq } from 'drizzle-orm';
-import type { ServingClient } from '@potion/lab-runtime';
+import type { ServingClientLike } from '@potion/lab-runtime';
 import type { DialGap } from './gaps.js';
 
 export const FELT_SWEEP_MAX_POSITIONS = 3;
@@ -75,7 +75,7 @@ export interface FeltCache {
 
 export interface FeltDeps {
   /** A client PINNED to the position's policy row. */
-  clientFor: (policyRef: string) => ServingClient;
+  clientFor: (policyRef: string) => ServingClientLike;
   cache: FeltCache;
   /** completionId → metered costUsd. REQUIRED (review finding 11): the cap
    * cannot be fail-closed without it. Production impl:

@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseHarnessSpecText } from '@potion/lab-spec';
 import type { Frontier, FrontierPoint } from '@potion/core';
-import { ServingClient, type ServingResult } from '@potion/lab-runtime';
+import type { ServingClientLike, ServingResult } from '@potion/lab-runtime';
 import { GEN_MAX_MODEL_CALLS } from './constants.js';
 import { generateSpec, verifyChoicesBinding } from './generate.js';
 import { TAXONOMY_CLUSTERS, type InterviewAnswers } from './interview.js';
@@ -159,14 +159,15 @@ describe(`closure property — ${CASES} seeded cases`, () => {
             : [pick(r, BAD_RESPONSES), pick(r, BAD_RESPONSES)];
       const q = [...responses];
       let calls = 0;
-      // ServingClient holds private state, so no object literal can stand in
-      // structurally — the repo's idiom is a real instance pointed at an
-      // unroutable host with the network method replaced. Nothing dials out,
-      // and the scripted reply is now checked against ServingResult.
-      const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-      client.complete = async () => {
-        calls += 1;
-        return ok(q.shift() ?? '');
+      // A plain object, checked against the real signatures: generateSpec
+      // takes ServingClientLike, so nothing dials out and the scripted reply
+      // is checked against ServingResult.
+      const client: ServingClientLike = {
+        complete: async () => {
+          calls += 1;
+          return ok(q.shift() ?? '');
+        },
+        emitSpans: async () => true,
       };
       const fr = frontierVariant(r);
 

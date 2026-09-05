@@ -22,7 +22,7 @@ import { REDACTED_GRANT, type ConnectorDef } from '@potion/lab-mcp';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { buildMcpLabTools } from './mcp-tools.js';
 import { runLeg } from './loop.js';
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 
 const MASTER = randomBytes(32);
 const TOKEN = 'gho_mcpWRAPtoken7Q2mV7pLk4Rt8sWzE3yNb6Jh';
@@ -85,17 +85,19 @@ async function seededDb(s: HarnessSpec): Promise<{ h: DbHandle; hash: string }> 
   return { h, hash };
 }
 
-function scripted(results: ServingResult[]): ServingClient {
+function scripted(results: ServingResult[]): ServingClientLike {
   const queue = [...results];
-  // A REAL ServingClient with its outbound methods scripted, so the stub's
-  // replies are type-checked against ServingResult.
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async (_req: ServingRequest) => {
-    const next = queue.shift();
-    if (!next) throw new Error('scripted client exhausted');
-    return next;
+  // A plain object, checked against the real signatures: the runtime takes
+  // ServingClientLike, so a double no longer has to be a real client
+  // pointed at an unroutable host.
+  const client: ServingClientLike = {
+    complete: async (_req: ServingRequest) => {
+      const next = queue.shift();
+      if (!next) throw new Error('scripted client exhausted');
+      return next;
+    },
+    emitSpans: async () => true,
   };
-  client.emitSpans = async () => true;
   return client;
 }
 

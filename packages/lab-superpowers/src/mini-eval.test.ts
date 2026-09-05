@@ -23,7 +23,7 @@ import {
 import { sealEnvelope } from '@potion/custody';
 import { MockMcpServer } from '@potion/lab-mcp/mock-server';
 import { harnessSpecHash, scanRawValue, type HarnessSpec } from '@potion/lab-spec';
-import { ServingClient, buildMcpLabTools, runLeg } from '@potion/lab-runtime';
+import { buildMcpLabTools, runLeg, type ServingClientLike } from '@potion/lab-runtime';
 import type { ServingRequest, ServingResult } from '@potion/lab-runtime';
 import { CATALOG, LIVE_PROVEN_IDS } from './catalog.js';
 import {
@@ -56,20 +56,19 @@ function specFor(pkg: SuperpowerPackage): HarnessSpec {
   };
 }
 
-// A REAL ServingClient with its two outbound methods scripted (the house
-// idiom — see lab-runtime's contract-law tests): the scripted replies are
-// type-checked against ServingResult, which an object literal standing in
-// for the class could never be.
-function scripted(results: ServingResult[]): ServingClient {
+// A plain object typed ServingClientLike: the consumer names the interface,
+// so the scripted replies are checked against ServingResult without any
+// client existing at all.
+function scripted(results: ServingResult[]): ServingClientLike {
   const queue = [...results];
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async (_req: ServingRequest): Promise<ServingResult> => {
-    const next = queue.shift();
-    if (next === undefined) throw new Error('exhausted');
-    return next;
+  return {
+    complete: async (_req: ServingRequest): Promise<ServingResult> => {
+      const next = queue.shift();
+      if (next === undefined) throw new Error('exhausted');
+      return next;
+    },
+    emitSpans: async () => true,
   };
-  client.emitSpans = async () => true;
-  return client;
 }
 const ok = (over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult => ({
   kind: 'ok',

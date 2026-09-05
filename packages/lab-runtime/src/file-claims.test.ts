@@ -18,7 +18,7 @@ import {
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { missingClaimedFiles, runLeg, type LabTool } from './loop.js';
 import { replayRun, type RecordedStep, type RecordedTerminal } from './replay.js';
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 
 const SPEC: HarnessSpec = {
   specVersion: 1, name: 'file claims harness',
@@ -28,17 +28,19 @@ const SPEC: HarnessSpec = {
   fuel: { maxUsdPerRun: 1, hardStop: true }, checkIns: [],
 };
 
-function scripted(results: ServingResult[]): ServingClient {
+function scripted(results: ServingResult[]): ServingClientLike {
   const queue = [...results];
-  // A REAL ServingClient with its outbound methods scripted, so the stub's
-  // replies are type-checked against ServingResult.
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async (_req: ServingRequest) => {
-    const next = queue.shift();
-    if (!next) throw new Error('scripted client exhausted');
-    return next;
+  // A plain object, checked against the real signatures: the runtime takes
+  // ServingClientLike, so a double no longer has to be a real client
+  // pointed at an unroutable host.
+  const client: ServingClientLike = {
+    complete: async (_req: ServingRequest) => {
+      const next = queue.shift();
+      if (!next) throw new Error('scripted client exhausted');
+      return next;
+    },
+    emitSpans: async () => true,
   };
-  client.emitSpans = async () => true;
   return client;
 }
 function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult {

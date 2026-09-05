@@ -5,7 +5,7 @@
 // the strict extraction schema; it never free-writes spec fields.
 import { z } from 'zod';
 import type { ChatMessage } from '@potion/core';
-import type { ServingClient } from '@potion/lab-runtime';
+import type { ServingClientLike } from '@potion/lab-runtime';
 import { scanRawValue, SPEC_LIMITS } from '@potion/lab-spec';
 import { GEN_MAX_MODEL_CALLS } from './constants.js';
 import { TAXONOMY_CLUSTERS, type InterviewAnswers } from './interview.js';
@@ -78,7 +78,7 @@ function tryParse(text: string): { ok: true; extraction: Extraction } | { ok: fa
   return { ok: true, extraction: parsed.data };
 }
 
-export async function extractMission(client: ServingClient, answers: InterviewAnswers): Promise<ExtractResult> {
+export async function extractMission(client: ServingClientLike, answers: InterviewAnswers): Promise<ExtractResult> {
   let calls = 0;
   let lastIssues = '';
   let messages: ChatMessage[] = [{ role: 'user', content: extractionPrompt(answers) }];

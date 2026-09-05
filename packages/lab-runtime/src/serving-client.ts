@@ -60,7 +60,34 @@ interface OpenAiErrorBody {
   error?: { message?: string; code?: string; type?: string };
 }
 
-export class ServingClient {
+/**
+ * WHAT A CALLER ACTUALLY NEEDS FROM THE SERVING CLIENT (2026-09-04).
+ *
+ * The class below carries private state (base url, api key, fetch, pin
+ * headers), and TypeScript compares classes with private fields NOMINALLY —
+ * so no object literal can ever satisfy `ServingClient`, however complete
+ * it is. Every consumer that named the class therefore forced its callers
+ * to produce a real instance, and every test that wanted a scripted reply
+ * had to reach for `as unknown as ServingClient`: a cast that switches off
+ * checking for the whole object, which is exactly how a stub drifts out of
+ * shape without anyone noticing.
+ *
+ * Depending on this interface instead costs nothing at runtime and gives
+ * the checking back: a scripted double is now checked against the real
+ * signatures, and a change to either method breaks its doubles at compile
+ * time rather than in whatever test happens to exercise them.
+ *
+ * Consumers should name THIS. The class stays the only thing that talks to
+ * the network.
+ */
+export interface ServingClientLike {
+  complete(req: ServingRequest): Promise<ServingResult>;
+  /** Resolves false when the spans could not be delivered; never throws
+   * into a caller, because telemetry must not fail the work. */
+  emitSpans(spans: Array<Record<string, unknown>>): Promise<boolean>;
+}
+
+export class ServingClient implements ServingClientLike {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly fetchFn: typeof fetch;

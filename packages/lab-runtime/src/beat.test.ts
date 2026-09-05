@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { createDb, createLabRun, getLabMemory, listLabSteps, migrate, seedIsolationOrgs, ORG_A } from '@potion/db';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { runLeg, systemPrompt } from './loop.js';
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 import { applyBeat, beatFromMemory, emptyBeat, renderBeatLedger, validateBeat, BEAT_LIMITS } from './beat.js';
 
 const ORG = ORG_A;
@@ -30,22 +30,23 @@ function spec(over: Partial<HarnessSpec> = {}): HarnessSpec {
   };
 }
 
-function scripted(results: ServingResult[]): ServingClient & { calls: ServingRequest[] } {
+function scripted(results: ServingResult[]): ServingClientLike & { calls: ServingRequest[] } {
   const queue = [...results];
   const calls: ServingRequest[] = [];
-  // ServingClient carries private state, so no literal satisfies it
-  // structurally. Real instance against an unroutable host with both
-  // network methods replaced — nothing dials out, and the scripted replies
-  // are checked against ServingResult for real.
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async (req: ServingRequest) => {
-    calls.push(req);
-    const next = queue.shift();
-    if (!next) throw new Error('scripted client exhausted');
-    return next;
+  // A plain object, checked against the real signatures: runLeg takes
+  // ServingClientLike, so a double no longer has to be a real client
+  // pointed at an unroutable host.
+  const client: ServingClientLike & { calls: ServingRequest[] } = {
+    calls,
+    complete: async (req: ServingRequest) => {
+      calls.push(req);
+      const next = queue.shift();
+      if (!next) throw new Error('scripted client exhausted');
+      return next;
+    },
+    emitSpans: async () => true,
   };
-  client.emitSpans = async () => true;
-  return Object.assign(client, { calls });
+  return client;
 }
 
 function ok(over: Partial<Extract<ServingResult, { kind: 'ok' }>> = {}): ServingResult {

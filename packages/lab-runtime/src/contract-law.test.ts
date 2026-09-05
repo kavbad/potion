@@ -17,7 +17,7 @@ import { runLeg } from './loop.js';
 import { replayRun, type RecordedStep } from './replay.js';
 import { extractDeliverable } from './deliverable.js';
 import type { StepPayload } from './checkpoint.js';
-import { ServingClient, type ServingRequest, type ServingResult } from './serving-client.js';
+import type { ServingClientLike, ServingRequest, ServingResult } from './serving-client.js';
 
 function standingSpec(withContract: boolean): HarnessSpec {
   return {
@@ -41,18 +41,19 @@ const GOOD_BRIEF = JSON.stringify({
   coverage: { checked: 3 },
 });
 
-function scripted(results: ServingResult[]): ServingClient {
+function scripted(results: ServingResult[]): ServingClientLike {
   const queue = [...results];
-  // A REAL ServingClient with its two outbound methods scripted — so the
-  // stub's replies are type-checked against ServingResult (the class has
-  // private state, which no object literal can stand in for).
-  const client = new ServingClient({ baseUrl: 'http://serving.invalid', apiKey: 'test-key' });
-  client.complete = async (_req: ServingRequest) => {
-    const next = queue.shift();
-    if (!next) throw new Error('scripted client exhausted');
-    return next;
+  // A plain object, checked against the real signatures: the runtime takes
+  // ServingClientLike, so a double no longer has to be a real client
+  // pointed at an unroutable host.
+  const client: ServingClientLike = {
+    complete: async (_req: ServingRequest) => {
+      const next = queue.shift();
+      if (!next) throw new Error('scripted client exhausted');
+      return next;
+    },
+    emitSpans: async () => true,
   };
-  client.emitSpans = async () => true;
   return client;
 }
 
