@@ -2,8 +2,9 @@
 // must not produce content-farm output: no echoes, no thin duplicates, and
 // nothing it cannot prove.
 import { describe, expect, it } from 'vitest';
-import { claimKey, generateAgenda, generateCatalogueAgenda, renderAgenda, type ClusterSignal } from './agenda.js';
+import { claimKey, generateAgenda, generateCatalogueAgenda, renderAgenda, type AgendaCandidate, type ClusterSignal } from './agenda.js';
 import { auditPieceNumbers, deterministicPiece } from './piece.js';
+import type { Draft } from './write.js';
 import { auditRepetition } from './lint.js';
 
 const NOW = new Date('2026-09-04T12:00:00Z');
@@ -204,27 +205,27 @@ describe('the catalogue generators (price economics)', () => {
 // draft. Since every piece worth publishing names its models, the writer
 // lane was dead and the composed fallback published every single day.
 describe('the piece number law', () => {
-  const candidate = {
-    id: 'quality-premium:code-gen', kind: 'quality-premium' as const, clusterId: 'code-gen',
+  const candidate: AgendaCandidate = {
+    id: 'quality-premium:code-gen', kind: 'quality-premium', clusterId: 'code-gen',
     headline: 'The last 2.1 points of code gen quality cost 296×',
     dek: 'One model scored 1.000 at $6.85 while another scored 0.979 at $0.0232.',
     demandQuery: 'q',
     evidence: { topModel: 'grok-4.6', topQuality: 1, topCostPer1K: 6.8463, cheapModel: 'name withheld', cheapQuality: 0.9795, cheapCostPer1K: 0.0232, factor: 295.6, qualityPoints: 2.1, n: 94 },
     scores: { demand: 1, magnitude: 1, evidence: 1, novelty: 1 }, score: 0.99, why: 'w',
   };
-  const draft = (over: Partial<Record<string, string>> = {}) => ({
+  const draft = (over: Partial<Draft> = {}): Draft => ({
     title: 'T', summary: 'S', plain: 'P', lede: 'L', frontierNote: '', auditionNote: '', mixingNote: '', takeaway: 'T2', faq: [], ...over,
   });
   const NOW = new Date('2026-09-04T17:00:00.000Z');
 
   it('lets a piece name the models it compares', () => {
     for (const name of ['grok-4.6', 'gpt-5', 'claude-sonnet-4.5', 'llama-3.3-70b', 'deepseek-v4-flash-0731']) {
-      expect(auditPieceNumbers(draft({ plain: `${name} leads this suite.` }) as never, candidate as never, NOW)).toBeNull();
+      expect(auditPieceNumbers(draft({ plain: `${name} leads this suite.` }), candidate, NOW)).toBeNull();
     }
   });
 
   it('still refuses a figure the evidence does not contain', () => {
-    expect(auditPieceNumbers(draft({ plain: 'It is 47 times cheaper.' }) as never, candidate as never, NOW)).toMatch(/"47"/);
+    expect(auditPieceNumbers(draft({ plain: 'It is 47 times cheaper.' }), candidate, NOW)).toMatch(/"47"/);
   });
 });
 
@@ -232,18 +233,18 @@ describe('the piece number law', () => {
 // the candidate's evidence refused every draft on the "24" in "the last 24
 // hours" — the second time a law mistook our own output for the model's.
 describe('the piece number law and the footer', () => {
-  const candidate = {
-    id: 'quality-premium:code-gen', kind: 'quality-premium' as const, clusterId: 'code-gen',
+  const candidate: AgendaCandidate = {
+    id: 'quality-premium:code-gen', kind: 'quality-premium', clusterId: 'code-gen',
     headline: 'The last 2.1 points cost 296×', dek: 'One model scored 1.000, another 0.979.', demandQuery: 'q',
     evidence: { topModel: 'grok-4.6', topQuality: 1, cheapQuality: 0.9795, factor: 295.6, qualityPoints: 2.1, n: 94 },
     scores: { demand: 1, magnitude: 1, evidence: 1, novelty: 1 }, score: 0.99, why: 'w',
   };
   it('does not read the measurement footer as a claim', () => {
-    const draft = {
+    const draft: Draft = {
       title: 'T', summary: 'S', plain: 'P', lede: 'L', frontierNote: '', mixingNote: '', takeaway: 'T2', faq: [],
       auditionNote: '3 measurement cycles ran in the last 24 hours, 7 newly listed models were measured.',
     };
-    expect(auditPieceNumbers(draft as never, candidate as never, new Date('2026-09-04T00:00:00Z'))).toBeNull();
+    expect(auditPieceNumbers(draft, candidate, new Date('2026-09-04T00:00:00Z'))).toBeNull();
   });
 });
 

@@ -229,6 +229,38 @@ output cannot see what the code around it prints — and a guard that reads
 what the code printed as if the model wrote it is the same error mirrored.**
 Lint the artifact, and check the artifact the way production assembles it.
 
+## The second-paragraph law (2026-09-05)
+
+The first Delta-written daily (`run-5834835a`) said the same four numbers
+three times. **The writer was following orders.** The assignment asked
+`plain` for "what was compared, what the gap is" and then asked `lede` for
+"the key numbers with their sample size" — the same paragraph, ordered
+twice. It also asked for `frontierNote`, which `assemblePieceIssue` never
+publishes.
+
+The three published paragraphs now have three jobs, named as such in the
+assignment: **the finding, what it means, what to do.** The middle one is
+told not to restate the figures.
+
+A prompt is a wish, so the law makes it a rule (`auditRepetition`): if the
+second paragraph carries three or more figures and every one already
+appeared in the first, it is paragraph one again and the piece is refused.
+Referring back stays legal — "the extra 8.7 points" earns its place in an
+argument; restating the set does not. A sentence repeated across
+paragraphs is refused anywhere.
+
+Two notes on scope. It is **daily-only** — the weekly's `plain` and `lede`
+have jobs of their own and have not shown this failure; widening it is a
+separate change needing its own evidence. And a test runs it over every
+candidate the agenda can produce, which immediately caught the *house*
+prose breaking it: the `cheapest-at-floor` fallback restated its own price
+range. **A law the fallback violates would refuse the writer for a fault
+we ship ourselves.**
+
+Harness: `80eec64c72fb9912eca5aeded94fe63a2f641af9ff060d50e8d05f88a691affc`
+(supersedes `457870b2…`; dialed via `POTION_RESEARCH_DELTA_DAILY_HARNESS`
+in the host `.env.prod`, which is runtime truth and never rsynced).
+
 ## Filed follow-ups
 - **runx- sessions on the dashboard run route**: the gate session's
   recorded resolutions are read via `DATABASE_URL` by the release script

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { auditNoOwnSpend, auditRepetition, lintDraft } from './lint.js';
 import { renderMarkdown, writeIssue } from './publish.js';
 import { redactFactsForWriter } from './delta.js';
-import type { FactSheet } from './types.js';
+import type { FactSheet, Issue } from './types.js';
 
 const draft = (over: Partial<Record<string, string>> = {}) => ({
   title: 'A finding.',
@@ -75,19 +75,19 @@ describe('the own-spend law', () => {
 // a figure the writer never wrote, printed by the template (found live
 // 2026-09-04). The law now runs over the rendered page, not just the draft.
 describe('the own-spend law reaches the rendered page', () => {
-  const issue = (over: Record<string, unknown> = {}) => ({
-    slug: '2026-09-04', week: '2026-09-04', kind: 'daily' as const,
+  const issue = (over: Partial<Issue> = {}): Issue => ({
+    slug: '2026-09-04', week: '2026-09-04', kind: 'daily',
     title: 'A finding.', summary: 's', body: 'One paragraph.',
     publishedAt: '2026-09-04T17:00:00.000Z', byline: 'Potion Research',
     plain: 'p', lede: 'l', frontierNote: '', auditionNote: '', mixingNote: '', takeaway: 't',
     method: 'm', faq: [], facts: null,
     writer: { model: 'w', costUsd: 0.0031, runId: 'run-abc' },
-    status: 'published' as const,
+    status: 'published',
     ...over,
   });
 
   it('never prints what the writer run cost us', () => {
-    const md = renderMarkdown(issue() as never);
+    const md = renderMarkdown(issue());
     expect(md).toContain('run-abc');
     expect(md).not.toMatch(/\$[\d.]+/);
     expect(auditNoOwnSpend(md)).toBeNull();
@@ -95,7 +95,7 @@ describe('the own-spend law reaches the rendered page', () => {
 
   it('holds an issue whose rendered page states our spend', () => {
     const dir = mkdtempSync(join(tmpdir(), 'fnotes-'));
-    writeIssue(dir, issue({ body: 'The run cost us $0.31 to produce.' }) as never);
+    writeIssue(dir, issue({ body: 'The run cost us $0.31 to produce.' }));
     const written = JSON.parse(readFileSync(join(dir, '2026-09-04.json'), 'utf8')) as { status: string; heldReason?: string };
     expect(written.status).toBe('held');
     expect(written.heldReason).toMatch(/never published/);
