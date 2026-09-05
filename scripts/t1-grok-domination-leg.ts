@@ -112,7 +112,7 @@ const rows = (
      GROUP BY item_id, strategy_hash
   `)
 ).rows as Array<{ item_id: string; strategy_hash: string; q: number }>;
-for (const [si, h] of shapeHashes.entries()) {
+for (const h of shapeHashes) {
   const misses = rows.filter((r) => r.strategy_hash === h && Number(r.q) < 1).sort((a, b) => a.item_id.localeCompare(b.item_id));
   console.log(`\n${NAMES.get(h)?.trim()}: ${misses.length === 0 ? 'NO MISSES' : misses.map((m) => `${m.item_id} ${Number(m.q).toFixed(2)}`).join(', ')}`);
 }

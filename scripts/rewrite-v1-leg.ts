@@ -50,7 +50,7 @@ const pooled = new Map<string, Map<string, Array<{ q: number; n: number }>>>();
 
 for (const clusterId of CLUSTERS) {
   pooled.set(clusterId, new Map());
-  for (const [i, salt] of (process.env.LEG_SALTS?.split(',') ?? ['rwv1-a', 'rwv1-b']).entries()) {
+  for (const salt of process.env.LEG_SALTS?.split(',') ?? ['rwv1-a', 'rwv1-b']) {
     const label = `rwv1-${clusterId}-${salt}`;
     console.log(`\n=== ${label} (salt ${salt}) ===`);
     const res = await frontierPlatformSweepHandler(

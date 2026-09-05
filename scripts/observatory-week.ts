@@ -66,7 +66,10 @@ const W = await import('@potion/workers');
 const {
   frontierPlatformSweepHandler, PLATFORM_OPS_ORG_ID, PLATFORM_SUITE_BY_CLUSTER,
   isoWeek, envelopeFor, planLanes, canaryTarget, driftVerdict, saturationVerdict, rankCandidates, digestLine, isFreeTier, postObservatoryEntry,
-  CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, OBSERVATORY_ENVELOPE_USD, runFrontierNotes, postNoteLine,
+  // OBSERVATORY_ENVELOPE_USD is deliberately NOT destructured: envelopeFor
+  // takes it as a default parameter, so naming it here only risks this script
+  // and the library disagreeing about the cap.
+  CANARY_CAP_USD, AUDITION_CAP_USD, CANARY_SAMPLE_N, runFrontierNotes, postNoteLine,
 } = W;
 
 // ---- ledger + envelope ----
