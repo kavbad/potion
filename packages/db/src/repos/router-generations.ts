@@ -13,10 +13,12 @@
 //   · nothing is deleted. A superseded or rolled-back generation keeps its
 //     pins so it can be promoted again — "put it back" must not depend on
 //     recomputing what used to be true.
-import { and, desc, eq, gt, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ne } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import {
   frontierPins,
+  qualitySamples,
+  requestLogs,
   routerGenerations,
   type GenerationPin,
   type RouterGenerationRow,
@@ -230,6 +232,121 @@ export async function canaryingGeneration(db: PotionDb, orgId: string): Promise<
     )
     .limit(1);
   return rows[0] ?? null;
+}
+
+export interface GenerationSideSamples {
+  requests: number;
+  /** Per-request cost in USD, one entry per served request. Raw, because
+   * the interval has to be computed over the samples — a mean handed across
+   * a boundary cannot be given a confidence interval afterwards. */
+  costs: number[];
+  /** Serve-judge scores for those requests, when the sampler took any. */
+  qualities: number[];
+}
+
+export interface GenerationEvidence {
+  /** Requests the canary actually routed. */
+  canary: GenerationSideSamples;
+  /** Requests the PROMOTED routing served in the same window — the
+   * comparator. Concurrent by construction: both sides are drawn from the
+   * same traffic over the same period, which is the whole reason a canary
+   * is better evidence than a suite. */
+  control: GenerationSideSamples;
+  /** Where the window starts — the first request this generation routed. */
+  since: string | null;
+}
+
+/**
+ * What a canary has measured so far: its own requests against the promoted
+ * routing's, over the same window.
+ *
+ * HOLDOUT ROWS ARE EXCLUDED FROM BOTH SIDES. A holdout served the org's
+ * incumbent, so it is evidence about the baseline and about neither
+ * generation; leaving it in the control would drag the comparator toward
+ * the incumbent's cost and quietly flatter any canary.
+ */
+export async function generationEvidence(
+  db: PotionDb,
+  orgId: string,
+  generationId: string,
+): Promise<GenerationEvidence> {
+  const firstRow = await db
+    .select({ ts: requestLogs.ts })
+    .from(requestLogs)
+    .where(and(eq(requestLogs.orgId, orgId), eq(requestLogs.generationId, generationId)))
+    .orderBy(requestLogs.ts)
+    .limit(1);
+  const since = firstRow[0]?.ts ?? null;
+  if (since === null) {
+    return { canary: { requests: 0, costs: [], qualities: [] }, control: { requests: 0, costs: [], qualities: [] }, since: null };
+  }
+
+  const rows = await db
+    .select({
+      generationId: requestLogs.generationId,
+      usage: requestLogs.usage,
+      completionId: requestLogs.completionId,
+    })
+    .from(requestLogs)
+    .where(
+      and(
+        eq(requestLogs.orgId, orgId),
+        eq(requestLogs.status, 'ok'),
+        eq(requestLogs.holdout, false),
+        gte(requestLogs.ts, since),
+      ),
+    );
+
+  // Serve-judge scores, joined by the completion id the sampler records.
+  const scored = new Map<string, number[]>();
+  for (const q of await db
+    .select({ requestId: qualitySamples.requestId, quality: qualitySamples.quality })
+    .from(qualitySamples)
+    .where(and(eq(qualitySamples.orgId, orgId), gte(qualitySamples.createdAt, since)))) {
+    if (q.requestId === null) continue;
+    const list = scored.get(q.requestId) ?? [];
+    list.push(q.quality);
+    scored.set(q.requestId, list);
+  }
+
+  const side = (): GenerationSideSamples => ({ requests: 0, costs: [], qualities: [] });
+  const out: GenerationEvidence = { canary: side(), control: side(), since: since.toISOString() };
+  for (const r of rows) {
+    // Only THIS generation's rows count as canary. Another generation's
+    // label belongs to neither side of this comparison.
+    const bucket =
+      r.generationId === generationId ? out.canary : r.generationId === null ? out.control : null;
+    if (bucket === null) continue;
+    bucket.requests += 1;
+    const cost = (r.usage as { costUsd?: number } | null)?.costUsd;
+    if (typeof cost === 'number' && Number.isFinite(cost)) bucket.costs.push(cost);
+    for (const q of (r.completionId !== null ? scored.get(r.completionId) : undefined) ?? []) {
+      bucket.qualities.push(q);
+    }
+  }
+  return out;
+}
+
+/**
+ * Record that a human promoted a generation THE EVIDENCE CONDEMNED, and
+ * what the evidence said at the time. Appended to the note rather than
+ * replacing it: the override is a fact about this generation that outlives
+ * whoever typed it, and a promotion against measurement is exactly the
+ * thing a future reader will want explained.
+ */
+export async function noteGenerationOverride(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  why: string,
+): Promise<void> {
+  const gen = await getRouterGeneration(db, orgId, id);
+  if (gen === null) return;
+  const stamp = `[promoted over adverse evidence ${new Date().toISOString()}] ${why}`;
+  await db
+    .update(routerGenerations)
+    .set({ note: gen.note === null || gen.note === '' ? stamp : `${gen.note}\n${stamp}` })
+    .where(and(eq(routerGenerations.orgId, orgId), eq(routerGenerations.id, id)));
 }
 
 /** Every generation an org could roll back TO: promoted at some point, not

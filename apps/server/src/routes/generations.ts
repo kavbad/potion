@@ -35,6 +35,8 @@ import {
   rollbackTo,
   servingGeneration,
   setCanaryRate,
+  generationEvidence,
+  noteGenerationOverride as noteOverride,
   type GenerationPin,
 } from '@potion/db';
 import {
@@ -50,6 +52,7 @@ import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 import { compileAndMintRouter } from '../routing/compile-router.js';
 import { bustCanaryCache } from '../routing/canary.js';
+import { generationVerdict } from '../routing/generation-verdict.js';
 
 /** The org's bound policy, resolved exactly as the compiler resolves it. */
 async function orgPolicy(ctx: PotionContext, orgId: string): Promise<Policy> {
@@ -176,9 +179,43 @@ export function registerGenerationRoutes(app: FastifyInstance, ctx: PotionContex
     return reply.send({ generation: dto(res.generation!), canaryRate: res.generation!.canaryRate });
   });
 
+  // What this candidate's canary has proved so far, on the org's own traffic.
+  app.get('/api/router/generations/:id/evidence', async (req, reply) => {
+    const orgId = req.potionOrg!.orgId;
+    const { id } = req.params as { id: string };
+    const gen = await getRouterGeneration(db, orgId, id);
+    if (gen === null) {
+      return reply.code(404).send(openAiError(`unknown generation '${id}'`, 'invalid_request_error', 'not_found'));
+    }
+    const verdict = generationVerdict(await generationEvidence(db, orgId, id), id);
+    return reply.send({ generation: dto(gen), verdict });
+  });
+
   app.post('/api/router/generations/:id/promote', { preHandler: [requireRole('admin')] }, async (req, reply) => {
     const orgId = req.potionOrg!.orgId;
     const { id } = req.params as { id: string };
+    const { acceptDegradation } = (req.body ?? {}) as { acceptDegradation?: unknown };
+    // THE GATE. Refuse only what the org's OWN traffic condemns: a candidate
+    // its canary measured as confidently worse. Thin or merely unconvincing
+    // evidence does not block — promoting a never-canaried generation is an
+    // ordinary act, so punishing an operator for gathering evidence would be
+    // backwards. The override exists because a human may know something the
+    // measurement does not, and it is RECORDED on the row rather than
+    // silently honoured.
+    const verdict = generationVerdict(await generationEvidence(db, orgId, id), id);
+    if (verdict.adverse && acceptDegradation !== true) {
+      return reply.code(409).send(
+        openAiError(
+          `your own traffic says this generation is worse — ${verdict.reasons.join(' ')} ` +
+            'Send acceptDegradation: true to promote it anyway; the override is recorded on the generation.',
+          'invalid_request_error',
+          'generation_evidence_adverse',
+        ),
+      );
+    }
+    if (verdict.adverse && acceptDegradation === true) {
+      await noteOverride(db, orgId, id, verdict.reasons.join(' '));
+    }
     const res = await promoteGeneration(db, orgId, id);
     if (!res.ok) {
       const code = res.reason === 'unknown generation' ? 404 : 409;
@@ -186,6 +223,7 @@ export function registerGenerationRoutes(app: FastifyInstance, ctx: PotionContex
     }
     return reply.send({
       promoted: true,
+      verdict,
       generation: dto(res.generation!),
       supersededId: res.previous?.id ?? null,
       requestId: `promote-${randomUUID().slice(0, 8)}`,

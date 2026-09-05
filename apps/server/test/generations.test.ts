@@ -9,7 +9,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint, type StrategyConfig } from '@potion/core';
-import { insertApiKey, insertPolicy, listFrontierPins, listRequestLogs } from '@potion/db';
+import { insertApiKey, insertPolicy, insertRequestLog, listFrontierPins, listRequestLogs } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 // R3: cross-tenant suites use TWO DISTINCT NON-DEFAULT orgs from the shared
@@ -258,5 +258,83 @@ describe('the canary slice', () => {
     for (let i = 0; i < 8; i += 1) {
       expect(String((await chat()).headers['x-frontier-trace'])).not.toContain('canary=');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G2 rung 4c — THE EVIDENCE GATE ON PROMOTE
+// ---------------------------------------------------------------------------
+describe('the evidence gate', () => {
+  const post = (url: string, payload: Record<string, unknown>) =>
+    app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' }, payload });
+
+  it('reports what the canary measured, and lets a thin canary through', async () => {
+    const staged = (await api('POST', '/api/router/generations')).json() as { generation: { id: string } };
+    const ev = await api('GET', `/api/router/generations/${staged.generation.id}/evidence`);
+    expect(ev.statusCode).toBe(200);
+    const v = (ev.json() as { verdict: { sufficient: boolean; adverse: boolean; reasons: string[] } }).verdict;
+    expect(v.sufficient).toBe(false); // it has routed nothing
+    expect(v.adverse).toBe(false);
+    // A generation with no canary at all promotes exactly as before.
+    expect((await api('POST', `/api/router/generations/${staged.generation.id}/promote`)).statusCode).toBe(200);
+  });
+
+  it('REFUSES a promotion the org’s own traffic condemns, and names why', async () => {
+    // Seed the comparison directly: a canary-labelled cohort that cost far
+    // more than the concurrent control. Both sides are ok, non-holdout rows
+    // in the same window, which is what generationEvidence reads.
+    const gen = (await api('POST', '/api/router/generations')).json() as { generation: { id: string } };
+    const id = gen.generation.id;
+    for (let i = 0; i < 40; i += 1) {
+      await insertRequestLog(db(), {
+        orgId: ORG, clusterId: CLUSTER, strategyHash: 'h-canary', model: 'mock-mid', status: 'ok',
+        usage: { inputTokens: 10, outputTokens: 10, costUsd: 0.05, latencyMs: 10 }, latencyMs: 10,
+        generationId: id,
+      } as never);
+      await insertRequestLog(db(), {
+        orgId: ORG, clusterId: CLUSTER, strategyHash: 'h-control', model: 'mock-cheap', status: 'ok',
+        usage: { inputTokens: 10, outputTokens: 10, costUsd: 0.001, latencyMs: 10 }, latencyMs: 10,
+      } as never);
+    }
+    const ev = (await api('GET', `/api/router/generations/${id}/evidence`)).json() as {
+      verdict: { sufficient: boolean; adverse: boolean; canaryRequests: number };
+    };
+    expect(ev.verdict.sufficient).toBe(true);
+    expect(ev.verdict.adverse).toBe(true);
+    expect(ev.verdict.canaryRequests).toBeGreaterThanOrEqual(40);
+
+    const refused = await api('POST', `/api/router/generations/${id}/promote`);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.code).toBe('generation_evidence_adverse');
+    expect(refused.json().error.message).toContain('costs more on your own traffic');
+    // And it did NOT promote: the previous generation still serves.
+    const list = (await api('GET', '/api/router/generations')).json() as { servingId: string };
+    expect(list.servingId).not.toBe(id);
+  });
+
+  it('the override promotes anyway and RECORDS that it overrode the evidence', async () => {
+    const list = (await api('GET', '/api/router/generations')).json() as {
+      generations: Array<{ id: string; status: string; canaryRate: number }>;
+    };
+    const condemned = list.generations.find((g) => g.status === 'candidate')!;
+    const res = await post(`/api/router/generations/${condemned.id}/promote`, { acceptDegradation: true });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((res.json() as { verdict: { adverse: boolean } }).verdict.adverse).toBe(true);
+
+    // The override is written on the row — a promotion against measurement
+    // is exactly what a future reader will want explained.
+    const after = (await api('GET', '/api/router/generations')).json() as {
+      servingId: string;
+      generations: Array<{ id: string; note: string | null }>;
+    };
+    expect(after.servingId).toBe(condemned.id);
+    const note = after.generations.find((g) => g.id === condemned.id)?.note ?? '';
+    expect(note).toContain('promoted over adverse evidence');
+    expect(note).toContain('costs more on your own traffic');
+  });
+
+  it('evidence is org-scoped — a foreign id is a uniform 404', async () => {
+    const mine = (await api('GET', '/api/router/generations')).json() as { generations: Array<{ id: string }> };
+    expect((await api('GET', `/api/router/generations/${mine.generations[0]!.id}/evidence`, KEY_B)).statusCode).toBe(404);
   });
 });
