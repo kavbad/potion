@@ -73,8 +73,19 @@ export function EvidenceBand() {
             const star = r.masked;
             return (
               <div key={r.label}>
-                <div className="flex items-baseline justify-between font-mono text-xs">
-                  <span>
+                {/* PHONES STACK (2026-09-05, found by walking the live page at
+                    375px). One flex row cannot hold a masked label and its
+                    numbers at that width, so the name wrapped INSIDE itself:
+                    "or-" on one line, the redaction block on the next, and
+                    "withheld" on a third. It shattered only on the masked row
+                    — the widest label, and the one row the whole section
+                    exists to make ("The name? That's the product."). Below sm
+                    the label takes its own line at full width; from sm up the
+                    original single-line layout is unchanged. nowrap is the
+                    belt to that braces: a redaction block is one token and
+                    must never be broken across lines. */}
+                <div className="flex flex-col gap-0.5 font-mono text-xs sm:flex-row sm:items-baseline sm:justify-between sm:gap-0">
+                  <span className="whitespace-nowrap">
                     <span className={star ? 'font-medium text-accent' : 'text-ink'}>
                       {r.label}
                     </span>
