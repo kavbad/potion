@@ -129,6 +129,20 @@ function surveyPackages(): Pkg[] {
  * naming the guard. That is the floor, not a deadline. It is a RATCHET: the
  * count may fall, never rise.
  *
+ * WHY THE FALL IS ASSERTED TOO, and not merely permitted. A number policed in
+ * one direction drifts in the other for free, and a count that DROPS has two
+ * causes that look identical from here: the casts went away, or the scanner
+ * stopped seeing them. So a fall fails, demanding the budget be lowered
+ * deliberately — which forces someone to say which of the two happened.
+ *
+ * That is not theory. It is the only guard in this repo that has caught a
+ * change while it was still on a branch: PR #8 relocated five integration
+ * tests out of packages/ and into tests/, which TEST_ROOTS did not list, and
+ * the count fell. Nothing had improved — the casts had moved somewhere this
+ * file could not look. Recording the lower number would have written down an
+ * improvement that never happened AND blinded the ratchet to that directory
+ * permanently. A one-sided ratchet would have accepted it in silence.
+ *
  * IT COUNTS THE AST, NOT THE TEXT (2026-09-04). A text scan was wrong in
  * both directions, and both errors cost someone a cycle:
  *
