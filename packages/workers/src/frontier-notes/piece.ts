@@ -111,7 +111,10 @@ function reading(c: AgendaCandidate): string {
     case 'quality-premium':
       return `The premium buys ${num(e.qualityPoints, (x) => x.toFixed(1))} quality points on this suite. Whether that is worth ${num(e.factor, ratio)} the price depends on what a failure costs you: at high volume with a cheap retry, it usually is not; on work that ships unreviewed, it can be.`;
     case 'cheapest-at-floor':
-      return `${num(e.clearingCount, String)} models clear the bar, so the choice is not between quality and price — it is between ${usd(e.cheapestCostPer1K)} and ${usd(e.dearestCostPer1K)} for the same measured outcome. Paying the top of that range buys nothing this suite can detect.`;
+      // States no figure from paragraph one on purpose: the range is the
+      // finding, and repeating it here is what THE SECOND-PARAGRAPH LAW
+      // refuses. What a reader does not already know is why a range exists.
+      return `Everything in that range clears the same bar on this suite, so the spread measures what a seller can charge rather than what a buyer receives. The only thing that moves the answer is whether your own quality bar is really the one measured here.`;
     case 'head-to-head':
       return `Both were run against the same held-out items on the same day, so the gap is a property of the models rather than of the test. A ${num(e.factor, ratio)} price difference at this quality distance is the whole decision.`;
     case 'price-outlier':

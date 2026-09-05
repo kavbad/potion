@@ -3,7 +3,8 @@
 // nothing it cannot prove.
 import { describe, expect, it } from 'vitest';
 import { claimKey, generateAgenda, generateCatalogueAgenda, renderAgenda, type ClusterSignal } from './agenda.js';
-import { auditPieceNumbers } from './piece.js';
+import { auditPieceNumbers, deterministicPiece } from './piece.js';
+import { auditRepetition } from './lint.js';
 
 const NOW = new Date('2026-09-04T12:00:00Z');
 
@@ -243,5 +244,18 @@ describe('the piece number law and the footer', () => {
       auditionNote: '3 measurement cycles ran in the last 24 hours, 7 newly listed models were measured.',
     };
     expect(auditPieceNumbers(draft as never, candidate as never, new Date('2026-09-04T00:00:00Z'))).toBeNull();
+  });
+});
+
+// The fallback must obey the law it enforces: if the composed piece ever
+// restated itself, the daily would refuse the writer for a fault it shares.
+describe('the composed piece obeys the second-paragraph law', () => {
+  it('holds for every candidate the agenda can produce', () => {
+    const a = generateAgenda({ signals: [CODE_GEN, CREATIVE], now: NOW });
+    expect(a.length).toBeGreaterThan(1);
+    for (const c of a) {
+      const piece = deterministicPiece(c, '3 measurement cycles ran in the last 24 hours.');
+      expect(auditRepetition(piece), `${c.id} restates itself`).toBeNull();
+    }
   });
 });
