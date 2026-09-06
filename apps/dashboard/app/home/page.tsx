@@ -17,6 +17,9 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Potion — The Compiler for Inference',
+  // Same page as '/', so it must not compete with it in the index. The URL
+  // stays live and shareable; the ranking signal consolidates on '/'.
+  alternates: { canonical: '/' },
 };
 
 export default function HomePage() {
