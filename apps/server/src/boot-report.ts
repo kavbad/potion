@@ -20,7 +20,7 @@
 // default, but `empty` means a human wrote the variable and left it
 // blank, which is nearly always a mistake and is invisible to any check
 // that tests presence. Those are called out by name.
-import type { FastifyBaseLogger } from 'fastify';
+
 
 export type GateSource = 'explicit' | 'default-unset' | 'default-empty';
 
@@ -321,8 +321,22 @@ export class BootRefusedError extends Error {
  * Emit the report. Warnings go at WARN so they survive a log level that
  * drops info, and each names the variable so the fix is unambiguous.
  */
+/**
+ * The three log levels this file uses — NOT FastifyBaseLogger.
+ *
+ * Taking the whole Fastify logger forced every caller that is not Fastify
+ * (a test asserting the boot REFUSES) to fake ~15 methods or cast the fake to
+ * nothing, and `as unknown as` on a fixture means the fixture is checked
+ * against nothing at all. A function should ask for what it uses.
+ */
+export interface BootGateLog {
+  info(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  fatal(obj: object, msg: string): void;
+}
+
 export function logBootGates(
-  log: FastifyBaseLogger,
+  log: BootGateLog,
   env: BootEnvView,
   providerMode: 'live' | 'mock',
   queueKind?: 'memory' | 'bullmq' | 'external',

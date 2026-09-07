@@ -215,8 +215,24 @@ export function betaInvCdf(p: number, a: number, b: number): number {
  * boundary conventions are standard: x = 0 pins lo = 0, x = n pins hi = 1.
  *
  * Deterministic by construction — no resampling, so no seed to store.
- * Overdispersion across task families is NOT modeled here; the follow-up is
- * a task-family bootstrap where family metadata exists.
+ *
+ * IT ASSUMES THE n OBSERVATIONS ARE INDEPENDENT, and it cannot tell when they
+ * are not. Measured (stats.test.ts, 3000 seeded trials at true p = 0.90):
+ *
+ *   60 independent items          coverage 95.1%   width 0.148
+ *   6 items seen 10 times each    coverage 90.8%   width 0.148
+ *   2 groups x 50 observations    coverage 72.5%   width 0.113
+ *
+ * The width is the tell: it is IDENTICAL for 60 independent items and for 6
+ * items seen ten times, because nothing in the input says which it is. The
+ * lower bound — the number every floor, graduation and qualification decision
+ * in this repo actually reads — overclaims 14.7% of the time in that last row
+ * against a nominal 2.5%.
+ *
+ * Where grouping metadata exists, use `clusteredQualityCi` instead. Where it
+ * does not, this is the right interval and the limit is real: see
+ * packages/pareto/src/outcome-evidence.ts, whose rows carry no customer or
+ * session id to group by.
  */
 export function jeffreysCi(scores: number[]): [number, number] {
   const n = scores.length;
@@ -227,4 +243,95 @@ export function jeffreysCi(scores: number[]): [number, number] {
   const lo = s <= 0 ? 0 : betaInvCdf(0.025, a, b);
   const hi = s >= n ? 1 : betaInvCdf(0.975, a, b);
   return [lo, hi];
+}
+
+/**
+ * The same boundary-honest interval, for scores that are NOT independent —
+ * the task-family bootstrap `jeffreysCi` names as its own missing follow-up.
+ *
+ * `groups[i]` labels the source of `scores[i]`: the task family, the situation
+ * fingerprint, the item. Ten runs of one situation are ONE unit of evidence
+ * about the world and ten observations to `jeffreysCi`, which is why its
+ * interval does not widen when the same work is repeated.
+ *
+ * METHOD. Resample GROUPS with replacement (the cluster bootstrap — the
+ * standard treatment, and the only resampling that preserves within-group
+ * correlation), take the mean of the resulting pooled observations, read
+ * percentiles. Groups are resampled, never observations inside them.
+ *
+ * THE UNION WITH JEFFREYS IS DELIBERATE. A cluster bootstrap over an all-ones
+ * sample returns [1, 1] — precisely the ±0.000 certainty that `jeffreysCi`
+ * exists to refuse. So the result is the WIDER of the two bounds on each
+ * side: the bootstrap contributes what it knows about clustering, Jeffreys
+ * contributes what it knows about the boundary, and neither can quietly
+ * narrow the other. On singleton groups the bootstrap has nothing extra to
+ * say and the result is `jeffreysCi` unchanged.
+ *
+ * THE UNION ALSO MEANS THIS IS NEVER NARROWER, so improved coverage is not by
+ * itself evidence that clustering is modeled — a bootstrap that ignored the
+ * groups entirely would raise coverage too, and did, and passed the first
+ * version of the test written for this. The property that actually shows the
+ * method is width RESPONDING to group size at fixed n (stats.test.ts, 'THE
+ * DISCRIMINATOR'): 60 observations in 30 groups vs in 3 groups measure
+ * 0.163 and 0.181, while `jeffreysCi` reads 0.149 for both.
+ *
+ * IT CANNOT RESCUE A TINY NUMBER OF GROUPS. With two groups there are three
+ * distinct resamples in the world; coverage measured 72% -> 76%. That is not
+ * a defect of the estimator, it is two units of evidence. The remedy is to
+ * REPORT the group count, not to widen an interval until it hides the fact.
+ *
+ * REPRODUCIBLE WITHOUT A STORED SEED. `jeffreysCi` needed none; this does, so
+ * the seed is DERIVED from the evidence itself via seedFromString. Same
+ * scores and same groups give the same interval forever, and a verdict stays
+ * re-derivable from what it was computed over.
+ */
+export function clusteredQualityCi(
+  scores: number[],
+  groups: readonly string[],
+  resamples: number = BOOTSTRAP_RESAMPLES,
+  alpha: number = 0.05,
+): [number, number] {
+  if (scores.length !== groups.length) {
+    throw new Error(
+      `clusteredQualityCi: ${scores.length} scores but ${groups.length} group labels — ` +
+        `a score whose source is unknown cannot be grouped, and silently dropping it would ` +
+        `narrow the interval it was meant to widen`,
+    );
+  }
+  const [jLo, jHi] = jeffreysCi(scores);
+  if (scores.length === 0) return [jLo, jHi];
+
+  const byGroup = new Map<string, number[]>();
+  for (let i = 0; i < scores.length; i++) {
+    const g = groups[i]!;
+    const arr = byGroup.get(g);
+    if (arr) arr.push(scores[i]!);
+    else byGroup.set(g, [scores[i]!]);
+  }
+  const clusters = [...byGroup.values()];
+  // Every observation its own group: there is no clustering to model, and the
+  // bootstrap would only add resampling noise to an exact interval.
+  if (clusters.length === scores.length) return [jLo, jHi];
+
+  const seed = seedFromString(
+    `clustered|${scores.length}|${[...byGroup.keys()].sort().join(',')}|${sha256(JSON.stringify(scores))}`,
+  );
+  const rand = mulberry32(seed);
+  const means: number[] = new Array<number>(resamples);
+  for (let r = 0; r < resamples; r++) {
+    let sum = 0;
+    let count = 0;
+    for (let c = 0; c < clusters.length; c++) {
+      const picked = clusters[Math.floor(rand() * clusters.length)]!;
+      for (const v of picked) {
+        sum += Math.min(1, Math.max(0, v));
+        count++;
+      }
+    }
+    means[r] = count === 0 ? 0 : sum / count;
+  }
+  means.sort((a, b) => a - b);
+  const bLo = means[Math.max(0, Math.floor((alpha / 2) * (resamples - 1)))]!;
+  const bHi = means[Math.min(resamples - 1, Math.ceil((1 - alpha / 2) * (resamples - 1)))]!;
+  return [Math.min(jLo, bLo), Math.max(jHi, bHi)];
 }
