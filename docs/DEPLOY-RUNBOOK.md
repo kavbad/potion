@@ -346,12 +346,29 @@ docker compose --profile split up -d worker server
 |---|---|
 | `POTION_WORKER=off`, memory queue driver | **server refuses to boot.** A process-local queue nobody consumes swallows every job silently, forever, and no worker could rescue it |
 | standalone worker started on the memory driver | **worker refuses to start**, same reasoning from the other side |
-| `POTION_WORKER=off`, Redis present, worker NOT started | **not detected.** Jobs accumulate in Redis. The boot gate cannot tell "a worker is coming" from "nobody is consuming" |
+| `POTION_WORKER=off`, Redis present, worker NOT started | **detected at runtime** (2026-09-06). `GET /readyz` carries a `consumers` block, and `potion_queue_stalled` goes to 1 |
 
-That last row is a real gap. After flipping the dial, check
-`docker compose ps worker` — and queue depth in Redis is the standing signal.
-An automatic liveness proof (the worker heartbeating somewhere the server can
-read) is not built.
+That last row was an open gap when the split shipped and is now closed. The
+boot gate could never have caught it: at boot, "no worker attached yet" and
+"no worker will ever attach" are the same observation. So it is answered at
+runtime instead —
+
+```
+curl -s https://api.<domain>/readyz | jq .consumers
+{ "waiting": 41, "consumers": 0, "stalled": true, "detail": "41 job(s) waiting and NO consumer attached — ..." }
+```
+
+**The rule is `waiting > 0 AND consumers == 0`, and both halves matter.**
+Waiting alone is not a stall: one worker inside a 24-minute research cycle
+legitimately leaves the next job queued, and a check that fired on depth would
+be muted within a week. Zero consumers alone is not a stall either — that is a
+normal second of a rollout.
+
+**It does NOT fail `/readyz`.** Readiness drains the instance from the load
+balancer, and a missing worker does not stop this process serving. Failing the
+probe here would turn "background work stopped" into "the product is down".
+Alert on `potion_queue_stalled` instead; `/metrics` is scraped, and the
+readiness probe the load balancer already runs is what samples it.
 
 **`org:delete` caches.** The handler invalidates the provider cache of the
 process that RUNS it. In-process that is the serving cache, which is the point

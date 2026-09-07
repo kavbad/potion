@@ -194,14 +194,36 @@ clears your bar.*
   every cycle, sweep and alert). Deploy: `deploy/docker-compose.prod.yml`
   gains a `worker` service behind `profiles: ["split"]`, so without
   `--profile split` the deployment is byte-identical. Runbook §10.
-- **TWO refusals guard the split, and ONE gap remains.** `POTION_WORKER=off`
-  on the memory driver refuses to boot, and a standalone worker on the memory
-  driver refuses to start — a process-local queue nobody can reach swallows
-  every job silently, forever. **NOT detected**: `POTION_WORKER=off` with
-  Redis present and no worker actually started; jobs accumulate in Redis and
-  the boot gate cannot tell "a worker is coming" from "nobody is consuming".
-  Check `docker compose ps worker` after flipping the dial. An automatic
-  liveness proof is not built.
+- **TWO refusals guard the split, and the third gap is now CLOSED.**
+  `POTION_WORKER=off` on the memory driver refuses to boot, and a standalone
+  worker on the memory driver refuses to start — a process-local queue nobody
+  can reach swallows every job silently, forever.
+- **The worker-liveness gap, closed** (2026-09-06): `POTION_WORKER=off` with
+  Redis present and no worker actually started was undetected — jobs
+  accumulate and nothing says so. The boot gate never could have caught it: at
+  boot, "no worker attached yet" and "no worker will ever attach" are the same
+  observation. So it is answered at RUNTIME. `PotionQueue.consumerHealth()`
+  reports facts (waiting count, attached consumers — bullmq reads Redis's own
+  `getWorkersCount`, the memory driver reports whether any handler is
+  registered); `assessConsumers` in readiness.ts makes the call; `GET /readyz`
+  carries a `consumers` block and `potion_queue_stalled` goes to 1.
+  **The rule is `waiting > 0 AND consumers == 0`, and both halves matter**:
+  waiting alone is not a stall (one worker inside a 24-minute cycle
+  legitimately leaves a queue, and a depth check would be muted in a week),
+  and zero consumers alone is a normal second of a rollout.
+  **It deliberately does NOT fail /readyz** — readiness drains the instance
+  from the load balancer, and a missing worker does not stop this process
+  SERVING; failing the probe would turn "background work stopped" into "the
+  product is down". Alert on the metric. The readiness probe the load balancer
+  already runs is what samples it, so no timer was added.
+- **Found while closing it: `MemoryQueue.close()` could hang forever.**
+  `pump()` stops at the head of the line when that job's name has no handler
+  (deliberately — a handler registered later still gets its jobs), and
+  `close()` waited on `jobs.length > 0`. One undeliverable job and close never
+  returned. Reachable exactly because of the split: a server with
+  `POTION_WORKER=off` registers NO handlers, so every job it accepts is
+  undeliverable in-process. Found by a test hanging 60s. Close is terminal, so
+  it now waits only for work that CAN drain.
 - **Also found by P1-3**: the standalone worker booted, printed "consuming 24
   job kinds", and EXITED — a worker has no listening socket, so the only thing
   holding its event loop open was the queue driver's own connection. Now an

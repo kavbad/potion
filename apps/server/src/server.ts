@@ -213,8 +213,10 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // ── M2 Wave 2 auth (#14): magic-link session auth + dashboard guard ──────
   // /auth/* routes (request-link / verify / logout / invite / me) and the
   // /api/* guard: session-or-apikey auth + viewer read-only / member write /
-  // admin invite RBAC. Dev-mode bypass POTION_DEV_AUTH=1 (default ON outside
-  // production) keeps the pre-auth local-tool behavior — see auth.ts header.
+  // admin invite RBAC. Dev-mode bypass POTION_DEV_AUTH=1 keeps the pre-auth
+  // local-tool behaviour; since P1-2 its DEFAULT is an allow-list — on only
+  // when NODE_ENV names a non-production runtime, never merely because
+  // NODE_ENV is absent or misspelled. See auth.ts header.
   app.decorateRequest('potionOrg', null);
   app.decorateRequest('potionAuth', null);
   app.addHook('onRequest', dashboardAuthHook(ctx));

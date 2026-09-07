@@ -65,7 +65,30 @@ export interface PotionQueue {
   ): void;
   /** Status lookup for the jobs endpoint; null when the id is unknown. */
   getJob(id: string): Promise<JobStatus | null>;
+  /**
+   * FACTS about who is draining this queue — the P1-3 liveness gap.
+   *
+   * A server started with POTION_WORKER=off enqueues and never consumes. If
+   * the standalone worker is not actually running, jobs accumulate in Redis
+   * and NOTHING says so: the boot gate cannot tell "a worker is coming" from
+   * "nobody is consuming", and every research cycle, guarantee sweep and
+   * alert dispatch is accepted and silently never runs.
+   *
+   * Facts only, no verdict. Whether `waiting > 0, consumers = 0` is a stall
+   * or a queue about to be picked up is a POLICY call, and it is made in
+   * apps/server/src/readiness.ts where the deployment shape is known.
+   *
+   * Optional so an out-of-tree driver keeps compiling.
+   */
+  consumerHealth?(): Promise<QueueConsumerHealth>;
   close(): Promise<void>;
+}
+
+export interface QueueConsumerHealth {
+  /** Jobs accepted and not yet started. */
+  waiting: number;
+  /** Processes currently attached to this queue as consumers. */
+  consumers: number;
 }
 
 /** Back-compat alias — SPEC §7 named the interface `Queue`. */
