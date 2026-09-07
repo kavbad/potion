@@ -173,7 +173,7 @@ state is the Redis AOF and Caddy volumes, both on the VM.
 
 ### 1.5 DNS / TLS — **pick: Caddy in-compose (Let's Encrypt) + DNS-only at the registrar/Cloudflare; runner-up: Cloudflare proxied + origin cert.**
 
-`deploy/Caddyfile` already provisions a Let's Encrypt cert on `POTION_SITE`
+`deploy/Caddyfile` already provisions Let's Encrypt certs on the site vars
 and **enforces the `/metrics` 403** that `route-inventory.ts`'s "network-
 restricted by deployment posture" justification depends on (Caddyfile:17). The
 server publishes no ports — it is reachable only through Caddy — so keeping TLS
@@ -199,7 +199,7 @@ set.
 
 - **Error — Sentry, Developer/free tier: 5,000 errors/mo, 1 user, 30-day
   retention** `[verified]`. Net-new: a minimal `@sentry/node` init in
-  `buildServer` covers the in-process worker too (they share the process — §2),
+  `buildServer` covers the in-process worker too (they share the process by DEFAULT — §2; `POTION_WORKER=off` plus the compose `worker` service splits them, see DEPLOY-RUNBOOK §10),
   so one wiring point instruments everything. The honest-stub convention wants
   an unwired failure path to be visible; error reporting for a partner-facing
   deploy is worth the single init. **This is the only net-new *code* the
@@ -307,7 +307,7 @@ openssl rand -hex 32   # → POTION_OPERATOR_TOKEN
 
 | Variable | Value | Why / source in code |
 |---|---|---|
-| `POTION_SITE` | `potion.<domain>` | Caddy provisions TLS for it (`Caddyfile:6`). `:443` only for the local rehearsal. |
+| `POTION_API_SITE` / `POTION_APP_SITE` / `POTION_ROOT_SITE` | `api.<domain>` / `app.<domain>` / `<domain>` | Caddy provisions TLS for each (`deploy/Caddyfile`). `:443` only for the local rehearsal. A single `POTION_SITE` was split into these three; the old name is read by nothing. |
 | `DATABASE_URL` | Render/Neon connection string, `sslmode=require` | `db.ts:35`. Direct endpoint if Neon (no `-pooler`). |
 | `PG_POOL_MAX` | `10` (default) | `pool.ts:32`; one pool, shared by the in-process worker. |
 | `PG_CONN_TIMEOUT_MS` | `15000` | Compose default; raised over the code default (5000) for cold-connect headroom. |
@@ -357,7 +357,7 @@ recorded and the runbook corrected in place.
 | 2 | **Compose bring-up** | `… up -d` | `depends_on: service_healthy` gates on Redis; `start_period: 40s` covers cold-DB migration; all services `Up`. |
 | 3 | **Server `/readyz` healthcheck** | compose healthcheck | Container reports `healthy`; `/readyz` = 200 (db ping + queue ping + breaker summary). |
 | 4 | **BullMQ against real Redis** | first job (e.g. the guarantee 60s sweep, or a lab run) | A job is consumed by the in-process BullMQ worker against `redis:7` — never verified outside `ioredis-mock` (F20). AOF present in `redisdata`. |
-| 5 | **TLS / ACME issuance** | `POTION_SITE=potion.<domain>`, ports 80/443 reachable | `curl -sSI https://potion.<domain>/healthz` → `200`; a real Let's Encrypt cert; check renewal config. |
+| 5 | **TLS / ACME issuance** | the three site vars set, ports 80/443 reachable | `curl -sSI https://potion.<domain>/healthz` → `200`; a real Let's Encrypt cert; check renewal config. |
 | 6 | **`/metrics` 403** (load-bearing) | `curl -s -o /dev/null -w '%{http_code}' https://host/metrics` | `403` — this **is** the "network-restricted by deployment posture" that `route-inventory.ts` asserts. Until it returns 403 that justification is a phantom. (If `POTION_METRICS=0`, prove the route is absent instead.) |
 | 7 | **HTTP→HTTPS redirect** | `curl -sSI http://host/healthz \| head -1` | `308` → https (Caddy default; verify, don't assume). |
 

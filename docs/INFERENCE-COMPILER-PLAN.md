@@ -202,7 +202,7 @@ condition and pays nothing.
 
 ### Compile-down (2026-09-05): the shapes that ARE programs, and the ones that are not
 
-`compileToProgram` (`packages/strategies/src/compile.ts`) expresses the
+`compileToProgram` (`packages/core/src/compile.ts`) expresses the
 handwritten shapes in the IR, and every claim is MEASURED: the shape and its
 compiled program run against the same scripted providers and must produce the
 same answer, the same models called, and the same cost.
@@ -1371,8 +1371,42 @@ tree and every one of them holds.
 
 | P2 | `jeffreysCi` overdispersion | **confirmed and MEASURED — coverage 95% -> 72% on clustered evidence; FIXED where grouping metadata exists** |
 
-Still taken on trust: the rest of the P2 set (the ~25 stale docs, splitting
-`handlers.ts`, dashboard coverage).
+| P2 | ~25 stale docs | **confirmed in KIND, not in count** — see below; fixed, with a guard |
+
+Still taken on trust: the rest of the P2 set (splitting `handlers.ts`,
+dashboard coverage).
+
+### P2 doc sweep: what "stale" had to mean before it could be fixed
+
+Three definitions a machine can settle, over 73 docs: a doc naming a source
+file that does not exist (7 refs / 6 docs), a doc naming an env variable
+nothing reads (3), and live copy calling Potion a router against the
+2026-09-04 directive (6 lines). All fixed; `scripts/doc-inventory.test.ts`
+keeps them fixed, and its exemptions must each carry a reason and still be
+live.
+
+**Both scans were wrong first, in the direction that invents work.** The path
+regex spelled its extensions `ts|tsx|…|js|json`; alternation is first-match,
+so `.tsx` matched as `.ts` and `.json` as `.js`, and the scan reported 16 dead
+references — nine of them its own bug. The naming scan matched the word
+`router|routing` and reported 119 lines across 38 docs, nearly all legitimate:
+the directive bans constructions ("the router artifact"), not the English verb
+("routing decided which requests each strategy saw"). Then the exemption list
+erased its own finding, because the scanner read `scripts/**` and the
+exemptions name the variables they exempt.
+
+**The worst staleness was invisible to all of it.** SPEC §15.4 — the contract
+— still described the promotion gate as "≥20% cost cut at ≥ same quality",
+with a "95% CI" and 1000 resamples: wrong on the cost path, wrong on the
+margin, wrong on the alpha, two checkpoints out of date. SPEC §16 described
+the outcome-evidence Jeffreys interval without saying it assumes independence.
+HARDENING-PLAN P2.1 described the auth-bypass defect in the present tense
+underneath a note saying it was fixed. Those came out of reading, and a
+checkable definition of staleness will never find them.
+
+**Dated records were deliberately left alone.** `docs/AUDIT-2026-08-22.md` and
+`docs/research/router-tax-2026-08-23.md` predate the naming directive; editing
+them to comply would falsify a record of what was said at the time.
 
 ### P2 overdispersion: the number, and a test that proved nothing
 
