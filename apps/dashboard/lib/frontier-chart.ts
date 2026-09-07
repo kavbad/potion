@@ -8,7 +8,7 @@
 //   dot radius scales with p95 latency (bigger dot = slower)
 //   dominated region = the shaded area under/left of the frontier step line
 //   frontier points are connected by a step line
-import type { FrontierPointDto, StrategyConfig } from './types';
+import type { FrontierPointDto, ProgramCheck, ProgramNode, StrategyConfig } from './types';
 
 /** One renderable point on the chart. */
 export interface ChartPoint {
@@ -66,7 +66,24 @@ export function formatDollars(per1K: number): string {
 
 /** Plain-language one-liner for a strategy config — no jargon, model names
  * kept as-is because buyers recognize tiers ("sonnet-class"). */
-export function describeStrategy(config: StrategyConfig): string {
+/** The mirror's known shapes. This list is what makes the switch below
+ *  exhaustive — add a union member without a case and TypeScript says so —
+ *  while still admitting that what arrives over HTTP is whatever the server
+ *  sent, which may be newer than this file. */
+const KNOWN_STRATEGY_TYPES = [
+  'single', 'cascade', 'best-of-n', 'draft-verify', 'ensemble', 'decompose', 'composite', 'program',
+] as const;
+
+function isKnownStrategy(config: { type: string }): config is StrategyConfig {
+  return (KNOWN_STRATEGY_TYPES as readonly string[]).includes(config.type);
+}
+
+export function describeStrategy(config: StrategyConfig | { type: string }): string {
+  // A shape this mirror has not learned renders its name, never the empty
+  // string a missing case used to produce. Typed rather than cast: the
+  // parameter says what actually arrives, so a test for this branch needs no
+  // escape hatch to reach it.
+  if (!isKnownStrategy(config)) return `Strategy · ${config.type}`;
   switch (config.type) {
     case 'single':
       return `Single model · ${config.model}`;
@@ -86,7 +103,106 @@ export function describeStrategy(config: StrategyConfig): string {
       return `Ensemble · ${config.models.join(' + ')} (${config.fusion.method})`;
     case 'decompose':
       return `Decompose · ${config.decomposerModel} splits, specialists answer`;
+    case 'composite':
+      return `Composite · starts on ${config.startModel}, restarts on ${config.upgradeModel} when confidence < ${config.upgradeIf.confidenceBelow}`;
+    case 'program':
+      // A tree is not plain language. What a buyer can act on is who it can
+      // call and the worst case it can bill them for — both static.
+      return `Program · ${config.name} — ${programModels(config.body).join(', ')} (at most ${programCallCount(config.body)} calls)`;
   }
+}
+
+// ---- program summaries (mirrors of @potion/core coverage.ts) ----
+
+/** Stable key order at EVERY depth. JSON.stringify's replacer-array argument
+ *  looks like it would do this and does not: the allowlist applies at every
+ *  level, so nested keys absent from the top-level list are silently dropped
+ *  and two different programs can produce the same key. */
+function canonicalJson(value: unknown): string {
+  const sortKeys = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sortKeys);
+    if (v !== null && typeof v === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        out[k] = sortKeys((v as Record<string, unknown>)[k]);
+      }
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(sortKeys(value));
+}
+
+/** Every model a program can call, in order, deduplicated. */
+export function programModels(node: ProgramNode): string[] {
+  const out: string[] = [];
+  const add = (m: string) => {
+    if (!out.includes(m)) out.push(m);
+  };
+  const walkCheck = (c: ProgramCheck): void => {
+    if (c.kind === 'agree') {
+      walk(c.of[0]);
+      walk(c.of[1]);
+    } else walk(c.of);
+  };
+  const walk = (n: ProgramNode): void => {
+    switch (n.op) {
+      case 'call':
+        add(n.model);
+        return;
+      case 'if':
+        walkCheck(n.check);
+        walk(n.then);
+        walk(n.else);
+        return;
+      case 'vote':
+        n.of.forEach(walk);
+        return;
+      case 'pick':
+        n.of.forEach(walk);
+        if (n.by.kind === 'judge') add(n.by.model);
+        return;
+    }
+  };
+  walk(node);
+  return out;
+}
+
+/** Worst-case calls. Keyed on STRUCTURE, exactly as the interpreter memoizes:
+ *  a node reached from a check and again from a branch is paid for once. */
+export function programCallCount(node: ProgramNode): number {
+  const seen = new Map<string, ProgramNode>();
+  const judges = new Set<string>();
+  const key = (n: ProgramNode): string => canonicalJson(n);
+  const walkCheck = (c: ProgramCheck): void => {
+    if (c.kind === 'agree') {
+      walk(c.of[0]);
+      walk(c.of[1]);
+    } else walk(c.of);
+  };
+  const walk = (x: ProgramNode): void => {
+    const k = key(x);
+    if (seen.has(k)) return;
+    seen.set(k, x);
+    switch (x.op) {
+      case 'call':
+        return;
+      case 'if':
+        walkCheck(x.check);
+        walk(x.then);
+        walk(x.else);
+        return;
+      case 'vote':
+        x.of.forEach(walk);
+        return;
+      case 'pick':
+        x.of.forEach(walk);
+        if (x.by.kind === 'judge') judges.add(k);
+        return;
+    }
+  };
+  walk(node);
+  return [...seen.values()].filter((n) => n.op === 'call').length + judges.size;
 }
 
 // ---- point mapping ----

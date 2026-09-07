@@ -21,6 +21,194 @@ clears your bar.*
 
 ## Current truths
 
+- **Promotion evidence floor** (P0-4, 2026-09-05): the §15.4 gate had NO
+  minimum sample size and the call site guarded only `pairs.length === 0`, so
+  a SINGLE paired item promoted — a percentile bootstrap over one delta
+  resamples the same value and reports a point as a 95% CI (measured: n=1
+  quality path promoted on `ci95 [0.0999…, 0.0999…]`). Fixed:
+  `PROMOTION_MIN_PAIRS = 5`, mirroring GUARANTEE_MIN_SAMPLES and
+  SUITE_VERIFY_MIN_PAIRS; below it the gate returns a typed
+  `refusal: 'insufficient-evidence'` — declining to judge, which is a
+  different fact from judging and saying no. The BOOTSTRAP branch had the
+  same hole and never went through the gate at all; it now carries the same
+  floor, because a first frontier is the one publication nothing downstream
+  can correct by comparison. Promotion reasons now record `n`, so a
+  zero-width interval can be read in context: legitimate at n=30 from
+  identical deltas, meaningless at n=2. Deliberately NOT also a width test —
+  the floor subsumes it, and refusing zero-width intervals outright would
+  refuse correct verdicts. VERIFIED against live traffic the same day: two
+  persisted cycles re-run under the floored gate promoted on `n=30` — the
+  zero-width interval came from thirty identical paired deltas, the legitimate
+  case the width test would have wrongly refused.
+- **Classifier outage is survivable** (P0-1, 2026-09-05): the embed call is the
+  hardest dependency on the serve path — every classified request waits on it —
+  and it had NO resilience (`resilient()` passed `embed` through untouched) and
+  NO try/catch at the call site, with no `setErrorHandler` on the instance. An
+  embeddings outage or hang was a bare 500 for EVERY org, including orgs whose
+  traffic routes entirely to another provider. Measured: an unsettling embed
+  hung the caller indefinitely — it hung its own test suite. Fixed on both
+  halves. `embed` now carries a per-attempt deadline, bounded retry (embedding
+  is idempotent) and its OWN breaker key `<provider>:embed`, so an embeddings
+  outage cannot open the completion breaker for a model that is answering
+  fine; the mock-determinism objection did not survive contact — a timeout
+  changes WHEN a call gives up, not WHAT a deterministic embedder returns, and
+  a test pins that. The call site catches and leaves `ranked` undefined, which
+  is the state a cluster HINT already leaves, so the existing branch routes to
+  `general` with no new machinery. The receipt says so: `classifier=unavailable`
+  on the trace, present ONLY on a degraded answer — a request that legitimately
+  matched nothing is a correct classification and carries no label.
+- **The assignment cache is bounded** (P0-2, 2026-09-05): it was a plain
+  process-lifetime `Map`, never evicted, while a comment in chat.ts called it
+  "the assignment LRU" — which is what let it pass review. Each entry holds a
+  384-dim embedding plus the ten-cluster ranking, ~3-4KB, one per distinct
+  prompt prefix, written from three routes: an OOM with a reassuring name.
+  Replaced by the LRU that comment claimed (`apps/server/src/assign-cache.ts`):
+  size cap 10k (~35MB) AND a 1h TTL, both env-tunable and neither reachable
+  below 1 by typo. TWO bounds because one is not enough — the cap is the memory
+  ceiling, the TTL is the correctness one, since a cached ranking is a decision
+  made against centroids that move. `get` re-inserts, so it is least-recently
+  USED and not a FIFO wearing an LRU's name. Stats (entries/hits/misses/
+  evictions/expiries vs cap) on `/healthz`, counted rather than derived: a hit
+  rate rebuilt from request logs cannot see an eviction. The chat.ts comment
+  now says cache, not LRU.
+- **The assignment cache key covers what was embedded** (P0-3, 2026-09-05): it
+  hashed `join('\n').slice(0, 512)` while all three call sites embedded the
+  join UNTRUNCATED, so two requests sharing a 512-character prefix got the
+  FIRST one's classification. Worst on agent traffic, the target workload
+  class: in a long session the first user turn carries the task and usually
+  exceeds 512 characters, so every later turn silently reused turn one's
+  cluster. Fixed by hashing the whole join — the truncation bought nothing,
+  since sha256 is fixed-width whatever it is given, so there was never a
+  key-size argument. Cost is microseconds of hashing against an embedding call
+  that costs milliseconds and money.
+- **A cycle's promotions are corrected for the family** (P1-1, 2026-09-05):
+  every candidate in a cycle is tested against the SAME incumbent at a 95%
+  bound, with no family-wise correction anywhere. Measured over 400 seeded
+  cycles of 20 pure-noise candidates (true delta 0, equal cost, so only the
+  quality path is open): per test 2.60% — the nominal one-sided 2.5%, so the
+  interval itself was never broken — but **41.5% of cycles false-promoted**,
+  0.52 false promotions per cycle. Fixed with Bonferroni: `alpha = 0.05 / m`
+  where m is the number of candidates the cycle will actually gate-test
+  (`promotionFamilySize` — a hash off the frontier or the incumbent itself is
+  skipped and is not a test). Measured after: per test 0.45%, **FWER 8.7%**.
+  `comparisons` is a REQUIRED argument to `evaluatePromotion`, not an optional
+  threshold: a gate that does not know its family size is the defect, so
+  dropping the wire is a compile error. A corrected alpha also asks for a
+  percentile the resample set must contain — at m=20 the 0.125th, which 1000
+  resamples put at index 1.25 — so resamples are floored at `10 / (alpha/2)`;
+  at m=1 that floor is 400, below the SPEC's 1000, so **every verdict recorded
+  before the correction reproduces bit-for-bit**. Reasons name the real level
+  ("CI99.75% (Bonferroni over 20 comparisons)"), never "CI95".
+- **HONEST RESIDUAL on P1-1**: 8.7% is not 5%. Bonferroni's guarantee assumes
+  an exact per-test bound; the percentile bootstrap is anti-conservative in
+  the far tail at n=30 over a distribution that is 80% ties, and the gap is
+  flat from 4k to 16k resamples — it is not a resample-count problem. Closing
+  it needs more heldout items per pair or a BCa interval. Asserted in the
+  test, not papered over.
+- **The cost path is a test now, not a coin flip** (found while proving P1-1,
+  FIXED 2026-09-05): `costCutPct >= 20% && ciLower >= 0` had two defects, both
+  simulated before either was fixed.
+  **(1) The bound was a floor artifact.** A percentile bootstrap resamples only
+  outcomes the sample contains, so a sample with no losing item has every
+  resample mean >= 0 and a lower bound pinned at exactly 0 — at every alpha,
+  which is why the P1-1 correction moved it only 16.5% -> 14.5%.
+  **(2) No power at any sample size.** A one-sided bound on a candidate whose
+  true delta is 0 sits below zero however much evidence there is, so `>= 0`
+  was passed only by luck: a candidate that truly held quality promoted in
+  60.5% of cycles at n=30, 5.0% at n=300, 8.0% at n=1000 — flat noise.
+  Fixed with a downside-honest bound (one pseudo-observation at minus the
+  magnitude the sample itself showed, weight 1/(n+1), so it vanishes as
+  evidence accumulates exactly as the rule of three does; an ALL-TIES sample
+  shows no scale, so it falls back to the worst drop the quality scale allows)
+  plus an explicit non-inferiority margin `DEFAULT_COST_QUALITY_MARGIN` =
+  0.015, dialable at `POTION_RESEARCH_COST_QUALITY_MARGIN`. Measured, same
+  simulation, 20-candidate cycles:
+
+  | | before | after |
+  |---|---|---|
+  | truly 5pts WORSE, n=30 | 14.5% | **0.0%** |
+  | 97% ties / 3% catastrophic, n=30 | **100%** | **0.0%** |
+  | all ties, n=30 | 100% | 0.0% |
+  | truly HOLDS quality, n=30 | 60.5% | 1.0% |
+  | truly HOLDS quality, n=300 | 5.0% | **56.7%** |
+  | truly HOLDS quality, n=1000 | 8.0% | **100%** |
+
+  Power now RISES with evidence — under the old rule it fell.
+- **TWO CONSEQUENCES of the cost-path fix, both deliberate.** First, **the cost
+  path cannot fire on a 30-item heldout set**, which is the truth about 30
+  items and not a regression; it needs roughly 300 paired items for a coin's
+  chance and ~1,000-2,000 to be reliable at m=20. Cost-path promotions are the
+  concrete thing a bigger extraction suite would buy. Second, **a promotion may
+  knowingly accept a regression up to the margin** (a measured 1pt dip at a 50%
+  cost cut now promotes) — that is what a non-inferiority margin means, the
+  reason text says "quality held to within 1.5pts" and never "quality held",
+  and the evidence needed scales as 1/margin^2 (0.5pt would want ~18,000
+  items). Watch for a ratchet: each promotion moves the incumbent.
+- **CORRECTED by the cost-path fix**: the P0-4 argument that an all-ties sample
+  above the pair floor is a legitimate cost promotion. The interval-width half
+  of that argument holds; the conclusion did not. A candidate that ties 97% of
+  the time and fails catastrophically 3% of the time shows all ties in 40% of
+  30-item samples, and the old rule promoted it in 100% of cycles. The review
+  was closer to right than it was given credit for.
+- **The dev-auth bypass fails CLOSED** (P1-2, 2026-09-05): `devAuthBypassEnabled`
+  resolved an unset `POTION_DEV_AUTH` as `NODE_ENV !== 'production'`, and the
+  bypass resolves an UNAUTHENTICATED `/api/*` request to the default org with
+  role **admin**. An unset NODE_ENV is not 'production' — and neither is
+  'Production', 'prod', or 'production ' — so every one of those opened it. The
+  dashboard's whole security posture rested on one string being present and
+  spelled right, in a repo whose only production incident (2026-08-27) was a
+  variable that WAS present and empty. Now an allow-list: on only for
+  `development`/`test`, so anything unrecognized — including nothing — is
+  treated as production. Empty/whitespace `POTION_DEV_AUTH` is UNSET (falls to
+  the default), not a deliberate off. Local dev names itself:
+  `apps/server` `dev` script sets `NODE_ENV=development`.
+  Not exploitable on the live box as it stands — the Dockerfile and
+  `deploy/docker-compose.prod.yml` both set `NODE_ENV=production` — which is
+  the point: this was the only thing standing between a missed env var and
+  anonymous admin.
+- **A fatal boot gate REFUSES the port** (HARDENING-PLAN P2.1, built with P1-2,
+  2026-09-05): `GateReport.fatal` joins `warn`; `POTION_DEV_AUTH=1` with
+  `NODE_ENV=production`, and magic-links-in-response with self-serve signup in
+  production, are fatal; `logBootGates` throws `BootRefusedError` and
+  `index.ts` prints the gate plus its remedy and exits 1. The 2026-08-27 class
+  was a gate that reported its state and did nothing about it — a warning in a
+  deploy log is only read by someone already looking. The report also now calls
+  the real `devAuthBypassEnabled` rather than a second copy of the rule, so the
+  boot log and the running server cannot disagree about whether authentication
+  is on.
+- **The worker can run off the server** (P1-3, 2026-09-05): `buildServer`
+  called `runWorker` unconditionally — every server was also a worker and
+  there was no way to build one that was not. Node runs ONE event loop:
+  measured here, loop lag maxed at **2ms idle and 1188ms during a single
+  in-process job**, freezing every in-flight request including streaming
+  ones; the two halves also shared a heap, a memory limit and a fate.
+  `POTION_WORKER=off` now builds a server that enqueues and never consumes,
+  and `apps/server/dist/worker.js` is a standalone consumer. ONE handler
+  wiring (`worker-runtime.ts` `startPotionWorker`) used by both processes — a
+  worker resolving its own prices path or embedder is the prices.json
+  contamination class again. `app.potionWorker` exposes the handle (or null)
+  so a deployment can assert what a process is doing rather than assume it.
+  **The default is unchanged**: unset or EMPTY `POTION_WORKER` = in-process,
+  which is right on one box; an unrecognized value keeps work HAPPENING and
+  the boot report names it (the other default would let a typo silently stop
+  every cycle, sweep and alert). Deploy: `deploy/docker-compose.prod.yml`
+  gains a `worker` service behind `profiles: ["split"]`, so without
+  `--profile split` the deployment is byte-identical. Runbook §10.
+- **TWO refusals guard the split, and ONE gap remains.** `POTION_WORKER=off`
+  on the memory driver refuses to boot, and a standalone worker on the memory
+  driver refuses to start — a process-local queue nobody can reach swallows
+  every job silently, forever. **NOT detected**: `POTION_WORKER=off` with
+  Redis present and no worker actually started; jobs accumulate in Redis and
+  the boot gate cannot tell "a worker is coming" from "nobody is consuming".
+  Check `docker compose ps worker` after flipping the dial. An automatic
+  liveness proof is not built.
+- **Also found by P1-3**: the standalone worker booted, printed "consuming 24
+  job kinds", and EXITED — a worker has no listening socket, so the only thing
+  holding its event loop open was the queue driver's own connection. Now an
+  explicit non-unref'd keep-alive, cleared on shutdown. And
+  `resolveQueueKind()` is exported from `@potion/queue` so the driver
+  precedence has one implementation rather than a second copy in the boot
+  report — the same lesson as P1-2's duplicated auth rule.
 - **Serving**: live at withpotion.com (Hetzner + Render PG17). Routing is
   request-classified, **workload-level** optimized (per-cluster frontiers +
   policy). Per-invocation conditional routing is a NAMED FUTURE direction,

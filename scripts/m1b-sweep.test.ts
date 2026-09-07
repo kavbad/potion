@@ -237,4 +237,37 @@ describe('requiredLiveEnvVars', () => {
   it('requires nothing for an all-mock world (dry-run path never calls this, but stays sane)', () => {
     expect(requiredLiveEnvVars([SINGLE_CHEAP], [[item('x', 10)]], PRICES)).toEqual([]);
   });
+
+  it('walks a program, judge picks included', () => {
+    const prog: StrategyConfig = {
+      type: 'program',
+      name: 'coe',
+      body: {
+        op: 'pick',
+        of: [{ op: 'call', model: 'm-cheap' }, { op: 'call', model: 'or-mini' }],
+        by: { kind: 'judge', model: 'an-judge' },
+      },
+    };
+    // The judge is a live provider reached only through `by` — a walk that
+    // stopped at leaf calls would let the sweep start without its key.
+    expect(requiredLiveEnvVars([prog], [[item('x', 10)]], PRICES)).toEqual([
+      'ANTHROPIC_API_KEY',
+      'OPENROUTER_API_KEY',
+    ]);
+  });
+
+  it('walks a composite, which this preflight never knew', () => {
+    const comp: StrategyConfig = {
+      type: 'composite',
+      startModel: 'm-cheap',
+      upgradeModel: 'or-mini',
+      upgradeIf: { confidenceBelow: 0.6 },
+    };
+    expect(requiredLiveEnvVars([comp], [[item('x', 10)]], PRICES)).toEqual(['OPENROUTER_API_KEY']);
+  });
+
+  it('refuses a strategy shape it has never learned instead of passing silently', () => {
+    const future = { type: 'not-invented-yet' };
+    expect(() => requiredLiveEnvVars([future], [[item('x', 10)]], PRICES)).toThrow(/does not know strategy type/);
+  });
 });

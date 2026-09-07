@@ -322,3 +322,78 @@ describe('openrouter transport', () => {
     expect(res.usage).toEqual({ inputTokens: 9, outputTokens: 1 });
   });
 });
+
+// ---- C4 reasoning effort (docs/INFERENCE-COMPILER-PLAN.md) ----
+//
+// The first optimization axis that is not "which model". Four transports, two
+// protocols: a WORD (openai `reasoning_effort`, openrouter `reasoning.effort`)
+// and a TOKEN BUDGET (anthropic `thinking.budget_tokens`, google
+// `thinkingConfig.thinkingBudget`).
+//
+// The refusal is the load-bearing part. A transport that answered normally
+// while dropping the effort would return an ordinary answer that the frontier
+// records as high-effort evidence — thought that never happened, measured and
+// promoted. Every transport here either carries the effort or throws.
+describe('reasoning effort on the wire (C4)', () => {
+  const ok = (body: unknown) => fetchMock.mockResolvedValue(jsonResponse(200, body));
+  const providers = () => createProviders({ prices: PRICES, apiKeys: { ...KEYS } });
+
+  it('openai sends a top-level reasoning_effort', async () => {
+    ok({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    await providers().openai.complete({
+      model: 'gpt-mini-class', messages: MESSAGES, params: { reasoningEffort: 'high' },
+    });
+    expect(lastCall().body.reasoning_effort).toBe('high');
+  });
+
+  it('openrouter wraps it as reasoning.effort — the same idea, a different protocol', async () => {
+    ok({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    await providers().openrouter.complete({
+      model: 'or-gpt-mini', messages: MESSAGES, params: { reasoningEffort: 'low' },
+    });
+    const { body } = lastCall();
+    expect(body.reasoning).toEqual({ effort: 'low' });
+    expect(body.reasoning_effort).toBeUndefined(); // never both
+  });
+
+  it('anthropic turns effort into a thinking budget that fits inside max_tokens', async () => {
+    ok({ content: [{ type: 'text', text: 'OK' }], usage: { input_tokens: 1, output_tokens: 1 } });
+    await providers().anthropic.complete({
+      model: 'haiku-class', messages: MESSAGES, params: { reasoningEffort: 'high', maxTokens: 8000 },
+    });
+    const { body } = lastCall();
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 7999 }); // clamped under max_tokens
+  });
+
+  it('google puts the same budget in thinkingConfig', async () => {
+    ok({ candidates: [{ content: { parts: [{ text: 'OK' }] } }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } });
+    await providers().google.complete({
+      model: 'gemini-flash-class', messages: MESSAGES, params: { reasoningEffort: 'medium', maxTokens: 8000 },
+    });
+    const cfg = lastCall().body.generationConfig as Record<string, unknown>;
+    expect(cfg.thinkingConfig).toEqual({ thinkingBudget: 4096 });
+  });
+
+  it('REFUSES rather than answering unthought when the budget cannot fit', async () => {
+    ok({ content: [{ type: 'text', text: 'OK' }], usage: { input_tokens: 1, output_tokens: 1 } });
+    // 512 output tokens cannot hold the 1024-token minimum thinking budget.
+    await expect(
+      providers().anthropic.complete({
+        model: 'haiku-class', messages: MESSAGES, params: { reasoningEffort: 'low', maxTokens: 512 },
+      }),
+    ).rejects.toThrow(/cannot honor reasoningEffort 'low'.*never happened/s);
+    await expect(
+      providers().google.complete({
+        model: 'gemini-flash-class', messages: MESSAGES, params: { reasoningEffort: 'high', maxTokens: 512 },
+      }),
+    ).rejects.toThrow(/cannot honor reasoningEffort/);
+  });
+
+  it('a request that names no effort reaches the wire exactly as before', async () => {
+    ok({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    await providers().openai.complete({ model: 'gpt-mini-class', messages: MESSAGES });
+    const { body } = lastCall();
+    expect(body).not.toHaveProperty('reasoning_effort');
+    expect(body).not.toHaveProperty('reasoning');
+  });
+});

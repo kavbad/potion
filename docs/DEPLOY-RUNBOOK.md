@@ -308,6 +308,61 @@ history so you know whether this deploy carries any.
 | Embeddings unpriced (F13) | embedding spend meters at $0 | F13, if the partner uses embeddings |
 | No SMTP | magic links are hand-delivered (single-use, 15 min) | by design |
 | Container/TLS layer unexecuted | §5–§6 run for the first time on your host | this deployment |
+| Jobs share the server's event loop | measured: loop lag 2ms idle, **1188ms** while one in-process job runs — every in-flight request, streaming included | **now optional**, see §10 |
+
+## §10 Splitting the worker off the server (P1-3, 2026-09-05)
+
+`buildServer` used to call `runWorker` unconditionally: every server was also
+a worker, and there was no way to build one that was not. Node runs one event
+loop, so a job with a synchronous stretch freezes serving for its duration —
+loop lag measured at 2ms idle and **1188ms** during a single in-process job.
+The two halves also shared a heap, a memory limit, and a fate.
+
+**In-process is still the default and is still right on one box.** What
+changed is that it is no longer the only option.
+
+To split:
+
+```bash
+# 1. in /opt/potion/.env.prod
+POTION_WORKER=off
+
+# 2. bring the worker up alongside the server
+docker compose --profile split up -d worker server
+```
+
+- The `worker` service is profile-gated, so without `--profile split` it does
+  not exist and the deployment is byte-identical to before.
+- It runs `apps/server/dist/worker.js`, which builds the SAME context the
+  server builds and calls the SAME `startPotionWorker`. There is one handler
+  wiring, in `apps/server/src/worker-runtime.ts`, and both processes use it.
+- The autoresearcher heartbeat lives inside `runWorker`, so in a split it runs
+  in the worker — once, in one process. Schedulers that only ENQUEUE (the lab
+  scheduler, the guarantee sweep) stay in the server, which is correct.
+
+**Two failure modes, and what happens in each:**
+
+| Configuration | What happens |
+|---|---|
+| `POTION_WORKER=off`, memory queue driver | **server refuses to boot.** A process-local queue nobody consumes swallows every job silently, forever, and no worker could rescue it |
+| standalone worker started on the memory driver | **worker refuses to start**, same reasoning from the other side |
+| `POTION_WORKER=off`, Redis present, worker NOT started | **not detected.** Jobs accumulate in Redis. The boot gate cannot tell "a worker is coming" from "nobody is consuming" |
+
+That last row is a real gap. After flipping the dial, check
+`docker compose ps worker` — and queue depth in Redis is the standing signal.
+An automatic liveness proof (the worker heartbeating somewhere the server can
+read) is not built.
+
+**`org:delete` caches.** The handler invalidates the provider cache of the
+process that RUNS it. In-process that is the serving cache, which is the point
+of it. Split, it invalidates the worker's copy and the server's own cache
+still expires on its TTL. Restart the server after an org deletion if that
+window matters.
+
+**Unvalidated:** the compose changes were checked by parsing the YAML and by
+running `apps/server/dist/worker.js` directly (it boots, reports 24 job kinds,
+stays up, and drains on SIGTERM). `docker compose config` was NOT run — there
+is no Docker on the machine this was written on.
 
 ## Added 2026-08-23
 

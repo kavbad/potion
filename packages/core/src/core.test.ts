@@ -3,7 +3,7 @@ import { canonicalJson, strategyHash } from './hash.js';
 import { costUsd, roundCost } from './prices.js';
 import { selectPoint } from './select.js';
 import { StrategyConfigSchema, PolicySchema } from './schemas.js';
-import type { Frontier, StrategyConfig } from './types.js';
+import type { Frontier, ProgramNode, StrategyConfig } from './types.js';
 
 describe('canonicalJson / strategyHash', () => {
   it('is stable under key reordering', () => {
@@ -91,6 +91,69 @@ describe('schemas', () => {
     expect(() =>
       StrategyConfigSchema.parse({ type: 'composite', startModel: 'cheap', upgradeIf: { confidenceBelow: 0.5 } }),
     ).toThrow(); // missing upgradeModel
+  });
+
+  // ---- compiler IR rung 1: programs reach the schema ----
+  it('validates a program strategy — the interpreter is reachable from the wire', () => {
+    const cheap: ProgramNode = { op: 'call', model: 'cheap' };
+    const coe: StrategyConfig = {
+      type: 'program',
+      name: 'consensus-or-escalate',
+      body: {
+        op: 'if',
+        check: { kind: 'agree', of: [cheap, { op: 'call', model: 'cheap-b' }] },
+        then: { op: 'pick', of: [cheap, { op: 'call', model: 'cheap-b' }], by: { kind: 'confidence' } },
+        else: { op: 'call', model: 'strong' },
+      },
+    };
+    expect(StrategyConfigSchema.parse(coe)).toBeTruthy();
+    // and it survives the round trip a database imposes
+    expect(StrategyConfigSchema.parse(JSON.parse(JSON.stringify(coe)))).toBeTruthy();
+    expect(strategyHash(StrategyConfigSchema.parse(coe))).toBe(strategyHash(coe));
+  });
+
+  it('refuses a program over the static call bound at PARSE time, not mid-run', () => {
+    const tooMany = {
+      type: 'program',
+      name: 'big',
+      body: { op: 'vote', of: Array.from({ length: 9 }, (_, i) => ({ op: 'call', model: `v${i}` })) },
+    };
+    expect(() => StrategyConfigSchema.parse(tooMany)).toThrow(/over the static bound/);
+  });
+
+  it('refuses a regex check that would only fail while serving', () => {
+    const bad = {
+      type: 'program',
+      name: 'vc',
+      body: {
+        op: 'if',
+        check: { kind: 'regex', of: { op: 'call', model: 'cheap' }, pattern: '([unclosed' },
+        then: { op: 'call', model: 'cheap' },
+        else: { op: 'call', model: 'strong' },
+      },
+    };
+    expect(() => StrategyConfigSchema.parse(bad)).toThrow(/compilable regular expression/);
+  });
+
+  it('refuses a two-way vote — a tie resolves to the first, which is not consensus', () => {
+    const twoWay = {
+      type: 'program',
+      name: 'v2',
+      body: { op: 'vote', of: [{ op: 'call', model: 'a' }, { op: 'call', model: 'b' }] },
+    };
+    expect(() => StrategyConfigSchema.parse(twoWay)).toThrow();
+    expect(() =>
+      StrategyConfigSchema.parse({ ...twoWay, body: { op: 'vote', of: [...twoWay.body.of, { op: 'call', model: 'c' }] } }),
+    ).not.toThrow();
+  });
+
+  it('refuses malformed program nodes', () => {
+    const wrap = (body: unknown) => ({ type: 'program', name: 'n', body });
+    expect(() => StrategyConfigSchema.parse(wrap({ op: 'nope' }))).toThrow();
+    expect(() => StrategyConfigSchema.parse(wrap({ op: 'call' }))).toThrow(); // no model
+    expect(() => StrategyConfigSchema.parse(wrap({ op: 'call', model: '' }))).toThrow();
+    expect(() => StrategyConfigSchema.parse(wrap({ op: 'pick', of: [{ op: 'call', model: 'a' }], by: { kind: 'confidence' } }))).toThrow();
+    expect(() => StrategyConfigSchema.parse({ type: 'program', body: { op: 'call', model: 'a' } })).toThrow(); // no name
   });
 
   it('rejects invalid policy', () => {

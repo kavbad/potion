@@ -1,4 +1,4 @@
-import type { SamplingParams } from '@potion/core';
+import type { ReasoningEffort, SamplingParams } from '@potion/core';
 // Provider contract types — EXACTLY per SPEC.md §2.
 // M3 #25 (OpenAI parity, ADDITIVE): CompleteRequest.params gains optional
 // tools/tool_choice passthrough and CompleteResponse gains optional
@@ -21,6 +21,15 @@ export interface CompleteRequest {
     tool_choice?: ToolChoice;
     /** Caller sampling/format parameters (2026-08-23), forwarded as-is. */
     sampling?: SamplingParams;
+    /**
+     * C4: how hard the model should think (docs/INFERENCE-COMPILER-PLAN.md).
+     *
+     * A transport that cannot carry this MUST THROW, never answer normally.
+     * An unhonored effort would be recorded as high-effort evidence for an
+     * answer that never thought — the same class of lie as stamping mock
+     * output live, and the frontier would be built on it.
+     */
+    reasoningEffort?: ReasoningEffort;
   };
   // M3 (SPEC §12.1, additive): optional cancellation signal threaded by the
   // resilience wrapper (per-attempt timeout / hedge loser abort). Providers

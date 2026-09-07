@@ -27,6 +27,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { EvalItem, PriceTable, ProviderId, StrategyConfig } from '@potion/core';
+import { programModels } from '@potion/core';
 import { loadPrices } from '@potion/providers';
 import {
   formatResultsTable,
@@ -159,8 +160,20 @@ export function fitsBudget(projectedUsd: number, remainingUsd: number): boolean 
  * every llm-judge scorer's provider (judge calls happen at score time, inside
  * runEval — a missing key there would crash the sweep AFTER money was spent,
  * so we fail fast up front instead). */
+/** What this preflight has learned to walk. Keeping the list explicit is what
+ *  lets the switch below stay exhaustive over StrategyConfig while the
+ *  parameter admits what actually arrives — a config row written by a newer
+ *  version of the code. */
+const WALKABLE_STRATEGY_TYPES = [
+  'single', 'cascade', 'best-of-n', 'draft-verify', 'ensemble', 'decompose', 'composite', 'program',
+] as const;
+
+function isWalkable(s: { type: string }): s is StrategyConfig {
+  return (WALKABLE_STRATEGY_TYPES as readonly string[]).includes(s.type);
+}
+
 export function requiredLiveEnvVars(
-  strategies: StrategyConfig[],
+  strategies: Array<StrategyConfig | { type: string }>,
   itemsBySuite: ReadonlyArray<EvalItem[]>,
   prices: PriceTable,
 ): string[] {
@@ -171,6 +184,16 @@ export function requiredLiveEnvVars(
     providers.add(entry.provider);
   };
   for (const strategy of strategies) {
+    // This preflight exists to fail BEFORE money is spent. A shape it does not
+    // know would otherwise contribute no providers and let the sweep start
+    // with a key missing — the failure it was written to prevent. Typed rather
+    // than cast, so the test for this branch needs no escape hatch.
+    if (!isWalkable(strategy)) {
+      throw new Error(
+        `requiredLiveEnvVars does not know strategy type '${strategy.type}' — ` +
+          `add it here before sweeping, or the preflight silently passes`,
+      );
+    }
     switch (strategy.type) {
       case 'single':
         addModel(strategy.model);
@@ -194,6 +217,15 @@ export function requiredLiveEnvVars(
         addModel(strategy.decomposerModel);
         Object.values(strategy.routing).forEach(addModel);
         if (strategy.fusion?.judge) addModel(strategy.fusion.judge.model);
+        break;
+      case 'composite':
+        addModel(strategy.startModel);
+        addModel(strategy.upgradeModel);
+        break;
+      case 'program':
+        // programModels walks leaf calls AND judge picks — every model a run
+        // can reach, which is exactly what this preflight is asking about.
+        programModels(strategy.body).forEach(addModel);
         break;
     }
   }

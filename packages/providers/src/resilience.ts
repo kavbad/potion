@@ -9,7 +9,7 @@
 //   jitter only affects retry sleep durations.
 
 import type { ProviderId } from '@potion/core';
-import { ProviderError, classifyError, type ProviderErrorKind } from './errors.js';
+import { ProviderError, ProviderTimeoutError, classifyError, type ProviderErrorKind } from './errors.js';
 import type { CompleteRequest, CompleteResponse, Provider } from './types.js';
 import { mulberry32, seedOf } from './mock/rng.js';
 import { MOCK_WORDS } from './mock/fixtures.js';
@@ -334,6 +334,28 @@ function attemptCall(
  * Only retryable kinds (rate_limit | timeout | server_5xx | network) are
  * retried; client_4xx (except 429) fails immediately.
  */
+/** P0-1: a per-attempt deadline for embed. The `complete` path has
+ *  callWithTimeout, which is typed to a CompleteResponse and threads an
+ *  AbortSignal the provider honours; embed takes no signal, so the deadline is
+ *  enforced on the caller's side — the request stops waiting even if the
+ *  socket does not. Stopping the WAIT is the property the serve path needs. */
+function embedWithTimeout(
+  embed: (texts: string[]) => Promise<number[][]>,
+  texts: string[],
+  timeoutMs: number,
+  provider: ProviderId,
+): Promise<number[][]> {
+  return new Promise<number[][]>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new ProviderTimeoutError(provider, timeoutMs));
+    }, timeoutMs);
+    embed(texts).then(
+      (res) => { clearTimeout(timer); resolve(res); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 export function resilient(p: Provider, policy?: Partial<ResiliencePolicy>): Provider {
   const resolved = resolvePolicy(policy);
 
@@ -411,11 +433,51 @@ export function resilient(p: Provider, policy?: Partial<ResiliencePolicy>): Prov
     };
   }
 
-  // Embeddings pass through untouched: §12.1 defines retry semantics for
-  // complete() only, and embed must stay deterministic for the mock.
+  // P0-1 (external review, 2026-09-05): EMBEDDINGS ARE WRAPPED TOO.
+  //
+  // They used to pass through untouched, on the reasoning that §12.1 defines
+  // retry semantics for complete() and that embed must stay deterministic for
+  // the mock. The second half does not follow from the first. A timeout and a
+  // bounded retry change WHEN a call gives up, not WHAT a deterministic
+  // embedder returns — a mock that always succeeds immediately is returned
+  // byte-identical either way, and there is a test asserting exactly that.
+  //
+  // What the passthrough actually bought was an unbounded hang on the hardest
+  // dependency on the serve path: every classified request waits on this call,
+  // for every org, including orgs whose traffic routes entirely elsewhere.
+  //
+  // Its own breaker key (`<provider>:embed`), deliberately: an embeddings
+  // outage must not open the completion breaker for a model that is answering
+  // fine, and vice versa. Retry is safe because embedding is idempotent.
   if (p.embed) {
     const embed = p.embed.bind(p);
-    wrapped.embed = (texts) => embed(texts);
+    wrapped.embed = async (texts: string[]): Promise<number[][]> => {
+      const rec = resolved.breaker ? breakerRecord(`${p.id}:embed`, resolved.breaker) : undefined;
+      if (rec) breakerBeforeCall(rec, p.id, 'embed');
+      let lastErr: ProviderError | undefined;
+      for (let attempt = 0; attempt <= resolved.retries; attempt++) {
+        if (attempt > 0) await sleep(resilienceBackoffMs(attempt, resolved.backoff));
+        try {
+          const res = await embedWithTimeout(embed, texts, resolved.timeoutMs, p.id);
+          if (rec) breakerOnSuccess(rec);
+          return res;
+        } catch (err) {
+          const pErr = asProviderError(err, p.id, 'embed');
+          lastErr = pErr;
+          if (!pErr.retryable || attempt >= resolved.retries) {
+            // Same settle-once discipline as complete(): a non-qualifying
+            // failure is evidence about the caller, not the provider.
+            if (rec) {
+              if (countsTowardBreaker(pErr.kind)) breakerOnFailure(rec);
+              else breakerOnSuccess(rec);
+            }
+            throw pErr;
+          }
+        }
+      }
+      if (rec) breakerOnFailure(rec);
+      throw lastErr ?? new ProviderError(p.id, `provider '${p.id}': exhausted embed retries`);
+    };
   }
   return wrapped;
 }

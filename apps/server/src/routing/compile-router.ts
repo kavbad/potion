@@ -16,6 +16,7 @@
 // wiggled". Changes are narrated in plain language — including, when the
 // org has traffic, the R2 line: the estimated monthly impact at the org's
 // own recent mix.
+import { costPerSuccess, evaluateReliabilityFloor, type ReliabilityFloorResult } from '@potion/core';
 import {
   sha256,
   canonicalJson,
@@ -36,6 +37,7 @@ import {
   type PotionDb,
   measuredSinglePoint,
   getOrgIncumbents,
+  GUARANTEE_MIN_SAMPLES,
 } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import {
@@ -84,6 +86,24 @@ export interface RouterAssignment {
    * rules as `shadow`: absent when the window holds nothing, excluded from
    * routerHash by construction. */
   outcomes?: ClusterOutcomeEvidence;
+  /**
+   * C5 reliability. The two things observational outcome evidence can honestly
+   * support about a DEPLOYED assignment — never a comparison between
+   * candidates, which is why reliability is not a frontier axis (see
+   * core/reliability.ts).
+   *
+   *   · costPerSuccess — what the customer pays per task that WORKED, billed
+   *     against the success rate's lower bound.
+   *   · floor — the policy's P(success) guarantee, evaluated with the same
+   *     "whole interval below the line" rigor as the quality guarantee.
+   *
+   * Same display-only rules as `shadow` and `outcomes`: absent when the window
+   * holds nothing, and excluded from routerHash by construction.
+   */
+  reliability?: {
+    costPerSuccess: number | null;
+    floor: ReliabilityFloorResult | null;
+  };
 }
 
 export interface ExpectedProjection {
@@ -164,7 +184,25 @@ export async function compileAndMintRouter(
         clusterId: a.clusterId,
         servingHash: a.strategyHash,
       });
-      if (oc !== null) a.outcomes = oc;
+      if (oc !== null) {
+        a.outcomes = oc;
+        // C5: derived from the same window, on the same instrument.
+        const floorPct = clusterPolicy?.guarantee?.minSuccessRate;
+        a.reliability = {
+          costPerSuccess:
+            a.costPer1K === null ? null : costPerSuccess(a.costPer1K, oc.success?.ci[0] ?? null),
+          floor:
+            floorPct === undefined
+              ? null
+              : evaluateReliabilityFloor({
+                  successCi: oc.success?.ci ?? null,
+                  rate: oc.success?.rate ?? null,
+                  n: oc.success?.n ?? 0,
+                  floor: floorPct,
+                  minSamples: GUARANTEE_MIN_SAMPLES,
+                }),
+        };
+      }
     }
   }
   const interpretation = await getRouterInterpretation(db, orgId);
