@@ -876,13 +876,16 @@ Work is happening on `deploy/2026-08-21-partner-ready`, 6 commits ahead of
 > now calls the REAL `devAuthBypassEnabled` instead of re-implementing it, so
 > the log and the server cannot disagree.
 
-`devAuthBypassEnabled()` in `apps/server/src/auth.ts:145` checks the explicit
-`POTION_DEV_AUTH` flag *before* the `NODE_ENV !== 'production'` fallback, so
-`POTION_DEV_AUTH=1` disables authentication in production. `boot-report.ts`
-already detects this exact state and already prints
+**What follows is the finding as written on 2026-09-02, kept for the record.
+It is FIXED — read the note above before acting on any of it.**
+
+`devAuthBypassEnabled()` in `apps/server/src/auth.ts` checked the explicit
+`POTION_DEV_AUTH` flag *before* an `NODE_ENV !== 'production'` fallback, so
+`POTION_DEV_AUTH=1` disabled authentication in production. `boot-report.ts`
+already detected this exact state and already printed
 `AUTH BYPASS IS ON IN PRODUCTION — every dashboard route is effectively public.`
 
-The mechanism exists. The missing piece is that nothing refuses:
+The mechanism existed. The missing piece was that nothing refused:
 
 - Add a `fatal?: string` field alongside `warn` in `GateReport`.
 - Mark `devAuth && isProd` fatal; likewise `magicLink && selfServe` on a

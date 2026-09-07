@@ -9,7 +9,7 @@ executable misinformation for coding agents.)
 
 _Last updated: 2026-09-01 (core-API review ladder: ALL P0s closed — one
 resolver, lower-bound law, serve-time router stamping, prod research live,
-shadow judge + shadow evidence on the router artifact)._
+shadow judge + shadow evidence on the compiled plan)._
 
 ## What Potion is (current thesis)
 
@@ -287,6 +287,43 @@ clears your bar.*
   distinct resamples in the world. Coverage 72% -> 76%. That is two units of
   evidence, not an estimator defect; the remedy is REPORTING the group count,
   which nothing does yet.
+- **The doc sweep, with a checkable definition of stale** (P2, 2026-09-06):
+  the review said "~25 stale docs" and did not say what stale meant. Three
+  definitions a machine can settle, measured over 73 docs:
+
+  | | found | after |
+  |---|---|---|
+  | docs naming a source file that does not exist | 7 refs / 6 docs | 0 (1 exempt: a P2.2 proposal) |
+  | docs naming an env var nothing reads | 3 | 0 (2 exempt: a proposal, and a retired name explained AS retired) |
+  | live copy calling Potion a router | 6 lines | 0 |
+
+  `scripts/doc-inventory.test.ts` holds all three, with exemptions that must
+  carry a reason and must still be LIVE — a stale exemption fails.
+- **BOTH SCANS WERE WRONG BEFORE THEY WERE RIGHT, in the direction that
+  invents work.** The path regex spelled extensions `ts|tsx|…|js|json`, and
+  alternation is first-match, so `.tsx` matched as `.ts` and `.json` as `.js`:
+  16 dead references across 11 docs, nine of them the scanner's own bug. The
+  naming scan matched the WORD `router|routing` and reported 119 lines across
+  38 docs — nearly all legitimate, because NAMING.md bans a handful of noun
+  constructions naming the product, not the English verb ("routing decided
+  which requests each strategy saw"). A staleness scan that invents staleness is worse than
+  none: the fixes it prompts are edits to correct prose.
+- **And the exemption list erased its own finding.** `namesKnownToCode`
+  scanned `scripts/**`, which includes the guard's own test file — where the
+  exemptions NAME the variables they exempt. Every ghost therefore looked like
+  it had a reader. Caught by the test that checks exemptions are still live.
+- **What no scan can find, found by reading** — and these were the worst:
+  **SPEC §15.4**, the contract, still described the promotion gate as "≥20%
+  cost cut at ≥ same quality" with a "95% CI" and 1000 resamples: wrong on the
+  cost path, wrong on the margin, wrong on the alpha, two checkpoints out of
+  date. **SPEC §16** described the outcome-evidence Jeffreys interval without
+  saying it assumes independence, which those rows cannot support. And
+  **HARDENING-PLAN P2.1** described the auth-bypass defect in the PRESENT
+  TENSE directly underneath the note saying it was fixed. All three corrected.
+- **Deliberately NOT rewritten**: dated records. `docs/AUDIT-2026-08-22.md`
+  and `docs/research/router-tax-2026-08-23.md` predate the 2026-09-04 naming
+  directive; editing them to comply would falsify a record of what was said.
+  Exempted by name, with that reason.
 - **Serving**: live at withpotion.com (Hetzner + Render PG17). Routing is
   request-classified, **workload-level** optimized (per-cluster frontiers +
   policy). Per-invocation conditional routing is a NAMED FUTURE direction,
@@ -322,7 +359,7 @@ clears your bar.*
   (POTION_RESEARCH_PROVIDER=live in prod compose, 06f5395). The shadow
   plane is closed into evidence: candidates are judge-scored IN-PROCESS by
   the serve judge — one scale with quality_samples, no text on the queue,
-  Jaccard scorer and queue leg retired (5b42bba) — and the router artifact
+  Jaccard scorer and queue leg retired (5b42bba) — and the compiled plan
   carries "on your traffic" evidence per assignment: Jeffreys intervals,
   measured-vs-measured costs, and a lower-bound-gated challenger
   `qualifies` flag; read-only, never mints a version (3528019). Landing
@@ -367,8 +404,8 @@ Savings · Try · Settings · Docs). Next: instrument enlargement
 `tasks/todo.md` (the ledger is append-only history; this file is the
 summary). **Core-API ladder next (G1, sequence adopted from the 2026-08-31
 review — protect it):** Outcome API SHIPPED (10d7876, SPEC §16 — the
-application is now the measurement instrument; evidence on the router
-artifact as "your app's verdicts") · full-request eval capture SHIPPED
+application is now the measurement instrument; evidence on the compiled
+plan as "your app's verdicts") · full-request eval capture SHIPPED
 (the sampler keeps the whole served conversation, redacted + parts
 stripped; derived items carry it; over-cap excluded, never truncated;
 tool/attachment samples excluded from suites with a named count) ·
@@ -384,7 +421,7 @@ estimated counterfactual is labeled "projected, not billed" context; no
 live baseline → pure at-cost. The review ladder's engineering is DONE;
 charging turns on at the Stripe sitting and the first invoice is honest. G2 rung 1 SHIPPED: org workload discovery (0087 —
 consented samples clustered within each serving cluster; observed-only
-snapshot with medoid exemplars + cohesion on the router page; refreshed
+snapshot with medoid exemplars + cohesion on the Compiler page; refreshed
 after each learning period). G2 rung 2 SHIPPED: per-workload
 measurement (0088 — each discovered workload's own suite measures the
 serving pick vs the incumbent on THAT work; eval rows at the workload-id
@@ -396,8 +433,8 @@ within the parent by the request's own classification vector against
 adopted centroids at the discovery-stored threshold; trace carries
 `;parent=`, hint path never sub-assigns, guard-blocked/empty workload
 frontiers fail OPEN to the parent; discovery snapshots preserve adopted
-rows and skip their territory; adopted assignments ride the router
-artifact + serve-time stamping; sampling stays parent-grain). **G2 rung 4 COMPLETE — ROUTER GENERATIONS (0092/0093,
+rows and skip their territory; adopted assignments ride the compiled
+plan + serve-time stamping; sampling stays parent-grain). **G2 rung 4 COMPLETE — ROUTER GENERATIONS (0092/0093,
 c96e979 + c8d6ed4 + aff0bac): stage → canary → promote-on-evidence →
 rollback.** A
 generation = the whole routing surface captured as frontier ids, with a

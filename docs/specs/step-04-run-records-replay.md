@@ -174,7 +174,7 @@ add workspace surface to hold two files. Decision: extend `lab-runtime`.
 
 ```
 packages/lab-runtime/
-  src/playback-client.ts   answers from the record; no network, no db
+  (playback-client.ts was the plan; it landed folded into replay.ts)
   src/replay.ts            replayRun(spec, steps[]) → equivalence | divergences
   src/spans.ts             ENRICHED (gen_ai.prompt/completion, tool.* spans)
   src/replay.test.ts       corpus playback + adversarial divergences + inertness

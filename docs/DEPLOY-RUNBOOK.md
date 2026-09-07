@@ -214,7 +214,7 @@ What to watch, since this is its first real run:
 
 ## §6 TLS and `/metrics`  ⚠️ UNEXECUTED
 
-`POTION_SITE=your.host` makes Caddy provision a Let's Encrypt certificate
+`POTION_API_SITE` / `POTION_APP_SITE` / `POTION_ROOT_SITE` make Caddy provision Let's Encrypt certificates
 automatically (ports 80 and 443 must be reachable from the internet). Verify:
 
 ```bash
