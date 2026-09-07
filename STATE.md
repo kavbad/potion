@@ -209,6 +209,84 @@ clears your bar.*
   `resolveQueueKind()` is exported from `@potion/queue` so the driver
   precedence has one implementation rather than a second copy in the boot
   report — the same lesson as P1-2's duplicated auth rule.
+- **The environment is inventoried, and the inventory is a guard** (P2,
+  2026-09-06): the review said "82 env flags in code, 28 in .env.example".
+  Measured properly the gap was worse — **100 distinct variables read in
+  shipped source against 29 documented**, and among the 71 undocumented were
+  `STRIPE_SECRET_KEY` (whether real money can move), `REDIS_URL` (whether the
+  rate limiter spans replicas — the F18 class), and `POTION_DEV_AUTH` (whether
+  /api/* requires authentication at all). `.env.example` now declares 96, and
+  `scripts/env-inventory.test.ts` fails when a flag is read in shipped source
+  and is neither declared there nor listed INTERNAL with a reason. The reverse
+  too: it fails when `.env.example` names something nothing consumes.
+- **The first version of that scan was wrong in BOTH directions** — worth
+  keeping because it is the guard-writing failure mode. Grepping
+  `process.env.X` reported 136 read / 29 documented AND claimed
+  `RESEND_API_KEY`, `PG_POOL_MAX` and every `POTION_BREAKER_*` knob were read
+  nowhere. They are: this repo deliberately reads env through an injected
+  `env: NodeJS.ProcessEnv` parameter wherever a value must be testable
+  (pool.ts, factory.ts, auth.ts, oidc.ts, boot-report.ts). A scan that cannot
+  see how the code actually reads env is a guard that lies confidently.
+- **The dead-knob rule nearly deleted a LIVE knob.** `POTION_ROOT_SITE` is
+  read by no TypeScript anywhere, so "documented but unread" flagged it and I
+  removed it — it is required by `deploy/Caddyfile` for the bare-domain vhost
+  and by compose with `:?`, so the next deploy would have failed at startup.
+  The rule now CHECKS the deployment files (Caddyfile, compose, Dockerfile)
+  rather than carrying an exemption list, so a knob that stops being consumed
+  there stops being allowed here.
+- **Two flags existed only as prose.** `POTION_BREAKER` (the circuit breaker's
+  off switch) was described in a paragraph and never declared, so no inventory
+  of that file could see it. Its parser sibling: accepting `# NAME=` as a
+  declaration made a wrapped sentence beginning `NODE_ENV=production ...`
+  register NODE_ENV as documented. Declarations are uncommented lines now.
+- **P1-2 left the type-escape ratchet broken and this checkpoint found it**:
+  `logBootGates` took a whole `FastifyBaseLogger`, so a test asserting the
+  boot refusal had to cast its fake with `as unknown as` — a fixture checked
+  against nothing. Fixed by narrowing the parameter to the three levels the
+  function actually uses (`BootGateLog`). The lesson is the running one: the
+  budget is never the thing to raise, and `pnpm vitest run scripts/` is part
+  of a checkpoint, not an afterthought.
+- **jeffreysCi assumes independence and cannot tell when it is wrong** (P2,
+  2026-09-06): its own docstring had named this as an unbuilt follow-up since
+  2026-08-25. Measured (3000 seeded trials, true p = 0.90, nominal 95%):
+
+  | evidence | coverage | lower-bound overclaim | width |
+  |---|---|---|---|
+  | 60 independent items | 95.1% | 1.0% | 0.148 |
+  | 6 items seen 10 times | 90.8% | 2.8% | 0.148 |
+  | 4 groups x 25 | 83.2% | 8.4% | 0.115 |
+  | 2 groups x 50 | 72.5% | **14.7%** | 0.113 |
+
+  **The width is the tell**: identical for 60 independent items and for 6 seen
+  ten times, because nothing in the input says which it is. The lower bound is
+  what every floor, graduation and qualification decision reads.
+  Fixed with `clusteredQualityCi` — a CLUSTER bootstrap (resample groups, not
+  observations), seeded from the evidence via `seedFromString` so it stays
+  re-derivable with no stored seed, unioned with Jeffreys so an all-ones
+  sample still never reports certainty, and returning `jeffreysCi` unchanged
+  when every group is a singleton.
+- **THE FIRST VERSION OF THAT TEST PROVED NOTHING.** It asserted coverage
+  (91.5% -> 95.7%, true), and a mutant that resampled OBSERVATIONS instead of
+  groups — the naive bootstrap, which models no clustering at all — PASSED it:
+  the union with Jeffreys widens the interval either way, and at n=60 that
+  alone recovers the coverage. The property that actually separates them is
+  width RESPONDING to group size at fixed n. Measured at n=60, group size 1 to
+  20: `jeffreysCi` 0.1492 -> 0.1445 (flat), naive bootstrap 0.1607 -> 0.1554
+  (flat), cluster bootstrap 0.1492 -> 0.1810. The naive mutant now dies by
+  name. Coverage is still asserted, but as a consequence, not as the proof.
+- **Wired where the metadata exists, and NOT where it does not.**
+  `lab-runtime/graduation.ts` has `situation` fingerprints and now groups by
+  them on both paths — earning (the repeat cap already refused to let volume
+  buy trust; this refuses to let it buy CONFIDENCE) and drift, where a wider
+  interval can only make revoking a human's grant more reluctant.
+  `pareto/outcome-evidence.ts` and `pareto/shadow-evidence.ts` have NO
+  grouping key at all — `OutcomeRowLike` carries requestId, cluster, strategy
+  and no customer or session id — so they keep `jeffreysCi` and the limit is
+  named in the docstring rather than papered over with a fabricated grouping.
+- **HONEST LIMIT, asserted**: a cluster bootstrap over 2 groups has three
+  distinct resamples in the world. Coverage 72% -> 76%. That is two units of
+  evidence, not an estimator defect; the remedy is REPORTING the group count,
+  which nothing does yet.
 - **Serving**: live at withpotion.com (Hetzner + Render PG17). Routing is
   request-classified, **workload-level** optimized (per-cluster frontiers +
   policy). Per-invocation conditional routing is a NAMED FUTURE direction,

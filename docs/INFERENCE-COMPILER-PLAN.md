@@ -1367,7 +1367,67 @@ tree and every one of them holds.
 
 | P1-3 | Workers run in-process with the server; `buildServer` calls `runWorker` unconditionally | **confirmed and MEASURED — 1188ms of event-loop lag from one job; FIXED, split is opt-in** |
 
-Taken on trust, not independently checked: the P2 set.
+| P2 | Env-flag reconciliation: "82 in code vs 28 in .env.example" | **confirmed, WORSE than stated, FIXED** — 100 read vs 29 documented; now 96 declared plus a guard |
+
+| P2 | `jeffreysCi` overdispersion | **confirmed and MEASURED — coverage 95% -> 72% on clustered evidence; FIXED where grouping metadata exists** |
+
+Still taken on trust: the rest of the P2 set (the ~25 stale docs, splitting
+`handlers.ts`, dashboard coverage).
+
+### P2 overdispersion: the number, and a test that proved nothing
+
+`jeffreysCi`'s own docstring had named this as an unbuilt follow-up since
+2026-08-25. At true p = 0.90, nominal 95%, 3000 seeded trials:
+
+| evidence | coverage | lower-bound overclaim | width |
+|---|---|---|---|
+| 60 independent items | 95.1% | 1.0% | 0.148 |
+| 6 items seen 10 times | 90.8% | 2.8% | 0.148 |
+| 2 groups x 50 | 72.5% | **14.7%** | 0.113 |
+
+The width is the tell: identical whether the sixty observations are sixty
+things or six things seen ten times, because nothing in the input says which.
+Every floor, graduation and qualification decision in this repo reads the
+lower bound.
+
+`clusteredQualityCi` resamples GROUPS, is seeded from the evidence so it needs
+no stored seed, unions with Jeffreys so the boundary stays honest, and is
+`jeffreysCi` exactly when every group is a singleton.
+
+**The first test written for it proved nothing.** It asserted coverage
+(91.5% -> 95.7%), and a mutant that resampled observations instead of groups —
+modelling no clustering whatsoever — passed, because unioning with Jeffreys
+widens the interval either way and at n=60 that alone recovers the coverage.
+The discriminating property is width responding to group size at fixed n:
+across group sizes 1 to 20 at n=60, `jeffreysCi` reads 0.1492 -> 0.1445 and
+the naive bootstrap 0.1607 -> 0.1554 — both flat — while the cluster bootstrap
+reads 0.1492 -> 0.1810. Same failure class as the caption-vs-provenance bugs:
+a true number offered as proof of a claim it does not support.
+
+### P2 env reconciliation: the count, and two ways the guard nearly lied
+
+The review's numbers were close and low. Measured properly — see
+`scripts/env-inventory.ts` for why the obvious grep is wrong — **100 distinct
+variables are read in shipped source against 29 documented**. Among the 71
+undocumented: `STRIPE_SECRET_KEY`, `REDIS_URL`, `POTION_DEV_AUTH`.
+
+The deliverable is not the list, it is the ratchet: every flag read in shipped
+source must be declared in `.env.example` or listed INTERNAL with a reason, and
+`.env.example` must not name anything nothing consumes. A new flag forces a
+decision, the way the route inventory and the type-escape budget do.
+
+Two failures worth recording, both caught before they shipped:
+
+1. **The scan was wrong in both directions.** `process.env.X` alone reported
+   136 read and claimed `RESEND_API_KEY`, `PG_POOL_MAX` and the
+   `POTION_BREAKER_*` knobs were read nowhere. This repo reads env through an
+   injected `env: NodeJS.ProcessEnv` parameter wherever the value must be
+   testable. A guard that cannot see how the code reads env lies confidently.
+2. **The dead-knob rule nearly deleted a live knob.** `POTION_ROOT_SITE` has
+   no TypeScript reader; `deploy/Caddyfile` needs it for the bare-domain vhost
+   and compose demands it with `:?`. Removing it would have failed the next
+   deploy at startup. The rule now reads the deployment files instead of
+   carrying an exemption list.
 
 ### P0-4 puts a caveat on a result recorded above
 

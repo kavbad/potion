@@ -8,6 +8,7 @@ import {
   bootGateReport,
   bootWarnings,
   BootRefusedError,
+  type BootGateLog,
   logBootGates,
   sourceOf,
 } from '../src/boot-report.js';
@@ -72,9 +73,9 @@ describe('boot gate report', () => {
   });
 
   it('a fatal gate REFUSES THE BOOT — the process does not take the port', () => {
-    const log = {
-      info: () => {}, warn: () => {}, fatal: () => {},
-    } as unknown as Parameters<typeof logBootGates>[0];
+    // A real BootGateLog, not a cast: the fake now has to actually match the
+    // shape the function asks for, so a change to that shape breaks here.
+    const log: BootGateLog = { info: () => {}, warn: () => {}, fatal: () => {} };
     expect(() => logBootGates(log, { NODE_ENV: 'production', POTION_DEV_AUTH: '1' }, 'live'))
       .toThrow(BootRefusedError);
     // ...and a clean production box still boots.

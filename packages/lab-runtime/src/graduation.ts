@@ -18,10 +18,19 @@
 // thousand routine successes (999 correct refunds and one wrong $100,000
 // refund is 99.9% and unacceptable — the named test pins that sentence).
 //
-// Uncertainty uses the platform's boundary-honest interval (jeffreysCi): a
-// perfect 25/25 is a ≥-bound wide enough to matter, and the per-tier floors
-// are compared against the interval's LOWER bound, never the mean.
-import { jeffreysCi } from '@potion/core';
+// Uncertainty uses the platform's boundary-honest interval: a perfect 25/25
+// is a ≥-bound wide enough to matter, and the per-tier floors are compared
+// against the interval's LOWER bound, never the mean.
+//
+// P2 (2026-09-06): that interval assumes the observations are INDEPENDENT,
+// and here they are emphatically not — this evaluator's whole subject is an
+// action repeated across situations, and ten runs of one situation are one
+// unit of evidence about the world. Measured: at six situations seen ten
+// times each, jeffreysCi covers 91.5% of the time against a nominal 95% and
+// its width does not move at all between that and sixty distinct situations.
+// This file is the one caller in the repo that HAS the grouping metadata
+// (`situation`), so it is the one that can use `clusteredQualityCi`.
+import { clusteredQualityCi, jeffreysCi } from '@potion/core';
 
 export type RiskTier = 'reversible-read' | 'reversible-act' | 'irreversible-act' | 'never-graduates';
 export type GrantState = 'supervised' | 'autonomous' | 'blocked';
@@ -126,6 +135,11 @@ export const REPEAT_EVIDENCE_CAP = 5;
  * capped per situation at REPEAT_EVIDENCE_CAP. */
 export function effectiveEvidence(evidence: ActionEvidence[]): {
   scores: number[];
+  /** P2: the SITUATION each score came from, positionally aligned with
+   *  `scores`. Kept so the interval can resample situations rather than
+   *  observations — the cap below thins repeats, it does not make what
+   *  survives independent. */
+  groups: string[];
   rawN: number;
   effectiveN: number;
   distinctSituations: number;
@@ -133,20 +147,29 @@ export function effectiveEvidence(evidence: ActionEvidence[]): {
   const successPerSituation = new Map<string, number>();
   const situations = new Set<string>();
   const scores: number[] = [];
+  const groups: string[] = [];
   for (const e of evidence) {
     const sit = e.situation ?? 'unfingerprinted';
     situations.add(sit);
     if (isFailure(e)) {
       scores.push(0);
+      groups.push(sit);
       continue;
     }
     const seen = successPerSituation.get(sit) ?? 0;
     if (seen < REPEAT_EVIDENCE_CAP) {
       successPerSituation.set(sit, seen + 1);
       scores.push(1);
+      groups.push(sit);
     }
   }
-  return { scores, rawN: evidence.length, effectiveN: scores.length, distinctSituations: situations.size };
+  return {
+    scores,
+    groups,
+    rawN: evidence.length,
+    effectiveN: scores.length,
+    distinctSituations: situations.size,
+  };
 }
 
 /** Recent-window trigger for automatic re-tightening: any reversal, or ≥2
@@ -219,7 +242,12 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
     // catch problems, and every raw observation is signal — the diversity
     // cap governs earning, never revocation.
     const rawScores: number[] = inWindow.map((e) => (isFailure(e) ? 0 : 1));
-    const [rawLower] = jeffreysCi(rawScores);
+    const rawGroups: string[] = inWindow.map((e) => e.situation ?? 'unfingerprinted');
+    // Grouped here too, and the direction is what makes it safe: a clustered
+    // interval is WIDER, so a lower bound that still falls below the floor
+    // fell below it on evidence that was not double-counted. This branch can
+    // only ever become MORE reluctant to revoke a human's grant.
+    const [rawLower] = clusteredQualityCi(rawScores, rawGroups);
     // W2 correction (found live, 2026-08-31): a human's grant on thin
     // evidence was auto-revoked at the very next pass — one clean approval
     // has a lower bound of 0.147, "below the floor", with ZERO negative
@@ -243,7 +271,12 @@ export function graduationDecision(input: GraduationInput): GraduationDecision {
   // cannot buy autonomy on volume alone.
   const eff = effectiveEvidence(inWindow);
   const successes = eff.scores.reduce((s, x) => s + x, 0);
-  const [lower] = jeffreysCi(eff.scores);
+  // P2: grouped by situation. The repeat cap already refuses to let volume
+  // buy trust; this refuses to let it buy CONFIDENCE, which is the other half
+  // of the same argument and was missing. Where every observation is its own
+  // situation the two intervals are identical, so nothing that was already
+  // earned on diverse evidence moves.
+  const [lower] = clusteredQualityCi(eff.scores, eff.groups);
 
   if (eff.effectiveN < rules.minN) {
     const narrowed = eff.rawN > eff.effectiveN
