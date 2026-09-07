@@ -1616,6 +1616,36 @@ interval-width half of that still holds. The conclusion did not: an all-ties
 sample is not evidence of equality, it is evidence of not having looked hard
 enough. The review was closer to right than it was given credit for.
 
+### The P1-3 liveness gap, closed (2026-09-06)
+
+The split shipped with a hole named at the time: `POTION_WORKER=off` with
+Redis present and the standalone worker not started is undetected — jobs
+accepted into Redis, nothing running them, nothing anywhere erroring.
+
+**The boot gate could never have caught it.** At boot, "no worker attached
+yet" and "no worker will ever attach" are the same observation. It is a
+runtime condition, and it is answered at runtime: `consumerHealth()` on the
+queue driver reports facts (bullmq asks Redis's own `getWorkersCount`), and
+`assessConsumers` makes the call.
+
+**`waiting > 0 AND consumers == 0`, both halves.** Waiting alone is not a
+stall — one worker inside a 24-minute research cycle legitimately leaves the
+next job queued, and a check that fired on depth would be muted within a week.
+Zero consumers alone is a normal second of a rollout.
+
+**It does not fail `/readyz`, on purpose.** Readiness drains the instance from
+the load balancer; a missing worker does not stop this process serving.
+Failing the probe would turn "background work stopped" into "the product is
+down" — a worse outage than the one being reported. The stall rides in the
+body and on `potion_queue_stalled`, which is where an alert belongs. A
+mutation that makes it gate readiness fails by name.
+
+**And it turned up a latent hang.** `MemoryQueue.close()` waited on
+`jobs.length > 0` while `pump()` stops at a job whose name has no handler, so
+one undeliverable job meant close never returned. The split is what makes it
+reachable — a server with the worker off registers no handlers, so every job
+it accepts is undeliverable. Found by a test hanging for 60 seconds.
+
 ### Ordering
 
 The review says take the P0s in numerical order. One argument against:

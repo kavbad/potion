@@ -68,6 +68,19 @@ export class MemoryQueue {
     return id;
   }
 
+  /**
+   * P1-3 liveness, memory driver. A process-local queue is consumed by the
+   * process that owns it and nobody else, so "is anything consuming" reduces
+   * to "has anything registered a handler". It can still be 0 with jobs
+   * waiting: a server built with POTION_WORKER=off registers none.
+   */
+  async consumerHealth(): Promise<{ waiting: number; consumers: number }> {
+    return {
+      waiting: this.jobs.filter((j) => j.state === 'queued').length,
+      consumers: this.handlers.size > 0 ? 1 : 0,
+    };
+  }
+
   registerHandler(
     name: string,
     fn: (payload: any, delivery: { jobId: string; attempt: number }) => Promise<unknown>,
@@ -139,8 +152,31 @@ export class MemoryQueue {
     }
   }
 
+  /**
+   * Drain, then close. Waits only for work that CAN drain.
+   *
+   * It used to wait on `this.jobs.length > 0`, and `pump()` stops at the head
+   * of the line when that job's name has no handler — deliberately, so a
+   * handler registered later still gets its jobs. Put those two together and
+   * a queue holding one undeliverable job never drains and `close()` never
+   * returns: the process hangs on shutdown until something kills it.
+   *
+   * Reachable the moment the two halves of Potion are split (P1-3): a server
+   * built with POTION_WORKER=off registers no handlers, so EVERY job it
+   * accepts is undeliverable in-process. The boot gate refuses that pairing
+   * with the memory driver in a deployment, but an embedder or a test that
+   * injects its own queue walks straight into it — which is how this was
+   * found, by a test hanging for 60 seconds.
+   *
+   * Close is terminal: nobody registers a handler during it, so a job with no
+   * handler now will never have one, and waiting for it is waiting forever.
+   */
+  private drainableJobs(): number {
+    return this.jobs.filter((j) => this.handlers.has(j.name)).length;
+  }
+
   async close(): Promise<void> {
-    while (this.jobs.length > 0 || this.pumping) {
+    while (this.drainableJobs() > 0 || this.pumping) {
       await new Promise<void>((resolve) => this.drainWaiters.push(resolve));
     }
     this.closed = true;
