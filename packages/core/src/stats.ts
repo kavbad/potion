@@ -64,6 +64,12 @@ export function bootstrapCi(
   stat: (xs: number[]) => number,
   seed: number,
   resamples: number = BOOTSTRAP_RESAMPLES,
+  /** Two-sided significance level. 0.05 reproduces the original percentiles
+   *  EXACTLY — floor(0.025·(r−1)) and ceil(0.975·(r−1)) — so every existing
+   *  caller is bit-identical and stored G0.3 breach evidence stays
+   *  re-derivable. A smaller alpha widens the interval, which is what a
+   *  family-wise correction needs (P1-1). */
+  alpha: number = 0.05,
 ): { estimate: number; ci95: [number, number] } {
   const n = values.length;
   const estimate = stat(values);
@@ -75,8 +81,8 @@ export function bootstrapCi(
     stats[r] = stat(buf);
   }
   stats.sort((a, b) => a - b);
-  const lo = stats[Math.max(0, Math.floor(0.025 * (resamples - 1)))]!;
-  const hi = stats[Math.min(resamples - 1, Math.ceil(0.975 * (resamples - 1)))]!;
+  const lo = stats[Math.max(0, Math.floor((alpha / 2) * (resamples - 1)))]!;
+  const hi = stats[Math.min(resamples - 1, Math.ceil((1 - alpha / 2) * (resamples - 1)))]!;
   return { estimate, ci95: [lo, hi] };
 }
 
@@ -91,12 +97,14 @@ export function bootstrapMeanCi(
   values: number[],
   seed: number,
   resamples: number = BOOTSTRAP_RESAMPLES,
+  alpha: number = 0.05,
 ): { mean: number; ci95: [number, number] } {
   const { estimate, ci95 } = bootstrapCi(
     values,
     (xs) => xs.reduce((s, d) => s + d, 0) / xs.length,
     seed,
     resamples,
+    alpha,
   );
   return { mean: estimate, ci95 };
 }

@@ -149,3 +149,66 @@ describe('the router artifact carries the verdicts', () => {
     expect(a.outcomes!.human?.edited).toBeGreaterThanOrEqual(1);
   });
 });
+
+// ---- C5 reliability (docs/INFERENCE-COMPILER-PLAN.md) ----
+//
+// The two things observational outcome evidence can honestly support about a
+// DEPLOYED assignment, surfaced where the customer reads their plan. Not a
+// frontier axis — outcome evidence cannot rank candidates, because routing
+// decided which requests each one saw.
+describe('C5: the compiled plan carries cost-per-success and the success floor', () => {
+  const ORG_R = 'org-reliability';
+  const KEY_R = 'pk_reliability';
+
+  async function planFor(key: string) {
+    const res = await app.inject({ method: 'GET', url: '/api/router', headers: { authorization: `Bearer ${key}` } });
+    expect(res.statusCode).toBe(200);
+    return (res.json() as {
+      document: {
+        assignments: Array<{
+          clusterId: string;
+          costPer1K: number | null;
+          reliability?: { costPerSuccess: number | null; floor: { verdict: string; n: number; reason: string } | null };
+        }>;
+      };
+    }).document.assignments.find((a) => a.clusterId === 'classification')!;
+  }
+
+  beforeAll(async () => {
+    await createOrg(db(), { id: ORG_R, name: ORG_R });
+    await insertPolicy(db(), {
+      id: `pol-${ORG_R}`, orgId: ORG_R, name: ORG_R,
+      // A demanding floor, so the seeded failures are unambiguously below it.
+      config: { type: 'min_cost', qualityFloor: 0.7, guarantee: { minQuality: 0.7, windowMin: 1440, sampleRate: 0, action: 'alert', minSuccessRate: 0.98 } },
+    });
+    await insertApiKey(db(), { id: `key-${ORG_R}`, keyHash: sha256(KEY_R), name: 'serve', orgId: ORG_R, policyId: `pol-${ORG_R}`, scopes: 'serve+admin' });
+    await saveFrontier(db(), 'classification', [point(CHEAP, 0.9, 1.0)], 'manual', '2026-09-05');
+    // Eight served requests; six succeeded. Well under a 0.98 floor, and
+    // enough of them that the interval does not straddle it.
+    for (let i = 0; i < 8; i++) {
+      const id = await serve(KEY_R);
+      await report(KEY_R, { request_id: id, success: i < 6 });
+    }
+  }, 120_000);
+
+  it('cost per success is billed against the LOWER bound, so it exceeds raw cost', async () => {
+    const a = await planFor(KEY_R);
+    expect(a.reliability?.costPerSuccess).not.toBeNull();
+    expect(a.reliability!.costPerSuccess!).toBeGreaterThan(a.costPer1K!);
+  });
+
+  it('the floor breaches when the whole interval sits below it, and says why', async () => {
+    const a = await planFor(KEY_R);
+    expect(a.reliability?.floor?.verdict).toBe('breached');
+    expect(a.reliability!.floor!.n).toBe(8);
+    expect(a.reliability!.floor!.reason).toContain('entirely below the floor');
+  });
+
+  it('a policy with no success floor gets no verdict — absent, never a passing zero', async () => {
+    const id = await serve(KEY_A);
+    await report(KEY_A, { request_id: id, success: true });
+    const a = await planFor(KEY_A);
+    expect(a.reliability?.floor).toBeNull();
+    expect(a.reliability?.costPerSuccess).not.toBeUndefined();
+  });
+});

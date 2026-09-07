@@ -324,7 +324,7 @@ openssl rand -hex 32   # → POTION_OPERATOR_TOKEN
 | `SENTRY_DSN` | Sentry DSN (item 4) | **NEW** — consumed by the 13a Sentry init (§1.6). |
 | `POTION_METRICS` | `0` (recommended) or `1` | `server.ts:100`. `0` = the meter and route do not exist; prefer until a private scraper is deployed. If `1`, the `/metrics` 403 (§4) is load-bearing. |
 | `POTION_SELF_SERVE` | **unset** | `auth.ts:205`; signup stays off. Operator onboarding is the only way an org is born. |
-| `NODE_ENV` | `production` (set by the image) | `auth.ts:148`; disables the dev-auth bypass. |
+| `NODE_ENV` | `production` (set by the image) | `auth.ts` `devAuthBypassEnabled`. Since P1-2 the bypass is an ALLOW-LIST — it is on only for `development`/`test`, so an unset or misspelled NODE_ENV leaves it OFF rather than opening it. Setting it to `production` is still correct and is what makes `POTION_DEV_AUTH=1` a fatal boot refusal. |
 
 Deliberately **not** set: `POTION_DEV_AUTH` (leave unset — off in prod),
 `POTION_SEED_DEMO` (no demo org in prod), `ARTIFACT_STORE` (no disk artifacts —

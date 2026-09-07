@@ -222,6 +222,11 @@ export const models = pgTable('models', {
   reasoning: boolean('reasoning'),
   /** 'seed' (committed prices.json) | 'scan' (discovered live). */
   source: text('source').notNull().default('seed'),
+  /** 0094 model health. A counter, not a flag: one 429 is weather, four in a
+   *  row is a model. Reset by any completed run. */
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  lastFailureAt: timestamp('last_failure_at', { withTimezone: true }),
+  lastFailureReason: text('last_failure_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

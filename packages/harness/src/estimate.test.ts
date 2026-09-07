@@ -5,7 +5,7 @@
 // regression in estimate-m1b-regression.test.ts.
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import type { EvalItem } from '@potion/core';
+import { REASONING_BUDGET_TOKENS, type EvalItem, type StrategyConfig } from '@potion/core';
 import { loadPrices } from '@potion/providers';
 import { MAX_SUBTASKS } from '@potion/strategies';
 import {
@@ -227,5 +227,75 @@ describe('BudgetCapError', () => {
     expect(e.message).toMatch(/Run NOT started/);
     expect(e.projectedUsd).toBe(1.2345);
     expect(e.capUsd).toBe(0.0001);
+  });
+});
+
+// ---- C4: thinking is not free ----
+//
+// The preflight is a worst-case UPPER BOUND, and `projectRunCostUsd` gates the
+// research sweep's graceful stop on it. A call at high effort that is priced
+// like a call at no effort makes that bound a floor instead of a ceiling: the
+// sweep would start a run it cannot afford and discover it by spending.
+describe('reasoning effort in the preflight (C4)', () => {
+  const item = itemWithContent('extract the order');
+  const INPUT = inputTokensOf(item);
+  const prog = (effort?: 'low' | 'medium' | 'high'): StrategyConfig => ({
+    type: 'program',
+    name: 'e',
+    body: { op: 'call', model: 'haiku-class', ...(effort !== undefined ? { reasoningEffort: effort } : {}) },
+  });
+
+  it('a call at effort is projected with its thinking budget on top of the answer', () => {
+    const none = estimateCalls(prog(), INPUT, ANSWER_OUTPUT_TOKENS);
+    const high = estimateCalls(prog('high'), INPUT, ANSWER_OUTPUT_TOKENS);
+    expect(none[0]!.outputTokens).toBe(ANSWER_OUTPUT_TOKENS);
+    expect(high[0]!.outputTokens).toBe(ANSWER_OUTPUT_TOKENS + REASONING_BUDGET_TOKENS.high);
+  });
+
+  it('the three efforts are strictly ordered — the compiler is trading along a real axis', () => {
+    const out = (e?: 'low' | 'medium' | 'high') => estimateCalls(prog(e), INPUT, ANSWER_OUTPUT_TOKENS)[0]!.outputTokens;
+    expect(out()).toBeLessThan(out('low'));
+    expect(out('low')).toBeLessThan(out('medium'));
+    expect(out('medium')).toBeLessThan(out('high'));
+  });
+
+  it('and it reaches the money: a high-effort program costs more than the same program without', () => {
+    const cheap = estimateItemCostUsd(prog(), item, prices, ANSWER_OUTPUT_TOKENS);
+    const dear = estimateItemCostUsd(prog('high'), item, prices, ANSWER_OUTPUT_TOKENS);
+    expect(dear).toBeGreaterThan(cheap);
+  });
+});
+
+// ---- C4 rung 4: tool definitions are input ----
+//
+// `inputTokensOf` counted the prompt and nothing else, so every tool-bearing
+// item was priced as if its tool schemas were free. They are not: they are
+// verbose JSON sent on EVERY call, and an agent workload offering twenty of
+// them can pay more for the catalogue than for the question. This is the
+// direction the bound must never get wrong — an under-estimate lets the sweep
+// start a run it cannot afford.
+describe('tool definitions in the preflight (C4 rung 4)', () => {
+  const tool = (name: string) => ({
+    type: 'function' as const,
+    function: {
+      name,
+      description: `Call ${name} to do the ${name} thing, with all the usual caveats.`,
+      parameters: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } } },
+    },
+  });
+  const bare = itemWithContent('do the thing');
+  const armed: EvalItem = { ...bare, tools: [tool('alpha'), tool('beta'), tool('gamma')] };
+
+  it('an item carrying tools costs more input than the same item without', () => {
+    expect(inputTokensOf(armed)).toBeGreaterThan(inputTokensOf(bare));
+  });
+
+  it('and it scales with the catalogue — twenty tools is not the same bill as three', () => {
+    const many: EvalItem = { ...bare, tools: Array.from({ length: 20 }, (_, i) => tool(`t${i}`)) };
+    expect(inputTokensOf(many)).toBeGreaterThan(inputTokensOf(armed) * 2);
+  });
+
+  it('an item with no tools is unchanged — no silent repricing of everything else', () => {
+    expect(inputTokensOf(bare)).toBe(Math.ceil(promptCharsOf(bare.prompt) / 4));
   });
 });

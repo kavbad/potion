@@ -124,8 +124,22 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      # 13a spec §2 gap 1: lab:run THROWS without it; loopback because the
-      # worker is in-process with the server.
+      # P1-3: where the job handlers run. UNSET (the default) = in-process,
+      # which is right on one box. Set POTION_WORKER=off in .env.prod AND
+      # start the `worker` service below (`--profile split`) to give
+      # background work its own event loop, heap and fate. Empty is treated
+      # as unset by the server, so a scaffolded-empty line cannot silently
+      # stop every job (the 2026-08-27 class).
+      #
+      # OFF WITHOUT A WORKER RUNNING IS A HAZARD: with Redis present the boot
+      # gate cannot tell "a worker is coming" from "nobody is consuming", so
+      # jobs would pile up in Redis unnoticed. After flipping it, check
+      # `docker compose ps worker`. Off with the MEMORY driver refuses to boot.
+      POTION_WORKER: ${POTION_WORKER:-}
+      # 13a spec §2 gap 1: lab:run THROWS without it. Loopback while the
+      # worker is in-process; in a split deployment the worker reaches the
+      # server by service name, which is why the worker service below sets
+      # its own POTION_SERVING_URL.
       POTION_SERVING_URL: ${POTION_SERVING_URL:-http://localhost:3000}
       # 13a spec §2 gap 2 + deploy plan D2: the public API origin — docs
       # snippets, Lab links and OAuth callbacks derive from it. Behind Caddy
@@ -339,6 +353,59 @@ services:
     volumes:
       - /opt/potion/research:/research
     restart: "no"
+
+  # ---- P1-3: the job half, as its own process (opt-in) ----------------------
+  # `docker compose --profile split up -d worker`, with POTION_WORKER=off set
+  # for the server. Without the profile this service does not exist, so the
+  # default deployment is byte-identical to before.
+  #
+  # Same image, same entry wiring: apps/server/src/worker.ts builds the SAME
+  # context the server builds (same db, same resolved prices path, same
+  # dimension-guarded embedder) and calls the SAME startPotionWorker. A worker
+  # that resolved any of those differently would be the prices.json
+  # contamination class again.
+  #
+  # REQUIRES the bullmq driver — REDIS_URL below is what makes the queue
+  # something two processes can share. It is not on sandboxnet: the sandbox is
+  # reached by the SERVER, not by job handlers.
+  worker:
+    profiles: ["split"]
+    image: deploy-server
+    working_dir: /app
+    command: ["node", "apps/server/dist/worker.js"]
+    restart: unless-stopped
+    networks:
+      - default
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (Neon direct endpoint, sslmode=require)}
+      PG_CONN_TIMEOUT_MS: ${PG_CONN_TIMEOUT_MS:-15000}
+      PG_POOL_MAX: ${PG_POOL_MAX:-10}
+      REDIS_URL: redis://redis:6379
+      QUEUE_DRIVER: bullmq
+      POTION_MASTER_KEY: ${POTION_MASTER_KEY:?set POTION_MASTER_KEY (64 hex, `openssl rand -hex 32`)}
+      # The SAME measured price table the server serves from — a worker on a
+      # different table promotes against evidence the server never priced.
+      POTION_PRICES_PATH: /app/.tranche/prices.json
+      POTION_CLUSTER_THRESHOLD: ${POTION_CLUSTER_THRESHOLD:-0.2}
+      POTION_EMBEDDER: ${POTION_EMBEDDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Not loopback: in a split deployment lab:run reaches the SERVER.
+      POTION_SERVING_URL: http://server:3000
+      POTION_PUBLIC_URL: ${POTION_PUBLIC_URL:?set POTION_PUBLIC_URL (https://api.<domain>)}
+      POTION_APP_URL: ${POTION_APP_URL:?set POTION_APP_URL (https://app.<domain>)}
+      # Alert rules deliver mail from whichever process dispatches them.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      POTION_EMAIL_FROM: ${POTION_EMAIL_FROM:-}
+      POTION_EMAIL_REPLY_TO: ${POTION_EMAIL_REPLY_TO:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      redis:
+        condition: service_started
 
 networks:
   # X1: the sandbox's world — internal: true means NO egress; only members

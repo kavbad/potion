@@ -113,6 +113,9 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
+      '@potion/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.43
@@ -662,6 +665,9 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@potion/strategies':
+        specifier: workspace:*
+        version: link:../strategies
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.43

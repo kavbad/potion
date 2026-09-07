@@ -310,7 +310,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
       'cache-control': 'no-cache',
       connection: 'keep-alive',
       'x-frontier-trace': trace,
-        'x-potion-model': strategyModelLabel(resolved.config as { type: string; model?: string }),
+        'x-potion-model': strategyModelLabel(resolved.config),
       'x-request-id': req.id,
     });
     const base = { id, created, model };
@@ -357,7 +357,7 @@ export function registerPlaygroundRoutes(app: FastifyInstance, ctx: PotionContex
             orgId: org.orgId,
             requestId: id,
             clusterId,
-            model: cfg.type === 'single' ? (cfg.model ?? null) : `combination:${cfg.type}`,
+            model: cfg.type === 'single' ? (cfg.model ?? null) : strategyModelLabel(cfg),
             // FULL-REQUEST CAPTURE (G1): the whole conversation, like the
             // key-served path. Playground requests carry no tools/parts.
             messages,

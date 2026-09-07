@@ -26,9 +26,11 @@
 // /api/* request resolves to the default demo org with role 'admin' — this
 // keeps the pre-auth local-tool behavior (and the existing tests/walkthrough)
 // alive. Enabled when POTION_DEV_AUTH=1, OR when POTION_DEV_AUTH is unset and
-// NODE_ENV !== 'production' (tests, local dev). PRODUCTION: set
-// NODE_ENV=production and never set POTION_DEV_AUTH=1 — the bypass is then
-// OFF by default and /api/* demands a session.
+// NODE_ENV NAMES a non-production runtime ('development' / 'test').
+// PRODUCTION: nothing to do — the bypass is off unless something explicitly
+// turns it on, and POTION_DEV_AUTH=1 with NODE_ENV=production REFUSES TO BOOT
+// (see boot-report.ts). Before P1-2 this defaulted the other way, on the
+// absence of a production marker.
 import { sha256, type Policy } from '@potion/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
@@ -139,13 +141,35 @@ export type RequestAuth =
   | ({ kind: 'session' } & SessionAuthResult)
   | { kind: 'dev'; org: OrgContext };
 
+/**
+ * Runtimes that identify themselves as NOT production. An ALLOW-LIST, and
+ * that is the whole of P1-2.
+ *
+ * This used to be `NODE_ENV !== 'production'`. An unset NODE_ENV is not
+ * 'production', and neither is 'Production', 'prod', or 'production ' — so
+ * every one of them opened the bypass, and the bypass resolves an
+ * UNAUTHENTICATED /api/* request to the default org with role 'admin'. The
+ * dashboard's entire security posture rested on one string being present and
+ * spelled exactly right, in a repo whose only production incident
+ * (2026-08-27, see boot-report.ts) was a variable that WAS present and empty.
+ *
+ * Inverted: a runtime now has to say what it is to get the bypass. Anything
+ * unrecognized — including nothing at all — is treated as production.
+ */
+const NON_PRODUCTION_RUNTIMES = new Set(['development', 'test']);
+
 /** The documented dev-mode bypass (see file header). POTION_DEV_AUTH=1 forces
- * ON, =0 forces OFF; unset → ON outside production (tests/local dev), OFF in
- * production. */
+ * ON, =0 forces OFF; unset or EMPTY → ON only when NODE_ENV names a
+ * non-production runtime (`development` / `test`), OFF otherwise. */
 export function devAuthBypassEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const flag = env.POTION_DEV_AUTH;
-  if (flag !== undefined && flag !== '') return flag === '1' || flag.toLowerCase() === 'true';
-  return env.NODE_ENV !== 'production';
+  const flag = env.POTION_DEV_AUTH?.trim();
+  // Empty/whitespace is UNSET, not "off": a scaffolded-empty variable is the
+  // 2026-08-27 incident's own shape, and it must fall through to the default
+  // rather than read as a deliberate choice either way.
+  if (flag !== undefined && flag !== '') {
+    return flag === '1' || flag.toLowerCase() === 'true';
+  }
+  return NON_PRODUCTION_RUNTIMES.has(env.NODE_ENV?.trim() ?? '');
 }
 
 /**

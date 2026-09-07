@@ -78,6 +78,12 @@ export async function openAiCompatibleComplete(
   if (req.params?.tools !== undefined) body.tools = req.params.tools;
   if (req.params?.tool_choice !== undefined) body.tool_choice = req.params.tool_choice;
   Object.assign(body, callerSampling(req.params?.sampling));
+  // C4 reasoning effort. Two protocols for the same idea: OpenAI takes a
+  // top-level `reasoning_effort`, OpenRouter wraps it as `reasoning.effort`.
+  if (req.params?.reasoningEffort !== undefined) {
+    if (provider === 'openrouter') body.reasoning = { effort: req.params.reasoningEffort };
+    else body.reasoning_effort = req.params.reasoningEffort;
+  }
 
   const { apiKey, ...retry } = opts;
   const { json } = await postJsonWithRetry<OpenAiChatResponse>(

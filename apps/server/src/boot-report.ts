@@ -31,10 +31,26 @@ export interface GateReport {
   source: GateSource;
   /** Set when this gate, in this state, deserves attention in the log. */
   warn?: string;
+  /**
+   * Set when this gate, in this state, means the process MUST NOT serve.
+   *
+   * The 2026-08-27 incident class in one word: a gate that reported its state
+   * and did nothing about it. A warning in a deploy log is only read by
+   * someone already looking. `fatal` is read by the process — it exits
+   * non-zero, and a server that cannot be secure never takes the port.
+   */
+  fatal?: string;
 }
 
 /** Where a gate's value came from — the empty/unset split is the point. */
 import { googleConfigFromEnv } from './oidc.js';
+// The REAL resolver, not a second copy of the rule. This file used to
+// re-implement `devAuthBypassEnabled`'s logic inline, which meant the boot log
+// and the running server could disagree about whether authentication was on —
+// and the log is the only place anyone would ever look.
+import { devAuthBypassEnabled } from './auth.js';
+import { resolveQueueKind } from '@potion/queue';
+import { workerModeFromEnv, workerModeIsUnrecognized } from './worker-runtime.js';
 
 export function sourceOf(raw: string | undefined): GateSource {
   if (raw === undefined) return 'default-unset';
@@ -57,6 +73,8 @@ export interface BootEnvView {
   POTION_GOOGLE_REDIRECT_URI?: string | undefined;
   POTION_APP_URL?: string | undefined;
   POTION_METRICS?: string | undefined;
+  POTION_WORKER?: string | undefined;
+  QUEUE_DRIVER?: string | undefined;
 }
 
 const truthy = (v: string | undefined): boolean => v === '1' || v?.toLowerCase() === 'true';
@@ -66,10 +84,19 @@ const truthy = (v: string | undefined): boolean => v === '1' || v?.toLowerCase()
  * mode, so the dangerous combinations are asserted in tests rather than
  * discovered in production.
  */
-export function bootGateReport(env: BootEnvView, providerMode: 'live' | 'mock'): GateReport[] {
+export function bootGateReport(
+  env: BootEnvView,
+  providerMode: 'live' | 'mock',
+  /**
+   * The RESOLVED queue, not a second guess at it. 'external' means the caller
+   * injected its own queue (tests, embedders) and owns whether it is shared.
+   * Omitted → resolved from `env` by @potion/queue's own precedence.
+   */
+  queueKind: 'memory' | 'bullmq' | 'external' = resolveQueueKind(env as NodeJS.ProcessEnv),
+): GateReport[] {
   const isProd = env.NODE_ENV === 'production';
   const devAuthRaw = env.POTION_DEV_AUTH;
-  const devAuth = devAuthRaw !== undefined && devAuthRaw !== '' ? truthy(devAuthRaw) : !isProd;
+  const devAuth = devAuthBypassEnabled(env as NodeJS.ProcessEnv);
 
   const selfServeRaw = env.POTION_SELF_SERVE;
   const selfServe = selfServeRaw === '1' ? true : selfServeRaw === '0' ? false : devAuth;
@@ -97,7 +124,14 @@ export function bootGateReport(env: BootEnvView, providerMode: 'live' | 'mock'):
     name: 'POTION_MAGIC_LINK_IN_RESPONSE',
     state: magicLink ? 'ON — sign-in links are returned in the HTTP response' : 'off',
     source: sourceOf(env.POTION_MAGIC_LINK_IN_RESPONSE),
-    ...(magicLink && selfServe
+    ...(magicLink && selfServe && isProd
+      ? {
+          fatal:
+            'DANGEROUS COMBINATION IN PRODUCTION: with self-serve signup ALSO open, ' +
+            'anyone who can reach /auth/request-link can mint a session as ANY email ' +
+            'address. Unset POTION_MAGIC_LINK_IN_RESPONSE or close POTION_SELF_SERVE.',
+        }
+      : magicLink && selfServe
       ? {
           warn:
             'DANGEROUS COMBINATION: with self-serve signup ALSO open, anyone who ' +
@@ -113,12 +147,53 @@ export function bootGateReport(env: BootEnvView, providerMode: 'live' | 'mock'):
     name: 'POTION_DEV_AUTH',
     state: devAuth ? 'bypass ON — unauthenticated requests resolve to a dev org' : 'bypass off',
     source: sourceOf(devAuthRaw),
+    // FATAL, not a warning (P1-2 / HARDENING-PLAN P2.1). Reaching this state
+    // now takes an explicit POTION_DEV_AUTH=1 next to NODE_ENV=production —
+    // somebody typed both — so there is no reading of it under which serving
+    // anonymous admin access to every dashboard route is the right move.
     ...(devAuth && isProd
-      ? { warn: 'AUTH BYPASS IS ON IN PRODUCTION — every dashboard route is effectively public.' }
+      ? {
+          fatal:
+            'AUTH BYPASS IS ON IN PRODUCTION — every dashboard route would be effectively ' +
+            'public: unauthenticated /api/* resolves to the default org as admin. ' +
+            'Unset POTION_DEV_AUTH (it defaults OFF) or set it to 0.',
+        }
       : {}),
   });
 
   // ---- money ----
+  // ---- P1-3: where the job handlers run, and whether anything runs them ----
+  const workerMode = workerModeFromEnv(env as NodeJS.ProcessEnv);
+  const driver = queueKind;
+  rows.push({
+    name: 'POTION_WORKER',
+    state:
+      workerMode === 'in-process'
+        ? `jobs run IN the server process (${driver} queue) — one event loop for serving and background work`
+        : `jobs run ELSEWHERE (${driver} queue) — this process enqueues only`,
+    source: sourceOf(env.POTION_WORKER),
+    // A server that consumes nothing, on a queue nobody else can reach, is a
+    // silent black hole: every research cycle, guarantee sweep and alert
+    // dispatch is accepted and never runs, and nothing anywhere errors. The
+    // memory driver is PROCESS-LOCAL, so this combination cannot be rescued
+    // by starting a worker beside it.
+    ...(workerMode === 'off' && driver === 'memory'
+      ? {
+          fatal:
+            'POTION_WORKER=off with the MEMORY queue driver: jobs would be enqueued into a ' +
+            'process-local queue that nothing consumes and no other process can reach — ' +
+            'silently dropped, forever. Set REDIS_URL (or QUEUE_DRIVER=bullmq) so a ' +
+            'standalone worker can share the queue, or leave POTION_WORKER unset.',
+        }
+      : workerModeIsUnrecognized(env as NodeJS.ProcessEnv)
+        ? {
+            warn:
+              `POTION_WORKER=${JSON.stringify(env.POTION_WORKER)} is not a value this build ` +
+              `understands — defaulted to in-process. Write 'off' or leave it unset.`,
+          }
+        : {}),
+  });
+
   rows.push({
     name: 'STRIPE_SECRET_KEY',
     state: sourceOf(env.STRIPE_SECRET_KEY) === 'explicit'
@@ -222,12 +297,37 @@ export function bootWarnings(rows: GateReport[]): GateReport[] {
   return rows.filter((r) => r.warn !== undefined);
 }
 
+/** Anything the PROCESS should not start past. */
+export function bootFatals(rows: GateReport[]): GateReport[] {
+  return rows.filter((r) => r.fatal !== undefined);
+}
+
+/**
+ * Thrown instead of exiting, so the refusal is testable and so an embedder
+ * (tests, the CLI) decides what a refusal means. `index.ts` turns it into a
+ * non-zero exit; nothing catches it and continues.
+ */
+export class BootRefusedError extends Error {
+  constructor(readonly gates: GateReport[]) {
+    super(
+      `refusing to serve — ${gates.length} fatal gate${gates.length === 1 ? '' : 's'}: ` +
+        gates.map((g) => `${g.name}: ${g.fatal}`).join(' | '),
+    );
+    this.name = 'BootRefusedError';
+  }
+}
+
 /**
  * Emit the report. Warnings go at WARN so they survive a log level that
  * drops info, and each names the variable so the fix is unambiguous.
  */
-export function logBootGates(log: FastifyBaseLogger, env: BootEnvView, providerMode: 'live' | 'mock'): GateReport[] {
-  const rows = bootGateReport(env, providerMode);
+export function logBootGates(
+  log: FastifyBaseLogger,
+  env: BootEnvView,
+  providerMode: 'live' | 'mock',
+  queueKind?: 'memory' | 'bullmq' | 'external',
+): GateReport[] {
+  const rows = bootGateReport(env, providerMode, queueKind);
   log.info(
     { gates: rows.map((r) => ({ name: r.name, state: r.state, source: r.source })) },
     'boot gate report — resolved states and where each came from',
@@ -235,5 +335,10 @@ export function logBootGates(log: FastifyBaseLogger, env: BootEnvView, providerM
   for (const r of bootWarnings(rows)) {
     log.warn({ gate: r.name, state: r.state, source: r.source }, `GATE WARNING ${r.name}: ${r.warn}`);
   }
+  const fatals = bootFatals(rows);
+  for (const r of fatals) {
+    log.fatal({ gate: r.name, state: r.state, source: r.source }, `GATE FATAL ${r.name}: ${r.fatal}`);
+  }
+  if (fatals.length > 0) throw new BootRefusedError(fatals);
   return rows;
 }

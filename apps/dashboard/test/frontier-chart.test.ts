@@ -12,7 +12,7 @@ import {
   toChartPoints,
   xDomain,
 } from '../lib/frontier-chart';
-import type { FrontierPointDto } from '../lib/types';
+import type { FrontierPointDto, ProgramNode } from '../lib/types';
 
 const point = (
   costPer1K: number,
@@ -120,5 +120,61 @@ describe('describeStrategy', () => {
         confidenceMethod: 'self-report-calibrated',
       }),
     ).toBe('Cascade · gpt-mini-class → frontier-class (escalates when confidence < 0.7)');
+  });
+
+  // The dashboard kept its own copy of the strategy union, and it stopped
+  // being a copy: `composite` has served since M3 #23 and `program` since the
+  // compiler IR landed, and neither was in it. describeStrategy is exhaustive
+  // over the union it was GIVEN, so it type-checked while returning undefined
+  // for a live shape — the hover card, the operating-point sentence and the
+  // PUBLIC share page each rendered an empty span for a real strategy.
+  it('describes a composite, which has been servable since M3 #23', () => {
+    expect(
+      describeStrategy({
+        type: 'composite',
+        startModel: 'gpt-mini-class',
+        upgradeModel: 'frontier-class',
+        upgradeIf: { confidenceBelow: 0.6 },
+      }),
+    ).toBe('Composite · starts on gpt-mini-class, restarts on frontier-class when confidence < 0.6');
+  });
+
+  it('describes a program by what it costs at worst, not by its tree', () => {
+    expect(
+      describeStrategy({
+        type: 'program',
+        name: 'consensus-or-escalate',
+        body: {
+          op: 'if',
+          check: { kind: 'agree', of: [{ op: 'call', model: 'a-class' }, { op: 'call', model: 'b-class' }] },
+          then: { op: 'pick', of: [{ op: 'call', model: 'a-class' }, { op: 'call', model: 'b-class' }], by: { kind: 'confidence' } },
+          else: { op: 'call', model: 'strong-class' },
+        },
+      }),
+    ).toBe('Program · consensus-or-escalate — a-class, b-class, strong-class (at most 3 calls)');
+  });
+
+  it('counts distinct branches even when they differ only deep in the tree', () => {
+    // The two branches share every top-level key and differ three levels down.
+    // A memo key built with JSON.stringify's replacer-array would collapse
+    // them into one and under-report what the program can bill.
+    const branch = (m: string): ProgramNode => ({
+      op: 'if',
+      check: { kind: 'confidence', of: { op: 'call', model: m }, min: 0.8 },
+      then: { op: 'call', model: m },
+      else: { op: 'call', model: 'strong-class' },
+    });
+    expect(
+      describeStrategy({
+        type: 'program',
+        name: 'two-deep',
+        body: { op: 'vote', of: [branch('a-class'), branch('b-class'), { op: 'call', model: 'c-class' }] },
+      }),
+    ).toBe('Program · two-deep — a-class, strong-class, b-class, c-class (at most 4 calls)');
+  });
+
+  it('never renders undefined for a shape it does not know', () => {
+    const future = { type: 'not-invented-yet' };
+    expect(describeStrategy(future)).toBe('Strategy · not-invented-yet');
   });
 });

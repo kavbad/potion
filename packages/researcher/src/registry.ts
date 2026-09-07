@@ -24,6 +24,18 @@ export interface ModelRegistryEntry {
   cls: ModelClass;
   inputPer1M: number;
   outputPer1M: number;
+  /**
+   * 0094: this model has FAILED OUT of runs — contained, timed out, or rate
+   * limited past its retries, `MODEL_UNHEALTHY_AFTER` times in a row.
+   *
+   * Selection below is by PRICE, and price was the only thing the registry
+   * knew, which is how a model that cannot complete a run became every
+   * cycle's cheap representative: cheapest-in-class selects for junk, because
+   * a model can be cheapest precisely because it is bad. This is the missing
+   * half. The worker sets it (it owns the database); this package only
+   * decides.
+   */
+  unhealthy?: boolean;
 }
 
 const CHEAP_HINTS = ['cheap', 'haiku', 'mini', 'flash'];
@@ -55,16 +67,24 @@ export function buildRegistry(prices: PriceTable): ModelRegistryEntry[] {
   }));
 }
 
-/** The deterministic class representative: cheapest input price, alias as
- * tie-break. `excludeProvider` skips entries of one provider (cross-provider
- * peer selection). */
+/**
+ * The deterministic class representative: cheapest input price among the
+ * models that WORK, alias as tie-break. `excludeProvider` skips entries of one
+ * provider (cross-provider peer selection).
+ *
+ * FAILS CLOSED. If every model in a class has failed out, this returns null
+ * and the caller emits fewer templates — which is the honest outcome. The
+ * alternative, falling back to the cheapest known-broken model, is exactly the
+ * bug: a cycle that spends real money measuring something that cannot
+ * complete, and then reports the failure as the strategy's quality.
+ */
 export function classRepresentative(
   registry: ModelRegistryEntry[],
   cls: ModelClass,
   excludeProvider?: ProviderId,
 ): ModelRegistryEntry | null {
   const pool = registry
-    .filter((e) => e.cls === cls && e.provider !== excludeProvider)
+    .filter((e) => e.cls === cls && e.provider !== excludeProvider && e.unhealthy !== true)
     .sort((x, y) => x.inputPer1M - y.inputPer1M || x.alias.localeCompare(y.alias));
   return pool[0] ?? null;
 }
@@ -92,7 +112,7 @@ export function classMembers(
   excludeProvider?: ProviderId,
 ): ModelRegistryEntry[] {
   return registry
-    .filter((e) => e.cls === cls && e.provider !== excludeProvider)
+    .filter((e) => e.cls === cls && e.provider !== excludeProvider && e.unhealthy !== true)
     .sort((x, y) => x.inputPer1M - y.inputPer1M || x.alias.localeCompare(y.alias));
 }
 
@@ -106,7 +126,7 @@ export function crossProviderPeers(
   n: number,
 ): ModelRegistryEntry[] {
   const pool = registry
-    .filter((e) => e.cls === cls && e.provider !== provider)
+    .filter((e) => e.cls === cls && e.provider !== provider && e.unhealthy !== true)
     .sort((x, y) => x.inputPer1M - y.inputPer1M || x.alias.localeCompare(y.alias));
   const seen = new Set<ProviderId>();
   const diverse: ModelRegistryEntry[] = [];

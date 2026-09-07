@@ -57,7 +57,7 @@ import { routerModelName } from '../routing/router-slug.js';
 import { learnFromAnswer, tooSmallForReasoning } from '../routing/reasoning.js';
 import { unwrapJsonFences, wantsJson } from '../routing/json-mode.js';
 import { answerShapeOf, promptFingerprint, sessionFingerprint, taskShapeOf } from '../routing/task-shape.js';
-import { execute } from '@potion/strategies';
+import { execute, strategyCapabilities } from '@potion/strategies';
 import { authenticate, bearerToken, openAiError } from '../auth.js';
 import {
   fallbackStrategyFor,
@@ -239,8 +239,30 @@ export function nextPointExcluding(
   return op;
 }
 
-export function strategyModelLabel(cfg: { type: string; model?: string }): string {
-  return cfg.type === 'single' ? (cfg.model ?? 'single') : `combination:${cfg.type}`;
+export function strategyModelLabel(cfg: { type: string; model?: string; name?: string }): string {
+  if (cfg.type === 'single') return cfg.model ?? 'single';
+  // For every other shape the TYPE is the mechanism: `combination:cascade`
+  // says what ran. A program's type is 'program' for all of them, and its
+  // mechanism is its name — dropping it would make every synthesized
+  // mechanism indistinguishable in the one header that says what answered.
+  if (cfg.type === 'program' && cfg.name !== undefined) return `combination:program:${cfg.name}`;
+  return `combination:${cfg.type}`;
+}
+
+/** WHICH streaming implementation serves a shape, or null for none.
+ *
+ *  This is the enumeration the SSE paths below key on, and it exists so that
+ *  `strategyCapabilities().canStream` has something to be checked against.
+ *  Before it, canStream was declared in packages/strategies, asserted by that
+ *  package's own test, and read by NOTHING — the route compared
+ *  `type === 'single'` and `type === 'composite'` by hand, which is exactly
+ *  what capabilities.ts's header says not to do. A shape whose declaration and
+ *  route disagreed would have shipped in silence. The guard that binds them is
+ *  in test/program-serving.test.ts. */
+export function streamingBranch(cfg: StrategyConfig): 'single' | 'composite' | null {
+  if (cfg.type === 'single') return 'single';
+  if (cfg.type === 'composite') return 'composite';
+  return null;
 }
 
 /** SPEC §8 trace header (semicolon-separated, no spaces), plus the M1a
@@ -254,6 +276,11 @@ export function traceHeaderValue(op: {
   provenance: 'live' | 'mock' | 'blocked';
   /** Present only when tools narrowed selection — see ToolConstraint. */
   constrained?: 'tools';
+  /** P0-1: present only when the CLASSIFIER could not be reached and the
+   *  request was served under 'general' as a result. A degraded answer says
+   *  so on its own receipt; a request that legitimately matched nothing does
+   *  not carry this. */
+  classifier?: 'unavailable';
 }): string {
   return (
     `cluster=${op.clusterId};strategy=${op.strategyHash8};` +
@@ -261,7 +288,8 @@ export function traceHeaderValue(op: {
     `provenance=${op.provenance}` +
     // Appended only when it actually fired, so ordinary traffic's trace is
     // byte-identical to before this change.
-    (op.constrained ? `;constrained=${op.constrained}` : '')
+    (op.constrained ? `;constrained=${op.constrained}` : '') +
+    (op.classifier ? `;classifier=${op.classifier}` : '')
   );
 }
 
@@ -671,6 +699,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // which is a different fact from a weak match.
     let ranked: RankedAssignment | undefined;
     let tClassifyMs: number | null = null;
+    // P0-1: set when the classifier could not be reached, so the trace can
+    // distinguish a degraded answer from a correct weak match.
+    let classifierFailed = false;
     if (hintedClusterId !== null) {
       // M5 #36: hint wins; the embedder/assigner is skipped entirely.
       clusterId = hintedClusterId;
@@ -680,19 +711,63 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const cacheKey = assignmentCacheKey(contents);
       ranked = ctx.assignCache.get(cacheKey);
       const tClassify0 = performance.now();
-      if (!ranked) {
+      // NOTHING TO CLASSIFY (2026-09-06, Replit evaluation B9-image). A
+      // message whose only content is a non-text part flattens to '' — and so
+      // does a literal empty prompt. '' is not a weak match, it is nothing to
+      // match on, and the LIVE embedder refuses it: that upstream 400 ("input
+      // cannot be an empty string") escaped this route as a non-OpenAI
+      // envelope, so an image-only request died in the classifier instead of
+      // reaching the unsupported_content refusal below. The mock embedder
+      // tolerates '', which is why no test caught it. Skip the classifier and
+      // leave `ranked` undefined — the same state a cluster HINT leaves, and
+      // every consumer below already handles it: no confidence, no embedding,
+      // no LSH bucket, and workload sub-assignment fails open to the parent.
+      const nothingToClassify = contents.every((c) => c.trim() === '');
+      // P0-1 (external review, 2026-09-05): THE CLASSIFIER IS NOT ALLOWED TO
+      // TAKE SERVING DOWN.
+      //
+      // This call had no try/catch and there is no setErrorHandler on the
+      // instance, so an embeddings outage or hang became a bare 500 for EVERY
+      // org — including orgs whose traffic routes entirely to another
+      // provider. That is the failure class the product sells protection
+      // against, sitting in front of the product.
+      //
+      // The fallback needs no new machinery: leaving `ranked` undefined is
+      // exactly the state a cluster HINT and an empty prompt already leave,
+      // and the branch below already routes it to 'general'. What is new is
+      // that the request says so on its receipt instead of the classifier
+      // failing silently into the weak-match destination.
+      if (!ranked && !nothingToClassify) {
         // S7 L1: assignRanked, not assign — ONE embedding, and it returns the
         // per-cluster cosines pickBest already computed instead of throwing
         // all but one away. The decision is unchanged (same threshold, same
         // 'general' fallback); what is new is that the row can now say how
         // well this request fit anything we have measured.
-        ranked = await ctx.assigner.assignRanked(contents.join('\n'));
-        ctx.assignCache.set(cacheKey, ranked);
+        try {
+          ranked = await ctx.assigner.assignRanked(contents.join('\n'));
+          ctx.assignCache.set(cacheKey, ranked);
+        } catch (err) {
+          classifierFailed = true;
+          app.log.warn(
+            { orgId: auth.org.orgId, err: err instanceof Error ? err.message : String(err) },
+            'classifier unavailable — serving under the general frontier',
+          );
+        }
         // Item C (2026-08-23): the classifier's real cost on the critical
         // path, measured in the request instead of probed from outside — a
         // probe conflated it with the routed model's own speed.
         tClassifyMs = Math.round(performance.now() - tClassify0);
       }
+      if (ranked === undefined) {
+        // Nothing to classify, or the classifier could not be reached: the
+        // documented weak-match destination, decided without an embedding
+        // rather than by one. The two are NOT the same fact, so only the
+        // second one labels the trace — a request routed to 'general' because
+        // there was nothing to match on is a correct classification; one
+        // routed there because the embedder was down is a degraded answer, and
+        // the receipt has to be able to say which.
+        clusterId = 'general';
+      } else {
       clusterId = ranked.assignment.clusterId;
       logBase.clusterConfidence = ranked.assignment.confidence;
       // The runner-up is read from the RANKING, not from the decision: when
@@ -703,6 +778,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         logBase.runnerUpCluster = runnerUp.clusterId;
         logBase.clusterMargin =
           Math.round((ranked.assignment.confidence - runnerUp.confidence) * 1e6) / 1e6;
+      }
       }
     }
     logBase.clusterId = clusterId;
@@ -740,7 +816,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // G1.6 retracts the old "NEVER org-scoped" contract: the read is
     // org-PREFERRED with platform fallback — an org's agent frontier serves
     // its own traffic; everyone else (and every platform cluster) gets the
-    // shared platform frontier. NOTE: the assignment LRU (context.ts) stays
+    // shared platform frontier. NOTE: the assignment cache (context.ts) stays
     // content-keyed — safe ONLY while cluster ASSIGNMENT remains platform
     // taxonomy; revisit if assignment ever considers org clusters.
     // One resolution per candidate cluster: frontier → provenance guard →
@@ -920,9 +996,14 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     logBase.strategyHash = sh;
     // S2 (0060): the ledger's "served by" — stamped once here, rides every
     // later insert via the logBase spread.
-    logBase.servedModel = strategyModelLabel(op.config as { type: string; model?: string });
+    // op.config is nullable until the 503 guard below ("no live strategy is
+    // resolvable"). It used to be CAST non-null here, which meant that guard
+    // could never be reached: a live server with a mock-only price table threw
+    // a TypeError on `cfg.type` at this line and returned a generic 500
+    // instead of the 503 that explains itself. Nullable in, nullable out.
+    logBase.servedModel = op.config === null ? null : strategyModelLabel(op.config);
     const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
-    if (skippedReasoning !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config as { type: string; model?: string }), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
+    if (skippedReasoning !== null && op.config !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
     const baseline = heldOut !== null ? null : await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
     // 0089: the recorded savings number carries its comparator — a caption
     // saying "vs your incumbent" must be provable from the row, and the
@@ -963,6 +1044,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         fallback: op.fallback,
         provenance,
         ...(op.toolConstraint ? { constrained: 'tools' as const } : {}),
+        ...(classifierFailed ? { classifier: 'unavailable' as const } : {}),
       }) +
       // Appended only when a minted version matched, so unstamped traffic's
       // trace is byte-identical to before this change.
@@ -988,7 +1070,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     void reply.header('x-frontier-trace', trace);
     // Item C: stage timing in its own header — the trace string is a pinned contract.
     if (tClassifyMs !== null) void reply.header('x-potion-timing', `classify=${tClassifyMs}`);
-    void reply.header('x-potion-model', strategyModelLabel(op.config as { type: string; model?: string }));
+    if (op.config !== null) void reply.header('x-potion-model', strategyModelLabel(op.config));
     // G2.6: the standing policy-level condition. Deduped in the repo, so it
     // is safe per-request; the alert fires once per episode, on the raise.
     void maintainPolicyCondition(
@@ -1090,14 +1172,20 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // guard exists to prevent. It is no longer the ordinary path: a customer
     // whose policy prefers a cascade now gets the best measured SINGLE point
     // instead of a 400.
-    if (body.tools !== undefined && op.config.type !== 'single') {
+    // C4b: keyed on the CAPABILITY, not on the literal type. Selection above
+    // narrows by `strategyCapabilities(...).canServeTools` plus measured tool
+    // evidence, and a bare-call program passes both — so comparing types here
+    // refused a point selection had legitimately chosen. Same drift the
+    // streaming half had: two places deciding the same question by different
+    // means. This one now asks the same function selection asked.
+    if (body.tools !== undefined && !strategyCapabilities(op.config).canServeTools) {
       await logRequest({ ...logBase, status: 'invalid_request', latencyMs: elapsed() });
       return reply
         .code(400)
         .send(
           openAiError(
             `tools/tool_choice cannot be served by a '${op.config.type}' strategy, which ` +
-              `transforms prompts and cannot guarantee tool semantics. The operating point ` +
+              `reads or transforms the answer and cannot guarantee tool semantics. The operating point ` +
               `was overridden after selection (guarantee rollback) — resolve the incident ` +
               `or send this request without tools`,
             'invalid_request_error',
@@ -1121,7 +1209,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         orgId: auth.org.orgId,
         requestId: id,
         clusterId: cluster,
-        model: cfg.type === 'single' ? (cfg.model ?? null) : `combination:${cfg.type}`,
+        model: cfg.type === 'single' ? (cfg.model ?? null) : strategyModelLabel(cfg),
         messages,
         completion: text,
         toolCount: body.tools?.length ?? 0,
@@ -1177,14 +1265,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const includeUsage = body.stream_options?.include_usage === true;
 
     // ---- 5a. SSE path: stream:true + single strategy ----
-    if (wantStream && op.config.type === 'single') {
+    const streamBranch = wantStream ? streamingBranch(op.config) : null;
+    if (streamBranch === 'single' && op.config.type === 'single') {
       reply.hijack();
       reply.raw.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache',
         connection: 'keep-alive',
         'x-frontier-trace': trace,
-        'x-potion-model': strategyModelLabel(op.config as { type: string; model?: string }),
+        'x-potion-model': strategyModelLabel(op.config),
         // M3 #26 observability: echo the request id (hijacked responses
         // bypass the plugin's onSend hook).
         'x-request-id': req.id,
@@ -1320,7 +1409,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // with no meta-commentary at the upgrade boundary. Chunk framing reuses
     // the 'single' plumbing above; tool_calls never occur (composite refuses
     // tools at the 4b gate).
-    if (wantStream && op.config.type === 'composite') {
+    if (streamBranch === 'composite' && op.config.type === 'composite') {
       reply.hijack();
       const base = { id, created, model: body.model };
       const writeData = (obj: unknown): void => {
@@ -1342,7 +1431,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           'cache-control': 'no-cache',
           connection: 'keep-alive',
           'x-frontier-trace': trace,
-          'x-potion-model': strategyModelLabel(op.config as { type: string; model?: string }),
+          'x-potion-model': strategyModelLabel(op.config),
           'x-request-id': req.id,
         });
         writeData(openAiError((err as Error).message, 'service_unavailable', 'service_unavailable'));
@@ -1429,21 +1518,45 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         }
       }
       if (wantStream) {
-        // Documented contract: non-streamable multi-call strategies (anything
-        // but 'single'/'composite') cannot token-stream.
+        // Documented contract: a shape with no streaming branch cannot
+        // token-stream. Derived from streamingBranch (and so from canStream)
+        // rather than re-listing the streamable types a third time.
         void reply.header('x-latency-contract', 'non-streamed');
       }
       // ---- M3 #23 composite (m3-composite) ----
       // Non-stream composite: record the keep/upgrade decision on the trace
       // header too (same upgraded=0|1 contract as the SSE relay above).
+      // C3: these enrichments are RECORDED, not merely shown. Before this,
+      // `logBase.trace` was stamped with the base trace at selection time and
+      // the branch was appended to the response header only — so the customer
+      // could see which way a conditional mechanism went and Potion could not.
+      // A compiler that cannot read its own decisions cannot learn from them,
+      // and the branch a program took is exactly the per-request difficulty
+      // label a predictive router would need.
       if (op.config.type === 'composite') {
         const upgraded = result.trace.some((t) => t.decision === 'upgraded') ? 1 : 0;
-        void reply.header('x-frontier-trace', `${trace};upgraded=${upgraded}`);
+        logBase.trace = `${trace};upgraded=${upgraded}`;
+        void reply.header('x-frontier-trace', logBase.trace);
       }
       // ---- end M3 #23 composite (m3-composite) ----
+      // C1 remainder: a program's receipt names the BRANCH THAT RAN. For every
+      // other shape the config says what happened; a program's config says
+      // what COULD happen, and the whole point of a gate is that only one side
+      // fires. The stage models in order are that path — and because the
+      // interpreter memoizes structurally, a kept branch shows one model where
+      // an escalating one shows two. Same append contract as `upgraded` above;
+      // they are mutually exclusive by type, as is `retry` (single only).
+      if (op.config.type === 'program') {
+        const path = result.trace.map((t) => t.model).join('>');
+        logBase.trace = `${trace};program=${op.config.name};path=${path}`;
+        void reply.header('x-frontier-trace', logBase.trace);
+      }
       // The point that answered (a single point may have been served once
       // more on the next point after an empty answer — routing/empty answer).
-      if (emptyAnswerRetry) void reply.header('x-frontier-trace', `${trace};retry=empty_answer`);
+      if (emptyAnswerRetry) {
+        logBase.trace = `${trace};retry=empty_answer`;
+        void reply.header('x-frontier-trace', logBase.trace);
+      }
       void reply.header('x-potion-model', strategyModelLabel(servedConfig));
       if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
