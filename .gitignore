@@ -25,6 +25,12 @@ invoices/
 # test passed locally and could not pass in a clean checkout at all. Found by
 # CI's first run that got far enough to reach it (2026-09-08).
 !/artifacts/tenancy-classification.md
+# ...and the Step 12 target register, for the same reason and more sharply:
+# step12-targets.test.ts exists so a row "cannot close by silence, by prose,
+# or by deletion" — and /artifacts/* had deleted the whole register from the
+# repo. The guard against disappearance had itself disappeared, and the test
+# passed only where a copy happened to sit on disk (2026-09-08).
+!/artifacts/step-12-targets.json
 !/artifacts/m1b-sweep-2026-08-06T05-16-58-387Z.json
 # G2.8 capstone exhibits: the parameter report is the item's deliverable, and
 # the findings JSON is the machine-readable record of the live run (clusters,
