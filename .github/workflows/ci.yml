@@ -82,7 +82,12 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
+      # Packages one at a time, not pnpm's default four. Combined with the
+      # CI worker cap in vitest.config.ts this keeps the runner inside its
+      # process budget; without it the suite fails on whichever test happens
+      # to fork when the budget runs out (see that config's comment). Wall
+      # clock traded for a result that means something.
+      - run: pnpm -r --workspace-concurrency=1 test && pnpm test:scripts
 
       # Supply-chain gate (M2-security, re-triaged M3 #29): fail on any NEW
       # high/critical production advisory; accepted ones live in
