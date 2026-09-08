@@ -945,13 +945,26 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
       // the log said was "expected [ 'repo/src/lib.js' ] to include
       // 'out/report/result.txt'" — and `repo/src/lib.js` is PRE-SEEDED above,
       // so its presence proves nothing about whether run_shell ran at all.
+      // WHAT THE SHELL SAID, in the failure message.
+      //
+      // The first version of this filtered steps on `payload includes
+      // 'run_shell'` — which matches the MODEL step carrying the tool CALL,
+      // and a 2000-char slice then spent the whole budget printing the
+      // prompt back. A CI failure reported the command it had already sent
+      // and nothing about what happened to it. The result lives on the step
+      // whose kind is 'tool', in `toolOutput`.
       const { listLabSteps: listSteps } = await import('@potion/db');
-      const shellSteps = await listSteps(db.db, runId, ORG);
       const shellEvidence = JSON.stringify(
-        shellSteps.filter((st) => JSON.stringify(st.payload).includes('run_shell')).map((st) => st.payload),
-      ).slice(0, 2000);
-      expect(names, `run steps: ${shellEvidence}`).toContain('repo/src/lib.js');
-      expect(names, `run steps: ${shellEvidence}`).toContain('out/report/result.txt');
+        (await listSteps(db.db, runId, ORG))
+          .filter((st) => st.kind === 'tool')
+          .map((st) => st.payload),
+      ).slice(0, 4000);
+      // Assert on the OUTPUT before the files: a shell that failed explains
+      // the missing file, and "expected [...] to include 'out/report/...'"
+      // does not explain anything.
+      expect(shellEvidence, 'no tool step recorded — run_shell never executed').toContain('run_shell');
+      expect(names, `shell said: ${shellEvidence}`).toContain('repo/src/lib.js');
+      expect(names, `shell said: ${shellEvidence}`).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.
       expect(names.some((n) => n.includes('.git/'))).toBe(false);
       const { getLabRunFile } = await import('@potion/db');
