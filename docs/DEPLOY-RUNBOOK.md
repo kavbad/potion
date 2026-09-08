@@ -26,6 +26,26 @@ down cleanly (that part is [ROLLBACK-RUNBOOK.md](ROLLBACK-RUNBOOK.md)).
 > artifacts/observatory/<file>.json` (scp the gitignored artifacts up
 > first). Proven 2026-09-02 (tools v2) and 2026-09-03 (code-review v5 +
 > extraction v5, the kat-coder retire).
+>
+> **AMENDED 2026-09-08 — the "retired museum" sentence above is WRONG and
+> nearly blocked a valid promotion.** The Render Frankfurt instance
+> (`dpg-da4gp70n74is73djg2s0-a`) is the LIVE production database. Verified
+> by direct query that day: 7576 `eval_results` (latest 19:18Z), `frontiers`
+> written 20:08Z, and a promotion written and read back. `DEPLOY-STATUS.md`
+> has it right ("Render Postgres 17, Frankfurt, Basic plan; 52 tables"); the
+> Neon section in §1 below is an UNUSED provisioning template, not what runs.
+> The host's `/opt/potion/app/.env.prod` `DATABASE_URL` is byte-identical to
+> the checkout's, and that is expected — all three `.env.prod.bak` files from
+> 2026-09-04/05 carry the same URL, so it is not rsync contamination. Keep
+> running prod DB work on the host (that part stands), but do not treat the
+> Frankfurt endpoint as dead.
+>
+> Two mechanics worth recording: `docker compose ... exec` fails with
+> `POTION_PUBLIC_URL is missing a value` unless you pass
+> `--env-file .env.prod`; `docker exec -w /app deploy-server-1 ...` sidesteps
+> compose interpolation entirely and uses the container's own env. And `psql`
+> is NOT installed in the server image — ad-hoc queries run as a small `.mjs`
+> from `/app/apps/server` (where `drizzle-orm` resolves), not from `/app`.
 
 > ## ⛔ STOP — DO NOT RUN MORE THAN ONE SERVER REPLICA
 >
