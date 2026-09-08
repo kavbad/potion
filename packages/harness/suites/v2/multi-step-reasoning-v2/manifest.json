@@ -1,0 +1,17 @@
+{
+  "suiteId": "multi-step-reasoning-v2",
+  "clusterId": "multi-step-reasoning",
+  "version": "2.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "Authored in-house; the 50 problems of the flat multi-step-reasoning suite, re-instrumented. v1 scored the ENTIRE answer against a bare gold value under prompts that ask the model to \"Solve step by step\" \u2014 so it ranked output-format obedience, not reasoning: measured live 2026-09-07, or-solar-pro4 and or-gemini-flash scored 0.000 on whole-text exact and 1.000 on the extracted answer over 20 GSM8K items sent under the same prompt. v2 puts the answer-format demand on a single labelled last line and scores THAT (exact/final-number for the 37 numeric golds, exact/final-answer for the 13 that are a weekday, yes/no, a letter, a time or a fraction). Item ids are NEW (msr2-NNN): cacheKeyOf hashes the item id, not the prompt or the scoring, so reusing the v1 ids would have silently resumed v1's cells and re-certified the wrong numbers.",
+    "license": "CC0-1.0"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "exact"
+    ]
+  },
+  "createdAt": "2026-09-07T21:00:00.000-07:00"
+}

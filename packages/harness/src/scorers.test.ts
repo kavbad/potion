@@ -15,6 +15,8 @@ import {
 } from '@potion/providers';
 import {
   buildJudgeScoreMessages,
+  finalAnswer,
+  finalNumber,
   normalizeText,
   parseJsonAnswer,
   scoreAnswer,
@@ -52,6 +54,68 @@ describe('exact scorer', () => {
   });
   it('normalizeText collapses all whitespace runs', () => {
     expect(normalizeText(' a\t b\n\n c ')).toBe('a b c');
+  });
+});
+
+// A reasoning suite scored on the WHOLE answer measures format obedience, not
+// arithmetic: a model that shows its work scores 0 against the bare gold
+// number while a model that prints "36" scores 1, on identical maths. The
+// extract option scores the answer the workload is actually judged on.
+describe('exact scorer, extract: final-number', () => {
+  const scoring = { kind: 'exact' as const, extract: 'final-number' as const };
+  it('credits a correct number reached with visible reasoning', () => {
+    expect(scoreExact('Step 1: 40% of 60 = 24.\nSo 60 - 24 = 36', '36', scoring)).toBe(1);
+    expect(scoreExact('36', '36', scoring)).toBe(1);
+  });
+  it('prefers a labelled final answer over a later stray number', () => {
+    expect(scoreExact('...costs $3.00 each.\nFinal answer: 12', '12', scoring)).toBe(1);
+    expect(scoreExact('Final answer: 12\n\n(checked against 99 cases)', '12', scoring)).toBe(1);
+  });
+  it('reads through thousands separators, currency and bold markers', () => {
+    expect(scoreExact('The total is $1,234', '1234', scoring)).toBe(1);
+    expect(scoreExact('**Final answer: 1,234**', '1234', scoring)).toBe(1);
+  });
+  it('scores 0 for a wrong number, and for no number at all', () => {
+    expect(scoreExact('Step 1: ...\nSo the answer is 35', '36', scoring)).toBe(0);
+    expect(scoreExact('I cannot solve this.', '36', scoring)).toBe(0);
+  });
+  it('leaves default exact scoring untouched', () => {
+    expect(scoreExact('the answer is 36', '36', { kind: 'exact' })).toBe(0);
+  });
+});
+
+// The same conflation for golds that are not numbers: a weekday, yes/no, a
+// letter, a time, a fraction. 'final-answer' reads the labelled last line and
+// falls back to whole-text compare when the model never labels one, so it can
+// only ever turn a format-obedience 0 into a correctness 1.
+describe('exact scorer, extract: final-answer', () => {
+  const scoring = { kind: 'exact' as const, extract: 'final-answer' as const };
+  it('credits a correct non-numeric answer reached with visible reasoning', () => {
+    expect(scoreExact('Mon+10 days lands on a Saturday.\nFinal answer: Saturday', 'saturday', scoring)).toBe(1);
+    expect(scoreExact('Working through it...\nFinal answer: 10:15 PM', '10:15 pm', scoring)).toBe(1);
+    expect(scoreExact('3 red, 4 blue of 7.\nFinal answer: 3/7', '3/7', scoring)).toBe(1);
+  });
+  it('reads through markdown emphasis and a trailing period', () => {
+    expect(scoreExact('**Final answer:** yes.', 'yes', scoring)).toBe(1);
+    expect(scoreExact('`Final answer: B`', 'b', scoring)).toBe(1);
+  });
+  it('takes the LAST label when the model restates it', () => {
+    expect(scoreExact('Final answer: Monday\nWait, recheck.\nFinal answer: Sunday', 'sunday', scoring)).toBe(1);
+  });
+  it('scores 0 for a wrong labelled answer', () => {
+    expect(scoreExact('Final answer: Monday', 'sunday', scoring)).toBe(0);
+  });
+  it('falls back to whole-text compare when no label is present', () => {
+    expect(scoreExact('sunday', 'sunday', scoring)).toBe(1);
+    expect(scoreExact('It is Sunday, I think.', 'sunday', scoring)).toBe(0);
+  });
+  it('leaves default exact scoring untouched', () => {
+    expect(scoreExact('Final answer: Saturday', 'saturday', { kind: 'exact' })).toBe(0);
+  });
+  it('finalAnswer returns null when there is no label, or the label is empty', () => {
+    expect(finalAnswer('It is Sunday, I think.')).toBeNull();
+    expect(finalAnswer('Final answer:')).toBeNull();
+    expect(finalAnswer('Final answer: Sunday')).toBe('Sunday');
   });
 });
 
