@@ -30,7 +30,7 @@
 // its width does not move at all between that and sixty distinct situations.
 // This file is the one caller in the repo that HAS the grouping metadata
 // (`situation`), so it is the one that can use `clusteredQualityCi`.
-import { clusteredQualityCi, jeffreysCi } from '@potion/core';
+import { clusteredQualityCi } from '@potion/core';
 
 export type RiskTier = 'reversible-read' | 'reversible-act' | 'irreversible-act' | 'never-graduates';
 export type GrantState = 'supervised' | 'autonomous' | 'blocked';
