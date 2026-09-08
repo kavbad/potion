@@ -51,6 +51,39 @@ export function normalizeText(s: string): string {
   return s.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/**
+ * The number an answer LANDS ON: a labelled "final answer: N" if the text
+ * carries one (the last such label wins), else the last number in the text.
+ * Thousands separators, currency signs and markdown bold are read through.
+ * Returns null when the text holds no number at all.
+ */
+export function finalNumber(text: string): number | null {
+  const cleaned = text.replace(/,(?=\d{3}(?!\d))/g, '').replace(/[$*`]/g, '');
+  const labelled = [...cleaned.matchAll(/final\s+answer\s*[:=]?\s*(-?\d+(?:\.\d+)?)/gi)];
+  const picked =
+    labelled.length > 0
+      ? labelled[labelled.length - 1]![1]!
+      : (cleaned.match(/-?\d+(?:\.\d+)?/g) ?? []).at(-1);
+  if (picked === undefined) return null;
+  const n = Number(picked);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * The answer a response LANDS ON when the gold is not a number: the text
+ * after the last "Final answer:" label, with markdown emphasis and trailing
+ * sentence punctuation stripped. Returns null when the response carries no
+ * such label — callers then fall back to whole-text compare, so this is never
+ * STRICTER than plain exact, only more forgiving of visible reasoning.
+ */
+export function finalAnswer(text: string): string | null {
+  const matches = [...text.matchAll(/final\s+answer\s*[:=]?\s*(.*)$/gim)];
+  const last = matches.at(-1)?.[1];
+  if (last === undefined) return null;
+  const cleaned = last.replace(/[*`]/g, '').trim().replace(/[.!]+$/, '').trim();
+  return cleaned === '' ? null : cleaned;
+}
+
 export function scoreExact(
   answer: string,
   reference: unknown,
@@ -60,7 +93,13 @@ export function scoreExact(
   if (scoring.field && ref !== null && typeof ref === 'object') {
     ref = (ref as Record<string, unknown>)[scoring.field];
   }
-  return normalizeText(String(ref ?? '')) === normalizeText(answer) ? 1 : 0;
+  if (scoring.extract === 'final-number') {
+    const got = finalNumber(answer);
+    const want = finalNumber(String(ref ?? ''));
+    return got !== null && want !== null && Math.abs(got - want) < 1e-9 ? 1 : 0;
+  }
+  const compared = scoring.extract === 'final-answer' ? (finalAnswer(answer) ?? answer) : answer;
+  return normalizeText(String(ref ?? '')) === normalizeText(compared) ? 1 : 0;
 }
 
 // ---- field-match --------------------------------------------------------------

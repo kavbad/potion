@@ -338,7 +338,7 @@ export const PolicySchema = z.discriminatedUnion('type', [
 ]);
 
 export const ScoringMethodSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('exact'), field: z.string().optional() }),
+  z.object({ kind: z.literal('exact'), field: z.string().optional(), extract: z.enum(['final-number', 'final-answer']).optional() }),
   z.object({
     kind: z.literal('code-exec'),
     language: z.enum(['javascript', 'python']),

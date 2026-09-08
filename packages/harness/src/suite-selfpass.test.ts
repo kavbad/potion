@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadSuiteV2 } from './ingest/suite-v2.js';
 import { scoreCodeExec } from './code-exec-sandbox.js';
+import { scoreExact } from './scorers.js';
 
 const CODE_EXEC_SUITES = ['code-gen-humaneval-js-v1', 'code-gen-potion-v2', 'code-gen-hard-v1', 'code-gen-hard-v2'];
 
@@ -282,5 +283,56 @@ describe('rewrite-confirm-v1 (LOCKED holdout)', () => {
     expect(manifest.locked).toBe(true);
     expect(items).toHaveLength(6);
     expect(items.every((it) => it.id.startsWith('rwc-'))).toBe(true);
+  });
+});
+
+// Reasoning-suite instrument gate (2026-09-07). The flat multi-step-reasoning
+// suite told models to "Solve step by step" and then compared the WHOLE answer
+// to a bare gold value, so it scored output-format obedience rather than
+// arithmetic: measured live, or-solar-pro4 and or-gemini-flash got 0.000 on
+// whole-text exact and 1.000 on the extracted answer over the same items, and
+// the compiled frontier rated gpt-4.1 at 0.56 on grade-school sums. This gate
+// asserts the property that was missing: on a suite whose prompts ask for
+// visible reasoning, a CORRECT answer that shows its work must score 1.
+const REASONING_SUITES = ['multi-step-reasoning-v2', 'gsm8k-v1'];
+
+describe('reasoning suite instrument gate', () => {
+  for (const suiteId of REASONING_SUITES) {
+    it(`${suiteId}: correct answers with visible reasoning score 1, wrong ones score 0`, () => {
+      const { items } = loadSuiteV2(suiteId);
+      expect(items.length).toBeGreaterThan(0);
+      const problems: string[] = [];
+      for (const item of items) {
+        if (item.scoring.kind !== 'exact' || item.scoring.extract === undefined) {
+          problems.push(`${item.id}: scoring ${JSON.stringify(item.scoring)} reads the whole answer`);
+          continue;
+        }
+        const gold = String(item.reference);
+        const shown = `Let me work through it.\nStep 1: ...\nStep 2: ...\nFinal answer: ${gold}`;
+        if (scoreExact(shown, item.reference, item.scoring) !== 1) {
+          problems.push(`${item.id}: correct answer with shown work scored 0 (gold ${gold})`);
+        }
+        const wrong = `Step 1: ...\nFinal answer: ${gold === '99' ? '98' : '99'}`;
+        if (scoreExact(wrong, item.reference, item.scoring) !== 0) {
+          problems.push(`${item.id}: a WRONG answer scored above 0 (gold ${gold})`);
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    });
+  }
+
+  // The prompt must actually ask for the label the scorer reads, or the
+  // extractor silently falls back to whole-text compare on every item.
+  it('multi-step-reasoning-v2: every item mandates the Final answer label', () => {
+    const { items, manifest } = loadSuiteV2('multi-step-reasoning-v2');
+    expect(items).toHaveLength(50);
+    expect(manifest.clusterId).toBe('multi-step-reasoning');
+    for (const item of items) {
+      const text = item.prompt.map((m) => m.content).join('\n');
+      expect(text, `${item.id} never asks for the label`).toMatch(/Final answer:/);
+      expect(text, `${item.id} still carries a whole-answer format demand`).not.toMatch(/Answer with/);
+    }
+    const numeric = items.filter((i) => (i.scoring as { extract?: string }).extract === 'final-number');
+    expect(numeric).toHaveLength(37);
   });
 });

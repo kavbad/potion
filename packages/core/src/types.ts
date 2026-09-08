@@ -253,7 +253,19 @@ export type ProgramCheck =
 
 // ---- eval ----
 export type ScoringMethod =
-  | { kind: 'exact'; field?: string }
+  /** `extract` scores the answer a reasoning workload actually lands on
+   *  instead of the whole text. Reasoning suites need it: scored on the whole
+   *  answer, a model that shows its work scores 0 against a bare gold value
+   *  and the frontier ends up ranking format obedience rather than
+   *  correctness.
+   *   - 'final-number' — the last number in the answer, a "Final answer: N"
+   *     label winning over a later stray number. Numeric golds.
+   *   - 'final-answer' — the text after the last "Final answer:" label,
+   *     compared with the usual `exact` normalization. For golds that are not
+   *     numbers (a weekday, yes/no, a letter, a time, a fraction). With no
+   *     label present it falls back to whole-text compare, so it is never
+   *     stricter than plain `exact`. */
+  | { kind: 'exact'; field?: string; extract?: 'final-number' | 'final-answer' }
   | { kind: 'code-exec'; language: 'javascript' | 'python'; tests: string }
   | { kind: 'field-match'; schema: Record<string, 'string' | 'number' | 'boolean' | 'array'> }
   | { kind: 'llm-judge'; rubric: string; judgeModel: string; scale: [number, number] }

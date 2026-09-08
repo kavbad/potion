@@ -1,0 +1,18 @@
+{
+  "suiteId": "gsm8k-v1",
+  "clusterId": "gsm8k",
+  "version": "1.1.0",
+  "source": {
+    "kind": "public-benchmark",
+    "name": "GSM8K (OpenAI grade-school-math) \u2014 150 items sampled from the TRAIN split (seed 20260907); the benchmark's TEST split is held out for serving evaluation. v1.1.0 scores the EXTRACTED final number (exact/final-number) under the same prompt the serving benchmark sends: scored on the whole answer, this suite ranked format obedience, not arithmetic.",
+    "license": "MIT",
+    "uri": "https://github.com/openai/grade-school-math"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "exact"
+    ]
+  },
+  "createdAt": "2026-09-07T18:00:00.000-07:00"
+}
