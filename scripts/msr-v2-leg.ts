@@ -42,8 +42,13 @@ const { frontierPlatformSweepHandler, PLATFORM_OPS_ORG_ID } = await import('@pot
 const { strategyHash } = await import('@potion/core');
 
 // The nine points of platform-frontiers.json cluster multi-step-reasoning v3.
+// The nine baseline points PLUS or-ling-3.0-flash: the served prod frontier
+// (multi-step-reasoning v5) carries ling as an operating point, and a
+// promotion that dropped it un-measured would be a frontier regression —
+// under min_cost floor 0.9 prod routes to ling today.
 const MODELS = ['or-solar-pro4','or-deepseek-v4-flash-0731','or-nemotron-3.5-lightning','or-gpt-full',
-  'or-gemini-flash','or-inkling-small','or-gemini-3.7-flash','or-inkling','or-kimi-k3'];
+  'or-gemini-flash','or-inkling-small','or-gemini-3.7-flash','or-inkling','or-kimi-k3',
+  'or-ling-3.0-flash'];
 
 const handle = await createDb(`pglite://${STORE}`);
 await migrate(handle.db);
@@ -76,7 +81,7 @@ for (const m of MODELS) names.set(strategyHash({ type: 'single', model: m } as n
 const spendByHash = new Map((res.perCandidate ?? []).map((p: { strategyHash: string; evidenceSpendUsd: number }) => [p.strategyHash, p.evidenceSpendUsd]));
 
 // v3's numbers, for the side-by-side that is the whole point of this leg.
-const V3: Record<string, number> = { 'or-solar-pro4': 0.50, 'or-deepseek-v4-flash-0731': 0.98,
+const V3: Record<string, number> = { 'or-ling-3.0-flash': 0.96, 'or-solar-pro4': 0.50, 'or-deepseek-v4-flash-0731': 0.98,
   'or-nemotron-3.5-lightning': 0.76, 'or-gpt-full': 0.56, 'or-gemini-flash': 0.66,
   'or-inkling-small': 0.92, 'or-gemini-3.7-flash': 1.00, 'or-inkling': 0.94, 'or-kimi-k3': 0.96 };
 
