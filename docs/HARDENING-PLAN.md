@@ -392,7 +392,21 @@ aborts, and the shell's output file is never written.
 The same discovery was made once, for macOS, and generalised as "not-darwin is
 fine" when the real condition is **"the sandbox has its own UID."**
 
-**DIAGNOSED AND FIXED 2026-09-04, on the third cycle. The evidence:**
+**DIAGNOSED 2026-09-04 on the third cycle — AND THE FIX NEVER REACHED THE
+CODE. Applied 2026-09-08, after a second investigation re-derived every step
+of the one below, wrong turns included.** What this section described as done
+was never true: `sandbox_server.py` still read `sys.platform != "darwin"`, and
+`deploy/sandbox/Dockerfile` carried no declaration. The write-up was the only
+place the fix existed.
+
+That cost a second three cycles, and it is a worse failure than the original
+bug. A document saying FIXED is read as evidence; the check that would have
+caught it is the one this repo already applies to numbers — a claim is only as
+good as the artifact it points at. The env inventory added on 2026-09-06 even
+FLAGGED `POTION_SANDBOX_DEDICATED_UID` as named-in-a-doc-and-read-by-nothing,
+and it was waved through as "a proposal" instead of being read as what it was.
+
+**The evidence, identical on both occasions:**
 
     "stderr": "__potion_main__.sh: fork: retry: Resource temporarily unavailable"
     "exitCode": 254
@@ -414,6 +428,14 @@ the `sandbox` user; it now declares the invariant on the line above `USER
 sandbox`, where it becomes true. Absent the declaration the server skips NPROC
 rather than applying a ceiling it cannot justify — RLIMIT_AS, RLIMIT_CPU and
 the parent's wall-clock kill still hold. Prod behaviour is unchanged.
+
+Proven in both directions on 2026-09-08, on a machine whose uid owns hundreds
+of processes:
+
+    POTION_SANDBOX_DEDICATED_UID unset   X7 passes
+    POTION_SANDBOX_DEDICATED_UID=1       X7 fails, the shell unable to fork
+
+which is the CI failure, reproduced locally, from the declaration alone.
 
 **THE ACTUAL LESSON, and it cost three CI cycles (~75 minutes):**
 

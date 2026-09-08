@@ -15,6 +15,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends git nodejs \
 
 COPY sandbox_server.py /opt/sandbox/sandbox_server.py
 
+# RLIMIT_NPROC is counted per real UID, host-wide — not per process tree. A
+# 64-process ceiling therefore means "this exec cannot fork-bomb" only where
+# the sandbox OWNS its uid, which is true on the next line and nowhere else.
+# The server applies the ceiling only when this says so; absent it, it skips
+# NPROC rather than imposing a limit it cannot justify (RLIMIT_AS, RLIMIT_CPU
+# and the parent's wall-clock kill still hold). The invariant is declared HERE
+# because it is a property of the deployment, not something the process can
+# measure about itself.
+ENV POTION_SANDBOX_DEDICATED_UID=1
 USER sandbox
 ENV SANDBOX_PORT=8790
 EXPOSE 8790
