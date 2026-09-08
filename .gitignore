@@ -18,6 +18,13 @@ invoices/
 /artifacts/*
 !/artifacts/m1b-gate3-live.log
 !/artifacts/m1b-sweep.log
+# ...and the tenancy classification exhibit, which tenancy-report.test.ts
+# reads and compares against what the committed inventories render. Its own
+# header called it "the committed classification exhibit" while /artifacts/*
+# swallowed it, so it existed only on machines that had generated it — the
+# test passed locally and could not pass in a clean checkout at all. Found by
+# CI's first run that got far enough to reach it (2026-09-08).
+!/artifacts/tenancy-classification.md
 !/artifacts/m1b-sweep-2026-08-06T05-16-58-387Z.json
 # G2.8 capstone exhibits: the parameter report is the item's deliverable, and
 # the findings JSON is the machine-readable record of the live run (clusters,
