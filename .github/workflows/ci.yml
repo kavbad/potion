@@ -56,9 +56,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # M2-security: secrets gate — scan working tree + full git history.
+      #
+      # GITHUB_TOKEN is REQUIRED for pull_request events (gitleaks-action v2
+      # refuses without it) and was missing. It never showed because this
+      # workflow had never once run on a pull request — the trigger named a
+      # branch that does not exist. The first PR it ever saw failed here, on
+      # configuration rather than on a finding: dead CI does not preserve a
+      # green build, it preserves the bugs a build would have caught.
       - name: Secrets scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_ENABLE_SUMMARY: false
