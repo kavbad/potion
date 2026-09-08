@@ -29,6 +29,14 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Least privilege, and `pull-requests: read` is load-bearing: the gitleaks
+    # action lists a PR's commits to decide what to scan, and the default token
+    # cannot, so the scan died with a 403 rather than a finding. Both this and
+    # the missing GITHUB_TOKEN above were invisible for as long as the workflow
+    # triggered on a branch that does not exist.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
