@@ -16,7 +16,6 @@ import {
 import {
   buildJudgeScoreMessages,
   finalAnswer,
-  finalNumber,
   normalizeText,
   parseJsonAnswer,
   scoreAnswer,
