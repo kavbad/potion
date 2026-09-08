@@ -35,8 +35,6 @@ const PLANNED_PATHS: Record<string, string> = {
 /** Names a doc discusses that no code reads — proposals, or retired spellings
  *  being explained as retired. */
 const PLANNED_ENV: Record<string, string> = {
-  'docs/HARDENING-PLAN.md::POTION_SANDBOX_DEDICATED_UID':
-    'proposed in the sandbox hardening item; nothing reads it yet, which is the point of the item',
   'docs/specs/step-13a-deploy.md::POTION_SITE':
     'named only to say it was SPLIT into the three site vars and is now read by nothing — deleting the sentence would delete the explanation',
 };
