@@ -5,11 +5,21 @@
 # Plus the M2-security gates that already lived here (gitleaks secrets scan).
 name: ci
 
+# TRIGGERS (fixed 2026-09-07). These read `branches: [master]`, and this repo
+# has no `master` — so this workflow fired on NOTHING. Not "no checks on that
+# PR": no checks on any push or any pull request, silently, with an empty
+# check list looking much like a passing one.
+#
+# `pull_request` deliberately carries NO base filter. A base filter is exactly
+# how CI stops without saying so: work here is done on branches cut from
+# `deploy/**` rather than from the default branch, and a filter naming one
+# branch gives a PR into any other branch no CI and no error. Every pull
+# request runs it; `push` stays scoped to the branches worth the runner
+# minutes on every commit.
 on:
   push:
-    branches: [master]
+    branches: [main, 'deploy/**']
   pull_request:
-    branches: [master]
 
 # Cancel superseded runs on the same ref (saves runner minutes on rapid pushes).
 concurrency:
