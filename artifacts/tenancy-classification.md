@@ -281,10 +281,10 @@ grep-derived and enforced by `mock-eligibility.test.ts`.
 | `packages/researcher/src/registry.ts` | classRepresentative | class-resolution | excluded-live | `packages/researcher/src/registry.test.ts` |
 | `packages/strategies/src/resolve.ts` | createResolver | factory | mode-blind | — |
 | `packages/workers/src/handlers.ts` | frontierLiveSweepHandler (reachable filter) | registry-build | excluded-live | `packages/workers/src/live-sweep.test.ts` |
-| `packages/workers/src/handlers.ts` | guaranteeSuiteVerifyHandler (judge resolution) | class-resolution | excluded-live | `packages/workers/src/suite-verify.test.ts` |
 | `packages/workers/src/handlers.ts` | researchCycleHandler (candidate registry) | registry-build | excluded-live | `packages/workers/src/false-live.test.ts` |
 | `packages/workers/src/handlers.ts` | rubricGenerateHandler (classRepresentative) | class-resolution | excluded-live | — |
 | `packages/workers/src/handlers.ts` | tracesClusterHandler (suite judge + strategies) | class-resolution | mock-allowed-by-design | — |
+| `packages/workers/src/suite-verify-job.ts` | guaranteeSuiteVerifyHandler (judge resolution) | class-resolution | excluded-live | `packages/workers/src/suite-verify.test.ts` |
 
 ## Deployment notes
 
