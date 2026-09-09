@@ -191,3 +191,66 @@ export async function listReasoningAliases(db: PotionDb): Promise<string[]> {
 export async function markModelReasoning(db: PotionDb, alias: string): Promise<void> {
   await db.update(models).set({ reasoning: true, updatedAt: new Date() }).where(eq(models.alias, alias));
 }
+
+// ---- 0094 MODEL HEALTH ----
+//
+// The registry knew price and nothing else, so selection could only use
+// price — and `classRepresentative` picks the cheapest, which is how a model
+// that fails out of runs became every cycle's cheap representative.
+
+/** Consecutive failures after which a model stops being selectable. One 429
+ *  is weather; this many in a row is the model. */
+export const MODEL_UNHEALTHY_AFTER = 3;
+
+/**
+ * Record that a model FAILED OUT of a run — contained, timed out, rate
+ * limited past its retries. Increments the counter; the reason is kept so the
+ * exclusion can be explained rather than merely applied.
+ *
+ * Only ever called for SINGLE-model strategies. A cascade that dies does not
+ * say which stage killed it, and blaming every model in a combination would
+ * disqualify innocent ones on their neighbour's behaviour.
+ */
+export async function recordModelFailure(
+  db: PotionDb,
+  alias: string,
+  reason: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db
+    .update(models)
+    .set({
+      consecutiveFailures: sql`${models.consecutiveFailures} + 1`,
+      lastFailureAt: now,
+      lastFailureReason: reason.slice(0, 500),
+      updatedAt: now,
+    })
+    .where(eq(models.alias, alias));
+}
+
+/** A model completed a run: the streak is over. */
+export async function clearModelFailures(db: PotionDb, alias: string): Promise<void> {
+  await db
+    .update(models)
+    .set({ consecutiveFailures: 0, updatedAt: new Date() })
+    .where(eq(models.alias, alias));
+}
+
+/** Aliases at or past the threshold — what selection must not pick. */
+export async function unhealthyModels(
+  db: PotionDb,
+  threshold: number = MODEL_UNHEALTHY_AFTER,
+): Promise<Map<string, { failures: number; reason: string | null }>> {
+  const rows = await db
+    .select({
+      alias: models.alias,
+      failures: models.consecutiveFailures,
+      reason: models.lastFailureReason,
+    })
+    .from(models);
+  const out = new Map<string, { failures: number; reason: string | null }>();
+  for (const r of rows) {
+    if (r.failures >= threshold) out.set(r.alias, { failures: r.failures, reason: r.reason });
+  }
+  return out;
+}

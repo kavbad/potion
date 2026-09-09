@@ -19,7 +19,7 @@ export const MOCK_PROVIDER_DISCLAIMER =
   'SIMULATED RESULTS — produced by the deterministic mock provider and/or ' +
   'mock-corpus-derived suites. TEST/CI SIMULATION ONLY: never authoritative ' +
   'for customer-facing evals and never evidence of real-world quality.';
-import type { PriceTable, ToolCall } from '@potion/core';
+import type { PriceTable, ReasoningEffort, ToolCall } from '@potion/core';
 import type { CompleteRequest, CompleteResponse, Provider } from '../types.js';
 import { MOCK_WORDS, specialFixtureText } from './fixtures.js';
 import { mockConfidenceOverride } from './eval-corpus.js';
@@ -100,6 +100,22 @@ export function toolCallEchoFixture(req: CompleteRequest, seed: number): ToolCal
   ];
 }
 
+/**
+ * C4 mock effort model (TEST/CI SIMULATION ONLY, like the confidence marker).
+ * Thinking costs tokens and time and buys certainty — the three things the
+ * compiler trades between — so the mock makes each move monotonically, and
+ * deterministically, without touching the rng stream.
+ */
+export const MOCK_REASONING_TOKENS: Record<ReasoningEffort, number> = { low: 64, medium: 256, high: 1024 };
+export const MOCK_EFFORT_LATENCY: Record<ReasoningEffort, number> = { low: 2, medium: 4, high: 8 };
+/** Effort closes the gap to certainty: high effort removes 3/4 of the doubt.
+ *  Monotone, stays inside [0, 1), and leaves an effort-free call untouched. */
+export function liftConfidence(c: number, effort: ReasoningEffort | undefined): number {
+  if (effort === undefined) return c;
+  const divisor = { low: 1.5, medium: 2, high: 4 }[effort];
+  return 1 - (1 - c) / divisor;
+}
+
 export function createMockProvider(prices: PriceTable): Provider {
   return {
     id: 'mock',
@@ -130,15 +146,26 @@ export function createMockProvider(prices: PriceTable): Provider {
         (e) => e.alias === req.model || e.model === req.model,
       );
       const resolvedModel = entry?.model ?? req.model;
+      // C4 reasoning effort. A DETERMINISTIC POST-HOC TRANSFORM of values that
+      // were already drawn — it consumes no rng, so a request that does not
+      // ask for effort produces byte-identical output to before, which is the
+      // whole fixture backbone of this repo.
+      const effort = req.params?.reasoningEffort;
+      const answerTokens =
+        estTokens(text.length) + (toolCalls ? estTokens(toolCalls[0]!.function.arguments.length) : 0);
+      const reasoningTokens = effort !== undefined ? MOCK_REASONING_TOKENS[effort] : 0;
       return {
         text,
         usage: {
           inputTokens: estTokens(promptTextOf(req).length),
-          outputTokens:
-            estTokens(text.length) + (toolCalls ? estTokens(toolCalls[0]!.function.arguments.length) : 0),
+          // Reasoning tokens ARE output tokens on every real bill, so they are
+          // inside the total as well as broken out — a cost model that read
+          // only the total must not undercount thinking.
+          outputTokens: answerTokens + reasoningTokens,
+          ...(reasoningTokens > 0 ? { reasoningTokens } : {}),
         },
-        latencyMs: latencyProfileMs(req.model),
-        logprobConfidence,
+        latencyMs: latencyProfileMs(req.model) * (effort !== undefined ? MOCK_EFFORT_LATENCY[effort] : 1),
+        logprobConfidence: liftConfidence(logprobConfidence, effort),
         modelVersion: `${resolvedModel}#mock-v1`,
         ...(toolCalls !== null ? { toolCalls } : {}),
       };

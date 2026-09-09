@@ -3,7 +3,15 @@
 // new-account sign-in died silently. Every case below is a config shape
 // that changes security or billing behaviour without saying so.
 import { describe, expect, it } from 'vitest';
-import { bootGateReport, bootWarnings, sourceOf } from '../src/boot-report.js';
+import {
+  bootFatals,
+  bootGateReport,
+  bootWarnings,
+  BootRefusedError,
+  type BootGateLog,
+  logBootGates,
+  sourceOf,
+} from '../src/boot-report.js';
 
 const PROD = { NODE_ENV: 'production' } as const;
 const gate = (env: Record<string, string | undefined>, name: string, mode: 'live' | 'mock' = 'live') =>
@@ -30,15 +38,60 @@ describe('boot gate report', () => {
     expect(gate({ POTION_SELF_SERVE: '0' }, 'POTION_SELF_SERVE').warn).toBeUndefined();
   });
 
-  it('flags the session-minting combination as dangerous', () => {
-    const g = gate({ POTION_SELF_SERVE: '1', POTION_MAGIC_LINK_IN_RESPONSE: '1' }, 'POTION_MAGIC_LINK_IN_RESPONSE');
-    expect(g.warn).toContain('DANGEROUS COMBINATION');
-    expect(g.warn).toContain('ANY email');
+  // (the session-minting combination is asserted below, split across the
+  // production case — now FATAL — and the closed-test-box case, still a warn)
+
+  it('an auth bypass left on in production is FATAL, not a warning', () => {
+    // P1-2 / HARDENING-PLAN P2.1. This used to be `warn`, and the whole
+    // mechanism was a line in a deploy log that nobody was reading — the
+    // 2026-08-27 class exactly: a gate that reported its state and did not act.
+    const g = gate({ POTION_DEV_AUTH: '1' }, 'POTION_DEV_AUTH');
+    expect(g.warn).toBeUndefined();
+    expect(g.fatal).toContain('AUTH BYPASS IS ON IN PRODUCTION');
+    expect(g.fatal).toContain('Unset POTION_DEV_AUTH'); // and names the remedy
+    expect(gate({}, 'POTION_DEV_AUTH').fatal).toBeUndefined(); // unset is OFF in prod
   });
 
-  it('flags an auth bypass left on in production', () => {
-    expect(gate({ POTION_DEV_AUTH: '1' }, 'POTION_DEV_AUTH').warn).toContain('PRODUCTION');
-    expect(gate({}, 'POTION_DEV_AUTH').warn).toBeUndefined(); // unset defaults OFF in prod
+  it('the report reads the REAL resolver, so the log cannot disagree with the server', () => {
+    // It used to re-implement the rule inline. Two copies of a security
+    // decision is one copy that can drift, and the log is the only place an
+    // operator would ever look.
+    expect(gate({ NODE_ENV: 'garbage' }, 'POTION_DEV_AUTH').state).toContain('bypass off');
+    expect(bootGateReport({ NODE_ENV: 'development' }, 'live')
+      .find((r) => r.name === 'POTION_DEV_AUTH')!.state).toContain('bypass ON');
+  });
+
+  it('magic links + self-serve is FATAL in production, a warning off it', () => {
+    const prod = gate({ POTION_SELF_SERVE: '1', POTION_MAGIC_LINK_IN_RESPONSE: '1' }, 'POTION_MAGIC_LINK_IN_RESPONSE');
+    expect(prod.fatal).toContain('ANY email');
+    const box = bootGateReport(
+      { NODE_ENV: 'development', POTION_SELF_SERVE: '1', POTION_MAGIC_LINK_IN_RESPONSE: '1' },
+      'live',
+    ).find((r) => r.name === 'POTION_MAGIC_LINK_IN_RESPONSE')!;
+    expect(box.fatal).toBeUndefined();
+    expect(box.warn).toContain('DANGEROUS COMBINATION');
+  });
+
+  it('a fatal gate REFUSES THE BOOT — the process does not take the port', () => {
+    // A real BootGateLog, not a cast: the fake now has to actually match the
+    // shape the function asks for, so a change to that shape breaks here.
+    const log: BootGateLog = { info: () => {}, warn: () => {}, fatal: () => {} };
+    expect(() => logBootGates(log, { NODE_ENV: 'production', POTION_DEV_AUTH: '1' }, 'live'))
+      .toThrow(BootRefusedError);
+    // ...and a clean production box still boots.
+    expect(() =>
+      logBootGates(log, {
+        NODE_ENV: 'production', POTION_SELF_SERVE: '1', POTION_DEV_AUTH: '0',
+        STRIPE_SECRET_KEY: 'sk_live_x', REDIS_URL: 'redis://x', SENTRY_DSN: 'https://x',
+        POTION_PUBLIC_URL: 'https://api.withpotion.com', POTION_OPERATOR_TOKEN: 't',
+      }, 'live'),
+    ).not.toThrow();
+  });
+
+  it('bootFatals selects exactly the gates that refuse', () => {
+    const rows = bootGateReport({ NODE_ENV: 'production', POTION_DEV_AUTH: '1' }, 'live');
+    expect(bootFatals(rows).map((r) => r.name)).toEqual(['POTION_DEV_AUTH']);
+    expect(bootFatals(bootGateReport({ NODE_ENV: 'production' }, 'live'))).toEqual([]);
   });
 
   it('says plainly whether money can actually move', () => {
@@ -72,6 +125,7 @@ describe('boot gate report', () => {
       'live',
     );
     expect(bootWarnings(rows)).toEqual([]);
+    expect(bootFatals(rows)).toEqual([]);
   });
 
   it('sign in with Google: both halves, or it is off and says so', () => {

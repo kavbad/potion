@@ -147,3 +147,27 @@ describe('computeFrontier', () => {
     expect(computeFrontier([])).toEqual([]);
   });
 });
+
+// THE DECISION, PINNED. A future contributor reading the review will reach for
+// a fourth dominance axis; this test is here to make them read the reason
+// first. Reliability is not on the frontier because the frontier RANKS, and
+// the only reliability evidence Potion has is observational — routing decided
+// which requests each strategy saw. Delete this test only alongside a causal
+// source (per-item outcomes under the randomized holdout).
+describe('reliability is deliberately NOT a dominance axis', () => {
+  const pt = (hash: string, quality: number, cost: number, lat: number): FrontierPoint => ({
+    clusterId: 'code-gen', strategyHash: hash, strategyConfig: { type: 'single', model: hash },
+    quality, costPer1K: cost, latencyP95: lat,
+  });
+
+  it('dominance still reads exactly three objectives', () => {
+    const worse = pt('a', 0.8, 2, 1000);
+    const better = pt('b', 0.9, 1, 900);
+    expect(isDominated(worse, [better])).toBe(better);
+    // An unreliable-but-otherwise-better point still dominates, because the
+    // frontier has no honest way to know it is unreliable. That is a stated
+    // limit, not an oversight — costPerSuccess is where reliability shows up.
+    const flaky = { ...pt('c', 0.95, 0.5, 800) };
+    expect(isDominated(worse, [flaky])).toBe(flaky);
+  });
+});

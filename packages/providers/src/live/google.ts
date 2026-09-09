@@ -6,6 +6,7 @@
 // embed: text-embedding-004 via :batchEmbedContents — NOTE: this model is
 // 768-dim, NOT the platform-canonical 384-dim the mock embedder uses; mixing
 // Google and mock embeddings in one vector space is invalid (v1).
+import { ProviderEffortRefusalError } from '../errors.js';
 import type { CompleteRequest, CompleteResponse, Provider } from '../types.js';
 import { postJsonWithRetry } from '../http.js';
 import {
@@ -13,6 +14,8 @@ import {
   samplingParams,
   splitSystem,
   type LiveProviderOptions,
+  effortRefusal,
+  thinkingBudgetFor,
 } from './common.js';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -46,6 +49,22 @@ export function createGoogleProvider(opts: LiveProviderOptions): Provider {
       };
       if (sampling.temperature !== undefined) generationConfig.temperature = sampling.temperature;
       if (sampling.seed !== undefined) generationConfig.seed = sampling.seed;
+      // C4: effort as a thinking budget, same refusal contract as anthropic.
+      if (req.params?.reasoningEffort !== undefined) {
+        const budget = thinkingBudgetFor(req.params.reasoningEffort, sampling.maxTokens);
+        if (budget === null) {
+          throw new ProviderEffortRefusalError('google', effortRefusal('google', req.params.reasoningEffort, sampling.maxTokens));
+        }
+        generationConfig.thinkingConfig = { thinkingBudget: budget };
+      }
+      // C4: effort as a thinking budget, same refusal contract as anthropic.
+      if (req.params?.reasoningEffort !== undefined) {
+        const budget = thinkingBudgetFor(req.params.reasoningEffort, sampling.maxTokens);
+        if (budget === null) {
+          throw new Error(effortRefusal('google', req.params.reasoningEffort, sampling.maxTokens));
+        }
+        generationConfig.thinkingConfig = { thinkingBudget: budget };
+      }
 
       const body: Record<string, unknown> = {
         contents: turns.map((t) => ({

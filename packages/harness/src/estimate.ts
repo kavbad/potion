@@ -31,7 +31,8 @@
 //
 // Cost per call = (input·inputPer1M + output·outputPer1M) / 1e6 with the
 // call's model price entry.
-import type { ChatMessage, EvalItem, PriceEntry, PriceTable, ProgramCheck, ProgramNode, StrategyConfig } from '@potion/core';
+import { PROMPT_VARIANT_TOKENS, REASONING_BUDGET_TOKENS } from '@potion/core';
+import type { ChatMessage, EvalItem, PriceEntry, PriceTable, ProgramCheck, ProgramNode, StrategyConfig, Tool } from '@potion/core';
 import { PROTOCOL_MAX_TOKENS } from '@potion/core';
 import { DEFAULT_MAX_TOKENS } from '@potion/providers';
 import { CODE_EXEC_TIMEOUT_MS, CODE_EXEC_WALL_SLACK_MS, MAX_SUBTASKS } from '@potion/strategies';
@@ -52,8 +53,17 @@ export function promptCharsOf(messages: ChatMessage[]): number {
   return messages.reduce((a, m) => a + m.role.length + 1 + m.content.length, 0);
 }
 
+/** Tool DEFINITIONS are input, on every call. Serialized JSON is the honest
+ *  proxy for what a transport sends — verbose schemas cost verbose money, and
+ *  an agent offering twenty tools can pay more for the catalogue than for the
+ *  question. Unpriced until C4 rung 4, which is the direction this bound must
+ *  never get wrong. */
+export function toolCharsOf(tools: Tool[] | undefined): number {
+  return tools === undefined ? 0 : JSON.stringify(tools).length;
+}
+
 export function inputTokensOf(item: EvalItem): number {
-  return Math.ceil(promptCharsOf(item.prompt) / 4);
+  return Math.ceil((promptCharsOf(item.prompt) + toolCharsOf(item.tools)) / 4);
 }
 
 interface CallEstimate {
@@ -192,7 +202,24 @@ export function estimateCalls(
       };
       const walk = (n: ProgramNode): void => {
         switch (n.op) {
-          case 'call': calls.push({ model: n.model, inputTokens: baseInputTokens, outputTokens: OUT }); return;
+          // C4 — THE RULE FOR THIS BOUND: model everything that makes a call
+          // MORE expensive, and nothing that makes it cheaper. A projection
+          // that under-estimates is broken (the sweep starts a run it cannot
+          // afford and finds out by spending); one that over-estimates is
+          // merely loose, and stops early in the safe direction.
+          //
+          // So: reasoning effort is priced (thinking is billed as output) and
+          // a prompt variant's instruction is priced (it is billed as input).
+          // NOT priced: `terse` shortening the answer, and `contextSelect`
+          // shrinking the prompt. Both are real savings and both show up in
+          // MEASURED cost on the frontier — which is the number that decides
+          // anything. A preflight claiming them would be guessing in the one
+          // direction it must not guess.
+          case 'call': calls.push({
+            model: n.model,
+            inputTokens: baseInputTokens + (n.promptVariant !== undefined ? PROMPT_VARIANT_TOKENS[n.promptVariant] : 0),
+            outputTokens: OUT + (n.reasoningEffort !== undefined ? REASONING_BUDGET_TOKENS[n.reasoningEffort] : 0),
+          }); return;
           case 'if': walkCheck(n.check); walk(n.then); walk(n.else); return;
           case 'vote': n.of.forEach(walk); return;
           case 'pick': n.of.forEach(walk); if (n.by.kind === 'judge') calls.push({ model: n.by.model, inputTokens: baseInputTokens + n.of.length * OUT, outputTokens: 64 }); return;

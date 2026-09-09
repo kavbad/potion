@@ -203,7 +203,7 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   NOT resolve incidents") moved to G2.3 where it belongs; [DONE 2026-08-08]
   G2.3 key role split: api-key role derives from scopes (serve → member,
   serve+admin → admin, FAIL CLOSED on unknown values); exhaustive
-  route-inventory fixture (apps/server/test/fixtures/route-inventory.ts —
+  route-inventory fixture (apps/server/src/security/route-inventory.ts —
   all routes classified, completeness-diffed, 27 admin routes probed per-key;
   G2.4 extends the same fixture with its lenses); walkthrough step-16 leg;
   [DONE 2026-08-08] G2.4 exhaustive tenancy sweep +

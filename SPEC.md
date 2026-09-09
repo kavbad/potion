@@ -569,7 +569,10 @@ export function generateCandidates(opts: GenerateOptions): StrategyConfig[]; // 
 - Mock cycles produce provenance=mock evidence → recipes enter `candidate` state (SIMULATED-badged); they can SHORTLIST, never PROMOTE.
 
 ### 15.4 Promotion gate — packages/researcher + packages/pareto
-- Post-cycle: recompute cluster frontiers including new candidates. Publish a new frontier version (parentId = current) ONLY from live-provenance evidence AND when heldout shows: quality delta ≥ +1.5 pts at ≤ same cost, OR ≥ 20% cost cut at ≥ same quality (thresholds env-tunable). Significance method (pinned): **paired bootstrap over per-item heldout deltas** (new recipe vs incumbent operating point, same items), 1000 resamples with replacement, 95% CI on the mean delta, seeded PRNG (mulberry32, seed recorded on the cycle row) — promote only when the CI lower bound clears the threshold; CI overlapping it → stays `candidate`.
+- Post-cycle: recompute cluster frontiers including new candidates. Publish a new frontier version (parentId = current) ONLY from live-provenance evidence AND when heldout shows: quality delta ≥ +1.5 pts at ≤ same cost, OR ≥ 20% cost cut with quality held to within the **non-inferiority margin** (default 1.5 pts, `POTION_RESEARCH_COST_QUALITY_MARGIN`). Significance method (pinned): **paired bootstrap over per-item heldout deltas** (new recipe vs incumbent operating point, same items), ≥1000 resamples with replacement, seeded PRNG (mulberry32, seed recorded on the cycle row) — promote only when the CI lower bound clears the threshold; CI overlapping it → stays `candidate`. A verdict needs at least `PROMOTION_MIN_PAIRS` (5) paired items or it REFUSES rather than judges.
+  - **The interval is not always 95%** (P1-1, 2026-09-05). A cycle adjudicates every candidate against the SAME incumbent, so the tests are a family: alpha is Bonferroni-corrected to `0.05 / comparisons`, `comparisons` is required of every caller and recorded on the verdict, and resamples are floored so the corrected percentile is resolvable. Uncorrected, 20 pure-noise candidates false-promoted 41.5% of cycles.
+  - **The cost path reads a downside-honest bound** (2026-09-05). `ciLower ≥ 0` was not a test: a percentile bootstrap over a sample with no losing item has its lower bound pinned at exactly 0 for every alpha, and a one-sided bound on a truly-equal candidate sits below zero at any n — so measured power FELL as evidence grew. The bound now charges for downside the sample never showed, and the margin above is what gives the test power at all.
+  - See `packages/researcher/src/gate.ts` and `docs/INFERENCE-COMPILER-PLAN.md` for the measurements behind both.
 - Promotion is a frontier version — #22 auto-rollback applies unchanged. Events → alerts (#33).
 
 ### 15.5 Recipe library + leaderboard (#32) — apps/server, apps/dashboard
@@ -602,7 +605,11 @@ _(renumbered from 0013: request_logs_policy took 0013 in M4 #30)_
 - Evidence: `@potion/pareto` outcome-evidence — instrument **'customer-outcomes'** (its own
   scale; never blended with serve-judge or suite-measured numbers), 30-day window, exact
   Jeffreys binomial over success verdicts + generalized Jeffreys over scores for the SERVING
-  strategy, human-signal counts, other-strategy signals counted (never ranked). Rides
+  strategy, human-signal counts, other-strategy signals counted (never ranked). That interval
+  **assumes the observations are independent**, and outcome rows carry no customer or session
+  id to group by — so a window dominated by a few heavy callers reads narrower than the
+  evidence supports (measured: coverage 95% → 72% at two sources; `clusteredQualityCi` is the
+  grouped interval, and this caller has nothing to group with). Rides
   `RouterAssignment.outcomes` → GET /api/router → the Compiler page's "your app's verdicts"
   sub-row. Display-only: excluded from routerHash, so outcome churn never mints a version.
 - OBSERVATIONAL, by contract: routing chose which requests each strategy saw — outcome

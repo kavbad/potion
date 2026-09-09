@@ -1,4 +1,25 @@
 {
-  "$comment": "Accepted advisories for the CI audit gate (scripts/security/audit-gate.mjs). Every entry needs a reason and is matched by advisory id + module. Re-triaged 2026-08-05 (m3-cicd-chaos, ROADMAP #29): the 16 previously-accepted advisories are ALL CLEARED by dependency fixes — next 15.1.8→15.5.22 (13 next advisories), drizzle-orm ^0.36.0→^0.45.2 (1116251), and scoped pnpm overrides for the transitive leftovers postcss@8.4.31→^8.5.18 + sharp@0.34.5→^0.35.0 (next-pinned) and glob@10.4.5→^10.5.0 (via @opentelemetry gcp detector; 1109842). `pnpm audit --prod` now reports 0 high/critical advisories, so the allowlist is intentionally EMPTY. Do not add entries without a reason.",
-  "allowlist": []
+  "$comment": "Accepted advisories for the CI audit gate (scripts/security/audit-gate.mjs). Every entry needs a reason and is matched by advisory id + module. Re-triaged 2026-08-05 (m3-cicd-chaos, ROADMAP #29): the 16 previously-accepted advisories were ALL CLEARED by dependency fixes — next 15.1.8->15.5.22, drizzle-orm ^0.36.0->^0.45.2, and scoped pnpm overrides for the transitive leftovers postcss, sharp and glob. It stayed EMPTY until 2026-09-08, when the gate ran in CI for the first time (the workflow had been triggering on a branch that does not exist) and found 11 blocking production advisories. Nine were patched — nanoid 3.3.17->3.3.18, fast-uri 3.1.5->3.1.7 AND 4.1.2->4.1.4. The two below are xlsx, which has no patched version in existence. Do not add entries without a reason, and prefer a bump or a removal to an entry: an accepted advisory is a vulnerability you have agreed to ship.",
+  "allowlist": [
+    {
+      "module": "xlsx",
+      "id": 1108110,
+      "advisory": "GHSA-4r6h-8v6p-xvw6",
+      "severity": "high",
+      "title": "Prototype pollution in SheetJS (xlsx <= 0.19.x)",
+      "accepted": "2026-09-08",
+      "acceptedBy": "operator",
+      "reason": "NO PATCHED VERSION EXISTS on npm — the advisory reports `patched: <0.0.0`, because SheetJS stopped publishing fixes to the npm registry and ships them from its own CDN instead. So the gate's other exit, a version bump, is not available. EXPOSURE, stated plainly rather than reassuringly: xlsx is loaded with a dynamic import in apps/dashboard/components/lab-workbench.tsx and parses spreadsheets fetched from /api/lab/runs/:runId/files/:name — files PRODUCED BY A SANDBOXED LAB RUN — in the operator's browser. That input is not trusted: an agent, or a document an agent processed, can influence the bytes that reach XLSX.read. A successful pollution runs in the dashboard page context, not on the server and not across tenants. The existing `sheetRows` parse cap bounds cost, not pollution. ACCEPTED because the preview is operator-facing on the operator's own runs, and the alternatives (vendor the CDN build, replace the library, drop the preview) are product work rather than a dependency fix. REVISIT when any of these becomes true: a patched xlsx reaches npm; the preview is exposed to any viewer who is not the run's own operator; or the SheetJS CDN build is vendored, which is the cheapest real fix and retires both entries."
+    },
+    {
+      "module": "xlsx",
+      "id": 1108111,
+      "advisory": "GHSA-5pgg-2g8v-p4x9",
+      "severity": "high",
+      "title": "Regular expression denial of service in SheetJS (xlsx <= 0.19.x)",
+      "accepted": "2026-09-08",
+      "acceptedBy": "operator",
+      "reason": "NO PATCHED VERSION EXISTS on npm (`patched: <0.0.0`); same package and same call site as advisory 1108110 above, which carries the full exposure note. This one is a ReDoS: a crafted workbook hangs the tab doing the parse. Blast radius is one browser tab belonging to the operator viewing their own run — no server thread, no other tenant. The parse is already wrapped in a try/catch that renders an honest error card, which covers a throw but not a hang. REVISIT on the same three conditions as 1108110."
+    }
+  ]
 }

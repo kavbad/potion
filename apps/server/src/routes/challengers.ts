@@ -137,7 +137,7 @@ export function registerChallengerRoutes(app: FastifyInstance, ctx: PotionContex
         d.op.config === null
           ? null
           : {
-              model: strategyModelLabel(d.op.config as { type: string; model?: string }),
+              model: strategyModelLabel(d.op.config),
               strategy: strategyHash(d.op.config).slice(0, 8),
               fallback: d.op.fallback,
               ...(d.op.fallbackReason !== undefined ? { fallbackReason: d.op.fallbackReason } : {}),

@@ -65,7 +65,30 @@ export interface PotionQueue {
   ): void;
   /** Status lookup for the jobs endpoint; null when the id is unknown. */
   getJob(id: string): Promise<JobStatus | null>;
+  /**
+   * FACTS about who is draining this queue — the P1-3 liveness gap.
+   *
+   * A server started with POTION_WORKER=off enqueues and never consumes. If
+   * the standalone worker is not actually running, jobs accumulate in Redis
+   * and NOTHING says so: the boot gate cannot tell "a worker is coming" from
+   * "nobody is consuming", and every research cycle, guarantee sweep and
+   * alert dispatch is accepted and silently never runs.
+   *
+   * Facts only, no verdict. Whether `waiting > 0, consumers = 0` is a stall
+   * or a queue about to be picked up is a POLICY call, and it is made in
+   * apps/server/src/readiness.ts where the deployment shape is known.
+   *
+   * Optional so an out-of-tree driver keeps compiling.
+   */
+  consumerHealth?(): Promise<QueueConsumerHealth>;
   close(): Promise<void>;
+}
+
+export interface QueueConsumerHealth {
+  /** Jobs accepted and not yet started. */
+  waiting: number;
+  /** Processes currently attached to this queue as consumers. */
+  consumers: number;
 }
 
 /** Back-compat alias — SPEC §7 named the interface `Queue`. */
@@ -80,15 +103,24 @@ export type CreateQueueOptions = BullMQDriverOptions;
  * createQueue(kind, redisUrlString) or the §12.2 form
  * createQueue(kind, { redisUrl, connection, … }).
  */
+/**
+ * The driver precedence, as ONE function: explicit QUEUE_DRIVER > REDIS_URL
+ * present > memory.
+ *
+ * Exported because callers need to REPORT it without guessing (the P1-3 boot
+ * gate has to know whether the queue is process-local before it can say
+ * whether a server with no in-process worker is a valid deployment or a black
+ * hole). Two copies of a precedence rule is one copy that can drift — the
+ * same lesson as the P1-2 boot report re-implementing the auth bypass.
+ */
+export function resolveQueueKind(env: NodeJS.ProcessEnv = process.env): QueueKind {
+  if (env.QUEUE_DRIVER === 'bullmq' || env.QUEUE_DRIVER === 'memory') return env.QUEUE_DRIVER;
+  return env.REDIS_URL !== undefined && env.REDIS_URL.trim() !== '' ? 'bullmq' : 'memory';
+}
+
 export function createQueue(kind?: QueueKind, opts?: CreateQueueOptions | string): PotionQueue {
   const options: CreateQueueOptions = typeof opts === 'string' ? { redisUrl: opts } : (opts ?? {});
-  const effectiveKind: QueueKind =
-    kind ??
-    (process.env.QUEUE_DRIVER === 'bullmq' || process.env.QUEUE_DRIVER === 'memory'
-      ? process.env.QUEUE_DRIVER
-      : process.env.REDIS_URL
-        ? 'bullmq'
-        : 'memory');
+  const effectiveKind: QueueKind = kind ?? resolveQueueKind();
   switch (effectiveKind) {
     case 'memory':
       return createMemoryQueue();

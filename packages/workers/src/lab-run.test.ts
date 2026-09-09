@@ -910,7 +910,18 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
               'set -e',
               'test -f repo/src/lib.js',
               'mkdir -p out/report',
-              'git init -q workrepo && cd workrepo && git commit -q --allow-empty -m offline && cd ..',
+              // The identity is passed PER INVOCATION (`git -c`), never assumed
+              // from the host. Without it git falls back to user@hostname, and
+              // on a CI runner that resolves to `runner@fv-az…​.(none)`, which
+              // git REFUSES: "unable to auto-detect email address". Under
+              // `set -e` that aborts the script before the echo below, so the
+              // produced file never exists and the assertion reads as "the
+              // sandbox lost my output" when the shell simply stopped early.
+              // This test is about git working OFFLINE, not about whether the
+              // machine running it has a name configured.
+              'git init -q workrepo && cd workrepo && ' +
+                'git -c user.email=lab@potion.invalid -c user.name=potion ' +
+                'commit -q --allow-empty -m offline && cd ..',
               'echo "tree ok, git ok" > out/report/result.txt',
             ].join('\n'),
           }),
@@ -929,8 +940,31 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
 
       const files = await listLabRunFiles(db.db, ORG, runId);
       const names = files.map((f) => f.name);
-      expect(names).toContain('repo/src/lib.js');
-      expect(names).toContain('out/report/result.txt');
+      // What the shell actually did, in the failure message. Without this the
+      // CI failure that prompted these lines was undiagnosable: the only thing
+      // the log said was "expected [ 'repo/src/lib.js' ] to include
+      // 'out/report/result.txt'" — and `repo/src/lib.js` is PRE-SEEDED above,
+      // so its presence proves nothing about whether run_shell ran at all.
+      // WHAT THE SHELL SAID, in the failure message.
+      //
+      // The first version of this filtered steps on `payload includes
+      // 'run_shell'` — which matches the MODEL step carrying the tool CALL,
+      // and a 2000-char slice then spent the whole budget printing the
+      // prompt back. A CI failure reported the command it had already sent
+      // and nothing about what happened to it. The result lives on the step
+      // whose kind is 'tool', in `toolOutput`.
+      const { listLabSteps: listSteps } = await import('@potion/db');
+      const shellEvidence = JSON.stringify(
+        (await listSteps(db.db, runId, ORG))
+          .filter((st) => st.kind === 'tool')
+          .map((st) => st.payload),
+      ).slice(0, 4000);
+      // Assert on the OUTPUT before the files: a shell that failed explains
+      // the missing file, and "expected [...] to include 'out/report/...'"
+      // does not explain anything.
+      expect(shellEvidence, 'no tool step recorded — run_shell never executed').toContain('run_shell');
+      expect(names, `shell said: ${shellEvidence}`).toContain('repo/src/lib.js');
+      expect(names, `shell said: ${shellEvidence}`).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.
       expect(names.some((n) => n.includes('.git/'))).toBe(false);
       const { getLabRunFile } = await import('@potion/db');

@@ -9,10 +9,23 @@ import { installShutdownSignalHandlers } from './shutdown.js';
 // ---- end M3 #27 HA imports ----
 
 const port = Number(process.env.PORT ?? 3000);
-const app = await buildServer({
-  logger: true,
-  log: (msg) => console.log(`[potion] ${msg}`),
-});
+// A boot gate can now REFUSE (boot-report.ts): a server that cannot be secure
+// must not take the port. Caught here so the operator reads the gate and its
+// remedy rather than a stack trace, and so the exit code is deliberate.
+let app;
+try {
+  app = await buildServer({
+    logger: true,
+    log: (msg) => console.log(`[potion] ${msg}`),
+  });
+} catch (err) {
+  const { BootRefusedError } = await import('./boot-report.js');
+  if (err instanceof BootRefusedError) {
+    for (const g of err.gates) console.error(`[potion] BOOT REFUSED — ${g.name}: ${g.fatal}`);
+    process.exit(1);
+  }
+  throw err;
+}
 // ---- M3 #27 HA (m3-ha) ----
 // SIGTERM/SIGINT → stop accepting, drain in-flight (30s cap), close queue/db,
 // exit 0 (force 1 past the cap) — see src/shutdown.ts.

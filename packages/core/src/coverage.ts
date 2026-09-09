@@ -18,6 +18,7 @@
 //   capability is treated as uncovered, because the alternative is routing
 //   a 60k-token prompt at a model nobody checked can hold it.
 import { charBucketMax, parseShapeClass } from './shape.js';
+import { canonicalJson } from './hash.js';
 import type { StrategyConfig, ProgramNode, ProgramCheck } from './types.js';
 
 /** Measured points a cluster needs before its evidence stops being thin. */
@@ -146,28 +147,49 @@ export function programModels(node: ProgramNode): string[] {
   return out;
 }
 
-/** Static call bound: the number of DISTINCT call nodes (by identity) plus
+/** The interpreter's static call ceiling. It lives HERE, next to the counter,
+ *  because the schema boundary must refuse an over-budget program at PARSE
+ *  time — a mechanism that can only be caught mid-run is a mechanism that can
+ *  reach a customer's request before anyone learns it was too big. */
+export const MAX_PROGRAM_CALLS = 8;
+
+/** The memo key of a program node: its STRUCTURE, not its object identity.
+ *
+ *  A program is data, so every program that serves has been through JSON —
+ *  and JSON does not preserve sharing. `verifiedCascade` builds one call node
+ *  and points both the check and the `then` branch at it; parse that back and
+ *  they are two equal objects. Under identity memoization the parsed program
+ *  was a DIFFERENT MECHANISM from the one that was measured: it paid for the
+ *  cheap call twice, its receipt named a stage that never ran, and this bound
+ *  over-counted. Keying on canonical JSON makes built and parsed identical,
+ *  which is the whole promise of putting mechanisms in the database. */
+export function programNodeKey(node: ProgramNode): string {
+  return canonicalJson(node);
+}
+
+/** Static call bound: the number of DISTINCT call nodes (by structure) plus
  *  judge picks — exactly what a worst-case execution pays for, because the
  *  interpreter memoizes per node (a call referenced from a check and again
  *  from a branch executes once). */
 export function programCallCount(node: ProgramNode): number {
-  const seen = new Set<ProgramNode>();
-  let judges = 0;
+  const seen = new Map<string, ProgramNode>();
+  const judges = new Set<string>();
   const walkCheck = (c: ProgramCheck): void => {
     if (c.kind === 'agree') { walk(c.of[0]); walk(c.of[1]); } else walk(c.of);
   };
   const walk = (x: ProgramNode): void => {
-    if (seen.has(x)) return;
-    seen.add(x);
+    const key = programNodeKey(x);
+    if (seen.has(key)) return;
+    seen.set(key, x);
     switch (x.op) {
       case 'call': return;
       case 'if': walkCheck(x.check); walk(x.then); walk(x.else); return;
       case 'vote': x.of.forEach(walk); return;
-      case 'pick': x.of.forEach(walk); if (x.by.kind === 'judge') judges++; return;
+      case 'pick': x.of.forEach(walk); if (x.by.kind === 'judge') judges.add(key); return;
     }
   };
   walk(node);
-  return [...seen].filter((n) => n.op === 'call').length + judges;
+  return [...seen.values()].filter((n) => n.op === 'call').length + judges.size;
 }
 
 export function strategyModels(config: StrategyConfig): string[] {
