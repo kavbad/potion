@@ -8,6 +8,7 @@ export * from './schemas.js';
 // Additive (M2-security): prompt-injection defense primitives.
 export * from './safety.js';
 export * from './stats.js';
+export * from './consensus.js';
 export * from './redact.js';
 export * from './shape.js';
 export * from './lsh.js';

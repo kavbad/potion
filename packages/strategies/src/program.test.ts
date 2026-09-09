@@ -111,6 +111,73 @@ describe('program interpreter — mechanisms as data', () => {
     expect(strategyHash(a)).not.toBe(strategyHash({ type: 'single', model: 'cheap-a' }));
     expect(normalizeAnswer('  Paris. ')).toBe('paris');
   });
+
+
+// A vote or an agree that compares WHOLE answers is decided by prose style, not
+// by the answer: three models reasoning step by step never produce identical
+// text, so every bucket holds one vote and the majority rule never fires.
+// Agreement is judged on the answer the reply LANDS ON when it declares one.
+describe('consensus is judged on the answer, not the prose around it', () => {
+  const REASONED_540 = 'Step 1: 3 sprints x 3 days = 9.\nStep 2: 9 x 60 = 540 meters.\n\nFinal answer: 540';
+  const TERSE_540 = 'He runs 9 sprints a week.\nFinal answer: 540';
+  const WRONG_180 = 'Three sprints of 60 metres is 180.\n\nFinal answer: 180';
+
+  it('agree: two models that reason differently and land on the same number DO agree', async () => {
+    const { ctx, calls } = scripted({
+      'cheap-a': { text: REASONED_540, confidence: 0.6 },
+      'cheap-b': { text: TERSE_540, confidence: 0.8 },
+      strong: { text: 'Final answer: 540' },
+    });
+    const cfg: StrategyConfig = { type: 'program', name: 'coe', body: consensusOrEscalate('coe', 'cheap-a', 'cheap-b', 'strong') };
+    const r = await execute(cfg, MESSAGES, ctx);
+    expect(calls.sort()).toEqual(['cheap-a', 'cheap-b']); // the strong model is never reached
+    expect(r.text).toBe(TERSE_540); // cheap-b, the more confident of the two that agreed
+  });
+
+  it('agree: landing on different numbers still escalates', async () => {
+    const { ctx, calls } = scripted({
+      'cheap-a': { text: REASONED_540, confidence: 0.6 },
+      'cheap-b': { text: WRONG_180, confidence: 0.8 },
+      strong: { text: 'Final answer: 540' },
+    });
+    const cfg: StrategyConfig = { type: 'program', name: 'coe', body: consensusOrEscalate('coe', 'cheap-a', 'cheap-b', 'strong') };
+    const r = await execute(cfg, MESSAGES, ctx);
+    expect(calls.sort()).toEqual(['cheap-a', 'cheap-b', 'strong']);
+    expect(r.text).toBe('Final answer: 540');
+  });
+
+  it('agree: the same number written differently is the same answer', async () => {
+    const { ctx } = scripted({
+      'cheap-a': { text: 'Adding it up.\nFinal answer: 1,234', confidence: 0.6 },
+      'cheap-b': { text: 'The total.\n**Final answer: 1234**', confidence: 0.8 },
+      strong: { text: 'escalated' },
+    });
+    const cfg: StrategyConfig = { type: 'program', name: 'coe', body: consensusOrEscalate('coe', 'cheap-a', 'cheap-b', 'strong') };
+    expect((await execute(cfg, MESSAGES, ctx)).text).not.toBe('escalated');
+  });
+
+  it('vote: the majority answer wins even though all three replies read differently', async () => {
+    const { ctx } = scripted({
+      'cheap-a': { text: REASONED_540 },
+      'cheap-b': { text: WRONG_180 },
+      strong: { text: TERSE_540 },
+    });
+    const vote: StrategyConfig = { type: 'program', name: 'v', body: { op: 'vote', of: [{ op: 'call', model: 'cheap-b' }, { op: 'call', model: 'cheap-a' }, { op: 'call', model: 'strong' }] } };
+    expect((await execute(vote, MESSAGES, ctx)).text).toBe(REASONED_540); // first reply of the winning bucket, not the first branch
+  });
+
+  it('answers that declare no final answer keep comparing on the whole text', async () => {
+    const { ctx, calls } = scripted({
+      'cheap-a': { text: 'function add(a, b) { return a + b; } // 2 args', confidence: 0.6 },
+      'cheap-b': { text: 'const add = (a, b) => a - b; // 2 args', confidence: 0.8 },
+      strong: { text: 'escalated' },
+    });
+    const cfg: StrategyConfig = { type: 'program', name: 'coe', body: consensusOrEscalate('coe', 'cheap-a', 'cheap-b', 'strong') };
+    const r = await execute(cfg, MESSAGES, ctx);
+    expect(calls.sort()).toEqual(['cheap-a', 'cheap-b', 'strong']); // different code is not agreement
+    expect(r.text).toBe('escalated');
+  });
+});
 });
 
 // ---- THE SERIALIZATION LAW (compiler IR rung 1) ----
