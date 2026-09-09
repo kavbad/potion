@@ -635,6 +635,11 @@ describe('workloadFeaturesForCycle — the evidence half comes from the frontier
     // exactly the case where "escalate to a model" and "mutate a mechanism"
     // are different offers.
     expect(f!.incumbent).toEqual(combo);
+    // THE GAP, not just the order: the grammar refuses to staff a mixture with
+    // a model measured far below its best member, and it can only do that if
+    // the numbers reach it. Combinations are excluded here for the same reason
+    // they are excluded above — this maps an alias to its quality.
+    expect(f!.measuredQuality).toEqual({ 'mock-frontier': 0.93, 'mock-cheap': 0.7 });
   });
 
   it('a cluster with no published frontier carries no measured models at all', async () => {
@@ -644,6 +649,7 @@ describe('workloadFeaturesForCycle — the evidence half comes from the frontier
     const [f] = await workloadFeaturesForCycle(ctx(), items, undefined);
     expect(f!.clusterId).toBe('creative');
     expect(f!.measuredModels).toBeUndefined(); // absent, not an empty array
+    expect(f!.measuredQuality).toBeUndefined();
     expect(f!.incumbent).toBeUndefined();
   });
 });

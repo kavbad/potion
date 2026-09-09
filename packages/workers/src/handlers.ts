@@ -1424,6 +1424,16 @@ export async function workloadFeaturesForCycle(
         .filter((pt) => pt.strategyConfig.type === 'single')
         .map((pt) => (pt.strategyConfig as { type: 'single'; model: string }).model);
       const deduped = [...new Set(measured)];
+      // The GAP, not just the order: the grammar refuses to staff a mixture
+      // with a model measured far below its best member, and it can only do
+      // that if it is told the numbers. byQuality is descending, so the first
+      // sighting of an alias is its best measured point.
+      const measuredQuality: Record<string, number> = {};
+      for (const pt of byQuality) {
+        if (pt.strategyConfig.type !== 'single') continue;
+        const alias = (pt.strategyConfig as { type: 'single'; model: string }).model;
+        if (!(alias in measuredQuality)) measuredQuality[alias] = pt.quality;
+      }
       // THE INCUMBENT, WHOLE: the highest-quality point's config, whatever
       // shape it is. `measuredModels` gives the synthesizer somewhere to
       // escalate; this gives it something to MUTATE — and when the incumbent
@@ -1432,6 +1442,7 @@ export async function workloadFeaturesForCycle(
       return {
         ...f,
         ...(deduped.length > 0 ? { measuredModels: deduped } : {}),
+        ...(Object.keys(measuredQuality).length > 0 ? { measuredQuality } : {}),
         ...(incumbent !== undefined ? { incumbent } : {}),
       };
     }),
