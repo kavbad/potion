@@ -73,6 +73,59 @@ describe('generateCandidates — SPEC §15.1', () => {
     expect(models.length).toBe(3);
   });
 
+  // Fusion pays for EVERY member, so a member measured far below the best is
+  // not a peer — it only adds candidates the judge has to reject. Measured
+  // live on GSM8K (2026-09-08): a 3-model majority whose weakest member scored
+  // 0.78 against the best member's 0.97 lost to that member alone at 4x cost.
+  // Class membership answers "how expensive", never "how good on THIS work".
+  describe('ensemble peers respect measured quality, not just price class', () => {
+    /** Four mid-class peers across four providers, so a skip has somewhere to go. */
+    const midRegistry = (): ModelRegistryEntry[] =>
+      buildRegistry({
+        version: 'test', updatedAt: '2026-09-08',
+        entries: [
+          { alias: 'or-sonnet', provider: 'openrouter', model: 'a', inputPer1M: 3, outputPer1M: 15 },
+          { alias: 'mock-m', provider: 'mock', model: 'b', inputPer1M: 0.9, outputPer1M: 2 },
+          { alias: 'gemini-pro-class', provider: 'google', model: 'c', inputPer1M: 1.25, outputPer1M: 10 },
+          { alias: 'openai-m', provider: 'openai', model: 'd', inputPer1M: 2, outputPer1M: 8 },
+          { alias: 'sonnet-class', provider: 'anthropic', model: 'e', inputPer1M: 3, outputPer1M: 15 },
+          { alias: 'or-judge', provider: 'openrouter', model: 'f', inputPer1M: 3, outputPer1M: 15 },
+        ],
+      });
+    const members = (measuredQuality?: Record<string, number>): string[] | undefined => {
+      const ens = generateCandidatesExplained({
+        registry: midRegistry(), existingHashes: new Set(), focusAlias: 'or-sonnet',
+        ...(measuredQuality ? { workloads: [{ clusterId: 'c1', scoringKinds: ['exact'], measuredQuality }] } : {}),
+      }).find((c) => c.template === 'ensemble(focus+2x-peers)');
+      return ens === undefined ? undefined : (ens.config as { models: string[] }).models;
+    };
+
+    it('with no measured evidence the peers are the price-ordered class peers, unchanged', () => {
+      expect(members()).toEqual(['or-sonnet', 'mock-m', 'gemini-pro-class']);
+    });
+
+    it('a peer measured far below the best is skipped for the next eligible one', () => {
+      expect(members({ 'or-sonnet': 0.95, 'mock-m': 0.6, 'gemini-pro-class': 0.93, 'openai-m': 0.94 }))
+        .toEqual(['or-sonnet', 'gemini-pro-class', 'openai-m']);
+    });
+
+    it('a peer inside the band is kept', () => {
+      expect(members({ 'or-sonnet': 0.95, 'mock-m': 0.9, 'gemini-pro-class': 0.93 }))
+        .toEqual(['or-sonnet', 'mock-m', 'gemini-pro-class']);
+    });
+
+    it('an UNMEASURED peer stays eligible — the researcher exists to try new models', () => {
+      expect(members({ 'or-sonnet': 0.95, 'mock-m': 0.6 }))
+        .toEqual(['or-sonnet', 'gemini-pro-class', 'openai-m']);
+    });
+
+    it('the band is judged against the best MEASURED member, focus included', () => {
+      // The focus is weak here, so a 0.80 peer is no longer far below anything.
+      expect(members({ 'or-sonnet': 0.78, 'mock-m': 0.8, 'gemini-pro-class': 0.82 }))
+        .toEqual(['or-sonnet', 'mock-m', 'gemini-pro-class']);
+    });
+  });
+
   it('cheap-class focus: the surviving composite, and draft-verify', () => {
     const explained = generateCandidatesExplained(opts({ focusAlias: 'or-haiku' }));
     const templates = explained.map((c) => c.template);

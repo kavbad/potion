@@ -98,6 +98,10 @@ export interface WorkloadFeatures {
   /** PRIOR EVIDENCE: single-model aliases already measured on this cluster,
    *  best-quality first. */
   measuredModels?: string[];
+  /** PRIOR EVIDENCE, WITH THE NUMBER: measured quality per single-model alias
+   *  on this cluster. `measuredModels` gives an order; this gives the GAP,
+   *  which is what says whether two models belong in the same mixture. */
+  measuredQuality?: Record<string, number>;
   /** PRIOR EVIDENCE, WHOLE: the mechanism currently measured best on this
    *  cluster — not a model drawn out of it. Compiled to the IR and mutated
    *  into new mechanisms; see mutateIncumbent. */
@@ -583,6 +587,42 @@ function programCandidates(
   return out;
 }
 
+/**
+ * How far below the best measured member a peer may sit and still be a peer.
+ *
+ * Fusion pays for EVERY member. A model measured far below the others does not
+ * add a viewpoint, it adds a candidate the judge has to reject — and in a
+ * majority shape it can pair up and outvote the member that was right.
+ * Measured live on GSM8K (2026-09-08): a three-model majority whose weakest
+ * member answered 78% correctly against the best member's 97% scored BELOW
+ * that member run alone, at four times the cost and three times the latency.
+ *
+ * Class membership cannot see this. It answers "how expensive", and the whole
+ * lesson of that run is that price is not quality on a given workload: the
+ * cheapest model on the menu was also among the most accurate, while a
+ * similarly priced one was 19 points worse.
+ *
+ * UNMEASURED models are NOT excluded. The researcher exists to try new models,
+ * and "no evidence" is not evidence of weakness — only a model we have
+ * measured on THIS work, and found far below, is turned away.
+ */
+export const PEER_QUALITY_BAND = 0.1;
+
+/** How many class peers to draw before the quality filter narrows them to 2. */
+const PEER_POOL_DRAW = 8;
+
+/** Best quality each alias has shown across this cycle's workloads. */
+function bestMeasuredQuality(workloads: WorkloadFeatures[] | undefined): Map<string, number> {
+  const best = new Map<string, number>();
+  for (const w of workloads ?? []) {
+    for (const [alias, q] of Object.entries(w.measuredQuality ?? {})) {
+      const seen = best.get(alias);
+      if (seen === undefined || q > seen) best.set(alias, q);
+    }
+  }
+  return best;
+}
+
 /** All raw (unpruned) template instantiations for one focus entry. */
 function templatesFor(
   focus: ModelRegistryEntry,
@@ -719,9 +759,25 @@ function templatesFor(
     });
   }
 
-  // 6. ensemble — focus + 2 cross-provider same-class peers (judge-pick).
+  // 6. ensemble — focus + 2 cross-provider same-class peers (judge-pick),
+  //    minus any peer measured far below the best measured member
+  //    (PEER_QUALITY_BAND). The wider draw below is what gives a skipped peer
+  //    somewhere to go; with no measurements the first two are the same two
+  //    this template has always emitted.
   if (judgeRep) {
-    let peers = crossProviderPeers(registry, focus.cls, focus.provider, 2);
+    const quality = bestMeasuredQuality(workloads);
+    const pool = crossProviderPeers(registry, focus.cls, focus.provider, PEER_POOL_DRAW);
+    const known = [focus, ...pool]
+      .map((e) => quality.get(e.alias))
+      .filter((q): q is number => q !== undefined);
+    const floor = known.length > 0 ? Math.max(...known) - PEER_QUALITY_BAND : undefined;
+    let peers = (floor === undefined
+      ? pool
+      : pool.filter((e) => {
+          const q = quality.get(e.alias);
+          return q === undefined || q >= floor;
+        })
+    ).slice(0, 2);
     if (seed !== undefined && peers.length > 1) {
       // Seeded rotation of the deterministic peer list (tie-breaks only).
       const rand = mulberry32(seed);

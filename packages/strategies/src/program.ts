@@ -15,7 +15,7 @@
 //   · no side effects beyond provider calls; no loops (no node recurses);
 //   · every stage is traced, so the receipt can name what ran.
 import type { ChatMessage, ContextSelect, ProgramCheck, ProgramNode, PromptVariant, ReasoningEffort, ToolCall, ToolSelect, Usage } from '@potion/core';
-import { costUsd, MAX_PROGRAM_CALLS, programNodeKey, roundCost } from '@potion/core';
+import { consensusKey, costUsd, MAX_PROGRAM_CALLS, normalizeAnswer, programNodeKey, roundCost } from '@potion/core';
 import { applyPromptVariant, selectContext, selectTools } from '@potion/core';
 import { buildJudgeMessages, parsePick } from './helpers.js';
 import type { ExecContext, StageTrace, StrategyResult } from './types.js';
@@ -48,10 +48,10 @@ function addUsage(a: Usage, b: Usage): Usage {
   };
 }
 
-/** Agreement is judged on normalized text: case, whitespace, trailing punctuation. */
-export function normalizeAnswer(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.!?,;:]+$/g, '');
-}
+/** Agreement is judged on the answer a reply LANDS ON (core/consensus.ts):
+ *  a declared "Final answer: …" when there is one, else the whole normalized
+ *  text. Re-exported here because it was this module's public symbol first. */
+export { normalizeAnswer };
 
 export async function runProgram(
   name: string,
@@ -165,7 +165,7 @@ export async function runProgram(
           }
           const counts = new Map<string, { n: number; first: NodeResult }>();
           for (const r of results) {
-            const k = normalizeAnswer(r.text);
+            const k = consensusKey(r.text);
             const e = counts.get(k);
             if (e) e.n++; else counts.set(k, { n: 1, first: r });
           }
@@ -212,7 +212,7 @@ export async function runProgram(
         const spent = { trace: [...a.trace, ...b.trace], usage: addUsage(a.usage, b.usage) };
         const tool = a.toolCalls ?? b.toolCalls;
         if (tool !== undefined) return { ok: false, ...spent, toolCalls: tool };
-        return { ok: normalizeAnswer(a.text) === normalizeAnswer(b.text), ...spent };
+        return { ok: consensusKey(a.text) === consensusKey(b.text), ...spent };
       }
       case 'tool-called': {
         // The ONE check that does not short-circuit on a tool call: it is
