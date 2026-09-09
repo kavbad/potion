@@ -26,7 +26,15 @@
 //   KEY_RISK_ACCEPTED=<YYYY-MM-DD> pnpm exec tsx scripts/s4-live-killswitch.ts
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { buildServer } from '../apps/server/src/server.js';
+// @potion/server, not ../apps/server/src — the sibling scripts in this
+// directory import the PACKAGE, and a program holding both pulls the server's
+// `declare module 'fastify'` augmentation in TWICE with two different
+// PotionContext types: one from src, one from dist. That was harmless while
+// every member of PotionContext was structural, and became a hard error the
+// moment one of them (assignCache) was a class with a private field, since a
+// private member is nominal and src's copy is not dist's. Caught by CI's
+// typecheck:scripts on its first ever run.
+import { buildServer } from '@potion/server/server';
 
 const REPO = fileURLToPath(new URL('.', import.meta.url));
 

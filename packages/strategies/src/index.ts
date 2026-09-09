@@ -23,5 +23,8 @@ export {
   baseSeedOf,
 } from './helpers.js';
 export * from './program.js';
+// The compiler moved to @potion/core (pure data → data); re-exported here
+// because this is where its equivalence is PROVEN.
+export { compileToProgram, compileGaps, type CompileResult, type CompileRefusal } from '@potion/core';
 export * from './capabilities.js';
 export * from './exec-sandbox.js';

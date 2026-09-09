@@ -5,6 +5,7 @@
 // Boot completes with ZERO network and ZERO services: PGlite + mock provider
 // + mock embedder are the defaults; live providers/embeddings only engage
 // when the matching *_API_KEY env vars are present.
+import { AssignCache, ASSIGN_CACHE_MAX_ENTRIES, ASSIGN_CACHE_TTL_MS } from './assign-cache.js';
 import { copyFileSync, mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -167,9 +168,12 @@ export interface PotionContext {
    * S7 L1 from `Assignment` to `RankedAssignment` so a cache HIT records the
    * same demand signal a miss does — otherwise the signal would be present
    * only on the first request of each repeated prompt, which is exactly
-   * backwards: repetition is what makes a demand cell). Unbounded in the MVP
-   * (process-lifetime Map). */
-  assignCache: Map<string, RankedAssignment>;
+   * backwards: repetition is what makes a demand cell).
+   *
+   * P0-2 (2026-09-05): this WAS an unbounded process-lifetime Map, while a
+   * comment in chat.ts called it "the assignment LRU". It is now the LRU that
+   * comment claimed — size-capped and TTL'd, see assign-cache.ts. */
+  assignCache: AssignCache<RankedAssignment>;
   /**
    * S7 L2 — the in-process demand accumulator. The serve path pays a Map
    * update per request; a timer drains it into the database (server.ts).
@@ -271,8 +275,36 @@ export interface ContextOptions {
 
 /** sha256 cache key of the FIRST 512 chars of the concatenated user content
  * (SPEC §8). Falls back to all message content when no user role exists. */
+/**
+ * The assignment cache's key.
+ *
+ * P0-3 (external review, 2026-09-05): this hashed `join('\n').slice(0, 512)`
+ * while all three call sites embedded the join UNTRUNCATED — so two requests
+ * sharing a 512-character prefix got the first one's classification. It bit
+ * agent traffic hardest, which is the target workload class: in a long session
+ * the first user turn carries the task and usually exceeds 512 characters, so
+ * every subsequent turn silently reused turn one's cluster.
+ *
+ * A key must cover EXACTLY what the cached value was computed from, and the
+ * truncation bought nothing it could have been trading for: sha256 is
+ * fixed-width whatever it is given, so there was never a key-size argument.
+ * Hashing a few extra kilobytes costs microseconds against an embedding call
+ * that costs milliseconds and money.
+ */
 export function assignmentCacheKey(contents: string[]): string {
-  return sha256(contents.join('\n').slice(0, 512));
+  return sha256(contents.join('\n'));
+}
+
+/** P0-2: operator dials for the assignment cache. Defaults are the module's;
+ *  a value below 1 is ignored rather than honoured — an unbounded cache is the
+ *  defect, and it must not be reachable by typo. */
+function assignCacheMaxFromEnv(): number {
+  const n = Number(process.env.POTION_ASSIGN_CACHE_MAX);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : ASSIGN_CACHE_MAX_ENTRIES;
+}
+function assignCacheTtlFromEnv(): number {
+  const n = Number(process.env.POTION_ASSIGN_CACHE_TTL_MS);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : ASSIGN_CACHE_TTL_MS;
 }
 
 function envApiKeys(): Partial<Record<ProviderId, string>> {
@@ -588,7 +620,7 @@ export async function buildContext(opts: ContextOptions = {}): Promise<PotionCon
     ...(orgFactory !== undefined ? { providerFactory: orgFactory } : {}),
     assigner,
     embedder: caching,
-    assignCache: new Map<string, RankedAssignment>(),
+    assignCache: new AssignCache<RankedAssignment>(assignCacheMaxFromEnv(), assignCacheTtlFromEnv()),
     demand: new DemandAccumulator(),
     demandOptOut: new Set<string>(),
     demandEnabled: process.env.POTION_DEMAND_LEARNING !== '0',

@@ -4,9 +4,10 @@
 // usage.input_tokens/output_tokens → Usage. Anthropic exposes no logprobs,
 // so logprobConfidence is always undefined.
 // embed: intentionally undefined — Anthropic has no embeddings API (v1).
+import { ProviderEffortRefusalError } from '../errors.js';
 import type { CompleteRequest, CompleteResponse, Provider } from '../types.js';
 import { postJsonWithRetry } from '../http.js';
-import { resolveModel, samplingParams, splitSystem, type LiveProviderOptions } from './common.js';
+import { effortRefusal, resolveModel, samplingParams, splitSystem, thinkingBudgetFor, type LiveProviderOptions } from './common.js';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -35,6 +36,14 @@ export function createAnthropicProvider(opts: LiveProviderOptions): Provider {
       };
       if (system !== undefined) body.system = system;
       if (sampling.temperature !== undefined) body.temperature = sampling.temperature;
+      // C4: effort as a THINKING BUDGET. Refuse rather than answer without it.
+      if (req.params?.reasoningEffort !== undefined) {
+        const budget = thinkingBudgetFor(req.params.reasoningEffort, sampling.maxTokens);
+        if (budget === null) {
+          throw new ProviderEffortRefusalError('anthropic', effortRefusal('anthropic', req.params.reasoningEffort, sampling.maxTokens));
+        }
+        body.thinking = { type: 'enabled', budget_tokens: budget };
+      }
 
       const { json } = await postJsonWithRetry<AnthropicResponse>(
         'anthropic',

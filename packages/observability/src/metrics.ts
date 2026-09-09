@@ -46,6 +46,12 @@ export interface Metrics {
   }): void;
   setBreakerState(key: string, state: BreakerState): void;
   observeShadow?(s: { clusterId: string; sampled: boolean }): void;
+  /**
+   * P1-3 liveness: who is draining the job queue. `stalled` is the alertable
+   * one — work waiting with nothing attached to run it. OPTIONAL so
+   * out-of-tree Metrics impls keep compiling.
+   */
+  setQueueConsumers?(c: { waiting: number; consumers: number; stalled: boolean }): void;
   /** M3 #22 quality guarantee (SPEC §12.5): one increment per guarantee
    * breach incident written. OPTIONAL so out-of-tree Metrics impls keep
    * compiling (NoopMetrics below no-ops it). */
@@ -80,6 +86,9 @@ export class PromMetrics implements Metrics {
     'cluster_id' | 'strategy_hash' | 'fallback' | 'provenance'
   >;
   private readonly breakerState: Gauge<'key'>;
+  private readonly queueWaiting: Gauge<string>;
+  private readonly queueConsumers: Gauge<string>;
+  private readonly queueStalled: Gauge<string>;
   private readonly shadowDecisionsTotal: Counter<'cluster_id' | 'sampled'>;
   private readonly guaranteeBreachesTotal: Counter<'org_id' | 'action'>;
   private readonly budgetEventsTotal: Counter<'org_id' | 'kind'>;
@@ -130,6 +139,21 @@ export class PromMetrics implements Metrics {
       name: 'potion_breaker_state',
       help: 'Circuit-breaker state per (provider,model) key: 0=closed 1=half-open 2=open',
       labelNames: ['key'],
+      registers: [this.registry],
+    });
+    this.queueWaiting = new Gauge({
+      name: 'potion_queue_waiting_jobs',
+      help: 'Jobs accepted and not yet started',
+      registers: [this.registry],
+    });
+    this.queueConsumers = new Gauge({
+      name: 'potion_queue_consumers',
+      help: 'Processes attached to the job queue as consumers',
+      registers: [this.registry],
+    });
+    this.queueStalled = new Gauge({
+      name: 'potion_queue_stalled',
+      help: 'P1-3: 1 when work is waiting and NO consumer is attached to run it',
       registers: [this.registry],
     });
     this.shadowDecisionsTotal = new Counter({
@@ -208,6 +232,12 @@ export class PromMetrics implements Metrics {
     });
   }
 
+  setQueueConsumers(c: { waiting: number; consumers: number; stalled: boolean }): void {
+    this.queueWaiting.set(c.waiting);
+    this.queueConsumers.set(c.consumers);
+    this.queueStalled.set(c.stalled ? 1 : 0);
+  }
+
   setBreakerState(key: string, state: BreakerState): void {
     this.breakerState.set({ key }, BREAKER_STATE_VALUE[state]);
   }
@@ -254,6 +284,7 @@ export class NoopMetrics implements Metrics {
   observeFrontierDecision(): void {}
   setBreakerState(): void {}
   observeShadow(): void {}
+  setQueueConsumers(): void {}
   observeGuaranteeBreach(): void {}
   observeBudgetEvent(): void {}
   observeAlertNotificationLatency(): void {}

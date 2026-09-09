@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { strategyHash, type EvalResult, type StrategyConfig } from '@potion/core';
+import { strategyHash, type EvalItem, type EvalResult, type StrategyConfig } from '@potion/core';
 import {
   loadModelRegistry,
   alertDeliveries,
@@ -29,14 +29,25 @@ import {
   strategyConfigs,
   type DbHandle,
   type NewTraceSpan,
+  models,
+  recordModelFailure,
+  unhealthyModels,
+  MODEL_UNHEALTHY_AFTER,
+  seedModelRegistry,
 } from '@potion/db';
+import { buildRegistry, classRepresentative } from '@potion/researcher';
 import { loadCurrentFrontier, saveFrontier } from '@potion/pareto';
 import { cacheKeyOf, loadSuiteV2 } from '@potion/harness';
 import { loadPrices } from '@potion/providers';
 import { inArray } from 'drizzle-orm';
 import {
   orgHashOf,
+  programSynthesisArmed,
+  promotionFamilySize,
+  promotionThresholdsFromEnv,
+  recordSingleModelHealth,
   researchCycleHandler,
+  workloadFeaturesForCycle,
   researchScanHandler,
   RESEARCH_V2_SUITE_IDS,
   toolSignatureSlug,
@@ -554,5 +565,213 @@ describe('platform sweep refuses a candidate pool the ceiling cannot represent',
     // …and naming it explicitly is the acknowledgement that lets it run.
     const acknowledged: number | undefined = 12;
     expect(acknowledged === undefined && poolSize > PLATFORM_SWEEP_MAX_ANSWERERS).toBe(false);
+  });
+});
+
+// ---- C2 arming (docs/INFERENCE-COMPILER-PLAN.md) ----
+describe('program synthesis is armed by the operator, never by default', () => {
+  const saved = process.env.POTION_SYNTH_PROGRAMS;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.POTION_SYNTH_PROGRAMS;
+    else process.env.POTION_SYNTH_PROGRAMS = saved;
+  });
+
+  it('is off when unset, and off for anything but an explicit yes', () => {
+    delete process.env.POTION_SYNTH_PROGRAMS;
+    expect(programSynthesisArmed()).toBe(false);
+    for (const v of ['', '0', 'false', 'no', 'yes', 'on', 'TRUE']) {
+      process.env.POTION_SYNTH_PROGRAMS = v;
+      expect(programSynthesisArmed()).toBe(false);
+    }
+  });
+
+  it('arms on 1 or true — the two spellings the other dials accept', () => {
+    process.env.POTION_SYNTH_PROGRAMS = '1';
+    expect(programSynthesisArmed()).toBe(true);
+    process.env.POTION_SYNTH_PROGRAMS = 'true';
+    expect(programSynthesisArmed()).toBe(true);
+  });
+});
+
+// ---- C2 workload conditioning (docs/INFERENCE-COMPILER-PLAN.md) ----
+describe('workloadFeaturesForCycle — the evidence half comes from the frontier', () => {
+  const item = (clusterId: string, scoring: EvalItem['scoring']): EvalItem => ({
+    id: `${clusterId}-1`,
+    clusterId: clusterId as EvalItem['clusterId'],
+    prompt: [{ role: 'user', content: 'q' }],
+    scoring,
+  });
+  const point = (cfg: StrategyConfig, quality: number) => ({
+    clusterId: 'extraction' as const,
+    strategyHash: strategyHash(cfg),
+    strategyConfig: cfg,
+    quality,
+    costPer1K: 1,
+    latencyP95: 900,
+  });
+
+  it('names the measured single models best-first, and never a combination', async () => {
+    const best: StrategyConfig = { type: 'single', model: 'mock-frontier' };
+    const ok: StrategyConfig = { type: 'single', model: 'mock-cheap' };
+    // A combination on the frontier is a MECHANISM, not something a program
+    // can escalate to with one call — it must not appear as a target.
+    const combo: StrategyConfig = { type: 'draft-verify', draftModel: 'mock-cheap', verifierModel: 'mock-frontier' };
+    await saveFrontier(
+      db.db,
+      'extraction',
+      [point(ok, 0.7), point(best, 0.93), point(combo, 0.99)],
+      'manual',
+      '2026-09-05',
+    );
+
+    const items = new Map<string, EvalItem[]>([
+      ['s1', [item('extraction', { kind: 'field-match', schema: { order: 'string' } })]],
+    ]);
+    const [f] = await workloadFeaturesForCycle(ctx(), items, undefined);
+    expect(f!.clusterId).toBe('extraction');
+    expect(f!.requiredKeys).toEqual(['order']);
+    expect(f!.measuredModels).toEqual(['mock-frontier', 'mock-cheap']); // quality desc
+    // The incumbent is the best point WHOLE — here the combination, which is
+    // exactly the case where "escalate to a model" and "mutate a mechanism"
+    // are different offers.
+    expect(f!.incumbent).toEqual(combo);
+  });
+
+  it('a cluster with no published frontier carries no measured models at all', async () => {
+    const items = new Map<string, EvalItem[]>([
+      ['s1', [item('creative', { kind: 'llm-judge', rubric: 'r', judgeModel: 'j', scale: [0, 10] })]],
+    ]);
+    const [f] = await workloadFeaturesForCycle(ctx(), items, undefined);
+    expect(f!.clusterId).toBe('creative');
+    expect(f!.measuredModels).toBeUndefined(); // absent, not an empty array
+    expect(f!.incumbent).toBeUndefined();
+  });
+});
+
+// ---- 0094 MODEL HEALTH (docs/INFERENCE-COMPILER-PLAN.md) ----
+//
+// Found live: classRepresentative picks the CHEAPEST in class, and price was
+// all the registry knew — so every cycle nominated `or-ling-3.0-flash`, a
+// model that could not complete three of four measured arms.
+async function loadPricesForTest() {
+  return loadPrices(pricesPath).table;
+}
+
+describe('a model that fails out stops being selectable', () => {
+  beforeEach(async () => {
+    // The catalog is what carries health, so it has to exist.
+    await seedModelRegistry(db.db, await loadPricesForTest());
+  });
+
+  const SINGLE_A: StrategyConfig = { type: 'single', model: 'mock-cheap' };
+  const SINGLE_B: StrategyConfig = { type: 'single', model: 'mock-mid' };
+  const COMBO: StrategyConfig = { type: 'cascade', stages: [{ model: 'mock-cheap' }, { model: 'mock-mid' }], confidenceMethod: 'logprob' };
+
+  it('a failing SINGLE is recorded; a completing one has its streak cleared', async () => {
+    await recordSingleModelHealth(
+      ctx(),
+      { failedStrategies: [{ strategyHash: strategyHash(SINGLE_A), error: 'rate limited (429) after 4 attempts' }] },
+      [SINGLE_A, SINGLE_B],
+    );
+    const rows = await db.db.select().from(models);
+    const a = rows.find((r) => r.alias === 'mock-cheap')!;
+    const b = rows.find((r) => r.alias === 'mock-mid')!;
+    expect(a.consecutiveFailures).toBe(1);
+    expect(a.lastFailureReason).toContain('429');
+    expect(b.consecutiveFailures).toBe(0);
+  });
+
+  it('a COMBINATION failing blames nobody — it does not say which stage died', async () => {
+    const before = (await db.db.select().from(models)).find((r) => r.alias === 'mock-frontier')!;
+    await recordSingleModelHealth(
+      ctx(),
+      { failedStrategies: [{ strategyHash: strategyHash(COMBO), error: 'timed out' }] },
+      [COMBO],
+    );
+    const after = (await db.db.select().from(models)).find((r) => r.alias === 'mock-frontier')!;
+    expect(after.consecutiveFailures).toBe(before.consecutiveFailures);
+  });
+
+  it('past the threshold the model is excluded, and selection takes a dearer working one', async () => {
+    for (let i = 0; i < MODEL_UNHEALTHY_AFTER; i++) {
+      await recordModelFailure(db.db, 'mock-cheap', 'rate limited');
+    }
+    const sick = await unhealthyModels(db.db);
+    expect(sick.has('mock-cheap')).toBe(true);
+    const registry = buildRegistry(await loadPricesForTest()).map((e) =>
+      sick.has(e.alias) ? { ...e, unhealthy: true } : e);
+    const rep = classRepresentative(registry, 'cheap');
+    expect(rep?.alias).not.toBe('mock-cheap');
+  });
+});
+
+// ---- P1-1: the promotion gate is told how many tests it is one of ----
+describe('promotionFamilySize — what the Bonferroni correction is over', () => {
+  const pts = (...hashes: string[]) => new Map(hashes.map((h) => [h, {}]));
+
+  it('counts the candidates that will actually be gate-tested', () => {
+    // c and d are on the frontier and are not the incumbent → 2 tests.
+    expect(promotionFamilySize(['c', 'd'], pts('c', 'd', 'inc'), 'inc')).toBe(2);
+  });
+
+  it('a candidate that missed the frontier is never tested, so it is not in the family', () => {
+    // Inflating m past the real family only makes the gate deaf.
+    expect(promotionFamilySize(['c', 'd'], pts('c', 'inc'), 'inc')).toBe(1);
+  });
+
+  it('the incumbent comparing against itself is not a test', () => {
+    expect(promotionFamilySize(['inc', 'c'], pts('inc', 'c'), 'inc')).toBe(1);
+  });
+
+  it('a duplicated hash is one test, not two', () => {
+    expect(promotionFamilySize(['c', 'c', 'd'], pts('c', 'd'), 'inc')).toBe(2);
+  });
+
+  it('a bootstrap cycle (no incumbent) still counts the candidates on the frontier', () => {
+    expect(promotionFamilySize(['c', 'd'], pts('c', 'd'), null)).toBe(2);
+  });
+
+  it('a single candidate is a family of one — alpha stays 0.05, nothing changes', () => {
+    expect(promotionFamilySize(['c'], pts('c', 'inc'), 'inc')).toBe(1);
+  });
+});
+
+// ---- the cost path's non-inferiority margin is an operator dial ----
+describe('promotionThresholdsFromEnv — the cost-quality margin', () => {
+  const KEY = 'POTION_RESEARCH_COST_QUALITY_MARGIN';
+  const saved = process.env[KEY];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[KEY];
+    else process.env[KEY] = saved;
+  });
+
+  it('unset leaves the gate on its own default', () => {
+    delete process.env[KEY];
+    expect(promotionThresholdsFromEnv().costQualityMargin).toBeUndefined();
+  });
+
+  it('EMPTY is unset, not zero — Number("") is 0 and would kill the cost path', () => {
+    // The only one of these knobs whose valid range includes 0, so the only
+    // one where an empty value in a .env file could silently disable a path.
+    process.env[KEY] = '';
+    expect(promotionThresholdsFromEnv().costQualityMargin).toBeUndefined();
+    process.env[KEY] = '   ';
+    expect(promotionThresholdsFromEnv().costQualityMargin).toBeUndefined();
+  });
+
+  it('an explicit 0 IS honoured — "no regression at all" is a real choice', () => {
+    // It costs the cost path all of its power (a zero-margin non-inferiority
+    // test can never be met), which is a legitimate quality-path-only stance.
+    process.env[KEY] = '0';
+    expect(promotionThresholdsFromEnv().costQualityMargin).toBe(0);
+  });
+
+  it('a stricter margin passes through; nonsense does not', () => {
+    process.env[KEY] = '0.005';
+    expect(promotionThresholdsFromEnv().costQualityMargin).toBe(0.005);
+    for (const bad of ['abc', '-0.01', '1', '2']) {
+      process.env[KEY] = bad;
+      expect(promotionThresholdsFromEnv().costQualityMargin).toBeUndefined();
+    }
   });
 });

@@ -452,3 +452,60 @@ describe('zero key material in errors', () => {
     expect((err as ProviderError).message).not.toContain(SECRET);
   });
 });
+
+// ---- P0-1 (external review, 2026-09-05): embed had no resilience ----
+//
+// `embed` passed through this wrapper untouched — no retry, no per-attempt
+// timeout, no F19 breaker — on the reasoning that §12.1 defines retry for
+// complete() and that the mock must stay deterministic. The second half does
+// not follow from the first: a timeout and a bounded retry change WHEN a call
+// gives up, not WHAT a mock returns. And the embedder is the hardest
+// dependency on the serve path: every classified request waits on it.
+describe('P0-1: embed is wrapped like everything else', () => {
+  const texts = ['hello'];
+  function embedder(impl: (n: number) => Promise<number[][]>): Provider {
+    let calls = 0;
+    return {
+      id: 'openai',
+      complete: async () => { throw new Error('not used'); },
+      embed: async () => impl(++calls),
+    };
+  }
+
+  it('RETRIES a retryable embed failure instead of surfacing the first one', async () => {
+    const p = resilient(
+      embedder(async (n) => {
+        if (n < 3) throw new ProviderError('openai', 'flaky', { kind: 'server_5xx' });
+        return [[1, 2, 3]];
+      }),
+      { retries: 3, backoff: { baseMs: 1, maxMs: 2, jitter: 'none' } },
+    );
+    expect(await p.embed!(texts)).toEqual([[1, 2, 3]]);
+  });
+
+  it('does NOT retry a client error — that is evidence about the caller', async () => {
+    let calls = 0;
+    const p = resilient(
+      embedder(async (n) => { calls = n; throw new ProviderError('openai', 'bad input', { kind: 'client_4xx' }); }),
+      { retries: 3, backoff: { baseMs: 1, maxMs: 2, jitter: 'none' } },
+    );
+    await expect(p.embed!(texts)).rejects.toThrow('bad input');
+    expect(calls).toBe(1);
+  });
+
+  it('ABORTS a hung embedder at the declared timeout instead of hanging the request', async () => {
+    const p = resilient(
+      embedder(() => new Promise(() => { /* never settles */ })),
+      { retries: 0, timeoutMs: 40 },
+    );
+    const started = Date.now();
+    await expect(p.embed!(texts)).rejects.toThrow(/timed out/);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('a deterministic embedder is returned unchanged — the mock concern was about output, not timing', async () => {
+    const p = resilient(embedder(async () => [[0.5, 0.5]]));
+    expect(await p.embed!(texts)).toEqual([[0.5, 0.5]]);
+    expect(await p.embed!(texts)).toEqual([[0.5, 0.5]]);
+  });
+});

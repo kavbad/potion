@@ -1,5 +1,7 @@
 // Shared helpers for the live transports: alias resolution, system-message
 // splitting and sampling params (SPEC §2).
+import { REASONING_BUDGET_TOKENS } from '@potion/core';
+import type { ReasoningEffort } from '@potion/core';
 import type { ChatMessage, PriceEntry, PriceTable } from '@potion/core';
 import type { CompleteRequest } from '../types.js';
 import type { RetryOptions } from '../http.js';
@@ -57,4 +59,33 @@ export function samplingParams(req: CompleteRequest): {
   if (p.temperature !== undefined) out.temperature = p.temperature;
   if (p.seed !== undefined) out.seed = p.seed;
   return out;
+}
+
+
+/**
+ * C4: token budgets for the transports that express reasoning effort as a
+ * NUMBER rather than a word (Anthropic `thinking.budget_tokens`, Google
+ * `thinkingConfig.thinkingBudget`).
+ *
+ * Anthropic requires budget_tokens >= 1024 AND max_tokens > budget_tokens. A
+ * request whose output budget cannot hold the thinking budget cannot honor the
+ * effort, and answering anyway would record thought that never happened — so
+ * this returns null and the caller REFUSES.
+ */
+export const MIN_THINKING_BUDGET = 1024;
+
+export function thinkingBudgetFor(effort: ReasoningEffort, maxTokens: number): number | null {
+  const wanted = REASONING_BUDGET_TOKENS[effort];
+  const affordable = Math.min(wanted, maxTokens - 1);
+  return affordable >= MIN_THINKING_BUDGET ? affordable : null;
+}
+
+/** The message a transport uses when it cannot honor an effort request. */
+export function effortRefusal(provider: string, effort: ReasoningEffort, maxTokens: number): string {
+  return (
+    `provider '${provider}': cannot honor reasoningEffort '${effort}' within an output budget of ` +
+    `${maxTokens} tokens (thinking needs at least ${MIN_THINKING_BUDGET}, and the budget must fit ` +
+    `strictly inside max_tokens) — refusing rather than answering without thinking, which would be ` +
+    `recorded as effort that never happened`
+  );
 }

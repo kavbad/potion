@@ -208,6 +208,27 @@ export class BullMQPotionQueue implements PotionQueue {
     this.worker.on('error', () => {});
   }
 
+  /**
+   * P1-3 liveness. `getWorkersCount` is Redis's own view of who is attached
+   * to this queue — a worker that crashed, OOM'd, or was never started has no
+   * client registered, so this is the fact the boot gate could not have.
+   */
+  async consumerHealth(): Promise<{ waiting: number; consumers: number }> {
+    try {
+      const [waiting, consumers] = await Promise.all([
+        this.queue.getWaitingCount(),
+        this.queue.getWorkersCount(),
+      ]);
+      return { waiting, consumers };
+    } catch (error) {
+      throw new QueueUnavailableError(
+        'consumerHealth failed — Redis unreachable or closed',
+        this.redisUrl,
+        { cause: error },
+      );
+    }
+  }
+
   async getJob(id: string): Promise<JobStatus | null> {
     try {
       const job = await this.queue.getJob(id);
