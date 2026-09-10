@@ -4477,12 +4477,26 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // a future retry to resume; this frontier does not touch them.
     const failedHashes = new Set(summary.failedStrategies.map((f) => f.strategyHash));
     const completeStrategies = strategies.filter((st) => !failedHashes.has(strategyHash(st)));
+    // BOUNDARY SUITE (2026-09-08): when the items name their parent slices,
+    // the evidence is read across the boundary AND its parents on exactly
+    // these items, and the point's quality is its weakest slice. Without
+    // this the sweep sees only the cells measured FRESH under the boundary's
+    // own cluster id — a cell the runner resumed from a parent suite is
+    // stored under the PARENT — so both boundary frontiers published that
+    // day were measured on partial unions.
+    const boundaryItems = committedItems.some((i) => i.slice !== undefined)
+      ? committedItems.map((i) => ({ id: i.id, ...(i.slice !== undefined ? { slice: i.slice } : {}) }))
+      : undefined;
     const aggregates = await aggregatesFromEvalResults(
       ctx.db,
       payload.clusterId,
       completeStrategies,
       prices.version,
-      { providerMode: 'live', instrument: payload.instrument ?? 'default' },
+      {
+        providerMode: 'live',
+        instrument: payload.instrument ?? 'default',
+        ...(boundaryItems !== undefined ? { items: boundaryItems } : {}),
+      },
     );
     // REGRESSION GUARD. A sweep publishes a NEW frontier version; if a
     // candidate failed this run, aggregatesFromEvalResults simply does not

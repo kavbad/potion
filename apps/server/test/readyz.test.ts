@@ -84,7 +84,14 @@ describe('GET /readyz (SPEC §12.8)', () => {
     }
   });
 
-  it('db ping timeout path → 503 with a timeout detail', async () => {
+  // CONTRACT CHANGED 2026-09-06, and this test is the record of why. It used
+  // to assert that a hung db ping made the instance UNREADY, which is what a
+  // readiness probe classically does — and in production that is what pulled
+  // the only replica out of rotation under load and turned saturation into a
+  // 32%-failure outage. A hung driver here is indistinguishable from a busy
+  // one, and busy must keep serving. The timeout DETAIL still has to survive,
+  // because an operator needs to see it; only the verdict changed.
+  it('db ping timeout path → still ready, flagged degraded, timeout detail intact', async () => {
     const db = await createDb();
     const ctx = asCtx({
       db: {
@@ -94,8 +101,9 @@ describe('GET /readyz (SPEC §12.8)', () => {
       },
     });
     const report = await checkReadiness(ctx, { dbTimeoutMs: 25 });
-    expect(report.ok).toBe(false);
-    expect(report.checks.db).toMatchObject({ ok: false, driver: 'node-postgres' });
+    expect(report.ok).toBe(true);
+    expect(report.degraded).toBe(true);
+    expect(report.checks.db).toMatchObject({ ok: true, degraded: true, driver: 'node-postgres' });
     expect(report.checks.db.detail).toContain('timeout after 25ms');
     expect(report.checks.queue.ok).toBe(true);
     await db.close();
@@ -179,5 +187,53 @@ describe('GET /readyz (SPEC §12.8)', () => {
     } finally {
       await victim.close().catch(() => {});
     }
+  });
+});
+
+// 2026-09-06, from a production load test. Caddy health-checks /readyz every
+// 10s and drains the upstream on a 503. Under sustained load the db ping
+// exceeded its 2s budget — because WE were busy, not because the database was
+// down — so /readyz reported unhealthy, the only replica was pulled from
+// rotation, and the proxy answered 478 of 1500 requests with 503 while the
+// server sat there able to serve them. The probe meant to protect the service
+// was the thing taking it down, at roughly 15 rps.
+describe('a SLOW dependency is not a DOWN one', () => {
+  const slow = (ms: number) => ({
+    db: {
+      db: { execute: () => new Promise((r) => setTimeout(r, ms)) },
+      driver: 'pglite',
+      close: async () => {},
+    },
+  });
+  const broken = {
+    db: {
+      db: { execute: () => Promise.reject(new Error('connection refused')) },
+      driver: 'pglite',
+      close: async () => {},
+    },
+  };
+
+  it('a db ping that TIMES OUT stays ready, and says it is degraded', async () => {
+    const report = await checkReadiness(asCtx(slow(200)), { dbTimeoutMs: 20 });
+    expect(
+      report.ok,
+      'draining a saturated instance removes capacity from a system already short of it',
+    ).toBe(true);
+    expect(report.degraded).toBe(true);
+    expect(report.checks.db.degraded).toBe(true);
+    expect(report.checks.db.detail).toMatch(/timeout/i);
+  });
+
+  it('a db ping that ERRORS is still not ready — draining is for broken, not busy', async () => {
+    const report = await checkReadiness(asCtx(broken), { dbTimeoutMs: 500 });
+    expect(report.ok).toBe(false);
+    expect(report.degraded).toBeUndefined();
+    expect(report.checks.db.detail).toMatch(/refused/i);
+  });
+
+  it('a healthy instance is neither degraded nor unready', async () => {
+    const report = await checkReadiness(asCtx(slow(0)), { dbTimeoutMs: 500 });
+    expect(report.ok).toBe(true);
+    expect(report.degraded).toBeUndefined();
   });
 });
