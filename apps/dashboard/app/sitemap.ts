@@ -31,7 +31,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
   return [
-    { url: `${origin}/home`, changeFrequency: 'weekly', priority: 1 },
+    // '/' IS THE LANDING (operator, 2026-09-05). It was absent entirely while
+    // /home — its duplicate — held priority 1, so the one page whose title
+    // changed had no entry and no lastmod to prompt a recrawl. /home stays
+    // served and shareable (it is the session-proof URL) but is NOT listed:
+    // two sitemap entries for one page is how authority gets split. Its
+    // canonical points here instead.
+    { url: `${origin}/`, changeFrequency: 'weekly', priority: 1, lastModified: new Date() },
     { url: `${origin}/docs`, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${origin}/terms`, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${origin}/privacy`, changeFrequency: 'yearly', priority: 0.3 },

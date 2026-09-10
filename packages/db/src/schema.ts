@@ -222,6 +222,11 @@ export const models = pgTable('models', {
   reasoning: boolean('reasoning'),
   /** 'seed' (committed prices.json) | 'scan' (discovered live). */
   source: text('source').notNull().default('seed'),
+  /** 0094 model health. A counter, not a flag: one 429 is weather, four in a
+   *  row is a model. Reset by any completed run. */
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  lastFailureAt: timestamp('last_failure_at', { withTimezone: true }),
+  lastFailureReason: text('last_failure_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -938,7 +943,7 @@ export type AlertEvent =
   // human — a challenger proved on this org's own traffic, or a discovered
   // workload finished measuring and can be routed. Everything the evidence
   // plane earns is inert until someone accepts it, and until now the only
-  // way to discover that was to visit the router page. Same TS-only
+  // way to discover that was to visit the Compiler page. Same TS-only
   // widening as the events above (alert_rules.events is text[], no DB
   // CHECK), so no migration.
   | 'evidence_ready';

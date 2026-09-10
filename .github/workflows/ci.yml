@@ -5,11 +5,21 @@
 # Plus the M2-security gates that already lived here (gitleaks secrets scan).
 name: ci
 
+# TRIGGERS (fixed 2026-09-07). These read `branches: [master]`, and this repo
+# has no `master` — so this workflow fired on NOTHING. Not "no checks on that
+# PR": no checks on any push or any pull request, silently, with an empty
+# check list looking much like a passing one.
+#
+# `pull_request` deliberately carries NO base filter. A base filter is exactly
+# how CI stops without saying so: work here is done on branches cut from
+# `deploy/**` rather than from the default branch, and a filter naming one
+# branch gives a PR into any other branch no CI and no error. Every pull
+# request runs it; `push` stays scoped to the branches worth the runner
+# minutes on every commit.
 on:
   push:
-    branches: [main]
+    branches: [main, 'deploy/**']
   pull_request:
-    branches: [main]
 
 # Cancel superseded runs on the same ref (saves runner minutes on rapid pushes).
 concurrency:
@@ -26,6 +36,14 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Least privilege, and `pull-requests: read` is load-bearing: the gitleaks
+    # action lists a PR's commits to decide what to scan, and the default token
+    # cannot, so the scan died with a 403 rather than a finding. Both this and
+    # the missing GITHUB_TOKEN above were invisible for as long as the workflow
+    # triggered on a branch that does not exist.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,9 +106,15 @@ jobs:
       - name: Typecheck
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: pnpm typecheck
+      # Packages one at a time, not pnpm's default four. Combined with the CI
+      # worker cap in vitest.config.ts this keeps the runner inside its process
+      # budget; without it the suite fails on whichever test happens to fork
+      # when the budget runs out. Wall clock traded for a result that means
+      # something. @potion/workers is EXCLUDED here and runs in the `workers`
+      # job below — see that job for why.
       - name: Test
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm test
+        run: pnpm --filter '!@potion/workers' -r test && pnpm test:scripts
 
       # M2-security: secrets gate. Runs the gitleaks BINARY over the full
       # history rather than gitleaks-action, which derives a COMMIT RANGE from
@@ -150,3 +174,63 @@ jobs:
         with:
           name: sbom
           path: artifacts/sbom.cyclonedx.json
+
+  # ---------------------------------------------------------------------------
+  # @potion/workers, on a runner of its own.
+  #
+  # Its lab-run tests boot a REAL sandbox — a Python server that forks a shell,
+  # which forks git. Sharing a runner with the other twenty-three packages, that
+  # fork failed:
+  #
+  #   __potion_main__.sh: fork: retry: Resource temporarily unavailable
+  #   exitCode 254, timedOut false, filesWritten []
+  #
+  # and the assertion it produced was about a missing output file, three layers
+  # from the cause. Tuning did not reach it: the same test passed in one run and
+  # failed in the next, and it still failed with the package fully serialized
+  # (maxWorkers 1, fileParallelism false) AND nothing else running beside it
+  # (--workspace-concurrency=1) — failing 25 minutes into the step, after most
+  # of the suite. That is the runner accumulating over the whole job, not test
+  # parallelism, and no concurrency setting reaches it.
+  #
+  # A second runner starts empty. That is the whole fix.
+  # ---------------------------------------------------------------------------
+  workers:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm 9.15.9 (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+
+      - name: pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      # The workers tests import other packages as dist, so the tree is built
+      # in runtime-dependency order first (see scripts/build-ordered.mjs).
+      - run: pnpm build
+
+      # python3 and git are what the sandbox forks; the test skips itself
+      # without them, and a silent skip is the failure mode this job exists to
+      # avoid. Fail here instead, where the reason is one line.
+      - name: The sandbox needs python3 and git
+        run: |
+          command -v python3
+          command -v git
+
+      - run: pnpm --filter @potion/workers test

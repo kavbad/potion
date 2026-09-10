@@ -83,6 +83,37 @@ export async function updateApiKeyPolicy(
     .where(and(eq(apiKeys.orgId, orgId), eq(apiKeys.id, apiKeyId)));
 }
 
+/**
+ * Set a key's rate limits (2026-09-06).
+ *
+ * rate_rps / daily_cap / max_body_kb have existed since migration 0006 and
+ * were writable ONLY at key creation — two call sites pick a number and
+ * nothing can ever change it again. Raising a customer's ceiling therefore
+ * meant a hand-written UPDATE against production, which is not a supported
+ * operation and leaves no audit trail.
+ *
+ * Every field is optional and independent: undefined leaves the column
+ * alone, null restores the platform default (the columns are nullable
+ * precisely so NULL means "use the default", never 0). A caller that wants
+ * to raise rps without touching the daily cap says so by omission.
+ */
+export async function updateApiKeyLimits(
+  db: PotionDb,
+  orgId: string,
+  apiKeyId: string,
+  limits: { rateRps?: number | null | undefined; dailyCap?: number | null | undefined; maxBodyKb?: number | null | undefined },
+): Promise<void> {
+  const set: Partial<{ rateRps: number | null; dailyCap: number | null; maxBodyKb: number | null }> = {};
+  if (limits.rateRps !== undefined) set.rateRps = limits.rateRps;
+  if (limits.dailyCap !== undefined) set.dailyCap = limits.dailyCap;
+  if (limits.maxBodyKb !== undefined) set.maxBodyKb = limits.maxBodyKb;
+  if (Object.keys(set).length === 0) return;
+  await db
+    .update(apiKeys)
+    .set(set)
+    .where(and(eq(apiKeys.orgId, orgId), eq(apiKeys.id, apiKeyId)));
+}
+
 /** Revoke an api key (M2 Wave 2, ROADMAP #15): sets revoked_at — the auth
  * hot path (apps/server/src/auth.ts authenticate) 401s it immediately.
  * Org-scoped: a cross-org key id no-ops. */
@@ -156,7 +187,7 @@ export function isInternalPolicyRow(row: Pick<PolicyRow, 'id' | 'name'>): boolea
     row.id.startsWith('pol-lab-') ||
     // The onboarding interpret call's ephemeral-key policy (floor ZERO) —
     // the row that actually hit the operator: EVERY org that described its
-    // product minted one as its FIRST policy, and router page, connection
+    // product minted one as its FIRST policy, and Compiler page, connection
     // page and key mint all read it as the org's rule.
     row.id.startsWith('pol-onb-') ||
     row.name === 'lab-io' ||

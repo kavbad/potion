@@ -20,10 +20,10 @@ Every row here is **enforced by tests**, not asserted by prose:
 
 ## Summary
 
-- **181** routes classified.
-- **54** org-scoped routes probed for the uniform no-existence-oracle 404.
+- **182** routes classified.
+- **55** org-scoped routes probed for the uniform no-existence-oracle 404.
 - **44** org-scoped collections probed for cross-tenant absence.
-- Tenancy classes: non-tenant 11, operator 5, org-list 43, org-param 58, platform-job 1, public 9, self-scoped 46, shared-global 8.
+- Tenancy classes: non-tenant 11, operator 5, org-list 43, org-param 59, platform-job 1, public 9, self-scoped 46, shared-global 8.
 
 ### What the tenancy classes mean
 
@@ -67,6 +67,7 @@ Every row here is **enforced by tests**, not asserted by prose:
 | POST | `/api/alerts/test` | yes | admin only (`serve+admin` key or admin session) | non-tenant | not applicable — fires at a caller-supplied URL; names no stored tenant resource |
 | GET | `/api/api-keys` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | POST | `/api/api-keys` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — mints into the CALLER’s org; cross-org policyId 404s (tenant-isolation.test.ts) |
+| PUT | `/api/api-keys/:id/limits` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
 | POST | `/api/api-keys/:id/revoke` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
 | GET | `/api/audit` | no | admin only (`serve+admin` key or admin session) | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/audit/export.jsonl` | no | admin only (`serve+admin` key or admin session) | org-list | absent from other orgs' responses (probed) |

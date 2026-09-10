@@ -5,7 +5,7 @@
 // models. Move the quality floor; the composition, cost, and quality
 // respond — every preview answered by the SERVE PATH'S own functions
 // through /api/router/whatif (pure, mints nothing). Applying goes through
-// POST /api/policies with rebindKeys, which recompiles the real router as
+// POST /api/policies with rebindKeys, which recompiles the real plan as
 // a new version with the change written on it.
 //
 // The asymmetry holds by shape: there is no model picker here. You state
@@ -122,7 +122,7 @@ export function RouterPriorities({
         setError(b?.error?.message ?? `apply failed (${res.status})`);
         return;
       }
-      // The real router recompiles on the next read — reload so the page
+      // The real plan recompiles on the next read — reload so the page
       // shows the new version with "your rule changed" written on it.
       window.location.reload();
     } finally {
@@ -130,7 +130,7 @@ export function RouterPriorities({
     }
   }, [candidate]);
 
-  // Changes vs the CURRENT router, per kind of work.
+  // Changes vs the CURRENT plan, per kind of work.
   const changed = (preview?.assignments ?? []).filter((a) => {
     const cur = currentAssignments.find((c) => c.clusterId === a.clusterId);
     return cur !== undefined && cur.strategy.label !== a.label;
@@ -228,7 +228,7 @@ export function RouterPriorities({
                 })}
               </div>
             ) : (
-              <p className="mt-2 font-mono text-[12px] text-faint">{busy ? '…' : 'no assignment changes vs your current router'}</p>
+              <p className="mt-2 font-mono text-[12px] text-faint">{busy ? '…' : 'no assignment changes vs your current plan'}</p>
             )}
           </>
         )}
@@ -243,13 +243,13 @@ export function RouterPriorities({
             className="bg-ink px-4 py-2 text-[13px] font-semibold text-[#f4f2ec] hover:opacity-90 disabled:opacity-40"
             data-testid="apply-priorities"
           >
-            {applying ? 'Recompiling…' : 'Use this router'}
+            {applying ? 'Recompiling…' : 'Use this plan'}
           </button>
         ) : (
           <span className="font-mono text-[12px] text-faint">an admin can apply this</span>
         )}
         <span className="font-mono text-[11.5px] text-faint">
-          applying rebinds your keys and mints the next router version — the change is written on it
+          applying rebinds your keys and mints the next plan version — the change is written on it
         </span>
       </div>
       {error && <p className="mt-2 text-[12.5px] text-refuse">{error}</p>}

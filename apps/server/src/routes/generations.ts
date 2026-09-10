@@ -147,7 +147,7 @@ export function registerGenerationRoutes(app: FastifyInstance, ctx: PotionContex
         .send(openAiError('nothing is serving yet — there is no routing to capture', 'invalid_request_error', 'nothing_to_capture'));
     }
     // The artifact and the pins are captured together so a reader can tie
-    // "what the router said" to "what it froze".
+    // "what the compiler said" to "what it froze".
     const compiled = await compileAndMintRouter(ctx, db, orgId, (m) => app.log.warn(m));
     const row = await insertRouterGeneration(db, {
       id: `gen-${randomUUID().slice(0, 8)}`,

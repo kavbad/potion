@@ -44,7 +44,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Mark } from '@/components/mark';
 import { Reveal } from '@/components/landing/reveal';
-import { TwoRoads } from '@/components/landing/two-roads';
+import { CompilePipeline } from '@/components/landing/compile-pipeline';
 import { EvidenceBand } from '@/components/landing/evidence-band';
 import { FrontierExplorer } from '@/components/landing/frontier-explorer';
 import { ResearchLoop } from '@/components/landing/research-loop';
@@ -93,27 +93,46 @@ export function Landing() {
           layout — headline left, artefact box right — and swapped the box.
           The box always competed with the words. This one has no box: a
           centred editorial stage at display scale for the words (unchanged,
-          operator-endorsed), and the routing evidence as a full-bleed
-          instrument tape forming the section's bottom edge — an EDGE, not a
-          box. Scale carries the confidence; the tape carries the proof. */}
+          operator-endorsed), and the evidence as an instrument beneath them.
+          Scale carries the confidence; the instrument carries the proof. */}
       <section className="relative flex min-h-[calc(100vh-73px)] flex-col bg-[#f4f2ec]">
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+          {/* The eyebrow can no longer be the tagline — the tagline is the
+              headline now — so it carries the one differentiator the whole
+              page then spends six sections proving. */}
           <div className="font-mono text-xs uppercase tracking-[0.14em] text-faint">
-            Measured model routing
+            Measured, not predicted
           </div>
-          {/* R2 repositioning (operator-endorsed line, 2026-08-27): the
-              router is the product. The bill promise is not removed — it
-              moved one breath down and stays verbatim in the bullets. */}
-          {/* Two sentences ≈ twice the old headline's length, so the scale
-              steps down a rung (operator: "resize so the tagline fits") and
-              each sentence takes its own line; the mark stays under the
-              LAST words only, as the original design had it. */}
-          <h1 className="mt-8 text-[2.35rem] font-medium leading-[1.08] tracking-[-0.03em] text-ink sm:text-[3.3rem] lg:text-[4.1rem]">
-            Your inference is unique.
-            <br className="hidden sm:block" />{' '}
-            Your router should{' '}
+          {/* THE ONE-LINER IS THE HEADLINE (operator, 2026-09-05).
+              "Your inference is unique. Your compiler should be too." was
+              built for a market of ROUTERS: it differentiated ours from
+              theirs. There are no other compilers, so the comparison has
+              nothing to stand against and the sentence stops meaning
+              anything. The category name does that work instead, and the
+              second line TEACHES the category by contrast — routers choose
+              from a fixed menu, a compiler builds the plan — before it sells.
+              Note the direction of the economics clause (operator, 2026-09-05:
+              "cheapest one good enough" made it "sound like crap"): the
+              quality bar is the CONSTRAINT the customer owns and price is what
+              falls out of it. Say it the other way round and the same true
+              sentence reads as a compromise we made on their behalf.
+
+              The scale returns to the rung the operator endorsed before
+              6fce198 ("Hero: re-fit the scale to the longer line") stepped it
+              down to fit two sentences. Four words fit; the rung comes back.
+              The mark stays under the last word, as the original design had
+              it.
+
+              ONE LINE, ALWAYS (operator, 2026-09-05). A wrapped category name
+              reads as two half-thoughts, so the size is fluid rather than
+              stepped: clamp() ties it to the viewport and `whitespace-nowrap`
+              forbids the break outright, which means the headline shrinks to
+              stay whole instead of breaking to stay big. The 4.5rem ceiling
+              is the largest that still fits inside the hero column at desktop. */}
+          <h1 className="mt-8 whitespace-nowrap text-[clamp(1.5rem,6.1vw,4.5rem)] font-medium leading-[1.02] tracking-[-0.035em] text-ink">
+            The Compiler for{' '}
             <span className="relative inline-block">
-              be&nbsp;too.
+              Inference
               {/* the graduation mark, at headline scale: beneath the words,
                   never through them (a strike reads as negation) */}
               <span aria-hidden className="absolute bottom-[-0.06em] left-[-0.02em] right-[0.06em] flex items-end">
@@ -122,42 +141,52 @@ export function Landing() {
               </span>
             </span>
           </h1>
-          <p className="mt-6 text-[1.45rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.75rem]">
-            Potion builds around your actual workload, quality bar, and economics — and serves
-            every request at the lowest price the evidence allows.
+          {/* TWO LINES, NOT THREE (operator, 2026-09-05). Measured on the live
+              page: the line wants 1017px per line and the max-w-5xl column
+              gave it 976 — 41px short, so it spilled four words onto a third
+              line. The column widened to 6xl and the type steps 28px → 26px,
+              which holds two lines down to ~1030px viewports.
+
+              The type also steps down on phones: the headline can only be
+              24px at 375px if it stays on ONE line, so a 1.45rem second line
+              of this length outweighs it by mass and the hierarchy inverts. */}
+          <p className="mx-auto mt-5 max-w-[62rem] text-[1.08rem] font-normal leading-snug tracking-[-0.01em] text-soft sm:text-[1.45rem] lg:text-[1.625rem]">
+            Routers pick from a menu. A compiler builds the plan: every model measured on your
+            work, every request compiled to the lowest price your quality bar allows.
           </p>
 
-          <div className="mt-8">
+          <div className="mt-9">
             <Link
               href="/login"
-              className="bg-ink px-6 py-3 text-sm font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
+              className="bg-ink px-7 py-3.5 text-[15px] font-medium text-[#f4f2ec] hover:opacity-90 active:translate-y-px"
             >
-              Build your router
+              Compile your inference
             </Link>
           </div>
 
-          <ul className="mx-auto mt-9 max-w-md space-y-2 text-left">
-            {[
-              'Lower bills, measured not promised. Each request goes to the cheapest model measured good enough.',
-              'Your rule: cost, quality, or speed. Picked from the measured Pareto frontier.',
-              'New models earn their place. Measured against your bar before they ever serve.',
-              'One line of code. A receipt with every answer.',
-            ].map((li) => (
-              <li key={li} className="flex gap-3 text-[14.5px] leading-snug text-soft">
-                <span aria-hidden className="mt-[9px] flex shrink-0 items-end self-start">
-                  <span className="h-px w-3.5 bg-accent/70" />
-                  <span className="h-[5px] w-px bg-accent/70" />
-                </span>
-                <span>{li}</span>
-              </li>
-            ))}
-          </ul>
+          {/* NO SUPPORTING LIST. Two versions of one lived here — four
+              stacked bullets, then a horizontal row of three — and both were
+              the same mistake: a fourth block of text under a headline that
+              claims a category, saying things every API landing page says
+              ("one line of code"). Assertion where the page's whole argument
+              is measurement.
 
-          {/* exa's first page, whole: the product runs in the hero. Real
-              measured routes streaming into the table, receipt alongside. */}
-          <div className="mt-14 w-full max-w-4xl text-left">
-            <Figure n="1" caption="The same requests through a gateway (one model for everything) and through Potion (the measured field for that kind of work, a quality floor, the cheapest point that clears it). Every point and price is a committed measurement; the tallies are means over the requests served so far.">
-              <TwoRoads />
+              It is not needed. The instrument directly below is the proof, and
+              it is running: the compiler taking one real request, weighing the
+              shapes it can emit, applying your rule to the measured field, and
+              printing what it saved. A hero that shows the product does not
+              also need to list it. What the bullets said is made where it
+              belongs —
+              the bill in the line above, the rule in §05, new models in §04.
+
+              Four blocks: eyebrow, headline, line, action. Then the machine. */}
+
+          {/* exa's first page, whole: the product RUNS in the hero. Not a
+              screenshot of the compiler — the compiler, on committed
+              measurements, deciding in front of you. */}
+          <div className="mt-16 w-full max-w-5xl text-left">
+            <Figure n="1" caption="One real request through the compiler: every measured point for its kind of work, drawn with its 95% interval and sized by its p95 latency. Your rule becomes a shape on that field — a quality floor, a cost ceiling, or a latency budget — everything that cannot satisfy it drops out, and the plan is whatever survives and wins. Every point, price and latency is a committed measurement.">
+              <CompilePipeline />
             </Figure>
           </div>
         </div>
@@ -181,7 +210,8 @@ export function Landing() {
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
             Less than it used to be — gateways now ship auto-routers, and that is exactly the
-            point. Prediction is becoming free.{' '}
+            point. Prediction is becoming free. A router picks a road; a compiler designs the
+            route.{' '}
             <span className="font-medium text-ink">Others predict which model should work.</span>{' '}
             <span className="font-medium text-ink">
               Potion measures what actually clears your bar
@@ -191,7 +221,7 @@ export function Landing() {
         </Reveal>
 
         <Reveal delayMs={120} className="mt-12">
-          <Figure n="2" caption="What a gateway answers and what Potion answers, row by row. The gateway column is factual about what gateways do well; the difference is judgment per request, backed by held-out measurement.">
+          <Figure n="2" caption="What a gateway answers, and what Potion answers. The gateway column is factual about what gateways do well; the difference is judgment on every request, backed by held-out measurement.">
             <div className="hidden grid-cols-[1fr_1.1fr_1.15fr] gap-px bg-[#d9d5cb] sm:grid">
               {/* header row — the Potion column is washed and carried by the
                   mark, so the eye picks its side before reading a word */}
@@ -249,18 +279,21 @@ export function Landing() {
             </div>
           </Figure>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-soft">
-            Access stopped being scarce the day gateways shipped. Judgment — measured per kind of
-            work, stated with its error bars, enforced as a floor — is the scarce layer. That layer
-            is Potion, and it works the same over any gateway or provider underneath.
+            Access stopped being scarce the day gateways shipped. Judgment did not. That is the
+            layer Potion sells — measured per kind of work, enforced as a floor — and it works the
+            same over any gateway or provider underneath.
           </p>
         </Reveal>
       </LabSection>
 
       {/* ---------------- 02 · the artifact (R2 coherence pass) ----------------
-          The hero promises "your router"; this is the first place the page
-          SHOWS one. The specimen is schematic — real workload names, masked
-          strategies (the evidence-band convention), illustrative numbers —
-          and the caption says so; real ones are compiled per org at /router.
+          The hero promises "your compiler"; this is the first place the page
+          SHOWS what it emits. The specimen is schematic — real workload names,
+          masked strategies (the evidence-band convention), illustrative
+          numbers — and the caption says so; real ones are compiled per org and
+          read on the Compiler page (the signed-in home; /router and /compiler
+          both redirect there — see docs/NAMING.md for what kept its old
+          spelling and why).
           The asymmetry is stated here because it IS the product boundary:
           you never hand-assign; you change what you want and Potion
           recompiles. */}
@@ -268,14 +301,23 @@ export function Landing() {
         <div className="grid items-start gap-12 lg:grid-cols-2">
           <div>
             <h2 className="text-[1.7rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-              A router with your name on it.
+              An execution plan with your name on it.
             </h2>
             <p className="mt-4 text-[15px] leading-relaxed text-soft">
-              Potion compiles your router from three things: your traffic&rsquo;s actual kinds of
+              Potion compiles it from three things: your traffic&rsquo;s actual kinds of
               work, your quality bar, and the measured frontiers. It ships as a model id —{' '}
               <code className="font-mono text-[13px] text-ink">potion/your-org</code> — and as a
-              document you can read: every kind of work, what it routes to, the measured quality
+              document you can read: every kind of work, how it is executed, the measured quality
               and price behind the choice.
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed text-soft">
+              <span className="font-medium text-ink">
+                The compiler emits the simplest plan that clears your bar.
+              </span>{' '}
+              Today that is usually one model per kind of work: we measured the clever shapes —
+              referee juries, run-and-test, escalate-when-unsure — on the same requests, and every
+              one of them lost. The gain is across requests, not inside one. When that changes,
+              the plan changes and you do not.
             </p>
             <p className="mt-3 text-[15px] leading-relaxed text-soft">
               It is versioned. When a new model ships or a measurement moves, Potion recompiles,
@@ -296,7 +338,7 @@ export function Landing() {
             <div className="px-5 py-4">
               <table className="w-full text-left font-mono text-[12px]">
                 <thead className="text-[11px] uppercase tracking-[0.1em] text-faint">
-                  <tr><th className="pb-2 font-normal">kind of work</th><th className="pb-2 font-normal">routes to</th><th className="pb-2 text-right font-normal">quality</th><th className="pb-2 text-right font-normal">$/1K</th></tr>
+                  <tr><th className="pb-2 font-normal">kind of work</th><th className="pb-2 font-normal">compiles to</th><th className="pb-2 text-right font-normal">quality</th><th className="pb-2 text-right font-normal">$/1K</th></tr>
                 </thead>
                 <tbody className="text-soft">
                   <tr className="border-t border-dashed border-[#d9d5cb]"><td className="py-1.5">extraction</td><td><span className="inline-flex items-baseline gap-1"><span aria-label="name withheld" title="name withheld" className="inline-block h-[9px] w-14 self-center bg-ink/60" />·small</span></td><td className="text-right tabular-nums">0.977</td><td className="text-right tabular-nums">$0.05</td></tr>
@@ -312,7 +354,7 @@ export function Landing() {
             </div>
             <figcaption className="border-t border-[#d9d5cb] px-5 py-2.5 font-mono text-[11.5px] leading-relaxed text-faint">
               the artifact, schematically — strategies masked, numbers illustrative. Real ones are
-              compiled per organization, from live measurements, on your Router page.
+              compiled per organization, from live measurements, on your Compiler page.
             </figcaption>
           </figure>
         </div>
@@ -346,15 +388,15 @@ export function Landing() {
               The frontier is measured weekly, by a machine. Negatives included.
             </h2>
             <p className="mt-6 text-base leading-relaxed text-soft">
-              Every model Potion considers routing to must first earn its place through
+              Every model the compiler is allowed to emit must first earn its place through
               measurement — the same private exams, per kind of work, with confidence intervals
               and dates on every point. New models are auditioned the week they ship. Only what
-              dominates on quality, cost and speed at once is published to the frontier your
-              requests are routed from.
+              dominates on quality, cost and speed at once is published to the frontiers your
+              plans are compiled from.
             </p>
             <p className="mt-4 text-base leading-relaxed text-soft">
               The engine also tests the clever ideas, so you never pay for one that does not
-              work. It spent two weeks trying to beat single-model routing with multi-model
+              work. It spent two weeks trying to beat the single-model plan with multi-model
               combinations — pre-registered, budget-capped — and every attempt lost to the best
               single model. We published all five losses. If the model market ever changes shape
               so a combination pays, the same machinery will find it, measure it, and only then
@@ -363,12 +405,12 @@ export function Landing() {
             <p className="mt-6 border-l-[3px] border-accent pl-5 text-base font-medium leading-relaxed text-accent">
               Why this is hard to copy: the measured corpus, the live receipts, and the replay
               engine live in one place, and the corpus compounds every week — including the
-              negatives. A router that only reports wins is indistinguishable from a router that
+              negatives. A compiler that only reports wins is indistinguishable from one that
               does not measure.
             </p>
           </Reveal>
           <Reveal delayMs={120}>
-            <Figure n="4" caption="The weekly loop, with no one in it: measure the models that could earn a route; replay candidates against stored results at no cost; audition new models the week they ship; publish what dominates — and publish what lost; route live traffic with receipts, which feed the next measurement.">
+            <Figure n="4" caption="The weekly loop, with no one in it: measure the models that could earn a place; replay candidates against stored results at no cost; audition new models the week they ship; publish what dominates — and publish what lost; serve live traffic with receipts, which feed the next measurement.">
               <ResearchLoop />
             </Figure>
           </Reveal>
@@ -384,12 +426,12 @@ export function Landing() {
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-soft">
               Measured options for one kind of work, error bars included. Pick a rule, drag the
-              slider, and you are running the same selection the router runs in production —
+              slider, and you are running the same selection the compiler makes in production —
               including its refusal to answer when nothing measured qualifies.
             </p>
           </Reveal>
           <Reveal delayMs={120} className="mt-10">
-            <Figure n="5" caption="The multi-step-reasoning frontier, version 3: nine measured options, 50 items each, 95% intervals drawn. The selection you run here is the selection the router runs in production, including its refusal when nothing qualifies.">
+            <Figure n="5" caption="The multi-step-reasoning frontier, version 3: nine measured options, 50 items each, 95% intervals drawn. The selection you run here is the selection the compiler makes in production, including its refusal when nothing qualifies.">
               <FrontierExplorer />
             </Figure>
           </Reveal>
@@ -406,18 +448,18 @@ export function Landing() {
               Built to refuse before it is built to answer.
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#d6d3cb]">
-              A router that spends your money has to be trustworthy before it is clever. So the
+              A compiler that spends your money has to be trustworthy before it is clever. So the
               serving path is written to fail closed: the server will not start if a frontier
               names a model it cannot serve; a frontier cannot be republished if it regresses; a
               request is refused before a budget is crossed, not after; and nothing is ever
               served from a number that was not measured.
             </p>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#d6d3cb]">
-              Priced like the incentives should be: model costs pass through at cost, and
-              Potion earns a share of the savings your own receipts verify — if it saves you
-              nothing, it earns nothing above cost. No minimum. You bring no provider accounts
-              and no keys: Potion buys from every provider at once, which is also what lets it
-              route across the whole market rather than the one account you happened to open.
+              Priced so we only win when you do: model costs pass through at cost, and Potion
+              earns a share of the savings your own receipts verify. If it saves you nothing, it
+              earns nothing above cost. No minimum. You bring no provider accounts and no keys —
+              Potion buys from every provider at once, which is what lets it compile from the
+              whole market rather than the one account you happened to open.
             </p>
           </Reveal>
           <Reveal delayMs={120} className="mt-14">
@@ -433,7 +475,7 @@ export function Landing() {
                 },
                 {
                   h: 'Fails closed',
-                  p: 'Boot refuses a frontier that names an unservable model. A regression cannot be published. No measurement, no route.',
+                  p: 'Boot refuses a frontier that names an unservable model. A regression cannot be published. No measurement, no plan.',
                   glyph: <><path d="M4 17h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M7 13l3-5 3 3 4-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>,
                 },
                 {
@@ -448,7 +490,7 @@ export function Landing() {
                 },
                 {
                   h: 'Re-checked every week',
-                  p: 'Every routed pick is re-measured on fresh tasks; a model that drifts is caught before it costs you.',
+                  p: 'Every pick the compiler emits is re-measured on fresh tasks; a model that drifts is caught before it costs you.',
                   glyph: <path d="M4 12h7m0 0l-3-3m3 3l-3 3M11 12h9M14 6l6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />,
                 },
                 {
@@ -501,7 +543,7 @@ export function Landing() {
               Change one line. Keep the receipts.
             </h2>
             <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-soft">
-              Point a client at Potion and watch the routing decisions arrive with the answers.
+              Point a client at Potion and watch every decision arrive with the answer.
             </p>
             <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
               <Link

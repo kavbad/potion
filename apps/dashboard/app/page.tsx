@@ -27,8 +27,19 @@ import { Landing } from '@/components/landing';
 import { SiteShell } from '@/components/site-header';
 import { RouterHome } from '@/components/router-home';
 import type { ConnectionResponse, RoutingActivityResponse } from '@/lib/types';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+
+/** '/' IS THE CANONICAL LANDING (operator, 2026-09-05). This route is
+ *  session-aware — signed out it is the landing, signed in it is Connect —
+ *  but a crawler is always signed out, so what Google indexes here is the
+ *  landing, and this is the URL people link to. /home renders the same page
+ *  for session-proof sharing and points its canonical here. Without this the
+ *  two competed and Google chose between them. */
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
 
 /** The end of a session is SAID, never a silent teleport (2026-08-28: the
  * operator's session was cleared mid-flow and the landing rendered with no

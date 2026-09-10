@@ -44,6 +44,18 @@ interface OpenAiEmbedResponse {
 }
 
 /** Shared OpenAI-shaped chat completion; also used by OpenRouter. */
+/** A 4xx whose upstream reason is about logprobs — the only refusal the
+ *  transport is allowed to answer by retrying without the parameter. */
+function isLogprobsRefused(err: unknown): boolean {
+  return (
+    err instanceof ProviderError &&
+    err.status !== undefined &&
+    err.status >= 400 &&
+    err.status < 500 &&
+    /logprobs?/i.test(err.message)
+  );
+}
+
 export async function openAiCompatibleComplete(
   provider: ProviderId,
   baseUrl: string,
@@ -78,19 +90,41 @@ export async function openAiCompatibleComplete(
   if (req.params?.tools !== undefined) body.tools = req.params.tools;
   if (req.params?.tool_choice !== undefined) body.tool_choice = req.params.tool_choice;
   Object.assign(body, callerSampling(req.params?.sampling));
+  // C4 reasoning effort. Two protocols for the same idea: OpenAI takes a
+  // top-level `reasoning_effort`, OpenRouter wraps it as `reasoning.effort`.
+  if (req.params?.reasoningEffort !== undefined) {
+    if (provider === 'openrouter') body.reasoning = { effort: req.params.reasoningEffort };
+    else body.reasoning_effort = req.params.reasoningEffort;
+  }
 
   const { apiKey, ...retry } = opts;
-  const { json } = await postJsonWithRetry<OpenAiChatResponse>(
-    provider,
-    {
-      url: baseUrl,
-      headers: { authorization: `Bearer ${apiKey}`, ...extraHeaders },
-      body,
-      // F19: the caller's cancellation reaches the socket.
-      signal: req.signal,
-    },
-    retry,
-  );
+  const post = (): Promise<{ json: OpenAiChatResponse }> =>
+    postJsonWithRetry<OpenAiChatResponse>(
+      provider,
+      {
+        url: baseUrl,
+        headers: { authorization: `Bearer ${apiKey}`, ...extraHeaders },
+        body,
+        // F19: the caller's cancellation reaches the socket.
+        signal: req.signal,
+      },
+      retry,
+    );
+  let json: OpenAiChatResponse;
+  try {
+    ({ json } = await post());
+  } catch (err) {
+    // The harness asks for logprobs on every cell to capture confidence, and
+    // OpenAI reasoning models refuse the parameter outright ("logprobs are not
+    // supported with reasoning models", 400 unsupported_parameter). Until
+    // 2026-09-07 that refusal failed the cell, so the sweep could not measure
+    // any such model — including the one the competitor was beating us with.
+    // Confidence is a nice-to-have; the answer is the measurement. Strip the
+    // parameter and ask once more. Any other 4xx is rethrown untouched.
+    if (body.logprobs !== true || !isLogprobsRefused(err)) throw err;
+    delete body.logprobs;
+    ({ json } = await post());
+  }
 
   const choice = json.choices?.[0];
   const tokenLogprobs = (choice?.logprobs?.content ?? [])

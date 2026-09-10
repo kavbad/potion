@@ -12,8 +12,8 @@ Mixing is not missing. It is **built, tested, and disconnected from the money.**
 | Component | State |
 |---|---|
 | `packages/strategies` | Executors for all seven shapes — single, cascade, best-of-n, draft-verify, ensemble, decompose, staged composite — each with tests, streaming and prompt-injection coverage. |
-| `packages/researcher/generate.ts` | A template grammar producing mixing candidates from the model registry: cascade with a focus model slotted into every class-compatible stage, composite pairs, draft-verify, best-of-n, cross-provider ensembles, decompose (off by default). Deterministic, budgeted, deduped against evaluated hashes. |
-| `packages/researcher/gate.ts` | A promotion gate with pinned statistics: paired bootstrap over held-out per-item deltas, 1000 resamples, 95% CI, promote only when the CI **lower** bound clears +1.5 quality points at no extra cost, or a 20% cost cut at no quality loss. |
+| `packages/researcher/src/generate.ts` | A template grammar producing mixing candidates from the model registry: cascade with a focus model slotted into every class-compatible stage, composite pairs, draft-verify, best-of-n, cross-provider ensembles, decompose (off by default). Deterministic, budgeted, deduped against evaluated hashes. |
+| `packages/researcher/src/gate.ts` | A promotion gate with pinned statistics: paired bootstrap over held-out per-item deltas, 1000 resamples, 95% CI, promote only when the CI **lower** bound clears +1.5 quality points at no extra cost, or a 20% cost cut at no quality loss. |
 | `research:scan` / `research:cycle` | Wired into the worker registry; `generateCandidatesExplained` is called at `handlers.ts:1547`. |
 
 **The gap:** the platform sweep — the code path that spends the campaign

@@ -916,13 +916,18 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
               'set -e',
               'test -f repo/src/lib.js',
               'mkdir -p out/report',
-              // Identity passed EXPLICITLY: the sandbox sets HOME to the workdir, so no
-              // user gitconfig applies, and git's fallback (user@hostname) only resolves
-              // where the host has a domain. On a CI runner it does not, `git commit`
-              // fails, `set -e` aborts, and the assertion below saw the pre-seeded tree
-              // survive while the shell's own output never appeared. A sealed shell must
-              // not depend on ambient identity (found on the workflow's first green run).
-              'git init -q workrepo && cd workrepo && git -c user.email=lab@potion.test -c user.name=lab commit -q --allow-empty -m offline && cd ..',
+              // The identity is passed PER INVOCATION (`git -c`), never assumed
+              // from the host. Without it git falls back to user@hostname, and
+              // on a CI runner that resolves to `runner@fv-az…​.(none)`, which
+              // git REFUSES: "unable to auto-detect email address". Under
+              // `set -e` that aborts the script before the echo below, so the
+              // produced file never exists and the assertion reads as "the
+              // sandbox lost my output" when the shell simply stopped early.
+              // This test is about git working OFFLINE, not about whether the
+              // machine running it has a name configured.
+              'git init -q workrepo && cd workrepo && ' +
+                'git -c user.email=lab@potion.invalid -c user.name=potion ' +
+                'commit -q --allow-empty -m offline && cd ..',
               'echo "tree ok, git ok" > out/report/result.txt',
             ].join('\n'),
           }),
@@ -955,6 +960,11 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
         toolSteps.map((st) => JSON.stringify(st.payload, null, 2).slice(0, 3000)).join('\n---\n') +
         `\n--- step kinds in order: ${JSON.stringify(allSteps.map((st) => st.kind))}` +
         `\n--- sandbox stderr:\n${sandboxErr.slice(0, 3000) || '(empty)'}`;
+      // Assert the shell RAN before asserting what it produced: `repo/src/lib.js`
+      // is pre-seeded above, so its presence proves nothing about run_shell, and
+      // "expected [...] to include 'out/report/result.txt'" names a symptom three
+      // layers from the cause. Zero tool steps means the call never executed.
+      expect(toolSteps.length, shellSays).toBeGreaterThan(0);
       expect(names, shellSays).toContain('repo/src/lib.js');
       expect(names, shellSays).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.

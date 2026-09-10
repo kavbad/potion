@@ -113,7 +113,7 @@ export function BarProposal({ initialProposals, initialAdmin }: { initialProposa
           <> the premium reference scores <span className="font-medium text-ink">{(p.incumbentQuality ?? p.suggestedFloor).toFixed(2)} on your own work</span>.</>
         )}{' '}
         I propose the bar <span className="font-medium text-ink">never below {p.suggestedFloor.toFixed(2)}</span>
-        <span className="text-faint"> (= what your current model measures — you can never do worse than today; the router is free to do better)</span>
+        <span className="text-faint"> (= what your current model measures — you can never do worse than today; the compiler is free to do better)</span>
         {p.servingCostPer1K !== null && p.incumbentCostPer1K !== null && p.incumbentCostPer1K > p.servingCostPer1K ? (
           <> — served at <span className="font-semibold text-kept">{usd(p.servingCostPer1K)}/1k instead of {usd(p.incumbentCostPer1K)}</span>, re-verified on fresh items.</>
         ) : (

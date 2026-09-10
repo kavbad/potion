@@ -24,8 +24,8 @@ import { usePathname } from 'next/navigation';
  * destination.
  */
 const PRIMARY = [
-  // 2026-08-27 redesign: the router IS the home — one protagonist, six doors.
-  { href: '/', label: 'Router', hint: 'Your router — what it saved, how it decides, every version' },
+  // 2026-08-27 redesign: the compiler IS the home — one protagonist, six doors.
+  { href: '/', label: 'Compiler', hint: 'Your compiler — what it saved, how it decides, every version' },
   { href: '/receipts', label: 'Receipts', hint: 'Every request, accounted for — try one live' },
   { href: '/usage', label: 'Savings', hint: 'What you kept, verified per receipt' },
   { href: '/lab', label: 'Workers', hint: 'Hire workers that earn autonomy — supervised first, trusted per action' },

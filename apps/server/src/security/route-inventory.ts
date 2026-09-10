@@ -333,6 +333,10 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   { method: 'POST', path: '/api/keys/:id/validate', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/keys/k-x/validate', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'providerKey', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'POST', path: '/api/api-keys', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/api-keys', probeBody: { name: 'probe' }, tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "mints into the CALLER’s org; cross-org policyId 404s (tenant-isolation.test.ts)" } },
   { method: 'POST', path: '/api/api-keys/:id/revoke', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/api-keys/k-x/revoke', tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'apiKey', crossOrgProbe: { expect: 'uniform-404' } },
+  // Same shape as revoke: admin-guarded, addressed by a key id in the
+  // caller's own org, and a key belonging to another org must be
+  // indistinguishable from one that does not exist.
+  { method: 'PUT', path: '/api/api-keys/:id/limits', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/api-keys/k-x/limits', probeBody: { rateRps: 5 }, tenancyClass: 'org-param', resourceParam: ':id', seededResource: 'apiKey', crossOrgProbe: { expect: 'uniform-404' } },
   { method: 'GET', path: '/api/audit', surface: 'api', mutating: false, guard: 'admin', tenancyClass: 'org-list', seededResource: 'providerKey', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/audit/export.jsonl', surface: 'api', mutating: false, guard: 'admin', tenancyClass: 'org-list', seededResource: 'providerKey', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'POST', path: '/api/alerts', surface: 'api', mutating: true, guard: 'admin', probeUrl: '/api/alerts', probeBody: { kind: 'webhook', targetUrl: 'https://x.example/h', events: ['quality_breach'] }, tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: "creates in the CALLER’s org" } },

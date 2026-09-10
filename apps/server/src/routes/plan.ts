@@ -42,6 +42,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   selectPoint,
+  qualityLowerBound,
   type FrontierPoint,
   type LatencyEvidence,
   type Policy,
@@ -243,6 +244,29 @@ export interface FrontierRow {
  * serving path's own selector — rather than trusting an argument about what
  * it should do. If min_cost lands elsewhere (the three-dimensional frontier
  * case), a compound rule adds the latency bound that isolates the row.
+ *
+ * THE FLOOR IS THE LOWER BOUND, NOT THE MEAN (2026-09-06). `selectPoint`
+ * filters min_cost and compound on `qualityLowerBound(p) >= qualityFloor` —
+ * the conservative end of the interval, because a floor is a promise and a
+ * mean is not evidence that the promise holds. Minting the floor from
+ * `target.quality` therefore set a bar the selector tests the target against
+ * and the target fails: for any point carrying real evidence the mean sits
+ * ABOVE its own lower bound, so the row became unbindable (null), and the
+ * only rows that ever bound were the CI-less ones — where mean == bound and
+ * the verification below passed vacuously.
+ *
+ * That is not a cosmetic mismatch. A floor minted from a mean is
+ * unsatisfiable on every OTHER cluster too, whose points all carry intervals.
+ * In production one such policy (floor 0.978543771043771, minted from a
+ * CI-less point) put 7 of 10 clusters onto `fallback=1` for a design
+ * partner — every request served the highest-quality point because nothing
+ * cleared the bar — which also made their `min_cost` arm the most expensive
+ * one in their own study. One row of data, two headline findings.
+ *
+ * Deriving the floor with the selector's own function makes the target
+ * satisfy its own filter by construction. The verification below still
+ * decides whether the rule ISOLATES the row; this only stops it from
+ * excluding the row it was built for.
  */
 export function policyBinding(target: FrontierPoint, points: FrontierPoint[]): Policy | null {
   const frontier = {
@@ -255,9 +279,10 @@ export function policyBinding(target: FrontierPoint, points: FrontierPoint[]): P
     pricesVersion: 'binding',
     createdAt: new Date(0).toISOString(),
   };
+  const floor = qualityLowerBound(target);
   const candidates: Policy[] = [
-    { type: 'min_cost', qualityFloor: target.quality },
-    { type: 'compound', qualityFloor: target.quality, p95Ms: Math.ceil(target.latencyP95) },
+    { type: 'min_cost', qualityFloor: floor },
+    { type: 'compound', qualityFloor: floor, p95Ms: Math.ceil(target.latencyP95) },
   ];
   for (const policy of candidates) {
     if (selectPoint(policy, frontier)?.strategyHash === target.strategyHash) return policy;

@@ -17,6 +17,7 @@ import { IBM_Plex_Mono, Inter } from 'next/font/google';
 import './globals.css';
 import { ChromeSwitch } from '@/components/chrome-switch';
 import { sessionCookieHeader } from '@/lib/api';
+import { siteOrigin } from '@/lib/research';
 
 const sans = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const mono = IBM_Plex_Mono({
@@ -31,10 +32,31 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL((process.env.POTION_APP_URL ?? 'https://withpotion.com').replace(/\/$/, '')),
-  title: 'Potion — your router, built from evidence',
+  // The PUBLIC origin, not the deployment's. Every relative canonical and
+  // og:url below resolves against this, and POTION_APP_URL is app.withpotion.com
+  // on the prod box because Google OAuth needs it to be — see lib/research.ts.
+  metadataBase: new URL(siteOrigin()),
+  title: 'Potion — The Compiler for Inference',
   description:
-    'Your inference is unique. Your router should be too. Potion compiles a router from your actual workload, quality bar, and economics — measured, receipted, versioned. OpenAI-compatible.',
+    'You set the quality bar. Potion measures every model on your actual work, then compiles the cheapest way to clear it — request by request, with a receipt on every answer. OpenAI-compatible.',
+  // WITHOUT THESE, EVERY SHARE OF THIS PAGE IS WHATEVER THE PLATFORM LAST
+  // SCRAPED — which through the whole compiler rename meant the retired
+  // "your router, built from evidence", with no image. /research/* has had
+  // openGraph for a while; the front door had none.
+  openGraph: {
+    type: 'website',
+    url: '/',
+    siteName: 'Potion',
+    title: 'Potion — The Compiler for Inference',
+    description:
+      'You set the quality bar. Potion measures every model on your actual work, then compiles the cheapest way to clear it — request by request, with a receipt on every answer.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Potion — The Compiler for Inference',
+    description:
+      'You set the quality bar. Potion measures every model on your actual work, then compiles the cheapest way to clear it — request by request, with a receipt on every answer.',
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

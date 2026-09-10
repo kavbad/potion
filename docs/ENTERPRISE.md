@@ -152,7 +152,7 @@ rubric/research/trace operations, or trigger spend-bearing live sweeps.
 `serve+admin` resolves to **admin grade** — the explicit choice at mint.
 FAIL CLOSED: an empty, malformed, or unrecognized scopes value resolves to
 serve-only; a typo can never mint an admin credential. The full route-by-
-route classification lives in `apps/server/test/fixtures/route-inventory.ts`
+route classification lives in `apps/server/src/security/route-inventory.ts`
 and is enforced by an exhaustive test.
 
 ## Related surfaces

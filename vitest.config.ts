@@ -29,6 +29,16 @@ export default defineConfig({
     // read, so the budget is set from what the tests actually cost.
     testTimeout: 120_000,
     hookTimeout: 60_000,
+    // CONCURRENCY ON CI (2026-09-08). Every test file gets its own worker and
+    // most of them boot PGlite — a WASM Postgres — so the default "as many
+    // workers as cores, times four packages at once" oversubscribes a 2-vCPU
+    // runner. The failure does not arrive as an out-of-memory: it lands on
+    // whichever test forks a subprocess at the wrong moment. The X7 sandbox
+    // test's shell died with
+    //   __potion_main__.sh: fork: retry: Resource temporarily unavailable
+    // exit 254, timedOut false, nothing written — and the assertion it failed
+    // was about a missing output file, three layers from the cause.
+    ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
     // Fails the run if the committed prices.json changes during it — the
     // stale-dist scan-writer tripwire (see vitest.prices-guard.ts).
     globalSetup: [fileURLToPath(new URL('./vitest.prices-guard.ts', import.meta.url))],

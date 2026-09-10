@@ -13,7 +13,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 // spends the dashboard's own key, never the visitor's, and is rate-limited.
 // (2026-08-24 surface review: /leaderboard and /hero-lab removed with their
 // pages — a smaller anonymous surface needs no other justification.)
-const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/docs', '/home', '/research', '/answers', '/md/', '/llms.txt', '/llms-full.txt', '/terms', '/privacy', '/status', '/sitemap.xml', '/robots.txt'];
+const OPEN_PREFIXES = ['/login', '/api/auth', '/api/docs-ask', '/share/', '/docs', '/home', '/research', '/answers', '/md/', '/llms.txt', '/llms-full.txt', '/terms', '/privacy', '/status', '/sitemap.xml', '/robots.txt',
+  // The share card MUST be anonymous — every scraper that fetches it (Slack,
+  // X, LinkedIn, Google) is signed out, and behind auth it 307s to /login and
+  // the card renders blank. A PREFIX, not an exact match: production serves
+  // this route with a content hash appended to the path.
+  '/opengraph-image'];
 
 // '/' is public (the landing page) and MUST be matched exactly. It cannot go
 // in OPEN_PREFIXES: every path startsWith('/'), so one entry there would make

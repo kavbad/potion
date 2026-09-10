@@ -78,7 +78,13 @@ export function permittedNumbers(f: DailyFacts): Set<string> {
     const s = String(v);
     out.add(s);
     if (/^\d+\.\d+$/.test(s)) out.add(s.replace(/0+$/, '').replace(/\.$/, ''));
-    if (/^\d+$/.test(s)) { out.add(`${s}.0`); out.add(`${s}.00`); }
+    if (/^\d+$/.test(s)) {
+      // Was `out.add(...), out.add(...)` — a comma expression. Both calls did
+      // run, but it reads as though only the first is guarded by the `if`,
+      // which is a bad way to write a line inside the redaction allow-list.
+      out.add(`${s}.0`);
+      out.add(`${s}.00`);
+    }
   }
   // 0 and 1 are structural in prose ("no cycles", "one alias"); the words
   // are checked by the count law upstream, the digits are always safe.

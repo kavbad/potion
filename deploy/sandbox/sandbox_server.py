@@ -71,10 +71,27 @@ _DEDICATED_UID = os.environ.get("POTION_SANDBOX_DEDICATED_UID") == "1"
 
 
 def child_limits():
-    # Each limit is best-effort: macOS dev refuses some (notably RLIMIT_AS).
-    # NPROC applies only where the deployment declares a dedicated uid (see
-    # above); elsewhere the address-space cap, the CPU cap and the parent's
-    # wall-clock kill still hold, which is the posture macOS has always had.
+    # Each limit is best-effort. RLIMIT_AS and RLIMIT_CPU bound THIS exec and
+    # apply wherever the OS honours them (macOS refuses RLIMIT_AS); the
+    # parent's wall-clock kill holds everywhere.
+    #
+    # RLIMIT_NPROC IS DIFFERENT, and the difference is the whole of this
+    # comment: the kernel counts it PER REAL UID, host-wide, not per process
+    # tree. A ceiling of 64 means "this exec cannot fork-bomb" only where the
+    # sandbox OWNS its uid. Where one uid owns the whole box — any CI runner,
+    # any shared dev machine — the count is already past 64 before the exec
+    # starts, and the FIRST fork fails:
+    #
+    #   __potion_main__.sh: fork: retry: Resource temporarily unavailable
+    #   exitCode 254, filesWritten []
+    #
+    # This was carved out as `sys.platform != "darwin"`, which is a proxy for
+    # the real condition and true in exactly one of the two places it matters.
+    # The condition is not the platform, it is whether the deployment gave the
+    # sandbox its own user — so the DEPLOYMENT declares it
+    # (deploy/sandbox/Dockerfile, above `USER sandbox`) and this reads the
+    # declaration. Undeclared, the ceiling is skipped rather than imposed
+    # unjustified; prod is unchanged because prod declares it.
     limits = [
         (resource.RLIMIT_AS, RLIMIT_AS_BYTES),
         (resource.RLIMIT_CPU, RLIMIT_CPU_S),

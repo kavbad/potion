@@ -200,7 +200,22 @@ test bug. The second means the cap can silently fail to fire in production.
 **Find out which before trusting the suite green.** Until then, a green run is
 partly luck.
 
-### P0.6 — `lab-runtime` still does not typecheck its tests
+### P0.6 — `lab-runtime` still does not typecheck its tests — CLOSED BY ANOTHER SESSION
+
+**SUPERSEDED 2026-09-04.** Commit `2b7c508` ("LAB-RUNTIME CLOSES IT — every
+package now typechecks its tests") fixed this independently while this plan was
+being written: `lab-runtime` now runs `tsc -p tsconfig.test.json` and the
+PENDING debt list is empty. `641de8c` then took the escape-hatch count from 223
+to 4, uncovering three more instances of the cascade shape bug that started that
+sweep. Both landed on `deploy/2026-08-21-partner-ready`, not `main`.
+
+Two sessions found the same defect from opposite directions within hours. That
+is the argument for P1.1 and P1.3 stated as evidence rather than opinion: with
+several agents committing to one repo, the only trustworthy signal comes from a
+gate that runs on a clean checkout in a quiet environment. Kept below for the
+record of how it was found.
+
+
 
 Every other lab package runs `tsc -p tsconfig.json --noEmit && tsc -p
 tsconfig.test.json`. `@potion/lab-runtime` runs only the first half — its
@@ -269,6 +284,21 @@ Committed here, same as P0.7.
 in test files and holds the total at a budget that "may fall, never rise".
 Good design — and it caught something real, in the most useful possible way.
 
+**CORRECTION 2026-09-05 — this no longer reproduces, and the entry is kept
+anyway.** The 223 → 219 below happened on the ORIGINAL base (pre-641de8c),
+where the budget was 223 and the scan was TEXT. Two things then changed
+upstream: 641de8c took the real count to 4, and ac02170 replaced the text scan
+with an AST count of `ts.AsExpression` nodes — the text version read prose
+("the private hop w-as never fetched" matched) and missed a bare `as unknown`.
+Checked on the current tip: all five relocated files carry ZERO hatches under
+both metrics, so moving them now shifts the count by nothing and the "lower the
+budget" message will not appear.
+
+The entry stays because the FINDING is not the number. A scan root that omits a
+directory holding tests is silent — see P0.16, where a planted cast in
+`tests/chaos` passes the guard with `'tests'` dropped. That is the durable
+result; 223 → 219 was merely how I happened to trip over it.
+
 Its scan roots were `[packages, apps]`. Moving five test files into `tests/`
 dropped the count 223 → 219, and the assertion demanded the budget be lowered
 "to lock the gain in". There was no gain: the four casts still exist, in a
@@ -284,6 +314,525 @@ discipline as everything else.
 Worth noting for its own sake: this is the honest-numbers failure mode the
 repo already has a name for. The ratchet asked to be told a comfortable
 number. The right answer was to widen its eyes, not lower its bar.
+
+### P0.10 — The secrets gate had never run either
+
+The `ci` workflow's FIRST EVER execution (PR #8, 2026-09-04) failed at the
+gitleaks step, before build/typecheck/lint/test started:
+
+    🛑 GITHUB_TOKEN is now required to scan pull requests.
+
+`gitleaks-action@v2` refuses `pull_request` events without that token and exits
+**before scanning**. So this was not a finding — it was the scan not happening.
+The step passed `GITLEAKS_CONFIG` and two flags and no token.
+
+**Nothing in this repository has ever been scanned for secrets.** The gate was
+configured, read correctly, and never executed — the sixth member of the family
+this phase keeps finding. Fixed by adding
+`GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` to the step's env.
+
+Two things follow, and neither is answered yet:
+
+1. **The dependency-vulnerability count and the secret count are both still
+   unknown.** `pnpm audit` could not reach the registry locally, and gitleaks
+   has never run. The first honest answer to either arrives with the next run —
+   treat a clean result as news, not as confirmation.
+2. **Moving five test files may have invalidated path-based allowlists** in
+   `.gitleaks.toml`. One of them (`exfiltration-corpus`, now
+   `tests/integration/`) carries a GitHub-token-shaped canary string as fixture
+   data BY DESIGN. If gitleaks flags it, the fix is the allowlist path, not the
+   fixture — and the fact that a canary is what surfaced it is the gate working.
+
+### P0.11 — The most fragile step runs first and blinds everything behind it
+
+`ci.yml` orders the job: install → **gitleaks** → build → typecheck → lint →
+test → dependency audit → SBOM. A failure at gitleaks skips all seven steps
+behind it.
+
+That is backwards for a regression gate. The secrets scan turned out to be the
+most config-fragile step in the file — three independent defects, each found
+only by running it (wrong branch trigger, missing `GITHUB_TOKEN`, missing
+`pull-requests: read`) — while build/typecheck/lint/test are the cheapest and
+highest-signal checks and depend on nothing but the repo. For three
+consecutive runs, a broken scanner meant no test signal at all.
+
+**Do:** move the secrets scan after `pnpm test`, or keep it early with
+`continue-on-error: true` and make it a separate required check. Either way a
+broken scanner costs you the scan, not the pipeline. Same argument for the
+dependency audit and SBOM, which sit behind everything and have therefore also
+never executed.
+
+The general rule worth adopting: **order CI steps by (signal ÷ fragility),
+highest first.** A gate you cannot see past is a gate that teaches people to
+ignore it.
+
+### P0.12 — RLIMIT_NPROC=64 is safe only where the sandbox owns its UID
+
+**CORRECTED 2026-09-04.** First diagnosis (git identity) was WRONG and the fix
+based on it did not work. The error: I read `repo/src/lib.js` being present as
+proof the sandbox ran and aborted later. That file is pre-seeded straight into
+the database by `upsertLabRunFile` — its presence says nothing about the
+sandbox. The abort could be anywhere, including line one.
+
+**Actual cause, from the sandbox's own comment** (`deploy/sandbox/sandbox_server.py`):
+
+    if sys.platform != "darwin":
+        limits.append((resource.RLIMIT_NPROC, RLIMIT_NPROC))   # 64
+
+    # macOS dev refuses some ... and NPROC is skipped there outright — Darwin
+    # counts it PER USER, so a dev machine's hundreds of processes make bash
+    # unable to fork at all (X7 found this via the shell).
+
+**Linux counts RLIMIT_NPROC per real UID as well.** The carve-out assumed Linux
+was safe because in the PROD CONTAINER the sandbox runs as a dedicated user
+owning few processes. On a CI runner the same UID owns the entire box, so a
+64-process ceiling is already near-exhausted: `git` cannot fork, `set -e`
+aborts, and the shell's output file is never written.
+
+The same discovery was made once, for macOS, and generalised as "not-darwin is
+fine" when the real condition is **"the sandbox has its own UID."**
+
+**DIAGNOSED 2026-09-04 on the third cycle — AND THE FIX NEVER REACHED THE
+CODE. Applied 2026-09-08, after a second investigation re-derived every step
+of the one below, wrong turns included.** What this section described as done
+was never true: `sandbox_server.py` still read `sys.platform != "darwin"`, and
+`deploy/sandbox/Dockerfile` carried no declaration. The write-up was the only
+place the fix existed.
+
+That cost a second three cycles, and it is a worse failure than the original
+bug. A document saying FIXED is read as evidence; the check that would have
+caught it is the one this repo already applies to numbers — a claim is only as
+good as the artifact it points at. The env inventory added on 2026-09-06 even
+FLAGGED `POTION_SANDBOX_DEDICATED_UID` as named-in-a-doc-and-read-by-nothing,
+and it was waved through as "a proposal" instead of being read as what it was.
+
+**The evidence, identical on both occasions:**
+
+    "stderr": "__potion_main__.sh: fork: retry: Resource temporarily unavailable"
+    "exitCode": 254
+    "filesWritten": []
+
+`EAGAIN` from `fork` — RLIMIT_NPROC, exactly as hypothesis 2 said. The CAUSE
+was right; both fixes were wrong about the CONDITION under which the ceiling is
+safe:
+
+| attempt | condition used | why it failed |
+| --- | --- | --- |
+| original | `sys.platform != "darwin"` | a proxy — true in the container, false on a runner where one uid owns the box |
+| fix 1 | headroom over a boot-time `/proc` count | the count drifts far past 64 while a parallel suite spawns workers; measured at boot, exhausted by exec time |
+| fix 2 | `POTION_SANDBOX_DEDICATED_UID=1`, declared in the Dockerfile | the invariant is a property of the DEPLOYMENT, not something the process can measure |
+
+RLIMIT_NPROC is counted per real UID host-wide, so "this exec cannot fork-bomb"
+holds only where the sandbox owns its uid. `deploy/sandbox/Dockerfile` creates
+the `sandbox` user; it now declares the invariant on the line above `USER
+sandbox`, where it becomes true. Absent the declaration the server skips NPROC
+rather than applying a ceiling it cannot justify — RLIMIT_AS, RLIMIT_CPU and
+the parent's wall-clock kill still hold. Prod behaviour is unchanged.
+
+Proven in both directions on 2026-09-08, on a machine whose uid owns hundreds
+of processes:
+
+    POTION_SANDBOX_DEDICATED_UID unset   X7 passes
+    POTION_SANDBOX_DEDICATED_UID=1       X7 fails, the shell unable to fork
+
+which is the CI failure, reproduced locally, from the declaration alone.
+
+**THE ACTUAL LESSON, and it cost three CI cycles (~75 minutes):**
+
+The test discarded its own evidence — `stdio: 'ignore'` on the sandbox, and no
+assertion on the shell's exit code — so the only signal reaching CI was "a file
+is missing", a symptom every line of the script can produce. I identified that
+gap BEFORE the first hypothesis and guessed anyway, twice. Both guesses were
+argued from which file survived, and that file is pre-seeded straight into the
+database: it never touches the sandbox and carries no information at all.
+
+**Rule:** when a failure reproduces only where you cannot look, spend cycle one
+making it speak. A test that cannot say why it failed will absorb hypotheses
+indefinitely, and each one feels reasonable in isolation.
+
+The diagnostics (a604846, 3bde286) are the durable part of this item and stay
+in the test: sandbox stderr captured, every tool step's exit code and output
+printed, step kinds listed, landed files named.
+
+---
+
+_Superseded record of the two wrong diagnoses, kept because the reasoning is
+the point:_
+
+1. Host git identity — fixed, X7 still failed.
+2. `RLIMIT_NPROC` counted per-uid — fixed (below), X7 still failed.
+
+Both were argued from the same thin evidence — WHICH FILE SURVIVED — and that
+evidence cannot distinguish between failures, because the surviving file is
+pre-seeded straight into the database and never touches the sandbox. Every step
+of the script is compatible with the symptom.
+
+**The actual defect is diagnosability, and it was visible before either guess.**
+The test spawns the sandbox with `stdio: 'ignore'` (its stderr discarded) and
+never asserts on the shell's own exit code or output, so the only thing reaching
+CI was "a file is missing". Fixed in a604846: sandbox stderr captured and
+printed in the assertion, the recorded `run_shell` step (exit code, stdout,
+stderr) printed with it. The next run names its own cause.
+
+**Lesson, at a cost of ~50 minutes of CI:** when a failure reproduces only in an
+environment you cannot enter, spend the first cycle making it speak, not on the
+most plausible hypothesis. A test that cannot say why it failed will absorb
+hypotheses indefinitely.
+
+The NPROC change below stands on its own merits — a per-uid ceiling is not what
+"this exec cannot fork-bomb" means — but it is NOT established as X7's cause,
+and this correction supersedes the claim that it was.
+
+**Applied 2026-09-04 — option 1 (correct in itself; not the X7 fix).** The limit is now HEADROOM over what the uid
+already runs, measured once at boot from `/proc`:
+
+    _NPROC_BASE = <processes owned by this uid>
+    RLIMIT_NPROC = _NPROC_BASE + 64
+
+"This snippet cannot fork-bomb" is a statement about what an exec may ADD, and
+that is true whether or not the uid is dedicated. In the prod container
+`_NPROC_BASE` is a handful, so the effective ceiling stays ~64 and prod
+behaviour is unchanged. Where the count is unknowable (macOS, no `/proc`) the
+limit is skipped — the same outcome Darwin had, now reached by the real
+condition rather than a platform name, so the `!= "darwin"` special case is
+gone.
+
+Note on verification: macOS takes the skip path, so this fix could not be
+exercised on the machine that wrote it. Local checks proved only that nothing
+broke. Linux CI is the test.
+
+Original guidance, kept because the reasoning is the point:
+
+**Do NOT simply raise or drop the limit** — NPROC is fork-bomb defence, and
+weakening a security control to make CI green is the trade this whole phase
+exists to refuse. The options, in order of preference:
+
+1. Gate on the actual condition: apply NPROC only when the sandbox owns its
+   UID (dedicated user, or a container where it is PID/user-isolated).
+   Detectable at startup; matches the real invariant instead of a proxy for it.
+2. Run the sandbox as a dedicated UID wherever it runs, CI included — making
+   the prod assumption true everywhere rather than conditional.
+3. Skip X7 where the invariant does not hold, and say so loudly. Weakest: a
+   sandbox test that skips on the only foreign environment available is close
+   to no test.
+
+**Also fix the diagnosability, which is why this took two wrong guesses:** the
+test spawns the sandbox with `stdio: 'ignore'`, so its stderr is discarded, and
+the shell's own stderr is never asserted on. A sandbox integration test that
+cannot say WHY the sandbox failed is a test you can only debug by hypothesis.
+Surface the tool output in the failure message.
+
+### Superseded first diagnosis — a sealed shell that leaned on the host's name
+
+The gate's first run to clear gitleaks/build/typecheck/lint failed one test out
+of 3,083: `lab-run.test.ts > X7 — the sealed shell (REAL sandbox integration)`.
+
+    expected [ 'repo/src/lib.js' ] to include 'out/report/result.txt'
+
+The pre-seeded tree survived; the shell's own output never appeared. Under
+`set -e` that puts the abort between them, on:
+
+    git init -q workrepo && cd workrepo && git commit -q --allow-empty -m offline
+
+`sandbox_server.py` sets `HOME` to the workdir, so no user gitconfig applies in
+any environment. But git's FALLBACK synthesises `user@hostname` — which
+resolves on a developer Mac and fails on a runner whose hostname carries no
+domain (`unable to auto-detect email address`). **The test passed for everyone
+who ever ran it and could not pass on CI.**
+
+Fixed by passing identity explicitly. A test of a *sealed* shell must not
+depend on ambient anything.
+
+**Why this one matters most.** Four full clean-tree runs here did not catch it,
+because this machine has a resolvable hostname. Every other defect in this
+phase was local state in the REPO — stale `dist`, an untracked artifact, a warm
+tree — and a clean checkout was enough to find them. This one was local state
+in the MACHINE, and only a genuinely foreign environment could surface it.
+That is the argument for CI that no plan document can make on its own.
+
+**Generalise it:** grep the suite for other ambient dependencies — `git`
+identity, `$HOME`, hostname, timezone, locale, network reachability, installed
+binaries. Anything a test reads that the repo does not provide is a test that
+passes for you and fails for a stranger.
+
+### P0.13 — `main` is red on its own ratchet, and nobody knows
+
+**Not this branch's regression. Verified on an untouched `origin/main`
+worktree, 2026-09-04.**
+
+    New `as never` / `as unknown as` in test files: 10 vs a budget of 4.
+    Worst offenders: frontier-notes/agenda.test.ts (4),
+    frontier-notes/own-spend.test.ts (2), db/research.test.ts (1),
+    db/tenancy.test.ts (1), alerts-dispatch.test.ts (1)
+
+The sequence:
+
+1. `641de8c` swept escape hatches **223 → 4** and set the budget at 4, with a
+   commit message cataloguing the real shape bugs the casts had been hiding —
+   three more instances of the cascade defect, phantom drizzle columns, a
+   `Usage` blob read back as undefined.
+2. `b79a995` and `6ba2042` landed **after** it and added six new casts.
+3. Nothing noticed, because the gate that runs the ratchet has never run.
+
+**The guard built to prevent this exact regression regressed within hours of
+being built.** That is not a criticism of the guard — it is a good guard, and
+it is the only thing in this repo that caught a change of mine (P0.9). It is
+the whole argument for P0 in one artifact: a check nothing executes is a check
+that decays silently, and the better the check, the more expensive the false
+confidence it buys.
+
+**How to clear it — the ratchet's own message is right:** *fix the type, do not
+raise the number.* Raising the budget to 10 records the regression as the new
+normal and spends the sweep's entire value. Six casts across two files is an
+afternoon.
+
+**Left deliberately unfixed by this branch.** It is another session's code, the
+correct fix is theirs to make, and silently absorbing someone else's red is how
+a gate becomes decorative. The first CI run on `main` will say so plainly.
+
+### P0.14 — 14 high-severity production advisories, shipping live
+
+The supply-chain gate ran for the first time on 2026-09-04 and answered a
+question this repo has never been able to answer:
+
+    audit-gate: 14 production advisories, level >= high: 0 accepted, 11 blocking
+
+| package | advisories | fix |
+| --- | ---: | --- |
+| `fast-uri` | 8 (4 GHSAs × 2 version ranges) | bump → >=3.1.6 / >=4.1.3 |
+| `nanoid` | 1 | bump → >=3.3.18 |
+| `xlsx` | 2 | **`patched: <0.0.0` — no patched version exists** |
+
+Nine are ordinary version bumps and should go in immediately.
+
+`xlsx` is the one that needs a decision rather than a command: prototype
+pollution (GHSA-4r6h-8v6p-xvw6) and ReDoS (GHSA-5pgg-2g8v-p4x9), with no fix
+published to npm — the unmaintained SheetJS-on-npm situation. The options are
+migrating to the vendor's own distribution, replacing the library, or accepting
+it with a written justification in `scripts/security/audit-allowlist.json`
+(currently empty, which is why all 11 block). Accepting is legitimate ONLY if
+the parsing path never sees untrusted spreadsheets — that is a question about
+where xlsx is called, not about the advisory.
+
+**This is production.** withpotion.com serves live traffic, the gate designed to
+catch exactly this was written into `ci.yml`, and it had never executed once.
+The same run produced the repository's first SBOM.
+
+**Nine bumped 2026-09-04** via `pnpm.overrides`, the pattern already used for
+postcss/sharp/glob. Gate went **14 advisories → 5, 11 blocking → 2**. Clean
+build and typecheck pass.
+
+**RESOLVED 2026-09-05 — option 1, the vendor's own distribution.**
+
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    audit-gate: 5 advisories, 2 blocking -> 3 advisories, 0 blocking. PASS.
+
+`patched: <0.0.0` was never a data error. SheetJS stopped publishing to npm at
+0.18.5 and moved to its own CDN, so the npm package is frozen ON the vulnerable
+code by the vendor's choice, and no fixed version will ever appear there. 0.20.3
+is the CDN's current release (probed — 0.20.4+ do not exist) and postdates both
+fixes.
+
+Verified rather than assumed, because a version jump is not a config change:
+the exact APIs the workbench uses were exercised against 0.20.3 — `XLSX.read`
+with `{type:'array', sheetRows}` and `utils.sheet_to_json` with
+`{header:1, raw:false, defval:''}`. `sheetRows` still caps the PARSE, row shape
+unchanged. Clean build/typecheck/lint all green; dashboard 122 tests; xlsx
+present in the built bundle.
+
+**Caveat on the record:** this is a production dependency from a non-npm host.
+It is the vendor's official channel and the lockfile pins the exact URL, but it
+carries no npm registry provenance, and the advisory database no longer matches
+the package by name+version — so the gate going quiet is NOT itself proof of
+patching. The proof is that 0.20.3 postdates both fixes. If a CDN dependency in
+production is unwanted, option 2 (replace the parser — this is only a capped
+preview grid) stays open.
+
+_Original triage, kept because it is why the allowlist was refused:_
+
+**`xlsx` triaged — and it is NOT the trusted-input case.**
+
+`apps/dashboard/components/lab-workbench.tsx:66` does:
+
+    fetch(`/api/lab/runs/${runId}/files/${name}`) → arrayBuffer → XLSX.read(buf)
+
+That is a **lab run workspace file, parsed client-side in the viewer's
+browser**. Those files are written by agent-authored code running in the
+sandbox, and that agent consumes web tools and MCP connectors. The path
+therefore exists: hostile content → agent → `.xlsx` → SheetJS prototype
+pollution (GHSA-4r6h-8v6p-xvw6) or ReDoS (GHSA-5pgg-2g8v-p4x9) in an
+operator's tab.
+
+**Allowlisting would contradict this repo's own posture.** `mini-eval.test.ts`
+asserts *"INJECTION FLOOR: a hostile server moves nothing past the Rules"* and
+passes. Accepting a prototype-pollution parser fed by agent output is the same
+class of risk that test exists to refuse — and the advisory has no patch, so
+the allowlist entry would be permanent.
+
+Options, best first:
+
+1. **SheetJS's own distribution.** The npm `xlsx` package is stale by the
+   vendor's choice; they publish fixed builds from their CDN. This is the
+   documented upgrade path and the smallest change.
+2. **Replace the parser** for what this actually is — a capped PREVIEW grid
+   (`sheetRows: GRID_ROW_CAP + 1`, first 100-odd rows). A preview does not
+   need a full workbook engine.
+3. **Contain the parse**: run it in a Web Worker so pollution cannot reach the
+   app's realm. Mitigates, does not remove.
+4. Allowlist with a written justification — only if 1-3 are all refused, and
+   the justification must argue why agent-written workbooks are trusted.
+
+### P0.15 — CI tests the MERGE, not your branch — and an ungated main is a treadmill
+
+Two things learned the hard way on 2026-09-04/05, both worth writing down.
+
+**1. A `pull_request` run evaluates head MERGED WITH base.** So a green local
+branch says nothing about CI while base is moving. `main` advanced 18 commits
+during this work, then 13 more, and each time CI was judging commits against a
+`main` that had never been built here. It produced a failure I initially
+misread as my own stale artifact — regenerating locally gave NO diff, which was
+the tell that the assumption was wrong.
+
+**Corollary:** a conflicting PR gets NO run at all. GitHub cannot construct the
+merge ref, so it silently skips the workflow — no run, no error, no annotation.
+"CI is slow" and "CI will never start" look identical. Check `mergeable` before
+concluding anything about a missing run.
+
+**2. An ungated `main` accumulates faster than a PR can absorb.** Regressions
+had to be cleared inside this PR twice:
+
+| wave | what had gone red on `main` |
+| --- | --- |
+| first | ratchet 10 vs 4 · lint (`agenda.ts`, `daily.ts`) · classification hash · 14 advisories |
+| second | ratchet 8 vs 4 again · tenancy artifact (7 new routes, unclassified) |
+
+None were malicious or careless — they are the ordinary output of fast work
+with no gate in front of it. The arithmetic is what matters: while `main` is
+ungated, every hour adds defects that the next PR must clear as a merge
+prerequisite, and a long-running branch pays that bill repeatedly.
+
+**This inverts the moment the gate lands.** The cost moves from "a reviewer
+spends an afternoon archaeologising" to "the author sees a red check in five
+minutes". That is the entire return on P0 — not the fixes, the relocation of
+when defects are found.
+
+**Practical consequence for this PR:** it will need one final rebase
+immediately before merge, and `main` should be gated (P1.1 branch protection)
+in the same sitting. Landing the gate without protecting the branch leaves the
+treadmill running.
+
+### P0.16 — Assert it, do not ask for it
+
+`TEST_ROOTS` is a hand-written list and every check in
+`scripts/test-typecheck-coverage.test.ts` walks it. Twice a directory has sat
+outside it while holding real tests: `scripts/` (fixed in 8a8f996, "the guard
+could not see its own directory") and `tests/`, which this branch fills with
+the five relocated integration tests.
+
+The failure mode is the dangerous kind — **a missing root is not an error, it
+is a smaller number.** No warning, no non-zero exit: an unwatched directory
+reporting success.
+
+**What I did first, and why it was wrong.** I asked the session I believed
+owned the file to keep `'tests'` in the list. Two mistakes in one move:
+
+1. The attribution was wrong (`ac02170`/`8a8f996` belong to a different
+   session), so the request went to someone who had never opened the file
+   while the actual owner kept editing it.
+2. More fundamentally — **a request that must be remembered, in a repo where
+   several sessions edit the same file, is not a guard. It is a hope with a
+   deadline.** A search turned up THREE sessions that have described editing
+   this one file.
+
+Fixed by assertion (138a93d): `pnpm-workspace.yaml` already declares every root
+that can hold a package, so any of them containing a `*.test.ts` must appear in
+`TEST_ROOTS`. Proven by reintroducing the bug the way 058132b does — drop
+`'tests'` and it fails by name; restore it and 7/7 pass.
+
+**The general rule, and it is the same one P0 is about:** when the correct
+behaviour depends on someone remembering something, encode it. Coordination by
+message does not survive a rebase, a handoff, or three concurrent sessions.
+Coordination by assertion does — and it tells whoever trips it exactly what
+they broke, which no amount of asking can.
+
+### P0.17 — The secrets gate scans a commit RANGE, and 35 findings sit behind it
+
+Run 33937430520 was the first with **Test green** — every gate passed except
+gitleaks, which failed like this:
+
+    fatal: ambiguous argument '61ddb8ec…^..d884f85…': unknown revision
+    failed to scan Git repository error="stderr is not empty"
+    scanned ~0 bytes (0)
+
+Not a leak — a scan that could not run and correctly refused to claim success.
+`gitleaks-action` derives a COMMIT RANGE from the PR; a force-push destroys the
+recorded base, so the range stops resolving. This branch is rebased constantly
+(main moves roughly hourly), so that is not an edge case here, it is the norm.
+Fourth distinct config defect in this one step: branch, token, permission,
+range.
+
+**And the range mode is why nobody has ever seen what a real scan finds.**
+Measured locally with the repo's own config, gitleaks 8.24.3:
+
+    607 commits scanned · leaks found: 35        (full history)
+    working tree only    · leaks found: 35        (same set — they are LIVE files)
+
+Triage, by file rather than by value:
+
+| where | count | reading |
+| --- | ---: | --- |
+| `.test.ts` / `fixtures/` | **33** | redaction, token-sealing and grant-absence tests. This repo asserts "EVERY inventoried route answers without token material" — those tests need token-SHAPED strings by construction. Near-certainly canaries. |
+| `docs/research/classifier-separation-…md:58` | 1 | prose; matched `generic-api-key` on the word "key". Reads as a false positive. |
+| `scripts/step10-live-mcp.ts:64` | 1 | `REHEARSAL_TOKEN = …`. Name says rehearsal, but it is the one that deserves eyes. |
+
+No obvious live credential. But `.gitleaks.toml`'s own allowlist comment says
+*"CI scans git history (tracked content only), so these paths can never hide a
+COMMITTED secret"* — a premise that was never true, because the action scans a
+range and the workflow never ran.
+
+**RESOLVED 2026-09-05 — option 3, triage then harden.**
+
+All 35 triaged individually, none a live credential (table above). Allowlisted
+in `.gitleaks.toml` by pattern with the reasons written down, and the residual
+risk stated IN THE FILE rather than buried: a real credential pasted into a
+`*.test.ts` or a `fixtures/` directory will not be caught by this gate. That is
+accepted deliberately, because 35 permanent findings makes a gate nobody reads.
+
+The scan then replaced gitleaks-action with the gitleaks BINARY over full
+history at checkout depth 0 — deterministic, immune to force-push, needing no
+token and no PR metadata, which is what `.gitleaks.toml`'s header always
+claimed the CI step did ("runs `gitleaks git` (history)"). The binary is
+CHECKSUM-VERIFIED before it executes: the tool that vouches for the repo's
+secrets does not get to arrive unchecked. `permissions` drops to
+`contents: read`, since `pull-requests: read` existed only for the action.
+
+Verified: 608 commits of history and the working tree both report no leaks.
+
+**Two things worth keeping from this one:**
+
+1. A scanner that fails on git plumbing tells you nothing about secrets in
+   either direction. Four consecutive failures here were all configuration,
+   and a fifth would have looked identical to a real finding.
+2. `.gitleaks.toml` documented a behaviour ("CI scans git history") that was
+   never true of the workflow as written. The config was honest about intent
+   and wrong about fact, and nothing could tell the difference until the gate
+   ran. That is the same shape as everything else in this phase.
+
+_Original framing, kept because the reasoning is why option 3 was chosen:_
+
+**The decision, and it is not mine to make unilaterally.** Three states:
+
+1. **Today:** the scan is broken, so it passes or fails on git plumbing rather
+   than on secrets. Green by accident is the worst of the three.
+2. **Make it robust** (scan the working tree, immune to force-push): correct,
+   and immediately **red with 35 findings**.
+3. **Triage first, then make it robust:** allowlist the canaries with reasons,
+   put eyes on the two non-test hits, then switch the scan mode. Slower, and
+   the only sequence that ends with a gate that means something.
+
+Recommend 3. Weakening a secrets gate to get a green tick is the exact trade
+this whole phase exists to refuse, and turning it red with 35 unreviewed
+findings just teaches people to ignore it.
 
 ### P0.3 — Record the green baseline
 
@@ -339,15 +888,26 @@ Work is happening on `deploy/2026-08-21-partner-ready`, 6 commits ahead of
 
 ## P2 — Close the security and config gaps (week 2)
 
-### P2.1 — Make the dangerous combination fatal, not advisory
+### P2.1 — Make the dangerous combination fatal, not advisory — **DONE 2026-09-05**
 
-`devAuthBypassEnabled()` in `apps/server/src/auth.ts:145` checks the explicit
-`POTION_DEV_AUTH` flag *before* the `NODE_ENV !== 'production'` fallback, so
-`POTION_DEV_AUTH=1` disables authentication in production. `boot-report.ts`
-already detects this exact state and already prints
+> Built alongside the review's P1-2 (the bypass also *defaulted* open on an
+> unset NODE_ENV). `GateReport.fatal` exists, `devAuth && isProd` and
+> `magicLink && selfServe && isProd` set it, `logBootGates` throws
+> `BootRefusedError`, and `index.ts` prints the gate and exits 1. Asserted in
+> `boot-report.test.ts`, and each half mutation-checked. The boot report also
+> now calls the REAL `devAuthBypassEnabled` instead of re-implementing it, so
+> the log and the server cannot disagree.
+
+**What follows is the finding as written on 2026-09-02, kept for the record.
+It is FIXED — read the note above before acting on any of it.**
+
+`devAuthBypassEnabled()` in `apps/server/src/auth.ts` checked the explicit
+`POTION_DEV_AUTH` flag *before* an `NODE_ENV !== 'production'` fallback, so
+`POTION_DEV_AUTH=1` disabled authentication in production. `boot-report.ts`
+already detected this exact state and already printed
 `AUTH BYPASS IS ON IN PRODUCTION — every dashboard route is effectively public.`
 
-The mechanism exists. The missing piece is that nothing refuses:
+The mechanism existed. The missing piece was that nothing refused:
 
 - Add a `fatal?: string` field alongside `warn` in `GateReport`.
 - Mark `devAuth && isProd` fatal; likewise `magicLink && selfServe` on a

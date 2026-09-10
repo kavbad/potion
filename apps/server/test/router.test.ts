@@ -180,7 +180,7 @@ describe('O1 — "what are you building?" → interpreted mix + instant reveal',
   });
 });
 
-describe('potion/<slug> — the router as a serving alias', () => {
+describe('potion/<slug> — the plan as a serving alias', () => {
   const chat = (model: string) =>
     app.inject({
       method: 'POST',
@@ -221,7 +221,7 @@ describe('potion/<slug> — the router as a serving alias', () => {
     expect(served!.routerVersion).toBe(3);
   });
 
-  it('/v1/models lists the named router first, as a router', async () => {
+  it('/v1/models lists the named plan first, as the compiler', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/v1/models',
@@ -230,7 +230,7 @@ describe('potion/<slug> — the router as a serving alias', () => {
     expect(res.statusCode).toBe(200);
     const data = (res.json() as { data: Array<{ id: string; potion?: { role?: string } }> }).data;
     expect(data[0]!.id).toBe('potion/acme-co');
-    expect(data[0]!.potion?.role).toBe('router');
+    expect(data[0]!.potion?.role).toBe('compiler');
     expect(data[1]!.id).toBe('potion-auto');
   });
 });

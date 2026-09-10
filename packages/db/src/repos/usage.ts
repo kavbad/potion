@@ -269,3 +269,46 @@ export async function listUsageDaily(
     )
     .orderBy(asc(usageDaily.day), asc(usageDaily.clusterId));
 }
+
+/**
+ * What the period's PROJECTED savings were measured against, per cluster.
+ *
+ * `usage_daily` rolls up `baseline_cost_usd` and nothing else, so an invoice
+ * built from it can state a projected-savings figure but not its comparator.
+ * Those are very different claims: a baseline of 'org-incumbent' is "what the
+ * model you told us you use would have cost", while 'best-of-frontier' is a
+ * counterfactual against the priciest measured option — a number no customer
+ * can reproduce, because it was never their alternative. 0089 records the
+ * basis on every request_logs row precisely so the caption can be proven from
+ * the row; this is the read side of that.
+ *
+ * Counts rather than a single label, because a period legitimately spans a
+ * change (an incumbent named mid-month), and 'mixed' is the honest answer
+ * there rather than whichever basis happened to sort first.
+ */
+export interface BaselineBasisCount {
+  clusterId: string;
+  basis: string | null;
+  requests: number;
+}
+
+export async function baselineBasisByCluster(
+  db: PotionDb,
+  orgId: string,
+  range: UsageRange,
+): Promise<BaselineBasisCount[]> {
+  assertDayRange(range);
+  const res = await db.execute(sql`
+    SELECT cluster_id, baseline_basis, count(*)::int AS requests
+    FROM request_logs
+    WHERE org_id = ${orgId}
+      AND status = 'ok'
+      AND ts >= ${`${range.fromDay}T00:00:00.000Z`}::timestamptz
+      AND ts <  (${`${range.toDay}T00:00:00.000Z`}::timestamptz + interval '1 day')
+      AND cluster_id IS NOT NULL
+    GROUP BY cluster_id, baseline_basis
+  `);
+  return (res.rows as Array<{ cluster_id: string; baseline_basis: string | null; requests: number }>).map(
+    (r) => ({ clusterId: r.cluster_id, basis: r.baseline_basis, requests: Number(r.requests) }),
+  );
+}

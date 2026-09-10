@@ -1,10 +1,10 @@
 'use client';
 
-// WHERE YOUR ROUTER IS RIGHT NOW (2026-09-02) — the flywheel, made legible
+// WHERE YOUR COMPILER IS RIGHT NOW (2026-09-02) — the flywheel, made legible
 // while it spins.
 //
 // THE GAP THIS CLOSES. RouterArc teaches the loop, but it renders only in
-// the no-traffic branch of the router home: the moment a customer has real
+// the no-traffic branch of the compiler home: the moment a customer has real
 // traffic — the moment the loop actually starts running — every explanation
 // of the background machinery disappeared. Sampling, shadow measurement,
 // workload discovery and the holdout all proceed invisibly for days, and
@@ -70,7 +70,7 @@ export function loopRows(input: {
       rows.push({
         key: 'sampling',
         label: 'reading your traffic',
-        detail: 'off — the router runs on platform evidence until you allow a sample',
+        detail: 'off — the compiler runs on platform evidence until you allow a sample',
         href: '/settings/controls',
         needsYou: true,
       });
@@ -101,7 +101,7 @@ export function loopRows(input: {
       key: 'shadow',
       label: 'testing alternatives',
       detail: 'candidates scored on your own traffic, after your answer went out',
-      href: '/router',
+      href: '/',
     });
   }
 
@@ -117,7 +117,7 @@ export function loopRows(input: {
       key: 'workloads',
       label: 'your own kinds of work',
       detail: parts.join(' · '),
-      href: '/router',
+      href: '/',
       needsYou: measured > 0,
     });
   }
@@ -125,7 +125,7 @@ export function loopRows(input: {
   if (input.hasOutcomes !== null) {
     rows.push(
       input.hasOutcomes
-        ? { key: 'outcomes', label: "your app's verdicts", detail: 'arriving — routing can now learn from ground truth, not judges alone', href: '/router' }
+        ? { key: 'outcomes', label: "your app's verdicts", detail: 'arriving — the compiler can now learn from ground truth, not judges alone', href: '/' }
         : { key: 'outcomes', label: "your app's verdicts", detail: 'none yet — one line wires the strongest evidence there is', href: '/docs#outcomes', needsYou: true },
     );
   }
@@ -155,7 +155,7 @@ export function LoopStatus({
   hasOutcomes,
   hasShadow,
 }: {
-  /** null until the router document has loaded. */
+  /** null until the plan document has loaded. */
   hasOutcomes: boolean | null;
   hasShadow: boolean | null;
 }) {
@@ -177,7 +177,7 @@ export function LoopStatus({
   return (
     <section className="mt-10" data-testid="loop-status">
       <div className="flex items-baseline justify-between border-b border-[#d9d5cb] pb-2 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-        <span className="text-soft">What your router is doing right now</span>
+        <span className="text-soft">What your compiler is doing right now</span>
         <Link href="/docs#first-weeks" className="text-faint hover:text-ink">how the loop works</Link>
       </div>
       <ul className="mt-2 space-y-1.5">

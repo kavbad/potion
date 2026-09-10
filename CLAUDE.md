@@ -10,6 +10,15 @@ Next dashboard (`apps/dashboard`), packages for providers/strategies/
 harness/cluster/pareto/db/workers/etc. Repo: `~/Projects/potion` (git;
 history starts at the M1b-complete baseline commit).
 
+## Naming (2026-09-04, operator directive — read docs/NAMING.md)
+
+**Potion is a COMPILER, never a router — internally and externally.** Tagline:
+*The Compiler for Inference*. A router picks a road; a compiler designs the
+route. What Potion emits, per org and versioned, is the **plan** (shipped as
+the model id `potion/<org>`). Storage and wire spellings (`router_versions`,
+`routerVersion`, `/api/router`, `compileAndMintRouter`) are deliberately NOT
+renamed — `docs/NAMING.md` says why and lists them.
+
 ## Positioning (2026-08-06)
 
 Potion is a quality guarantee, not a router. Generic selection is a free
@@ -194,7 +203,7 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   NOT resolve incidents") moved to G2.3 where it belongs; [DONE 2026-08-08]
   G2.3 key role split: api-key role derives from scopes (serve → member,
   serve+admin → admin, FAIL CLOSED on unknown values); exhaustive
-  route-inventory fixture (apps/server/test/fixtures/route-inventory.ts —
+  route-inventory fixture (apps/server/src/security/route-inventory.ts —
   all routes classified, completeness-diffed, 27 admin routes probed per-key;
   G2.4 extends the same fixture with its lenses); walkthrough step-16 leg;
   [DONE 2026-08-08] G2.4 exhaustive tenancy sweep +

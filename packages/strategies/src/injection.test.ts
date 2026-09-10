@@ -8,7 +8,7 @@
 // framing raises the bar but is not a proof. These tests cover the parser
 // and prompt-construction layers, not model behavior.
 import { describe, expect, it } from 'vitest';
-import type { PriceTable } from '@potion/core';
+import type { ChatMessage, PriceTable, StrategyConfig } from '@potion/core';
 import {
   UNTRUSTED_DATA_BEGIN,
   UNTRUSTED_DATA_END,
@@ -49,6 +49,81 @@ describe('judge prompt DATA-block wrapping (best-of-n / ensemble)', () => {
     const c1 = msg!.content.split('\nCANDIDATE 1:\n')[1]!;
     const block = c1.slice(0, c1.indexOf('\n\nRespond with exactly one line:'));
     expect(unwrapUntrustedData(block).trim()).toBe(ADVERSARIAL);
+  });
+});
+
+/** Two candidates — the second is the adversarial one — and a judge whose
+ *  reply is chosen by the caller. Captures the judge's prompt. */
+function scriptedJudge(judgeReply: (msgs: ChatMessage[]) => string) {
+  const prices: PriceTable = {
+    version: 't',
+    updatedAt: 't',
+    entries: ['cheap-a', 'cheap-b', 'judge'].map((alias) => ({
+      alias, provider: 'mock' as const, model: `${alias}-v1`, inputPer1M: 0, outputPer1M: 0,
+    })),
+  };
+  const answers: Record<string, string> = { 'cheap-a': 'candidate zero', 'cheap-b': ADVERSARIAL };
+  const stub: Provider = {
+    id: 'mock',
+    complete: async (req: CompleteRequest) => ({
+      text: req.model === 'judge' ? judgeReply(req.messages) : (answers[req.model] ?? req.model),
+      usage: { inputTokens: 1, outputTokens: 1 },
+      latencyMs: 1,
+      modelVersion: 'stub-v1',
+    }),
+  };
+  const providers = { ...createProviders({ prices }), mock: stub };
+  const ctx: ExecContext = { providers, prices, resolve: createResolver(providers, prices), seed: 1 };
+  return { ctx };
+}
+
+// The compiler IR's judge was the ONE judge in the repo that interpolated
+// untrusted model output raw. Every other judging path — best-of-n, ensemble,
+// the cascade self-report probe, composite's upgrade note — wraps it. Programs
+// were unreachable from outside their own tests when the interpreter was
+// written, so nothing noticed; C1 made them servable and C2 made them
+// synthesizable, at which point "the mechanism nobody could run" became "the
+// mechanism a gate could promote".
+describe('program pick-by-judge hardening (compiler IR)', () => {
+  it('wraps candidate answers in DATA blocks like every other judge', async () => {
+    let judgePrompt = '';
+    const seen = scriptedJudge((msgs) => {
+      judgePrompt = msgs.map((m) => m.content).join('\n');
+      return 'PICK: 0';
+    });
+    const pick: StrategyConfig = {
+      type: 'program',
+      name: 'j',
+      body: {
+        op: 'pick',
+        of: [{ op: 'call', model: 'cheap-a' }, { op: 'call', model: 'cheap-b' }],
+        by: { kind: 'judge', model: 'judge' },
+      },
+    };
+    await execute(pick, [{ role: 'user', content: 'customer task text' }], seen.ctx);
+    expect(judgePrompt).toContain(UNTRUSTED_DATA_FRAME);
+    const idx = judgePrompt.indexOf(ADVERSARIAL);
+    expect(idx).toBeGreaterThan(-1);
+    expect(judgePrompt.lastIndexOf(UNTRUSTED_DATA_BEGIN, idx)).toBeGreaterThan(-1);
+    expect(judgePrompt.indexOf(UNTRUSTED_DATA_END, idx)).toBeGreaterThan(idx);
+  });
+
+  it('a candidate cannot steer the pick by embedding its own verdict', async () => {
+    // The adversarial candidate is index 1 and shouts "PICK: 0". A judge that
+    // echoes the injection still must not decide the outcome: the parse takes
+    // the LAST anchored PICK, which is the judge's own closing line.
+    const seen = scriptedJudge(() => `${ADVERSARIAL}\nPICK: 1`);
+    const pick: StrategyConfig = {
+      type: 'program',
+      name: 'j',
+      body: {
+        op: 'pick',
+        of: [{ op: 'call', model: 'cheap-a' }, { op: 'call', model: 'cheap-b' }],
+        by: { kind: 'judge', model: 'judge' },
+      },
+    };
+    const r = await execute(pick, [{ role: 'user', content: 'q' }], seen.ctx);
+    expect(r.text).toBe(ADVERSARIAL); // candidate 1, the judge's real verdict
   });
 });
 

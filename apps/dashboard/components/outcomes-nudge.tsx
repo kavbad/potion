@@ -8,9 +8,9 @@
 //
 // HONESTY RULES, which decide when this renders at all:
 //   · It appears only when routing traffic is PROVEN (requests that carried
-//     a real routing decision) and the loaded router document carries no
+//     a real serving decision) and the loaded plan document carries no
 //     outcome evidence on any assignment. Absent data is never treated as
-//     absent outcomes — an unloaded router renders nothing.
+//     absent outcomes — an unloaded plan renders nothing.
 //   · A floor of MIN_REQUESTS keeps it away from someone's first minute;
 //     the ask only makes sense once there is traffic worth explaining.
 //   · Dismissible, and the dismissal sticks per browser. This is an
@@ -25,7 +25,7 @@ export const MIN_REQUESTS = 20;
 const DISMISS_KEY = 'potion.outcomes-nudge.dismissed';
 
 /** Pure, so the render condition is testable without a DOM: prove traffic,
- * prove the router loaded, and prove no assignment carries outcomes. */
+ * prove the plan loaded, and prove no assignment carries outcomes. */
 export function shouldInvite(args: {
   routedRequests: number;
   assignments: Array<{ outcomes?: unknown }> | null;
@@ -71,10 +71,10 @@ export function OutcomesNudge({
         </button>
       </div>
       <p className="mt-3 text-[14px] leading-relaxed text-soft">
-        Your router&rsquo;s quality numbers come from a{' '}
+        Your plan&rsquo;s quality numbers come from a{' '}
         <span className="font-medium text-ink">judge</span> — a model scoring another model. Your
         application knows better: the query ran, the validator passed, someone accepted the draft.
-        Send that back and routing starts optimising for the thing you actually care about.
+        Send that back and the compiler starts optimising for the thing you actually care about.
       </p>
       <div className="mt-4">
         <CopyBlock

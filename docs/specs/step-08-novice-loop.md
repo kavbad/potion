@@ -358,7 +358,7 @@ standing-mission scheduling; multi-run dashboards (Step 14/16 surfaces).
   Catalog-edit replay invariance:
   `packages/lab-runtime/src/catalog-invariance.test.ts`. toolPolicy
   activation (both slots, per-slot `policy_override=` trace proof, tool-free
-  wrap-up): `packages/lab-runtime/src/walkthrough.test.ts`. Report ladder /
+  wrap-up): `tests/integration/src/walkthrough.test.ts`. Report ladder /
   taxonomy / est-vs-metered pins: `packages/lab-runtime/src/report.test.ts`.
   Tool posture in all three places: `apps/server/test/lab-posture.test.ts`.
   The ten-minute clock: `apps/dashboard/scripts/lab-walkthrough.ts`

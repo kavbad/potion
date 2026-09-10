@@ -231,7 +231,7 @@ export function BuildPlanner() {
               </p>
               <p className="mt-2 text-xs text-faint">
                 Frontier v{plan.evidence.frontierVersion} · {plan.evidence.provenance} provider
-                evidence · you are seeing the same numbers the router uses.
+                evidence · you are seeing the same numbers the compiler uses.
                 {!plan.evidence.countsAreComplete &&
                   ' Counts cover the strategies still on the frontier; candidates measured and then beaten are not included here.'}
               </p>

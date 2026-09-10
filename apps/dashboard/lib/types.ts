@@ -27,7 +27,28 @@ export type StrategyConfig =
       decomposerModel: string;
       routing: Record<string, string>;
       fusion?: { method: string };
-    };
+    }
+  /** M3 #23. This mirror went stale the day composite shipped: the union said
+   *  six shapes while the server served seven, so describeStrategy — exhaustive
+   *  over what it was given — compiled while returning undefined for a real
+   *  operating point. A mirror that drifts is worse than no mirror, because it
+   *  makes the drift type-check. */
+  | { type: 'composite'; startModel: string; upgradeModel: string; upgradeIf: { confidenceBelow: number } }
+  /** The compiler IR: a mechanism as data. The dashboard never runs one — it
+   *  only has to say honestly what a point IS. */
+  | { type: 'program'; name: string; body: ProgramNode };
+
+export type ProgramNode =
+  | { op: 'call'; model: string }
+  | { op: 'if'; check: ProgramCheck; then: ProgramNode; else: ProgramNode }
+  | { op: 'vote'; of: ProgramNode[] }
+  | { op: 'pick'; of: ProgramNode[]; by: { kind: 'confidence' } | { kind: 'judge'; model: string } };
+
+export type ProgramCheck =
+  | { kind: 'agree'; of: [ProgramNode, ProgramNode] }
+  | { kind: 'confidence'; of: ProgramNode; min: number }
+  | { kind: 'regex'; of: ProgramNode; pattern: string }
+  | { kind: 'json'; of: ProgramNode; requiredKeys?: string[] };
 
 export type ProviderKeyStatus = 'active' | 'revoked' | 'rotating';
 
@@ -548,7 +569,7 @@ export interface ClusterReadinessDto {
 export interface ConnectionResponse {
   baseUrl: string;
   endpoint: string;
-  /** Coherence pass: the org's named router — the model id to hand out. */
+  /** Coherence pass: the org's named plan — the model id to hand out. */
   router?: { name: string };
   /** false = derived from the request, only trustworthy without a proxy. */
   baseUrlConfigured: boolean;
@@ -585,14 +606,14 @@ export interface RoutingActivityRow {
   provenance: 'live' | 'mock' | 'blocked' | null;
   /** Requires BOTH a real frontier and a policy-selected point. Unknown ⇒ false. */
   routed: boolean;
-  /** R2: the router version whose recorded assignment this request rode;
+  /** R2: the plan version whose recorded assignment this request rode;
    * null = no routing decision, or routing never minted as a version. */
   routerVersion: number | null;
 }
 
 export interface RoutingActivityResponse {
   requests: RoutingActivityRow[];
-  /** R2: the org's current compiled router. */
+  /** R2: the org's current compiled plan. */
   router?: { name: string; version: number };
   summary: {
     returned: number;

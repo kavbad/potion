@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createQueue } from './index.js';
-import { MemoryQueue } from './memory.js';
+import { createMemoryQueue, MemoryQueue } from './memory.js';
 
 describe('memory queue', () => {
   it('processes jobs FIFO and returns unique ids', async () => {
@@ -143,5 +143,55 @@ describe('queue driver parity (F10)', () => {
     await q.close();
     expect(seen.map((d) => d.attempt)).toEqual([1, 2, 3]);
     expect(new Set(seen.map((d) => d.jobId))).toEqual(new Set([id])); // ONE job id across attempts
+  });
+});
+
+// ---- close() must not wait on work that cannot drain (found 2026-09-06) ----
+//
+// pump() stops at the head of the line when that job's name has no handler,
+// so a handler registered later still gets its jobs. close() used to wait on
+// `jobs.length > 0`. Together: one undeliverable job and close() never
+// returns. Reachable as soon as the server and worker are split (P1-3) — a
+// server with POTION_WORKER=off registers no handlers at all.
+describe('memory queue close, with undeliverable work', () => {
+  it('returns instead of hanging when nothing can handle the queued job', async () => {
+    const q = createMemoryQueue();
+    await q.enqueue('nobody-handles-this', { a: 1 });
+    // The bug was an unbounded await; a timeout is how the test distinguishes
+    // "closed" from "still waiting" without hanging the suite for 60s.
+    const closed = await Promise.race([
+      q.close().then(() => 'closed' as const),
+      new Promise<'hung'>((r) => setTimeout(() => r('hung'), 2_000)),
+    ]);
+    expect(closed).toBe('closed');
+  });
+
+  it('still DRAINS work that can be handled before closing', async () => {
+    const q = createMemoryQueue();
+    let ran = 0;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    q.registerHandler('slow', async () => { await gate; ran++; return {}; });
+    await q.enqueue('slow', {});
+    let done = false;
+    const closing = q.close().then(() => { done = true; });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(done).toBe(false); // it is waiting, as it should
+    release();
+    await closing;
+    expect(ran).toBe(1); // and the job ran before the close returned
+  });
+
+  it('a mix drains the deliverable and does not wait on the rest', async () => {
+    const q = createMemoryQueue();
+    let ran = 0;
+    q.registerHandler('known', async () => { ran++; return {}; });
+    await q.enqueue('known', {});
+    await q.enqueue('unknown', {});
+    await Promise.race([
+      q.close(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('close hung')), 2_000)),
+    ]);
+    expect(ran).toBe(1);
   });
 });

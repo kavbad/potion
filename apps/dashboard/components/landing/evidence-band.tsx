@@ -56,7 +56,7 @@ export function EvidenceBand() {
             <span className="font-medium text-[#efece4]">{CODE_GEN.ratio}-fold</span>.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-[#d6d3cb]">
-            This is why routing pays: most kinds of work are served from the bottom row, a few genuinely need
+            This is why the compiler pays: most kinds of work are served from the bottom row, a few genuinely need
             the top one, and only a measurement can tell them apart.
           </p>
           <p className="mt-6 font-mono text-[12px] leading-relaxed text-[#a8a29e]">
@@ -73,8 +73,19 @@ export function EvidenceBand() {
             const star = r.masked;
             return (
               <div key={r.label}>
-                <div className="flex items-baseline justify-between font-mono text-xs">
-                  <span>
+                {/* PHONES STACK (2026-09-05, found by walking the live page at
+                    375px). One flex row cannot hold a masked label and its
+                    numbers at that width, so the name wrapped INSIDE itself:
+                    "or-" on one line, the redaction block on the next, and
+                    "withheld" on a third. It shattered only on the masked row
+                    — the widest label, and the one row the whole section
+                    exists to make ("The name? That's the product."). Below sm
+                    the label takes its own line at full width; from sm up the
+                    original single-line layout is unchanged. nowrap is the
+                    belt to that braces: a redaction block is one token and
+                    must never be broken across lines. */}
+                <div className="flex flex-col gap-0.5 font-mono text-xs sm:flex-row sm:items-baseline sm:justify-between sm:gap-0">
+                  <span className="whitespace-nowrap">
                     <span className={star ? 'font-medium text-accent' : 'text-ink'}>
                       {r.label}
                     </span>
@@ -92,7 +103,7 @@ export function EvidenceBand() {
                 </div>
                 {star && (
                   <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-accent">
-                    ↑ the routed pick — {CODE_GEN.qualityRetainedPct}% of the top row&apos;s quality at{' '}
+                    ↑ the compiled pick — {CODE_GEN.qualityRetainedPct}% of the top row&apos;s quality at{' '}
                     {CODE_GEN.ratioWords}. The name? That&apos;s the product.
                   </p>
                 )}

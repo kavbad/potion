@@ -48,7 +48,7 @@ interface InterpretResponse {
 
 const SAMPLE = 'Is this review positive, negative, or neutral? "Crashed twice, support never replied."';
 
-/** Which surfaces the router's first-run question may stand in front of.
+/** Which surfaces the compiler's first-run question may stand in front of.
  * Exported so the exemption is a fact a test can hold, not a substring
  * buried in an effect. */
 export function gateAppliesTo(pathname: string): boolean {
@@ -79,12 +79,12 @@ export function FirstRunGate() {
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
   const check = useCallback(async () => {
-    // WORKERS IS NOT THE ROUTER (2026-09-05, from a cold walkthrough on
+    // WORKERS IS NOT THE COMPILER (2026-09-05, from a cold walkthrough on
     // production). This gate is a fixed, opaque, full-viewport overlay at
     // z-50, mounted by app-shell on EVERY signed-in route, and beat 1 has
     // no skip — Continue stays disabled until you name the AI provider your
     // company already uses. That is a fair question to ask someone setting
-    // up a router. It is an absurd one to put in front of someone who came
+    // up a plan. It is an absurd one to put in front of someone who came
     // to have a worker read their spreadsheet, and it was unanswerable
     // rather than merely annoying: /lab rendered UNDERNEATH it, the compose
     // box physically unclickable (elementFromPoint hit the overlay).
@@ -92,9 +92,9 @@ export function FirstRunGate() {
     // Two of the four outside accounts on production signed up and created
     // nothing at all. This is the wall they hit.
     //
-    // So the router's first-run question belongs to the router's surfaces.
+    // So the compiler's first-run question belongs to the compiler's surfaces.
     // It is not skipped here, only deferred: /lab is exempt, and the gate
-    // is waiting on the router pages whenever they go there.
+    // is waiting on the compiler pages whenever they go there.
     if (!gateAppliesTo(pathname)) return setBeat('done');
     const [me, inc] = await Promise.all([
       fetch('/api/auth/me', { cache: 'no-store' }).catch(() => null),
@@ -168,7 +168,7 @@ export function FirstRunGate() {
       // Mint failure is not a wall: the flow continues; keys live in Settings.
     }
     // The payoff: reading /api/router right here IS the moment the org's
-    // router v1 gets compiled and minted — the artifact exists because this
+    // plan v1 gets compiled and minted — the artifact exists because this
     // flow just gave it a quality bar. Absent a policy it stays quiet.
     const r = await fetch('/api/router', { cache: 'no-store' }).then((x) => (x.ok ? x.json() : null)).catch(() => null) as
       | { name?: string; version?: number; document?: { policy?: unknown } }
@@ -233,7 +233,7 @@ export function FirstRunGate() {
             </h1>
             <p className="mt-2 text-[14px] leading-relaxed text-soft">
               One sentence is enough — describe the product, or paste a typical prompt. Potion works
-              out what kinds of work it needs and builds your router around them. You never choose
+              out what kinds of work it needs and builds your plan around them. You never choose
               models, thresholds, or fallbacks.
             </p>
             <textarea
@@ -289,7 +289,7 @@ export function FirstRunGate() {
               </button>
               {choice === null && <span className="text-[12px] text-faint">Pick one — &ldquo;not sure&rdquo; is a fine answer.</span>}
               {choice !== null && description.trim().length < 3 && (
-                <span className="text-[12px] text-faint">Describing what you&rsquo;re building gets you a router preview on the next screen.</span>
+                <span className="text-[12px] text-faint">Describing what you&rsquo;re building gets you a plan preview on the next screen.</span>
               )}
             </div>
           </>
@@ -299,7 +299,7 @@ export function FirstRunGate() {
           <>
             <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">We understood the workload</div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-              Your router is ready.
+              Your plan is ready.
             </h1>
             <p className="mt-2 text-[14px] leading-relaxed text-soft">{interp.summary}</p>
 
@@ -324,7 +324,7 @@ export function FirstRunGate() {
                 {interp.rule ? (
                   <p className="mt-2 font-mono text-[12px] leading-relaxed text-soft" data-testid="reveal-rule">
                     why these choices: your starting rule — {interp.rule.toLowerCase().replace(/\.$/, '')}. change it
-                    anytime on your Router page; measurement personalizes it from week one.
+                    anytime on your Compiler page; measurement personalizes it from week one.
                   </p>
                 ) : null}
                 {interp.expected && (
@@ -337,7 +337,7 @@ export function FirstRunGate() {
                         org's NAMED incumbent when we've measured it — the
                         personal comparison — else the best-scorer ceiling,
                         labeled as the ceiling it is. Never a simulation of
-                        someone else's router: unmeasurable claims are the
+                        someone else's plan: unmeasurable claims are the
                         actual swindle. */}
                     {interp.expected.incumbent ? (
                       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[#d9d5cb] pt-3 font-mono text-[12.5px] sm:grid-cols-4" data-testid="expected-vs-incumbent">
@@ -367,17 +367,17 @@ export function FirstRunGate() {
                   very clear"), and honestly per the consent choice. */}
               <div className="border-t border-accent/40 px-5 py-3.5" data-testid="reveal-learning">
                 <div className="font-mono text-[12px] uppercase tracking-[0.12em] text-accent">
-                  this router gets better on its own — here&rsquo;s exactly how
+                  this plan gets better on its own — here&rsquo;s exactly how
                 </div>
                 {consent ? (
                   <ol className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-soft">
                     <li><span className="font-medium text-ink">Today · provisional.</span> Built from Potion&rsquo;s live platform measurements at your described mix — it works from the first request.</li>
                     <li><span className="font-medium text-ink">This week · measured on YOUR work.</span> Potion samples your real prompts (small, capped, credentials and numbers stripped) and scores quality per kind of work — on your traffic, not a benchmark.</li>
-                    <li><span className="font-medium text-ink">Then, always · personalized.</span> When the evidence shows a better point, an upgrade proposal appears — one click mints the next router version, with the change and the saving written on it. Never silently.</li>
+                    <li><span className="font-medium text-ink">Then, always · personalized.</span> When the evidence shows a better point, an upgrade proposal appears — one click mints the next plan version, with the change and the saving written on it. Never silently.</li>
                   </ol>
                 ) : (
                   <p className="mt-2 text-[13px] leading-relaxed text-soft">
-                    You turned workload measurement <b>off</b>, so this router stays on Potion&rsquo;s
+                    You turned workload measurement <b>off</b>, so this plan stays on Potion&rsquo;s
                     platform measurements — still live, still verified, but it won&rsquo;t personalize
                     to your prompts. Flip it on anytime in Settings and the measuring starts.
                   </p>
@@ -387,7 +387,7 @@ export function FirstRunGate() {
 
             <div className="mt-6 flex items-center gap-4">
               <button type="button" onClick={() => setBeat('key')} className="bg-ink px-5 py-2.5 text-[13px] font-medium text-[#f4f2ec] hover:opacity-90" data-testid="use-this-router">
-                Use this router →
+                Use this plan →
               </button>
               <button type="button" onClick={() => setBeat('question')} className="text-[12px] text-faint underline hover:text-soft">
                 that&rsquo;s not what I&rsquo;m building — re-describe
@@ -399,10 +399,10 @@ export function FirstRunGate() {
         {beat === 'key' && (
           <>
             <div className="mt-8 font-mono text-[12px] uppercase tracking-[0.14em] text-faint">
-              Step 2 of 4 · {router ? 'your router, compiled' : 'your key'}
+              Step 2 of 4 · {router ? 'your plan, compiled' : 'your key'}
             </div>
             <h1 className="mt-2 text-[1.8rem] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-              {router ? 'Your router is compiled. Point your client at it.' : 'Point your client here. Keep everything else.'}
+              {router ? 'Your plan is compiled. Point your client at it.' : 'Point your client here. Keep everything else.'}
             </h1>
             <p className="mt-2 text-[14px] leading-relaxed text-soft">
               Potion speaks the OpenAI protocol — requests, streaming, and tool calls unchanged.
@@ -413,7 +413,7 @@ export function FirstRunGate() {
                 <div className="flex items-center justify-between gap-3 border border-accent/50 bg-[#fbfaf7] px-4 py-3">
                   <div className="min-w-0">
                     <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-accent">
-                      your router · v{router.version} · compiled just now from your bar
+                      your plan · v{router.version} · compiled just now from your bar
                     </div>
                     <div className="truncate font-mono text-[13px] text-ink">model: &apos;{router.name}&apos;</div>
                   </div>
@@ -454,7 +454,7 @@ export function FirstRunGate() {
                 <li><span className="font-medium text-ink">It works today.</span> v1 routes every request on Potion&rsquo;s live measurements, under your bar — nothing to wait for.</li>
                 <li><span className="font-medium text-ink">Weeks 1–2: Potion reads your traffic.</span> A small, capped sample of your requests — credentials and number runs stripped — is measured to learn what <em>your</em> work is and which models are good enough at it.
                   {choice === 'scratch' ? ' Starting from scratch, there’s no old model to beat — your work is measured against a strong default bar; the arc is the same.' : ''}</li>
-                <li><span className="font-medium text-ink">Then it becomes yours.</span> Potion proposes your own quality bar per kind of work — you accept or ignore, nothing changes silently — and your router recompiles as a new version with the change written on it.</li>
+                <li><span className="font-medium text-ink">Then it becomes yours.</span> Potion proposes your own quality bar per kind of work — you accept or ignore, nothing changes silently — and your plan recompiles as a new version with the change written on it.</li>
               </ol>
             </div>
             <div className="mt-6 flex items-center gap-4">

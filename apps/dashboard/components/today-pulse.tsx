@@ -129,7 +129,7 @@ export function TodayPulse() {
   // don't get the value"). Three rules now govern it:
   //   1. HUMAN SENTENCES, never engine narrative — a re-measure is COUNTED
   //      ("3 options proved in, 7 beaten out"), not recited per strategy;
-  //   2. every line answers "what does this mean for MY router";
+  //   2. every line answers "what does this mean for MY plan";
   //   3. two lines show; the rest live behind one quiet toggle.
   const routerFresh =
     router !== null && router.version > 1 &&
@@ -142,7 +142,7 @@ export function TodayPulse() {
 
   interface FeedItem { key: string; when: string; head: string; rest: React.ReactNode; href: string; link: string }
   const feedItems: FeedItem[] = [];
-  // X3 UX: worker deliverables land in the SAME feed as router news — the
+  // X3 UX: worker deliverables land in the SAME feed as plan news — the
   // product's two halves finally meet on one surface.
   for (const r of (labRecent ?? []).filter((x) => x.state === 'completed').slice(0, 2)) {
     feedItems.push({
@@ -157,7 +157,7 @@ export function TodayPulse() {
     feedItems.push({
       key: 'router',
       when: new Date(routerFresh.mintedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      head: `Your router moved to v${routerFresh.version}`,
+      head: `Your plan moved to v${routerFresh.version}`,
       rest: <>{' — '}{routerFresh.document.changes[0] ?? ''}{routerFresh.document.changes.length > 1 ? ` · +${routerFresh.document.changes.length - 1} more` : ''}</>,
       href: '/', link: `v${routerFresh.version} →`,
     });
@@ -177,7 +177,7 @@ export function TodayPulse() {
       key: `${m.clusterId}-${m.toVersion}`,
       when: new Date(m.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
       head: `${m.name} re-measured`,
-      rest: <>{' — '}{summary}.{m.kind === 'held-back' ? <> Your pin is holding v{m.fromVersion}.</> : <> Your router re-checks its pick against this automatically.</>}</>,
+      rest: <>{' — '}{summary}.{m.kind === 'held-back' ? <> Your pin is holding v{m.fromVersion}.</> : <> The compiler re-checks your pick against this automatically.</>}</>,
       href: '/settings/frontier', link: `v${m.toVersion} →`,
     });
   }
@@ -237,7 +237,7 @@ export function TodayPulse() {
         <div className="mt-7">
           <div className="flex items-baseline justify-between border-b border-[#c4bfb2] pb-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-faint">
             <span>Lately</span>
-            <span>your router recompiles from these — every line links to evidence</span>
+            <span>your plan recompiles from these — every line links to evidence</span>
           </div>
           {feedItems.slice(0, feedOpen ? feedItems.length : 2).map((f) => (
             <div key={f.key} className="grid grid-cols-[86px_1fr_auto] items-baseline gap-3 border-b border-dashed border-[#d9d5cb] py-2.5 text-[13.5px] text-soft">

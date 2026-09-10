@@ -37,6 +37,17 @@ function pt(over: Partial<FrontierPoint>): FrontierPoint {
   };
 }
 
+/** A point's measured evidence, with the interval real measurement carries. */
+function ev(mean: number, half: number): NonNullable<FrontierPoint['evidence']> {
+  return {
+    cacheKeys: [],
+    runIds: ['r'],
+    n: 30,
+    qualityCi95: half,
+    qualityCi: [mean - half, Math.min(1, mean + half)],
+  };
+}
+
 describe('policyOptionsFor — every option carries the point it would really select', () => {
   it('offers all three shapes with their selected point and measured numbers', () => {
     const options = policyOptionsFor([
@@ -146,6 +157,43 @@ describe('the frontier table — every measured strategy, and a row binds a POLI
     expect(flash.type, 'min_cost cannot isolate a latency-only survivor').toBe('compound');
     // …while a row min_cost CAN isolate keeps the simpler rule.
     expect(policyBinding(points[0]!, points)!.type).toBe('min_cost');
+  });
+
+  // 2026-09-06, found by reading production against the Replit evaluation.
+  //
+  // Every point above is CI-LESS, and that is the only reason this suite was
+  // green. selectPoint's min_cost filter tests qualityLowerBound(p) — the
+  // CONSERVATIVE bound — while policyBinding minted its floor from the MEAN.
+  // For a CI-less point mean == lower bound, so the mint verified and shipped.
+  // For any point carrying real evidence the floor sits ABOVE the bound the
+  // selector tests, so the target fails its own filter and the row becomes
+  // unbindable — and a floor minted that way is unsatisfiable on every other
+  // cluster too. In production one such policy (floor 0.978543771043771) put
+  // 7 of 10 clusters on fallback=1 for a design partner, and made their
+  // min_cost arm the most expensive one in their study.
+  it('a row carrying a CONFIDENCE INTERVAL is still bindable', () => {
+    const points = [
+      pt({ strategyHash: 'cheap', quality: 0.90, costPer1K: 0.10, latencyP95: 900, evidence: ev(0.90, 0.03) }),
+      pt({ strategyHash: 'good', quality: 0.98, costPer1K: 1.00, latencyP95: 800, evidence: ev(0.98, 0.02) }),
+    ];
+    const bound = policyBinding(points[1]!, points);
+    expect(bound, 'a measured point with an interval must still bind a policy').not.toBeNull();
+  });
+
+  it('the floor it mints is tested the way the SELECTOR tests it', async () => {
+    const { selectPoint } = await import('@potion/core');
+    const points = [
+      pt({ strategyHash: 'cheap', quality: 0.90, costPer1K: 0.10, latencyP95: 900, evidence: ev(0.90, 0.03) }),
+      pt({ strategyHash: 'good', quality: 0.98, costPer1K: 1.00, latencyP95: 800, evidence: ev(0.98, 0.02) }),
+    ];
+    const frontier = {
+      id: 'f', clusterId: 'code-gen', version: 1, parentId: null, trigger: 'manual' as const,
+      points, pricesVersion: 'v', createdAt: new Date(0).toISOString(),
+    };
+    const bound = policyBinding(points[1]!, points)!;
+    expect(bound).not.toBeNull();
+    // The floor must be satisfiable by the very point it was derived from.
+    expect(selectPoint(bound, frontier)?.strategyHash).toBe('good');
   });
 
   it('the three priorities may COLLAPSE onto one row — which is why the table exists', () => {

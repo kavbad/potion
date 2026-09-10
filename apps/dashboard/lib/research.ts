@@ -61,6 +61,17 @@ export function getIssue(slug: string): Issue | null {
 
 export const RESEARCH_TITLE = 'Frontier Notes';
 export const RESEARCH_TAGLINE = 'Weekly measurements of which AI models are cheapest at a given quality, and what routing between them saves.';
+/** THE PUBLIC ORIGIN — where the site IS, which is not where the app is
+ *  DEPLOYED. This used to read POTION_APP_URL, and on the production box that
+ *  is `https://app.withpotion.com`, deliberately: the Google OAuth redirect
+ *  URI derives from it and must match what is registered at Google (see
+ *  apps/server/src/oidc.ts and boot-report.ts). So every canonical, every
+ *  sitemap <loc>, the RSS feed and llms.txt were advertising a host that
+ *  301s to withpotion.com — a sitemap of redirects, and split authority.
+ *
+ *  Retiring POTION_APP_URL here rather than repointing it: repointing would
+ *  have fixed the sitemap and broken sign-in. Override with POTION_PUBLIC_URL
+ *  where the public host genuinely differs (a staging domain). */
 export function siteOrigin(): string {
-  return (process.env.POTION_APP_URL ?? 'https://withpotion.com').replace(/\/$/, '');
+  return (process.env.POTION_PUBLIC_URL ?? 'https://withpotion.com').replace(/\/$/, '');
 }

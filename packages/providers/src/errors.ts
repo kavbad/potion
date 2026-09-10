@@ -112,6 +112,19 @@ export class ProviderAuthError extends ProviderError {
   }
 }
 
+/**
+ * C4: the transport was asked for reasoning effort it cannot honor on this
+ * request. NOT retryable — nothing about waiting makes an output budget big
+ * enough — and never downgraded to an ordinary call, because an answer that
+ * did not think would be recorded as evidence that it did.
+ */
+export class ProviderEffortRefusalError extends ProviderError {
+  constructor(provider: ProviderId, message: string, opts?: ProviderErrorOptions) {
+    super(provider, message, { ...opts, kind: opts?.kind ?? 'client_4xx' });
+    this.name = new.target.name;
+  }
+}
+
 /** HTTP 429 that persisted through all retries. */
 export class ProviderRateLimitError extends ProviderError {
   readonly retryAttempts: number;

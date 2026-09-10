@@ -4,7 +4,7 @@ import { CLUSTERS as GENERATED_CLUSTERS, type LandingPoint as GeneratedPoint } f
 //
 // A marketing page is exactly where invented numbers go, so these are not
 // invented: every one is derived from the committed platform baseline at
-// packages/db/baseline/platform-frontiers.json — the same evidence the router
+// packages/db/baseline/platform-frontiers.json — the same evidence the compiler
 // selects from. They are hardcoded rather than fetched because the landing
 // page is PUBLIC and must render with no session and no API server, and a
 // number that silently becomes a dash is worse than one that is a little

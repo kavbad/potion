@@ -77,7 +77,7 @@ export function ChallengerProposal({ initialProposals, initialAdmin }: { initial
         <p className="mt-2 max-w-lg text-[14px] leading-relaxed text-soft">
           <span className="font-medium text-ink">Done — your own measurements route this work now.</span>{' '}
           {applied.nowServes !== null ? <>Serving: <span className="font-medium text-ink">{applied.nowServes}</span>. </> : null}
-          The router recompiles as a new version with the change written on it, and every receipt names it.
+          Your plan recompiles as a new version with the change written on it, and every receipt names it.
         </p>
       </div>
     );
@@ -117,7 +117,7 @@ export function ChallengerProposal({ initialProposals, initialAdmin }: { initial
         {cheaper ? (
           <> — at <span className="font-semibold text-kept">{usd(p.shadow!.costPer1K!)}/1k measured, vs {usd(p.shadow!.servingMeasuredCostPer1K!)} for your current route</span></>
         ) : null}
-        . Promoting mints a router built from <span className="font-medium text-ink">your measurements</span> — selection still holds your
+        . Promoting mints a plan built from <span className="font-medium text-ink">your measurements</span> — selection still holds your
         floor, so a route that cannot prove your bar never serves.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
