@@ -8,7 +8,7 @@ import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { isEmptyAnswer } from '../src/routes/chat.js';
-import { clearReasoningMarks, isReasoningModel, seedReasoningMarks } from '../src/routing/reasoning.js';
+import { clearReasoningMarks, isReasoningModel, markReasoning, seedReasoningMarks } from '../src/routing/reasoning.js';
 
 const ORG = 'org-empty';
 const KEY = 'pk_empty';
@@ -88,13 +88,40 @@ describe('serving', () => {
     expect(isReasoningModel('mock-cheap')).toBe(true); // the empty answer taught the server
     expect(isReasoningModel('mock-mid')).toBe(false); // the retry's real answer taught nothing wrong
   });
-  it('JSON path: no other point → the empty answer is reported with finish_reason length', async () => {
+  // REWRITTEN 2026-09-06, and this comment is why. It used to assert that
+  // with no other point the empty answer is simply reported honestly — the
+  // best outcome available at the time. It no longer is: `mock-cheap` is a
+  // KNOWN reasoning model by now (the case above taught the server), the
+  // budget is 300, and the pre-call guard therefore knows before dialling
+  // that this model cannot emit anything. There IS something else to serve —
+  // the platform fallback — which that path previously refused to consider,
+  // so the request was spent on a call whose outcome was already determined.
+  // Honest-empty is still the contract when nothing at all can answer, which
+  // the second case below pins.
+  it('JSON path: no other point, but the fallback can answer → it serves, labelled', async () => {
+    calls.length = 0; thinkerMode = 'empty';
+    const res = await post('code-gen');
+    expect(res.statusCode).toBe(200);
+    expect(calls, 'the model known to be unable to answer is never dialled').toEqual(['mock-mid']);
+    expect(res.json().choices[0].message.content.length).toBeGreaterThan(0);
+    expect(String(res.headers['x-frontier-trace'])).toContain('fallback=1');
+    expect(res.json().potion?.fallback_reason).toBe('reasoning_budget');
+    expect(String(res.headers['x-frontier-trace'])).not.toContain('retry=');
+  });
+
+  it('JSON path: when NOTHING can answer the budget, the empty answer is still reported honestly', async () => {
+    // Mark the fallback as a reasoning model too: now every route out is one,
+    // there is no better answer to give, and the old contract stands — serve,
+    // and report finish_reason length rather than inventing a refusal.
+    markReasoning('mock-mid', 'reasoning_tokens');
     calls.length = 0; thinkerMode = 'empty';
     const res = await post('code-gen');
     expect(res.statusCode).toBe(200);
     expect(calls).toEqual(['mock-cheap']);
     expect(res.json().choices[0].finish_reason).toBe('length');
     expect(String(res.headers['x-frontier-trace'])).not.toContain('retry=');
+    clearReasoningMarks();
+    markReasoning('mock-cheap', 'reasoning_tokens'); // restore what the suite taught
   });
   it('stream path: retries before any content is written', async () => {
     clearReasoningMarks(); // the JSON case above taught the server; test the retry itself

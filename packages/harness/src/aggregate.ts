@@ -46,12 +46,34 @@ export function aggregateResults(
   results: EvalResult[],
   pricesVersion: string,
   providerMode?: ProviderMode,
+  /** BOUNDARY SUITE (2026-09-08): the parent slice of an item, when the suite
+   *  is a union. With ≥2 slices present the point's quality is the WEAKEST
+   *  slice's — "clears the floor on both kinds of item" is a statement about
+   *  each kind, not their average — and every slice is recorded in evidence. */
+  sliceOf?: (itemId: string) => string | undefined,
 ): StrategyAggregate {
   const n = results.length;
   const qualities = results.map((r) => r.quality);
   const latencies = results.map((r) => r.usage.latencyMs);
-  const qCi = jeffreysCi(qualities);
-  const qMean = mean(qualities);
+  const bySlice = new Map<string, number[]>();
+  if (sliceOf !== undefined) {
+    for (const r of results) {
+      const s = sliceOf(r.itemId);
+      if (s === undefined) continue;
+      bySlice.set(s, [...(bySlice.get(s) ?? []), r.quality]);
+    }
+  }
+  const sliced = bySlice.size >= 2;
+  const sliceStats = sliced
+    ? [...bySlice.entries()].map(([name, qs]) => {
+        const ci = jeffreysCi(qs);
+        const m = mean(qs);
+        return { name, n: qs.length, quality: m, ci, half: Math.max(m - ci[0], ci[1] - m) };
+      })
+    : [];
+  const weakest = sliced ? sliceStats.reduce((a, b) => (b.quality < a.quality ? b : a)) : null;
+  const qCi = weakest ? weakest.ci : jeffreysCi(qualities);
+  const qMean = weakest ? weakest.quality : mean(qualities);
   const qHalf = n > 0 ? Math.max(qMean - qCi[0], qCi[1] - qMean) : 0;
   // G2.6 provenance parity: a latency-driven selection must be as auditable as
   // a quality-driven one, so the p95 ships with its own n, CI and seed rather
@@ -92,9 +114,22 @@ export function aggregateResults(
             n,
             qualityCi95: qHalf,
             qualityCi: qCi,
+            // The tokens this strategy actually consumed (2026-09-06). Cost
+            // is stored as a scalar measured at THIS suite's prompt size; a
+            // strategy carrying a fixed input overhead is mispriced for any
+            // caller whose prompts are a different length. Recording the
+            // profile lets the selector re-form cost at the request's real
+            // size — see core/select.ts expectedCostPer1K.
+            tokens: {
+              inputMean: mean(results.map((r) => r.usage.inputTokens)),
+              outputMean: mean(results.map((r) => r.usage.outputTokens)),
+            },
             latencyN: n,
             latencyP95Ci95: latencyCi!.ci95,
             latencySeed,
+            ...(weakest
+              ? { slices: Object.fromEntries(sliceStats.map((s) => [s.name, { n: s.n, quality: s.quality, qualityCi95: s.half }])) }
+              : {}),
             // MIXING M3: every cell is TOOLS-instrument evidence → the point
             // was measured on items that carried tools. Keyed on the cell's
             // effective instrument, not its scorer (2026-09-01): the tools

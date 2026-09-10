@@ -377,7 +377,11 @@ describe('cost is evaluated at the size the caller actually sends', () => {
   });
 
   it('falls back to the measured scalar when any point lacks a token profile', () => {
-    const legacy = { ...plain, strategyHash: 'legacy', costPer1K: 0.01, evidence: undefined };
+    // OMIT evidence rather than set it undefined: under
+    // exactOptionalPropertyTypes those are different types, and a point
+    // measured before profiles existed simply has no such key.
+    const { evidence: _plainEv, ...plainBare } = plain;
+    const legacy = { ...plainBare, strategyHash: 'legacy', costPer1K: 0.01 };
     const mixed = { ...frontier, points: [transform, legacy] };
     expect(baselineInputTokens(mixed.points), 'one basis or the other, never both').toBeNull();
     expect(selectPoint(policy, mixed, { requestInputTokens: 24, prices })?.strategyHash).toBe('legacy');
@@ -452,7 +456,8 @@ describe('a point that cannot answer within the budget is not feasible', () => {
   });
 
   it('a frontier without profiles is not judged on evidence it does not have', () => {
-    const legacy = { ...terse, strategyHash: 'legacy', evidence: undefined };
+    const { evidence: _terseEv, ...terseBare } = terse;
+    const legacy = { ...terseBare, strategyHash: 'legacy' };
     const mixed = { ...frontier, points: [verbose, legacy] };
     expect(selectPoint(policy, mixed, { requestInputTokens: 100, prices, maxOutputTokens: 64 })?.strategyHash).toBe('verbose');
   });
