@@ -92,7 +92,9 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     expect(inv.totals).toEqual({
       requests: 7, inputTokens: 550, outputTokens: 275,
       platformCostUsd: 0.23, marginUsd: 0,
-      projectedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0.23,
+      // projectedBasis (0089 read side): these fixtures carry no baseline
+      // basis, so the invoice says so rather than implying an incumbent.
+      projectedSavedUsd: 0, projectedBasis: null, savingsShareUsd: 0, totalUsd: 0.23,
     });
   });
 
@@ -224,5 +226,53 @@ describe('GET /api/usage/invoice', () => {
       headers: { authorization: `Bearer ${RAW_A}` },
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// 0089's READ SIDE (2026-09-06). usage_daily rolls up baseline_cost_usd and
+// drops baseline_basis, so an invoice could state a projected-savings figure
+// without saying what it was measured against. Those are different claims:
+// against a NAMED incumbent the number is reproducible by the customer;
+// against best-of-frontier it is a counterfactual versus the priciest
+// measured option, which was never their alternative. A design partner was
+// handed the second and asked to reconcile it as if it were the first.
+describe('projected savings name their comparator', () => {
+  const ORG_B = 'org-basis';
+  const PERIOD = '2026-07';
+
+  beforeAll(async () => {
+    const { createOrg } = await import('@potion/db');
+    await createOrg(db(), { id: ORG_B, name: 'Basis' });
+    await db().insert(usageDaily).values([
+      { orgId: ORG_B, day: '2026-07-01', clusterId: 'code-gen', requests: 2, inputTokens: 100, outputTokens: 50, costUsd: 0.1, platformCostUsd: 0.1, baselineCostUsd: 0.5 },
+      { orgId: ORG_B, day: '2026-07-01', clusterId: 'extraction', requests: 1, inputTokens: 50, outputTokens: 25, costUsd: 0.05, platformCostUsd: 0.05, baselineCostUsd: 0.2 },
+    ]);
+    // code-gen was compared against a NAMED incumbent; extraction had none,
+    // so its "savings" are against the frontier's premium point.
+    await insertRequestLog(db(), {
+      ts: new Date('2026-07-02T10:00:00Z'), orgId: ORG_B, clusterId: 'code-gen', status: 'ok',
+      baselineBasis: 'org-incumbent',
+      usage: { inputTokens: 5, outputTokens: 5, costUsd: 0.0005, latencyMs: 1 },
+    });
+    await insertRequestLog(db(), {
+      ts: new Date('2026-07-02T10:01:00Z'), orgId: ORG_B, clusterId: 'extraction', status: 'ok',
+      baselineBasis: 'best-of-frontier',
+      usage: { inputTokens: 5, outputTokens: 5, costUsd: 0.0005, latencyMs: 1 },
+    });
+  }, 60_000);
+
+  it('labels each line with the basis its savings were computed against', async () => {
+    const inv = await generateInvoice(db(), ORG_B, PERIOD, BASIS);
+    const line = (c: string) => inv.lineItems.find((l) => l.clusterId === c)!;
+    expect(line('code-gen').projectedBasis).toBe('org-incumbent');
+    expect(
+      line('extraction').projectedBasis,
+      'a savings figure with no named incumbent must say so, not read as "what you saved"',
+    ).toBe('best-of-frontier');
+  });
+
+  it("says 'mixed' rather than picking whichever basis sorted first", async () => {
+    const inv = await generateInvoice(db(), ORG_B, PERIOD, BASIS);
+    expect(inv.totals.projectedBasis).toBe('mixed');
   });
 });
