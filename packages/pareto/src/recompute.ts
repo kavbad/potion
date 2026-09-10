@@ -249,16 +249,38 @@ export async function aggregatesFromEvalResults(
   clusterId: ClusterId,
   strategies: StrategyConfig[],
   pricesVersion: string,
-  opts: { includeStale?: boolean; orgId?: string; providerMode?: 'live' | 'mock'; instrument?: 'default' | 'tools' | 'vision' | 'audio' } = {},
+  opts: {
+    includeStale?: boolean;
+    orgId?: string;
+    providerMode?: 'live' | 'mock';
+    instrument?: 'default' | 'tools' | 'vision' | 'audio';
+    /**
+     * BOUNDARY SUITE (2026-09-08): the suite's own items, each naming the
+     * parent slice it came from. A boundary cluster's evidence is every cell
+     * measured on ITS ITEMS — a cell the runner reused from a parent suite is
+     * stored under the PARENT's cluster_id, so filtering by cluster alone saw
+     * only fresh cells (both boundary frontiers published that day were
+     * measured on partial unions). With items given: rows are read for the
+     * boundary AND its parents, restricted to the items, deduped per
+     * (strategy, item) preferring the boundary's own row, and aggregated with
+     * the weakest slice as the point's quality. Absent → unchanged.
+     */
+    items?: ReadonlyArray<{ id: string; slice?: string }>;
+  } = {},
 ): Promise<StrategyAggregate[]> {
   const hashes = strategies.map((s) => strategyHash(s));
   if (hashes.length === 0) return [];
+  const sliced = opts.items !== undefined && opts.items.some((i) => i.slice !== undefined);
+  const parentIds = sliced ? [...new Set(opts.items!.map((i) => i.slice).filter((s): s is string => s !== undefined))] : [];
+  const itemIds = sliced ? opts.items!.map((i) => i.id) : [];
+  const sliceOf = sliced ? (id: string) => opts.items!.find((i) => i.id === id)?.slice : undefined;
   const rows = await db
     .select()
     .from(evalResults)
     .where(
       and(
-        eq(evalResults.clusterId, clusterId),
+        sliced ? inArray(evalResults.clusterId, [clusterId, ...parentIds]) : eq(evalResults.clusterId, clusterId),
+        ...(sliced ? [inArray(evalResults.itemId, itemIds)] : []),
         inArray(evalResults.strategyHash, hashes),
         eq(evalResults.pricesVersion, pricesVersion),
         // MIXING M3: cells from different instruments are never averaged.
@@ -283,11 +305,26 @@ export async function aggregatesFromEvalResults(
     list.push(row);
     byHash.set(row.strategyHash, list);
   }
+  // One cell per (strategy, item): the boundary's own row wins; otherwise the
+  // newest parent row. The same measurement must never count twice.
+  const dedupe = (group: typeof rows): typeof rows => {
+    if (!sliced) return group;
+    const best = new Map<string, (typeof rows)[number]>();
+    for (const r of group) {
+      const cur = best.get(r.itemId);
+      const better =
+        cur === undefined ||
+        (r.clusterId === clusterId && cur.clusterId !== clusterId) ||
+        (r.clusterId === cur.clusterId && r.createdAt > cur.createdAt);
+      if (better) best.set(r.itemId, r);
+    }
+    return [...best.values()];
+  };
   const out: StrategyAggregate[] = [];
   for (const strategy of strategies) {
     const sh = strategyHash(strategy);
-    const group = byHash.get(sh);
-    if (!group || group.length === 0) continue;
+    const group = dedupe(byHash.get(sh) ?? []);
+    if (group.length === 0) continue;
     out.push(
       aggregateResults(
         clusterId,
@@ -319,6 +356,8 @@ export async function aggregatesFromEvalResults(
           createdAt: r.createdAt,
         })),
         pricesVersion,
+        undefined,
+        sliceOf,
       ),
     );
   }

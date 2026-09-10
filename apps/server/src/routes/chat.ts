@@ -39,6 +39,7 @@ import {
   SamplingParamsSchema,
   type SamplingParams,
   qualityLowerBound,
+  underpoweredExclusions,
 } from '@potion/core';
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
 // G0 (0082): serve-time router-version stamping — appended import.
@@ -50,7 +51,7 @@ import { resolveCanary } from '../routing/canary.js';
 import { maybeKeepLearningSample } from '../learning/sampling.js';
 import type { RankedAssignment } from '@potion/cluster';
 import { bindServingDegeneracy, loadCurrentFrontier, resolveOperatingPoint, guardFrontierProvenance, type OperatingPoint } from '@potion/pareto';
-import { ambiguityMargin, ambiguousRunnerUp, pickSafer } from '../routing/ambiguity.js';
+import { ambiguityMargin, ambiguousRunnerUp, boundaryClusterId, boundaryServes, pickSafer } from '../routing/ambiguity.js';
 import { baselineFor } from '../routing/baseline.js';
 import { policyForCluster } from '../routing/floors.js';
 import { routerModelName } from '../routing/router-slug.js';
@@ -497,6 +498,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // never enter it, nor the learning sampler.
     const messages: ChatMessage[] = flattened.map((f) => f.message);
     const execMaxOutputTokens = body.max_tokens !== undefined ? resolveMaxOutputTokens(body.max_tokens) : undefined;
+    // The request's own input size, for request-aware cost selection. chars/4
+    // is the platform's existing labeled approximation (see Usage.usageEstimated)
+    // — exact token counts differ per tokenizer, and selection needs the
+    // RELATIVE size of this request against the size points were measured at,
+    // which a consistent approximation gives.
+    const requestInputTokens = Math.max(
+      1,
+      Math.round(messages.reduce((n, m) => n + (m.content?.length ?? 0), 0) / 4),
+    );
     // Pre-auth log fields: unattributed → default org (see above). Replaced
     // with the authenticated org as soon as the key resolves.
     // Flywheel (0055): the content-free shape is derivable only NOW (content
@@ -875,7 +885,25 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         clusterPolicy,
         degeneracy.frontier,
         fallbackStrategyFor(ctx.providerMode, ctx.prices),
-        { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined },
+        {
+          toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined,
+          // COST AT THIS REQUEST'S SIZE (2026-09-06). costPer1K is a scalar
+          // measured at the suite's prompt length, so a strategy carrying a
+          // fixed input overhead is mispriced for anyone whose prompts are
+          // shorter — which is how a min_cost policy served a design
+          // partner's most expensive arm. Points measured before token
+          // profiles existed fall back to the scalar, frontier-wide.
+          request: {
+            requestInputTokens,
+            prices: ctx.prices,
+            // The caller's own output budget. A point whose measured mean
+            // output exceeds it truncates before reaching the answer — the
+            // shape defect a head-to-head caught, where a routed model wrote
+            // 200 characters of preamble and never arrived while a plain
+            // model answered in three.
+            ...(execMaxOutputTokens !== undefined ? { maxOutputTokens: execMaxOutputTokens } : {}),
+          },
+        },
       );
       const served =
         point.config === null
@@ -926,6 +954,20 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // stronger claim than a near-equal taxonomy runner-up.
     const runnerUpId = ranked !== undefined && workloadParent === null ? ambiguousRunnerUp(ranked, ambiguityMargin()) : null;
     if (runnerUpId !== null) {
+      // THE BOUNDARY FRONTIER FIRST (2026-09-08, routing/ambiguity.ts): a
+      // request the classifier cannot place between two clusters is served
+      // from the frontier measured on BOTH clusters' items, when one exists
+      // with a point that clears the policy. Only when it does not — no
+      // boundary sweep yet, or nothing measured clears the floor on the
+      // union — does the tiebreak below compare the two parents' points.
+      const boundaryId = boundaryClusterId(clusterId, runnerUpId);
+      const boundary = await resolveFor(boundaryId);
+      if (boundaryServes(boundary)) {
+        logBase.clusterTiebreak = true;
+        clusterId = boundaryId;
+        logBase.clusterId = clusterId;
+        chosen = boundary;
+      } else {
       const other = await resolveFor(runnerUpId);
       if (other !== null) {
       const asCandidate = (r: NonNullable<typeof chosen>) => ({
@@ -944,16 +986,72 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         chosen = other;
       }
       }
+      }
     }
     const { frontier, provenance, latency } = chosen;
     let op = chosen.op;
     if (op.fallbackReason !== undefined) implicitSignals.push(`fallback_${op.fallbackReason}`);
     // A known reasoning model under a small output budget is skipped BEFORE
     // the call (routing/reasoning.ts); the trace says so.
+    //
+    // MEASUREMENT OUTRANKS THE HEURISTIC (2026-09-07). REASONING_MIN_BUDGET
+    // (1024) is a PROXY for the only question that matters — will this model
+    // produce its answer inside the caller's budget? Since evidence.tokens
+    // exists we can answer that directly, and the proxy is now costing real
+    // money: or-solar-pro4 is the cheapest feasible point on extraction at
+    // $0.0208/1K, is reasoning-marked, and averages 91 output tokens. Under
+    // max_tokens=400 the heuristic skipped it anyway and the request went to
+    // a point 9x dearer — most of a persistent 1.6x cost gap against a free
+    // auto-router, on a model that demonstrably fits the budget four times
+    // over.
+    //
+    // So a point whose MEASURED mean output fits the budget is not skipped,
+    // whatever the roster says. The heuristic still governs points with no
+    // profile, which is every point measured before today — it is the
+    // fallback for absent evidence, not a veto over present evidence.
+    const measuredOutputFits = (): boolean => {
+      if (op.config?.type !== 'single' || execMaxOutputTokens === undefined) return false;
+      const point = (op.frontier?.points ?? []).find(
+        (pt) => pt.strategyHash === strategyHash(op.config as StrategyConfig),
+      );
+      const out = point?.evidence?.tokens?.outputMean;
+      return out !== undefined && out <= execMaxOutputTokens;
+    };
     let skippedReasoning: string | null = null;
-    if (op.config?.type === 'single' && tooSmallForReasoning(op.config.model, execMaxOutputTokens)) {
-      const next = nextPointExcluding(policy, op.frontier, strategyHash(op.config), fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execMaxOutputTokens });
+    if (op.config?.type === 'single' && tooSmallForReasoning(op.config.model, execMaxOutputTokens) && !measuredOutputFits()) {
+      const toolCapableOnly = body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined;
+      const next = nextPointExcluding(policy, op.frontier, strategyHash(op.config), fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly, maxOutputTokens: execMaxOutputTokens });
       if (next?.config) { skippedReasoning = strategyModelLabel(op.config); op = next; }
+      else {
+        // NOTHING ON THE FRONTIER CAN ANSWER AT THIS BUDGET (2026-09-06).
+        //
+        // nextPointExcluding refuses to return a fallback — right for its
+        // other caller, the empty-answer RETRY, which must not turn one bad
+        // answer into an unmeasured one. Here it was fatal: with no
+        // qualifying alternative the branch above did nothing and we served
+        // the reasoning model anyway, under a budget we had just determined
+        // is too small for it to emit anything. The customer got "".
+        //
+        // Measured in a head-to-head on 2026-09-06: every one of 11 failures
+        // was this, all on multi-step-reasoning at max_tokens=64, against
+        // baselines that answered 100% of the same items. We knew the model
+        // would return nothing, and called it.
+        //
+        // An empty 200 is the worst outcome available. Silently raising the
+        // caller's max_tokens is not an option — it spends their money
+        // against an explicit instruction — so serve the platform fallback
+        // when IT can answer, and say so: fallback=1, because that is what
+        // this is, and the receipt should never imply a measured pick.
+        const fb = fallbackStrategyFor(ctx.providerMode, ctx.prices);
+        if (fb !== null && fb.type === 'single' && !tooSmallForReasoning(fb.model, execMaxOutputTokens)) {
+          skippedReasoning = strategyModelLabel(op.config);
+          op = { ...op, config: fb, fallback: 1 as const, fallbackReason: 'reasoning_budget' };
+        }
+        // If even the fallback is a reasoning model there is nothing that can
+        // answer at this budget. We still serve rather than inventing a new
+        // refusal class here, but the warning below fires and the trace
+        // carries the skip — so an empty answer is at least explained.
+      }
     }
     try {
       const guaranteeOverride = await resolveGuaranteeOverride(
@@ -1035,6 +1133,16 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       frontierVersion: op.frontierVersion,
     });
     if (routerVersion !== null) logBase.routerVersion = routerVersion;
+    // How many points the floor excluded on interval WIDTH rather than on
+    // measured quality (core/select.ts). Zero on every frontier whose
+    // evidence is strong enough, so ordinary traces are byte-identical.
+    const underpowered = op.frontier ? underpoweredExclusions(policy, op.frontier) : 0;
+    if (underpowered > 0) {
+      app.log.warn(
+        { orgId: auth.org.orgId, clusterId, underpowered, floor: (policy as { qualityFloor?: number }).qualityFloor },
+        'points excluded by interval width, not quality — the evidence is underpowered for this floor',
+      );
+    }
     const trace =
       traceHeaderValue({
         clusterId,
@@ -1064,6 +1172,12 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // Appended only when the org's own measured traffic excluded a
       // degenerate route — absent, the trace is byte-identical to before.
       (chosen.degenerateExcluded.length > 0 ? `;degenerate_excluded=${chosen.degenerateExcluded.length}` : '') +
+      // Appended only when a point's MEAN cleared the floor but its interval
+      // did not — "we have not measured it enough to promise it", which is a
+      // different fact from "it is not good enough" and calls for the
+      // opposite response. A re-measurement once forced min_cost onto a point
+      // 19x dearer this way, with nothing anywhere saying why.
+      (underpowered > 0 ? `;underpowered=${underpowered}` : '') +
       (policyOverrideName !== null ? `;policy_override=${policyOverrideName}` : '') +
       latencyTraceFields(policy, latency, op.latencyViolation !== undefined);
     logBase.trace = trace;

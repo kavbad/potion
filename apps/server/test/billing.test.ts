@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sha256 } from '@potion/core';
-import { insertApiKey, insertRequestLog, usageDaily, DEFAULT_ORG_ID } from '@potion/db';
+import { insertApiKey, insertRequestLog, usageDaily } from '@potion/db';
+import { ORG_A, ORG_A_NAME, seedIsolationOrgs } from './fixtures/orgs.js';
 import { buildServer } from '../src/server.js';
 import { generateInvoice, toCents } from '../src/billing/invoice.js';
 import { renderInvoiceHtml } from '../src/billing/render-html.js';
@@ -17,17 +18,24 @@ import {
   resolveBillingBackend,
 } from '../src/billing/backend.js';
 
-const ORG_A = DEFAULT_ORG_ID;
+// ORG_A comes from the shared isolation fixture — binding a subject org to
+// the DEFAULT org is the assumption that hid tenancy defect D1.
 const RAW_A = 'pk_billing_org_a';
 
 let app: FastifyInstance;
 const db = () => app.potion.db.db;
+// The invoice id is derived from the ORG, so it follows the fixture rather
+// than naming the default org the subject used to be.
+const INVOICE_ID = `inv_${ORG_A}_2026-08`;
 
 beforeAll(async () => {
   app = await buildServer({ seed: false });
+  // ORG_A is a real, non-default org and has to be created before anything
+  // is hung off it — which is the point of not reusing the default.
+  await seedIsolationOrgs(db());
   await insertApiKey(db(), { id: 'key-billing-a', keyHash: sha256(RAW_A), name: 'a', orgId: ORG_A });
 
-  // usage_daily rows for org_demo, period 2026-08 (hand math below):
+  // usage_daily rows for ORG_A, period 2026-08 (hand math below):
   //   code-gen:   2026-08-01 $0.10 (2 req, 100/50 tok) + 2026-08-02 $0.05 (1 req, 50/25)
   //   extraction: 2026-08-01 $0.08 (4 req, 400/200)
   //   outside:    2026-09-01 $7.77 (excluded from the 2026-08 invoice)
@@ -63,10 +71,10 @@ describe('generateInvoice (hand-computed to the cent)', () => {
   it('default margin 0: pass-through, line items per cluster, exact totals', async () => {
     const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS);
     expect(inv).toMatchObject({
-      id: 'inv_org_demo_2026-08',
+      id: INVOICE_ID,
       object: 'potion.invoice',
       orgId: ORG_A,
-      org: { id: ORG_A, name: 'Demo Org' },
+      org: { id: ORG_A, name: ORG_A_NAME },
       period: '2026-08',
       periodStart: '2026-08-01',
       periodEnd: '2026-08-31',
@@ -92,7 +100,9 @@ describe('generateInvoice (hand-computed to the cent)', () => {
     expect(inv.totals).toEqual({
       requests: 7, inputTokens: 550, outputTokens: 275,
       platformCostUsd: 0.23, marginUsd: 0,
-      projectedSavedUsd: 0, savingsShareUsd: 0, totalUsd: 0.23,
+      // projectedBasis (0089 read side): these fixtures carry no baseline
+      // basis, so the invoice says so rather than implying an incumbent.
+      projectedSavedUsd: 0, projectedBasis: null, savingsShareUsd: 0, totalUsd: 0.23,
     });
   });
 
@@ -138,8 +148,8 @@ describe('renderInvoiceHtml', () => {
     const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS, { marginPct: 10 });
     const html = renderInvoiceHtml(inv);
     expect(html).toContain('<!doctype html>');
-    expect(html).toContain('Invoice inv_org_demo_2026-08');
-    expect(html).toContain('Demo Org');
+    expect(html).toContain(`Invoice ${INVOICE_ID}`);
+    expect(html).toContain(ORG_A_NAME);
     expect(html).toContain("Potion routed requests — cluster 'code-gen' (2026-08)");
     expect(html).toContain('@media print');
     expect(html).toContain('Total due');
@@ -155,10 +165,10 @@ describe('BillingBackend', () => {
       const inv = await generateInvoice(db(), ORG_A, '2026-08', BASIS);
       const html = renderInvoiceHtml(inv);
       const { ref } = await new JsonFileBillingBackend(dir).saveInvoice(inv, html);
-      expect(ref).toBe(join(dir, 'inv_org_demo_2026-08.json'));
+      expect(ref).toBe(join(dir, `${INVOICE_ID}.json`));
       const parsed = JSON.parse(readFileSync(ref, 'utf8'));
       expect(parsed.totals.totalUsd).toBe(0.23);
-      expect(readFileSync(join(dir, 'inv_org_demo_2026-08.html'), 'utf8')).toContain('Total due');
+      expect(readFileSync(join(dir, `${INVOICE_ID}.html`), 'utf8')).toContain('Total due');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -198,7 +208,7 @@ describe('GET /api/usage/invoice', () => {
     });
     expect(res.statusCode).toBe(200);
     const inv = res.json();
-    expect(inv).toMatchObject({ id: 'inv_org_demo_2026-08', orgId: ORG_A, marginPct: 10 });
+    expect(inv).toMatchObject({ id: INVOICE_ID, orgId: ORG_A, marginPct: 10 });
     expect(inv.lineItems).toHaveLength(2);
     expect(toCents(inv.totals.totalUsd)).toBe(
       inv.lineItems.reduce((s: number, l: { totalUsd: number }) => s + toCents(l.totalUsd), 0),
@@ -214,7 +224,7 @@ describe('GET /api/usage/invoice', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
-    expect(res.body).toContain('Invoice inv_org_demo_2026-08');
+    expect(res.body).toContain(`Invoice ${INVOICE_ID}`);
   });
 
   it('validates the period param', async () => {
@@ -224,5 +234,53 @@ describe('GET /api/usage/invoice', () => {
       headers: { authorization: `Bearer ${RAW_A}` },
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// 0089's READ SIDE (2026-09-06). usage_daily rolls up baseline_cost_usd and
+// drops baseline_basis, so an invoice could state a projected-savings figure
+// without saying what it was measured against. Those are different claims:
+// against a NAMED incumbent the number is reproducible by the customer;
+// against best-of-frontier it is a counterfactual versus the priciest
+// measured option, which was never their alternative. A design partner was
+// handed the second and asked to reconcile it as if it were the first.
+describe('projected savings name their comparator', () => {
+  const ORG_B = 'org-basis';
+  const PERIOD = '2026-07';
+
+  beforeAll(async () => {
+    const { createOrg } = await import('@potion/db');
+    await createOrg(db(), { id: ORG_B, name: 'Basis' });
+    await db().insert(usageDaily).values([
+      { orgId: ORG_B, day: '2026-07-01', clusterId: 'code-gen', requests: 2, inputTokens: 100, outputTokens: 50, costUsd: 0.1, platformCostUsd: 0.1, baselineCostUsd: 0.5 },
+      { orgId: ORG_B, day: '2026-07-01', clusterId: 'extraction', requests: 1, inputTokens: 50, outputTokens: 25, costUsd: 0.05, platformCostUsd: 0.05, baselineCostUsd: 0.2 },
+    ]);
+    // code-gen was compared against a NAMED incumbent; extraction had none,
+    // so its "savings" are against the frontier's premium point.
+    await insertRequestLog(db(), {
+      ts: new Date('2026-07-02T10:00:00Z'), orgId: ORG_B, clusterId: 'code-gen', status: 'ok',
+      baselineBasis: 'org-incumbent',
+      usage: { inputTokens: 5, outputTokens: 5, costUsd: 0.0005, latencyMs: 1 },
+    });
+    await insertRequestLog(db(), {
+      ts: new Date('2026-07-02T10:01:00Z'), orgId: ORG_B, clusterId: 'extraction', status: 'ok',
+      baselineBasis: 'best-of-frontier',
+      usage: { inputTokens: 5, outputTokens: 5, costUsd: 0.0005, latencyMs: 1 },
+    });
+  }, 60_000);
+
+  it('labels each line with the basis its savings were computed against', async () => {
+    const inv = await generateInvoice(db(), ORG_B, PERIOD, BASIS);
+    const line = (c: string) => inv.lineItems.find((l) => l.clusterId === c)!;
+    expect(line('code-gen').projectedBasis).toBe('org-incumbent');
+    expect(
+      line('extraction').projectedBasis,
+      'a savings figure with no named incumbent must say so, not read as "what you saved"',
+    ).toBe('best-of-frontier');
+  });
+
+  it("says 'mixed' rather than picking whichever basis sorted first", async () => {
+    const inv = await generateInvoice(db(), ORG_B, PERIOD, BASIS);
+    expect(inv.totals.projectedBasis).toBe('mixed');
   });
 });

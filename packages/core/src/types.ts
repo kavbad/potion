@@ -281,6 +281,13 @@ export interface EvalItem {
   reference?: unknown;
   scoring: ScoringMethod;
   /**
+   * BOUNDARY SUITE slice (2026-09-08): the parent cluster this item came
+   * from, when the suite is the union of two clusters' suites. The aggregate
+   * reports the WEAKEST slice as the point's quality, so a boundary point
+   * has cleared the floor on both kinds of item — not on their average.
+   */
+  slice?: string;
+  /**
    * JOURNEY item (eval-review adoption, 2026-08-25): task completion as the
    * atomic outcome. `prompt` is STEP 1; these are the follow-on steps, run
    * in order with the SAME strategy, each prompt templated with earlier
@@ -384,6 +391,30 @@ export interface FrontierPointEvidence {
   latencySeed?: number;
   suiteId?: string;
   suiteVersion?: string;
+  /**
+   * TOKENS THIS STRATEGY ACTUALLY CONSUMED, meaned over the run (2026-09-06).
+   *
+   * costPer1K is a scalar measured at the SUITE's prompt size, and a strategy
+   * that rewrites or prefixes the prompt carries a fixed input overhead the
+   * scalar hides. On the classification suite (~125-token items) a transform
+   * adding ~64 tokens is +51%; for a customer sending 24-token prompts the
+   * same transform is +267%. Ranking on the scalar therefore ranks for
+   * someone else's prompt length — which is how a `min_cost` policy came to
+   * serve the most expensive arm in a design partner's own study.
+   *
+   * A MULTIPLICATIVE overhead would be size-invariant and could stay inside
+   * the scalar safely. It is the ADDITIVE part that must be carried
+   * separately, because its relative weight moves with the request.
+   *
+   * Absent = measured before this existed. Selection then falls back to the
+   * scalar for the WHOLE frontier rather than mixing two bases — and, since
+   * 2026-09-10, a promotion may not DROP it either (scripts/
+   * promote-frontier-guards.ts), because losing it fails open in silence.
+   */
+  tokens?: { inputMean: number; outputMean: number };
+  /** BOUNDARY SUITE (2026-09-08): per-parent-slice quality. Present only when
+   *  the items carried ≥2 distinct slices; the point's quality is the min. */
+  slices?: Record<string, { n: number; quality: number; qualityCi95: number }>;
   /** The rubric the llm-judge evidence was scored under (0022 identity). */
   rubricHash?: string;
   /** judge_calibrations uuid backing trust in that rubric×judge. */

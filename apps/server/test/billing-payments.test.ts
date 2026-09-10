@@ -59,6 +59,9 @@ function invoiceFixture(over: { id: string; orgId?: string; period?: string; tot
       platformCostUsd: 0,
       marginUsd: 0,
       projectedSavedUsd: 0,
+      // The basis the projection was formed on (ported 2026-09-10); null is
+      // the honest value for a zero invoice with nothing to attribute.
+      projectedBasis: null,
       savingsShareUsd: 0,
       totalUsd: over.totalUsd,
     },

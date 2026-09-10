@@ -369,6 +369,8 @@ export const EvalItemSchema = z.object({
   tools: z.array(ToolSchema).optional(),
   reference: z.unknown().optional(),
   scoring: ScoringMethodSchema,
+  /** Boundary-suite parent slice (see EvalItem.slice). */
+  slice: z.string().optional(),
   /** Journey follow-on steps (prompt = step 1); see EvalItem.journeySteps. */
   journeySteps: z
     .array(z.object({ clusterId: z.string(), prompt: z.string().min(1) }))

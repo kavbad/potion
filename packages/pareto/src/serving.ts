@@ -24,6 +24,7 @@ import {
   latencyPremium,
   resolveLatency,
   selectPoint,
+  type SelectionContext,
   strategyHash,
   type Frontier,
   type LatencyEvidence,
@@ -110,7 +111,11 @@ export interface OperatingPoint {
   /** Why the fallback fired (2026-08-24, beta feedback): 'policy_infeasible'
    * = no measured point met the policy (e.g. the quality floor); the best
    * point served. Absent when fallback is 0. */
-  fallbackReason?: 'no_frontier' | 'no_point_resolvable' | 'policy_infeasible';
+  /** 'reasoning_budget' (2026-09-06): every point the policy admits is a
+   *  reasoning model under an output budget too small for one to emit
+   *  anything, so the platform fallback served instead. Distinct from
+   *  policy_infeasible — the policy was satisfiable, the BUDGET was not. */
+  fallbackReason?: 'no_frontier' | 'no_point_resolvable' | 'policy_infeasible' | 'reasoning_budget';
   /** null = no strategy is resolvable for this server's mode (live server,
    * no non-mock price entry) — the caller REFUSES rather than serving mock
    * output on a live path (G2.4). */
@@ -181,7 +186,7 @@ export function resolveOperatingPoint(
   policy: Policy,
   frontier: Frontier | null,
   fallbackStrategy: StrategyConfig | null = DEFAULT_STRATEGY,
-  opts: { toolCapableOnly?: boolean } = {},
+  opts: { toolCapableOnly?: boolean; request?: SelectionContext } = {},
 ): OperatingPoint {
   // TOOL-CAPABLE NARROWING. A request carrying `tools` cannot be served by a
   // strategy that rewrites or fans out the prompt — cascade/ensemble/
@@ -197,7 +202,7 @@ export function resolveOperatingPoint(
   // always finds a measured answer, and both last-resort fallbacks
   // (DEFAULT_STRATEGY, liveDefaultStrategy) are single by construction.
   if (opts.toolCapableOnly) {
-    const unrestricted = resolveOperatingPoint(policy, frontier, fallbackStrategy);
+    const unrestricted = resolveOperatingPoint(policy, frontier, fallbackStrategy, { ...(opts.request ? { request: opts.request } : {}) });
     if (unrestricted.config === null) return unrestricted;
     if (unrestricted.config.type === 'single') return unrestricted;
     const unrestrictedPoint = frontier?.points.find((p) => p.strategyHash === strategyHash(unrestricted.config as StrategyConfig));
@@ -214,7 +219,7 @@ export function resolveOperatingPoint(
       : [];
     const narrowed: Frontier | null =
       frontier && singles.length > 0 ? { ...frontier, points: singles } : null;
-    const restricted = resolveOperatingPoint(policy, narrowed, fallbackStrategy);
+    const restricted = resolveOperatingPoint(policy, narrowed, fallbackStrategy, { ...(opts.request ? { request: opts.request } : {}) });
     return {
       ...restricted,
       // A narrowed frontier still reports its real version; only an absent
@@ -228,7 +233,11 @@ export function resolveOperatingPoint(
   if (!frontier || frontier.points.length === 0) {
     return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_frontier', frontierVersion: 0, frontier };
   }
-  const selected = selectPoint(policy, frontier);
+  // Request-aware cost when the caller supplied the request's size and the
+  // frontier carries token profiles; the measured scalar otherwise. See
+  // core/select.ts — a fixed prompt overhead is a different fraction of a
+  // short request than of the suite item it was measured on.
+  const selected = selectPoint(policy, frontier, opts.request);
   if (selected) {
     return {
       config: selected.strategyConfig,
