@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalJson, strategyHash } from './hash.js';
 import { costUsd, roundCost } from './prices.js';
-import { selectPoint } from './select.js';
+import { selectPoint, expectedCostPer1K, baselineInputTokens, underpoweredExclusions } from './select.js';
 import { StrategyConfigSchema, PolicySchema } from './schemas.js';
-import type { Frontier, ProgramNode, StrategyConfig } from './types.js';
+import type { Frontier, StrategyConfig } from './types.js';
 
 describe('canonicalJson / strategyHash', () => {
   it('is stable under key reordering', () => {
@@ -91,69 +91,6 @@ describe('schemas', () => {
     expect(() =>
       StrategyConfigSchema.parse({ type: 'composite', startModel: 'cheap', upgradeIf: { confidenceBelow: 0.5 } }),
     ).toThrow(); // missing upgradeModel
-  });
-
-  // ---- compiler IR rung 1: programs reach the schema ----
-  it('validates a program strategy — the interpreter is reachable from the wire', () => {
-    const cheap: ProgramNode = { op: 'call', model: 'cheap' };
-    const coe: StrategyConfig = {
-      type: 'program',
-      name: 'consensus-or-escalate',
-      body: {
-        op: 'if',
-        check: { kind: 'agree', of: [cheap, { op: 'call', model: 'cheap-b' }] },
-        then: { op: 'pick', of: [cheap, { op: 'call', model: 'cheap-b' }], by: { kind: 'confidence' } },
-        else: { op: 'call', model: 'strong' },
-      },
-    };
-    expect(StrategyConfigSchema.parse(coe)).toBeTruthy();
-    // and it survives the round trip a database imposes
-    expect(StrategyConfigSchema.parse(JSON.parse(JSON.stringify(coe)))).toBeTruthy();
-    expect(strategyHash(StrategyConfigSchema.parse(coe))).toBe(strategyHash(coe));
-  });
-
-  it('refuses a program over the static call bound at PARSE time, not mid-run', () => {
-    const tooMany = {
-      type: 'program',
-      name: 'big',
-      body: { op: 'vote', of: Array.from({ length: 9 }, (_, i) => ({ op: 'call', model: `v${i}` })) },
-    };
-    expect(() => StrategyConfigSchema.parse(tooMany)).toThrow(/over the static bound/);
-  });
-
-  it('refuses a regex check that would only fail while serving', () => {
-    const bad = {
-      type: 'program',
-      name: 'vc',
-      body: {
-        op: 'if',
-        check: { kind: 'regex', of: { op: 'call', model: 'cheap' }, pattern: '([unclosed' },
-        then: { op: 'call', model: 'cheap' },
-        else: { op: 'call', model: 'strong' },
-      },
-    };
-    expect(() => StrategyConfigSchema.parse(bad)).toThrow(/compilable regular expression/);
-  });
-
-  it('refuses a two-way vote — a tie resolves to the first, which is not consensus', () => {
-    const twoWay = {
-      type: 'program',
-      name: 'v2',
-      body: { op: 'vote', of: [{ op: 'call', model: 'a' }, { op: 'call', model: 'b' }] },
-    };
-    expect(() => StrategyConfigSchema.parse(twoWay)).toThrow();
-    expect(() =>
-      StrategyConfigSchema.parse({ ...twoWay, body: { op: 'vote', of: [...twoWay.body.of, { op: 'call', model: 'c' }] } }),
-    ).not.toThrow();
-  });
-
-  it('refuses malformed program nodes', () => {
-    const wrap = (body: unknown) => ({ type: 'program', name: 'n', body });
-    expect(() => StrategyConfigSchema.parse(wrap({ op: 'nope' }))).toThrow();
-    expect(() => StrategyConfigSchema.parse(wrap({ op: 'call' }))).toThrow(); // no model
-    expect(() => StrategyConfigSchema.parse(wrap({ op: 'call', model: '' }))).toThrow();
-    expect(() => StrategyConfigSchema.parse(wrap({ op: 'pick', of: [{ op: 'call', model: 'a' }], by: { kind: 'confidence' } }))).toThrow();
-    expect(() => StrategyConfigSchema.parse({ type: 'program', body: { op: 'call', model: 'a' } })).toThrow(); // no name
   });
 
   it('rejects invalid policy', () => {
@@ -314,5 +251,211 @@ describe('strategyHash — composite golden', () => {
   it('differs from every other strategy type / threshold', () => {
     expect(strategyHash({ ...COMPOSITE, upgradeIf: { confidenceBelow: 0.61 } })).not.toBe(GOLDEN);
     expect(strategyHash({ type: 'single', model: 'mock-cheap' })).not.toBe(GOLDEN);
+  });
+});
+
+// 2026-09-06 — the defect a design partner's benchmark exposed, in miniature.
+//
+// costPer1K is measured at the SUITE's prompt size. A strategy that prefixes
+// the prompt carries a FIXED input overhead, so it is a modest surcharge on a
+// 125-token suite item and a crushing one on the 24-token prompts a real
+// customer sends. Ranking on the scalar ranks for someone else's prompt
+// length: in production a min_cost policy selected the arm that cost 19x its
+// alternative on the customer's own corpus.
+//
+// THE FIXTURE MUST MAKE THE TWO BASES DISAGREE, or it proves nothing. A first
+// version of this test had the transform pricier on both bases, so it passed
+// with the correction deliberately removed. Here the transform runs on a
+// 10x CHEAPER model, which makes it the cheaper point on the suite and the
+// dearer one on a short request — the exact inversion the scalar cannot see.
+describe('cost is evaluated at the size the caller actually sends', () => {
+  const prices = {
+    version: 't', updatedAt: '',
+    entries: [
+      { alias: 'dear', provider: 'openrouter' as const, model: 'dear', inputPer1M: 10, outputPer1M: 10 },
+      { alias: 'cheap', provider: 'openrouter' as const, model: 'cheap', inputPer1M: 1, outputPer1M: 1 },
+    ],
+  };
+  const pt = (hash: string, model: string, inputMean: number, costPer1K: number) => ({
+    clusterId: 'classification',
+    strategyHash: hash,
+    strategyConfig: { type: 'single' as const, model },
+    quality: 0.9,
+    costPer1K,
+    latencyP95: 500,
+    providerMode: 'live' as const,
+    evidence: {
+      cacheKeys: [], runIds: ['r'], n: 30, qualityCi95: 0.01, qualityCi: [0.89, 0.91] as [number, number],
+      tokens: { inputMean, outputMean: 5 },
+    },
+  });
+  // On the suite (125-token items):
+  //   plain     dear model, no transform : (125*10 + 5*10)/1e6*1000 = $1.30
+  //   transform cheap model, +400 tokens : (525*1  + 5*1 )/1e6*1000 = $0.53  ← cheaper
+  const plain = pt('plain', 'dear', 125, 1.3);
+  const transform = pt('transform', 'cheap', 525, 0.53);
+  const frontier = {
+    id: 'f', clusterId: 'classification', version: 1, parentId: null,
+    trigger: 'manual' as const, points: [transform, plain], pricesVersion: 't',
+    createdAt: new Date(0).toISOString(),
+  };
+  const policy = { type: 'min_cost' as const, qualityFloor: 0.5 };
+
+  it('the measured scalar prefers the transform — it was cheaper on the suite', () => {
+    expect(selectPoint(policy, frontier)?.strategyHash).toBe('transform');
+  });
+
+  it('at the request its overhead dominates, and min_cost picks the other point', () => {
+    // 24-token request: plain (24*10+5*10)/1e6*1000 = $0.29
+    //                   transform (24+400)*1 + 5 = $0.429
+    const picked = selectPoint(policy, frontier, { requestInputTokens: 24, prices });
+    expect(
+      picked?.strategyHash,
+      'a fixed prompt overhead is priced against the request, not the suite',
+    ).toBe('plain');
+  });
+
+  it('and at a LONG request the transform is right again — this is not a thumb on the scale', () => {
+    const picked = selectPoint(policy, frontier, { requestInputTokens: 2000, prices });
+    expect(picked?.strategyHash).toBe('transform');
+  });
+
+  it('reconstructs the overhead from the least-transforming point', () => {
+    const base = baselineInputTokens(frontier.points);
+    expect(base).toBe(125);
+    expect(expectedCostPer1K(transform, 24, prices, base!)).toBeCloseTo(0.429, 3);
+    expect(expectedCostPer1K(plain, 24, prices, base!)).toBeCloseTo(0.29, 3);
+  });
+
+  it('falls back to the measured scalar when any point lacks a token profile', () => {
+    const legacy = { ...plain, strategyHash: 'legacy', costPer1K: 0.01, evidence: undefined };
+    const mixed = { ...frontier, points: [transform, legacy] };
+    expect(baselineInputTokens(mixed.points), 'one basis or the other, never both').toBeNull();
+    expect(selectPoint(policy, mixed, { requestInputTokens: 24, prices })?.strategyHash).toBe('legacy');
+  });
+});
+
+// 2026-09-06, second finding from the same head-to-head. After the reasoning
+// guard stopped empty answers, 8 failures remained — all the same shape: the
+// routed model wrote ~200 characters of "Let's break this down…" and was cut
+// off at max_tokens=64 before reaching the answer. The incumbent answered the
+// identical items in a median of THREE characters and got 8/8 right.
+//
+// Quality was measured with no regard for whether an answer fits the budget
+// the caller gives it — the same blind spot the cost model had about request
+// size. The evidence needed was already being collected (outputMean); nothing
+// consulted it.
+describe('a point that cannot answer within the budget is not feasible', () => {
+  const prices = {
+    version: 't', updatedAt: '',
+    entries: [
+      { alias: 'cheap', provider: 'openrouter' as const, model: 'cheap', inputPer1M: 0.1, outputPer1M: 0.1 },
+      { alias: 'dear', provider: 'openrouter' as const, model: 'dear', inputPer1M: 1, outputPer1M: 1 },
+    ],
+  };
+  // The fixture has to keep 'verbose' genuinely cheaper under BOTH cost bases,
+  // or the request-aware cost model picks 'terse' for cost reasons and the
+  // budget filter is never exercised. (A first version got this wrong and the
+  // cost model caught it — 300 output tokens is not cheap on the same model.)
+  const pt = (hash: string, quality: number, cost: number, outputMean: number, model: string) => ({
+    clusterId: 'multi-step-reasoning',
+    strategyHash: hash,
+    strategyConfig: { type: 'single' as const, model },
+    quality, costPer1K: cost, latencyP95: 500, providerMode: 'live' as const,
+    evidence: {
+      cacheKeys: [], runIds: ['r'], n: 30, qualityCi95: 0.01,
+      qualityCi: [quality - 0.01, Math.min(1, quality + 0.01)] as [number, number],
+      tokens: { inputMean: 120, outputMean },
+    },
+  });
+  // 'verbose' is cheaper and scores higher — and averages 300 output tokens,
+  // so under a 64-token budget it truncates. 'terse' averages 8.
+  // verbose: cheap model, 300 output tokens  → (100 + 300) × 0.1 = $0.04/1K
+  // terse:    dear model,    8 output tokens  → (100 +   8) × 1.0 = $0.108/1K
+  const verbose = pt('verbose', 0.95, 0.04, 300, 'cheap');
+  const terse = pt('terse', 0.90, 0.108, 8, 'dear');
+  const frontier = {
+    id: 'f', clusterId: 'multi-step-reasoning', version: 1, parentId: null,
+    trigger: 'manual' as const, points: [verbose, terse], pricesVersion: 't',
+    createdAt: new Date(0).toISOString(),
+  };
+  const policy = { type: 'min_cost' as const, qualityFloor: 0.5 };
+
+  it('with no stated budget, nothing changes — the cheaper point still wins', () => {
+    expect(selectPoint(policy, frontier, { requestInputTokens: 100, prices })?.strategyHash).toBe('verbose');
+  });
+
+  it('under a budget it cannot fit, the truncating point is not selected', () => {
+    const picked = selectPoint(policy, frontier, { requestInputTokens: 100, prices, maxOutputTokens: 64 });
+    expect(
+      picked?.strategyHash,
+      'a mean output above the budget means most answers are cut off before the answer',
+    ).toBe('terse');
+  });
+
+  it('a generous budget admits it again — this is feasibility, not a penalty', () => {
+    expect(selectPoint(policy, frontier, { requestInputTokens: 100, prices, maxOutputTokens: 4096 })?.strategyHash).toBe('verbose');
+  });
+
+  it('when NOTHING fits the budget, it says so rather than serving a truncation', () => {
+    const allVerbose = { ...frontier, points: [verbose, { ...terse, strategyHash: 'terse2', evidence: { ...terse.evidence, tokens: { inputMean: 120, outputMean: 250 } } }] };
+    expect(selectPoint(policy, allVerbose, { requestInputTokens: 100, prices, maxOutputTokens: 64 })).toBeNull();
+  });
+
+  it('a frontier without profiles is not judged on evidence it does not have', () => {
+    const legacy = { ...terse, strategyHash: 'legacy', evidence: undefined };
+    const mixed = { ...frontier, points: [verbose, legacy] };
+    expect(selectPoint(policy, mixed, { requestInputTokens: 100, prices, maxOutputTokens: 64 })?.strategyHash).toBe('verbose');
+  });
+});
+
+// 2026-09-07. A re-measurement moved or-gemini-flash on classification to a
+// MEAN of 0.950 with a LOWER BOUND of 0.849 — missing an 0.85 floor by one
+// thousandth, because 40 suite items give a ±0.10 Jeffreys interval. Every
+// point under $0.05/1K was excluded the same way, min_cost was forced onto a
+// point 19x dearer, and the customer's routing became 5x more expensive.
+// Nothing in the receipt, the logs or the dashboard said why.
+//
+// "Not good enough" and "not measured enough to promise" are opposite
+// problems — replace the model, or measure more. The floor cannot tell them
+// apart, and it should not: a floor is a promise. But the SYSTEM must.
+describe('a floor excluding points on interval width says so', () => {
+  const pt = (hash: string, mean: number, half: number) => ({
+    clusterId: 'classification',
+    strategyHash: hash,
+    strategyConfig: { type: 'single' as const, model: 'm' },
+    quality: mean, costPer1K: 0.04, latencyP95: 400, providerMode: 'live' as const,
+    evidence: {
+      cacheKeys: [], runIds: ['r'], n: 40, qualityCi95: half,
+      qualityCi: [mean - half, Math.min(1, mean + half)] as [number, number],
+    },
+  });
+  const frontier = {
+    id: 'f', clusterId: 'classification', version: 6, parentId: null, trigger: 'manual' as const,
+    // the production shape: a strong mean, an interval too wide to promise it
+    points: [pt('underpowered', 0.95, 0.101), pt('confident', 1.0, 0.06)],
+    pricesVersion: 'v', createdAt: new Date(0).toISOString(),
+  };
+
+  it('counts the point whose MEAN clears the floor but whose interval does not', () => {
+    expect(underpoweredExclusions({ type: 'min_cost', qualityFloor: 0.85 }, frontier)).toBe(1);
+  });
+
+  it('counts nothing when the evidence is strong enough to promise the floor', () => {
+    const tight = { ...frontier, points: [pt('a', 0.95, 0.04), pt('b', 1.0, 0.02)] };
+    expect(underpoweredExclusions({ type: 'min_cost', qualityFloor: 0.85 }, tight)).toBe(0);
+  });
+
+  it('counts nothing for a point that is simply below the bar', () => {
+    const weak = { ...frontier, points: [pt('weak', 0.60, 0.05)] };
+    expect(
+      underpoweredExclusions({ type: 'min_cost', qualityFloor: 0.85 }, weak),
+      'a genuinely bad model is not an evidence problem',
+    ).toBe(0);
+  });
+
+  it('applies to compound too, and not to policies without a floor', () => {
+    expect(underpoweredExclusions({ type: 'compound', qualityFloor: 0.85, p95Ms: 1000 }, frontier)).toBe(1);
+    expect(underpoweredExclusions({ type: 'max_quality', costCeilingPer1K: 5 }, frontier)).toBe(0);
   });
 });

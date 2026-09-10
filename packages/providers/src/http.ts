@@ -90,12 +90,45 @@ export function errorBodyMessage(json: unknown): string {
     if (typeof err === 'string') return err;
     if (err !== null && typeof err === 'object') {
       const msg = (err as { message?: unknown }).message;
-      if (typeof msg === 'string') return msg;
+      // OpenRouter wraps every upstream 4xx as the bare "Provider returned
+      // error" and puts the real reason in error.metadata.raw. Two sweeps
+      // (2026-09-07) reported luna ("logprobs are not supported with
+      // reasoning models") and a dead upstream ("bad request") as the SAME
+      // failure, because this function threw the reason away. Keep it.
+      const upstream = upstreamDetail((err as { metadata?: unknown }).metadata);
+      if (typeof msg === 'string') return upstream ? `${msg} — upstream: ${upstream}` : msg;
+      if (upstream) return upstream;
     }
     const msg = (json as { message?: unknown }).message;
     if (typeof msg === 'string') return msg;
   }
   return '';
+}
+
+/** The upstream provider's own error text from OpenRouter's error.metadata
+ *  ({ raw, provider_name }), or '' — never throws, never returns headers. */
+function upstreamDetail(metadata: unknown): string {
+  if (metadata === null || typeof metadata !== 'object') return '';
+  const { raw, provider_name: providerName } = metadata as { raw?: unknown; provider_name?: unknown };
+  let text = '';
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const inner = parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+      const e = inner.error;
+      const fromError = e !== null && typeof e === 'object' ? (e as { message?: unknown }).message : undefined;
+      const candidate = fromError ?? inner.message ?? inner.msg;
+      text = typeof candidate === 'string' ? candidate : raw;
+    } catch {
+      text = raw;
+    }
+  } else if (raw !== null && typeof raw === 'object') {
+    const e = (raw as { error?: { message?: unknown }; message?: unknown }).error?.message ?? (raw as { message?: unknown }).message;
+    if (typeof e === 'string') text = e;
+  }
+  text = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) return '';
+  return typeof providerName === 'string' && providerName ? `${text} (${providerName})` : text;
 }
 
 /**

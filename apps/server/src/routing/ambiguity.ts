@@ -64,3 +64,39 @@ export function pickSafer<T extends TiebreakCandidate>(best: T, runnerUp: T): T 
   }
   return best;
 }
+
+/**
+ * THE BOUNDARY FRONTIER (2026-09-08).
+ *
+ * `pickSafer` compares each cluster's point on ITS OWN suite — a lower bound
+ * measured on reasoning word problems against one measured on invoices — and
+ * calls the higher number "safer". Measured on the benchmark's boundary items
+ * (order-inversion tasks two independent labellers split on) that sent every
+ * tie to multi-step-reasoning, whose cheapest point inverts the order wrong or
+ * runs out of budget on a third of them, while extraction's point answers them
+ * in nine tokens. No rule over those two numbers can fix that: neither was
+ * measured on the items in question.
+ *
+ * So the boundary between two clusters is its own workload. A suite that is
+ * the union of both parents' items is swept like any cluster, under the id
+ * below; a point earns a place on that frontier only by clearing the floor on
+ * BOTH kinds of item. When the classifier cannot place a request, the serve
+ * path resolves the policy against THAT frontier first, and falls back to the
+ * tiebreak only when no measured boundary point exists. The receipt names the
+ * boundary cluster, so the decision is visible rather than laundered into one
+ * parent or the other.
+ */
+export const BOUNDARY_SEPARATOR = '+';
+
+/** Stable id for the boundary between two clusters, whichever order they arrive in. */
+export function boundaryClusterId(a: string, b: string): string {
+  return [a, b].sort().join(BOUNDARY_SEPARATOR);
+}
+
+/** TRUE when a resolution came from a MEASURED point — not a fallback, not
+ *  an empty frontier — and can therefore stand in for the tiebreak. */
+export function boundaryServes<T extends { op: { fallback: 0 | 1; config: unknown } }>(
+  boundary: T | null | undefined,
+): boundary is T {
+  return boundary !== null && boundary !== undefined && boundary.op.fallback !== 1 && boundary.op.config !== null;
+}

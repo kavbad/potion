@@ -603,7 +603,14 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         const cached = await getEvalResultByCacheKey(handle.db, cacheKey);
         if (cached && opts.resume) {
           cacheHits++;
-          results.push(cached);
+          // The SAME measurement under THIS suite: the stored row carries the
+          // cluster it was first measured under, and aggregation groups by
+          // cluster. Pushed as stored, every cell a boundary suite reused from
+          // a parent fell out of the boundary's aggregate (2026-09-08: both
+          // boundary frontiers published on partial unions for every cached
+          // model). The cluster is the suite's grouping, not part of the
+          // evidence; the row in the table is untouched.
+          results.push({ ...cached, clusterId: item.clusterId });
           continue;
         }
         let outcome, quality, scorer, scorerUsage;
@@ -717,12 +724,16 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
       ...opts.suiteIds,
       ...v2Suites.map((s) => s.manifest.clusterId),
     ];
+    // Boundary suites (2026-09-08): an item's parent slice, when it names one.
+    const sliceById = new Map<string, string>();
+    for (const it of allItems) if (it.slice !== undefined) sliceById.set(it.id, it.slice);
+    const sliceOf = sliceById.size > 0 ? (id: string) => sliceById.get(id) : undefined;
     for (const strategy of opts.strategies) {
       const sh = strategyHash(strategy);
       for (const clusterId of clusterKeys) {
         const group = groups.get(`${sh}|${clusterId}`) ?? [];
         if (group.length === 0) continue;
-        aggregates.push(aggregateResults(clusterId, sh, strategy, group, prices.version, providerMode));
+        aggregates.push(aggregateResults(clusterId, sh, strategy, group, prices.version, providerMode, sliceOf));
       }
     }
 

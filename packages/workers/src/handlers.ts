@@ -6,7 +6,7 @@ import {
   redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi, costUsd, roundCost,
   type ProviderId, seedFromString, sha256, strategyHash, suiteContentHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
-  type ChatMessage, type ClusterId, type EvalItem, type Policy, type PriceTable, type StrategyConfig } from '@potion/core';
+  type ChatMessage, type EvalItem, type Policy, type PriceTable, type StrategyConfig } from '@potion/core';
 import {
   listParkedRunsDue,
   markParkedRunReminded,
@@ -59,9 +59,6 @@ import {
   type DbHandle,
   type GuaranteeEvaluation,
   type PotionDb,
-  recordModelFailure,
-  clearModelFailures,
-  unhealthyModels,
 } from '@potion/db';
 // ---- M4 #33 alerts + #35 budget autopilot (SPEC §13.5/§13.7) ----
 import {
@@ -126,9 +123,6 @@ import {
   classMembers,
   evaluatePromotion,
   generateCandidatesExplained,
-  PROMOTION_MIN_PAIRS,
-  workloadFeaturesFromItems,
-  type WorkloadFeatures,
   type ItemPair,
   type ModelRegistryEntry,
 } from '@potion/researcher';
@@ -1331,157 +1325,16 @@ export const RESEARCH_CYCLE_DEFAULT_LIVE_CAP_USD = 5;
 export const MOCK_CYCLE_BUDGET_CAP_USD = 1_000_000_000;
 
 /** Promotion-gate threshold env overrides (SPEC §15.4: "env-tunable"). */
-export function promotionThresholdsFromEnv(): {
+function promotionThresholdsFromEnv(): {
   qualityDeltaMin?: number;
   costCutMin?: number;
-  costQualityMargin?: number;
 } {
-  const out: { qualityDeltaMin?: number; costCutMin?: number; costQualityMargin?: number } = {};
+  const out: { qualityDeltaMin?: number; costCutMin?: number } = {};
   const q = Number(process.env.POTION_RESEARCH_QUALITY_DELTA_MIN);
   if (Number.isFinite(q) && q > 0) out.qualityDeltaMin = q;
   const c = Number(process.env.POTION_RESEARCH_COST_CUT_MIN);
   if (Number.isFinite(c) && c > 0 && c < 1) out.costCutMin = c;
-  // The cost path's non-inferiority margin: how much measured quality a cost
-  // cut may buy. 0 is ACCEPTED and means "no regression at all", which is
-  // strictly correct and, being a zero-margin non-inferiority test, has no
-  // power at any sample size — the cost path then never fires. That is a
-  // legitimate operator choice (quality path only), so it is not clamped away.
-  //
-  // The `raw !== undefined && raw !== ''` guard is NOT ceremony: this is the
-  // first of these knobs whose valid range includes 0, and Number('') === 0.
-  // Without it, `POTION_RESEARCH_COST_QUALITY_MARGIN=` in a .env file — an
-  // ordinary way to write "unset" — would set the margin to zero and silently
-  // switch the cost path off for good.
-  const raw = process.env.POTION_RESEARCH_COST_QUALITY_MARGIN;
-  if (raw !== undefined && raw.trim() !== '') {
-    const m = Number(raw);
-    if (Number.isFinite(m) && m >= 0 && m < 1) out.costQualityMargin = m;
-  }
   return out;
-}
-
-/** C2 program synthesis (docs/INFERENCE-COMPILER-PLAN.md) — OFF unless the
- *  operator arms it. Synthesized programs enter the candidate set like any
- *  other recipe, which means every armed cycle spends money measuring them;
- *  that is an operator decision, so it lives in env beside the other research
- *  dials and never defaults on. Accepts '1' or 'true'. */
-export function programSynthesisArmed(): boolean {
-  const v = process.env.POTION_SYNTH_PROGRAMS;
-  return v === '1' || v === 'true';
-}
-
-/** C2 conditioning: assemble the synthesizer's view of the work this cycle
- *  will be judged on. Two halves, both DERIVED:
- *    · the item side — which scoring kinds each cluster uses and which keys
- *      every answer in it must carry — from the suite items already loaded;
- *    · the evidence side — which single models have actually measured best on
- *      that cluster — from its published frontier.
- *  A synthesizer without these emits the same mechanisms for an extraction
- *  workload and a creative one, which is not merely imprecise: an agreement
- *  gate on prose can never fire, so the program is born dominated. */
-/**
- * P1-1 (external review, 2026-09-05): the size of the comparison FAMILY a
- * cycle's promotion gate is about to run.
- *
- * Every candidate in a cycle is tested against the SAME incumbent, so their
- * individual 95% bounds are not the cycle's 95% bound. Measured on pure noise
- * in packages/researcher/src/gate.test.ts: twenty candidates false-promote
- * 41.5% of cycles uncorrected, 8.7% corrected.
- *
- * Counts the tests that will ACTUALLY run, not the candidates generated. A
- * candidate that missed the frontier, or that IS the incumbent, is skipped
- * before the gate and never becomes a test — counting it would inflate m and
- * make the gate needlessly deaf. Duplicate hashes count once for the same
- * reason: the cycle runs one test per distinct candidate.
- */
-export function promotionFamilySize(
-  candidateHashes: readonly string[],
-  frontierPoints: ReadonlyMap<string, unknown>,
-  incumbentHash: string | null,
-): number {
-  const tested = new Set<string>();
-  for (const h of candidateHashes) {
-    if (!frontierPoints.has(h)) continue;
-    if (h === incumbentHash) continue;
-    tested.add(h);
-  }
-  return tested.size;
-}
-
-export async function workloadFeaturesForCycle(
-  ctx: JobContext,
-  suiteItemsById: Map<string, EvalItem[]>,
-  orgId: string | undefined,
-): Promise<WorkloadFeatures[]> {
-  const features = workloadFeaturesFromItems([...suiteItemsById.values()].flat());
-  return Promise.all(
-    features.map(async (f) => {
-      const frontier = await loadCurrentFrontier(ctx.db, f.clusterId as ClusterId, orgId);
-      // Single-model points only: the escalation target is one call, and a
-      // combination on the frontier is a mechanism, not a model to escalate to.
-      const byQuality = [...(frontier?.points ?? [])].sort((a, b) => b.quality - a.quality);
-      const measured = byQuality
-        .filter((pt) => pt.strategyConfig.type === 'single')
-        .map((pt) => (pt.strategyConfig as { type: 'single'; model: string }).model);
-      const deduped = [...new Set(measured)];
-      // The GAP, not just the order: the grammar refuses to staff a mixture
-      // with a model measured far below its best member, and it can only do
-      // that if it is told the numbers. byQuality is descending, so the first
-      // sighting of an alias is its best measured point.
-      const measuredQuality: Record<string, number> = {};
-      for (const pt of byQuality) {
-        if (pt.strategyConfig.type !== 'single') continue;
-        const alias = (pt.strategyConfig as { type: 'single'; model: string }).model;
-        if (!(alias in measuredQuality)) measuredQuality[alias] = pt.quality;
-      }
-      // THE INCUMBENT, WHOLE: the highest-quality point's config, whatever
-      // shape it is. `measuredModels` gives the synthesizer somewhere to
-      // escalate; this gives it something to MUTATE — and when the incumbent
-      // is a combination, the two are very different offers.
-      const incumbent = byQuality[0]?.strategyConfig;
-      return {
-        ...f,
-        ...(deduped.length > 0 ? { measuredModels: deduped } : {}),
-        ...(Object.keys(measuredQuality).length > 0 ? { measuredQuality } : {}),
-        ...(incumbent !== undefined ? { incumbent } : {}),
-      };
-    }),
-  );
-}
-
-/**
- * 0094: turn a sweep's outcome into model health.
- *
- * A SINGLE-model strategy is the only unambiguous evidence about a model —
- * it failed, or it completed, and there is nothing else in the strategy to
- * blame. Combinations are deliberately ignored in both directions: a cascade
- * completing does not vouch for its cheap stage either.
- */
-export async function recordSingleModelHealth(
-  ctx: JobContext,
-  summary: { failedStrategies: Array<{ strategyHash: string; error: string }> },
-  strategies: StrategyConfig[],
-): Promise<void> {
-  // From the CANDIDATE list, not from summary.results: containment splices a
-  // failed strategy's rows out of the results, so the one strategy whose
-  // health we most need to record is the one missing from them.
-  const singleOf = new Map<string, string>();
-  for (const st of strategies) {
-    if (st.type === 'single') singleOf.set(strategyHash(st), st.model);
-  }
-  const failed = new Set<string>();
-  for (const f of summary.failedStrategies) {
-    const alias = singleOf.get(f.strategyHash);
-    if (alias !== undefined) {
-      failed.add(alias);
-      await recordModelFailure(ctx.db, alias, f.error);
-    }
-  }
-  // A completed single clears its streak — a provider's bad afternoon must
-  // not blacklist a model for good.
-  for (const alias of new Set(singleOf.values())) {
-    if (!failed.has(alias)) await clearModelFailures(ctx.db, alias);
-  }
 }
 
 // ---- research:scan (SPEC §15.2) ----
@@ -1809,10 +1662,6 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
     // mock-alias candidates and then died on MockAliasInLiveRunError,
     // leaving its ledger row stuck at 'running'. reachable() is the G1.7
     // pattern.
-    // 0094: what the catalog remembers about models that fail out. Marked on
-    // the registry entries below, so classRepresentative and the peer picker
-    // cannot nominate one — the fix for cheapest-in-class selecting for junk.
-    const unhealthy = await unhealthyModels(ctx.db);
     const candidateRegistry =
       provider === 'live'
         ? buildRegistry(prices).filter(
@@ -1822,9 +1671,6 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
                 undefined,
           )
         : buildRegistry(prices);
-    const healthAwareRegistry = candidateRegistry.map((e) =>
-      unhealthy.has(e.alias) ? { ...e, unhealthy: true } : e,
-    );
     if (provider === 'live' && candidateRegistry.length === 0) {
       throw new Error(
         'live research cycle refused: no provider API keys in env (set OPENROUTER_API_KEY or ' +
@@ -1832,18 +1678,12 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
       );
     }
     candidates = generateCandidatesExplained({
-      registry: healthAwareRegistry,
+      registry: candidateRegistry,
       ...(payload.focusAlias !== undefined ? { focusAlias: payload.focusAlias } : {}),
       existingHashes,
       evaluatedHashes,
       seed,
       budget: DEFAULT_CANDIDATE_BUDGET,
-      includePrograms: programSynthesisArmed(),
-      // Only paid for when synthesis is armed — it is a frontier read per
-      // cluster, and an unarmed cycle has nothing to condition.
-      ...(programSynthesisArmed()
-        ? { workloads: await workloadFeaturesForCycle(ctx, suiteItemsById, payload.orgId) }
-        : {}),
     }).map((c) => c.config);
   }
 
@@ -1966,16 +1806,6 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
       executedSpendUsd += summary.executedSpendUsd;
       provenance = summary.providerMode;
       suitesRun.push(suiteId);
-      // 0094 MODEL HEALTH. A sweep is the only place that learns a model
-      // cannot complete a run, and until now it forgot immediately — so
-      // classRepresentative kept picking the cheapest broken model, cycle
-      // after cycle. Attribute ONLY from single-model strategies: a cascade
-      // that dies does not say which stage killed it, and blaming every model
-      // in a combination disqualifies innocent ones for a neighbour's
-      // behaviour.
-      if (summary.providerMode === 'live') {
-        await recordSingleModelHealth(ctx, summary, candidates);
-      }
     }
 
     // G1.8 → post-capstone item 1: live ORG cycle spend is customer-
@@ -2035,12 +1865,6 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
       const pointByHash = new Map(points.map((pt) => [pt.strategyHash, pt]));
       const incumbent = current ? highestQualityPoint(current.points) : null;
 
-      const familySize = promotionFamilySize(
-        candidateHashes,
-        pointByHash,
-        incumbent?.strategyHash ?? null,
-      );
-
       for (const hash of candidateHashes) {
         const candidatePoint = pointByHash.get(hash);
         if (!candidatePoint) continue; // candidate didn't make the frontier
@@ -2050,17 +1874,10 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
         let reason: string;
         if (incumbent === null) {
           // No incumbent: first live frontier ever for this cluster.
-          //
-          // P0-4 also applies HERE, and this branch never went through the
-          // gate at all — it guarded `pairs.length === 0`, so a first frontier
-          // could be published on a SINGLE item and then serve as the
-          // incumbent every later verdict is measured against. A bootstrap is
-          // the one publication nothing downstream can correct by comparison,
-          // so it gets the same floor.
           const pairs = await liveHeldoutPairs(ctx, clusterId, hash, hash, prices.version, payload.orgId);
-          if (pairs.length < PROMOTION_MIN_PAIRS) continue;
+          if (pairs.length === 0) continue; // still live-evidence-gated
           path = 'bootstrap';
-          reason = `first live-provenance frontier for cluster (no incumbent), n=${pairs.length}`;
+          reason = 'first live-provenance frontier for cluster (no incumbent)';
         } else {
           const pairs = await liveHeldoutPairs(
             ctx,
@@ -2074,16 +1891,11 @@ export const researchCycleHandler: WorkerHandler<'research:cycle', ResearchCycle
             candidateCostPer1K: candidatePoint.costPer1K,
             incumbentCostPer1K: incumbent.costPer1K,
             seed,
-            comparisons: familySize,
             thresholds,
           });
-          if (!verdict.promote) continue; // CI overlaps, or refused → 'candidate'
+          if (!verdict.promote) continue; // CI overlaps → stays 'candidate'
           path = verdict.path!;
-          // n on the RECORD, not only in the verdict object. A promotion
-          // reason reading "CI95 lower 0.0000" is unreadable without it: a
-          // zero-width interval is legitimate at n=30 (identical deltas) and
-          // meaningless at n=2, and the log line could not tell them apart.
-          reason = `${verdict.reason} [n=${verdict.n}]`;
+          reason = verdict.reason;
         }
 
         // A candidate cleared the gate → publish the recomputed frontier as
@@ -4477,12 +4289,18 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
     // a future retry to resume; this frontier does not touch them.
     const failedHashes = new Set(summary.failedStrategies.map((f) => f.strategyHash));
     const completeStrategies = strategies.filter((st) => !failedHashes.has(strategyHash(st)));
+    // BOUNDARY SUITE (2026-09-08): when the items name their parent slices,
+    // the evidence is read across the boundary AND its parents on exactly
+    // these items, and the point's quality is its weakest slice.
+    const boundaryItems = committedItems.some((i) => i.slice !== undefined)
+      ? committedItems.map((i) => ({ id: i.id, ...(i.slice !== undefined ? { slice: i.slice } : {}) }))
+      : undefined;
     const aggregates = await aggregatesFromEvalResults(
       ctx.db,
       payload.clusterId,
       completeStrategies,
       prices.version,
-      { providerMode: 'live', instrument: payload.instrument ?? 'default' },
+      { providerMode: 'live', instrument: payload.instrument ?? 'default', ...(boundaryItems !== undefined ? { items: boundaryItems } : {}) },
     );
     // REGRESSION GUARD. A sweep publishes a NEW frontier version; if a
     // candidate failed this run, aggregatesFromEvalResults simply does not

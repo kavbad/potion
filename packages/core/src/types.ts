@@ -1,8 +1,5 @@
 // packages/core — THE CONTRACT. Every other package imports these types.
 // Aligned with SPEC.md §1. Changes here require orchestrator review.
-import type { ContextSelect } from './context-select.js';
-import type { ToolSelect } from './tool-select.js';
-import type { PromptVariant } from './prompt-variant.js';
 
 export type ProviderId = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'mock';
 
@@ -160,64 +157,9 @@ export type StrategyConfig =
 
 /** Program grammar. Every leaf `call` names a model, so the boot-time
  *  frontier↔registry check (which walks `model` keys) covers programs too. */
-/**
- * C4 rung 1: how hard a model should think before answering. The FIRST
- * optimization axis that is not "which model" — the same model at two efforts
- * is two operating points, with different cost, latency and quality, and the
- * compiler gets to choose between them.
- *
- * Absent means "the provider's default", which is NOT the same as 'low': a
- * request that never mentions effort must reach the wire unchanged, or every
- * existing measured point silently changes meaning.
- */
-export const REASONING_EFFORT = ['low', 'medium', 'high'] as const;
-export type ReasoningEffort = (typeof REASONING_EFFORT)[number];
-
-/**
- * What an effort COSTS, as an upper bound in output tokens.
- *
- * These are the budgets the token-protocol transports actually request
- * (Anthropic `thinking.budget_tokens`, Google `thinkingConfig.thinkingBudget`).
- * The word-protocol transports (OpenAI, OpenRouter) pick their own budget
- * internally, so for them this is an estimate — which is the right kind of
- * wrong for a preflight whose whole job is to be an UPPER bound. A cost model
- * that priced thinking at zero would turn that bound into a floor, and the
- * research sweep's graceful stop reads it before deciding what it can afford.
- */
-export const REASONING_BUDGET_TOKENS: Record<ReasoningEffort, number> = {
-  low: 1024,
-  medium: 4096,
-  high: 16384,
-};
-
-/** Providers whose wire protocol can carry an effort request. A provider that
- *  cannot MUST refuse rather than answer normally: an unhonored effort would
- *  be recorded as high-effort evidence for an answer that never thought, which
- *  is the same class of lie as a mock number stamped live. */
-export const REASONING_EFFORT_PROVIDERS = ['openai', 'openrouter', 'anthropic', 'google', 'mock'] as const;
-
 export type ProgramNode =
-  /** One model call on the request; yields text + confidence (when exposed).
-   *  `reasoningEffort` is part of the node's STRUCTURE, so the interpreter's
-   *  memo treats `call(m, low)` and `call(m, high)` as two different calls —
-   *  which is exactly what an effort-gated escalation needs. */
-  | {
-      op: 'call';
-      model: string;
-      reasoningEffort?: ReasoningEffort | undefined;
-      /** C4 rung 2: HOW the request is asked. A name from a closed set, never
-       *  free text — see prompt-variant.ts for why. Part of the node's
-       *  structure, so the memo reads two variants of one model as two calls. */
-      promptVariant?: PromptVariant | undefined;
-      /** C4 rung 3: HOW MUCH of the request's own context to send. A call
-       *  parameter rather than a node, so `messages` stays constant through
-       *  the tree and the structural memo keeps meaning what it says. */
-      contextSelect?: ContextSelect | undefined;
-      /** C4 rung 4: HOW MANY of the caller's tools to offer. Same shape and
-       *  the same reasoning as contextSelect — a catalogue is input tokens on
-       *  every call, and most of it is irrelevant to any one request. */
-      toolSelect?: ToolSelect | undefined;
-    }
+  /** One model call on the request; yields text + confidence (when exposed). */
+  | { op: 'call'; model: string }
   /** Branch on a check over previously computed nodes. */
   | { op: 'if'; check: ProgramCheck; then: ProgramNode; else: ProgramNode }
   /** Majority over normalized answers of ≥3 nodes; ties → the first. */
@@ -232,24 +174,8 @@ export type ProgramCheck =
   | { kind: 'confidence'; of: ProgramNode; min: number }
   /** The node's text matches the pattern. */
   | { kind: 'regex'; of: ProgramNode; pattern: string }
-  /**
-   * C4 rung 4: the node MADE A TOOL CALL. The one check that may look at a
-   * tool call, because it does not JUDGE one — it observes that a decision
-   * happened. Every other check reads text or confidence, and a tool call
-   * carries neither, which is why C4b makes one terminal through them.
-   *
-   * This exists so tool selection can be safe: offer fewer tools, and if the
-   * model made no call, try again with all of them. Without it, dropping a
-   * tool the request needed would be an undetectable correctness failure
-   * rather than a measurable one.
-   */
-  | { kind: 'tool-called'; of: ProgramNode }
-  /** The node's text parses as JSON and, if given, has these top-level keys.
-   *  `| undefined` is deliberate: under exactOptionalPropertyTypes an absent
-   *  key and an explicit undefined are different types, and a parsed program
-   *  (zod cannot express "absent") must be the SAME type as a built one — or
-   *  the grammar would need a duplicate wire twin to cross the schema. */
-  | { kind: 'json'; of: ProgramNode; requiredKeys?: string[] | undefined };
+  /** The node's text parses as JSON and, if given, has these top-level keys. */
+  | { kind: 'json'; of: ProgramNode; requiredKeys?: string[] };
 
 // ---- eval ----
 export type ScoringMethod =
@@ -280,6 +206,13 @@ export interface EvalItem {
   tools?: Tool[];
   reference?: unknown;
   scoring: ScoringMethod;
+  /**
+   * BOUNDARY SUITE slice (2026-09-08): the parent cluster this item came
+   * from, when the suite is the union of two clusters' suites. The aggregate
+   * reports the WEAKEST slice as the point's quality, so a boundary point
+   * has cleared the floor on both kinds of item — not on their average.
+   */
+  slice?: string;
   /**
    * JOURNEY item (eval-review adoption, 2026-08-25): task completion as the
    * atomic outcome. `prompt` is STEP 1; these are the follow-on steps, run
@@ -350,6 +283,9 @@ export interface FrontierPointEvidence {
   /** Distinct eval run ids the rows came from. */
   runIds: string[];
   n: number;
+  /** BOUNDARY SUITE (2026-09-08): per-parent-slice quality. Present only when
+   *  the items carried ≥2 distinct slices; the point's quality is the min. */
+  slices?: Record<string, { n: number; quality: number; qualityCi95: number }>;
   /** TRUE when this point was measured on items that carried tools (MIXING
    * M3): a combination may serve tool-carrying requests only with this. */
   toolsMeasured?: boolean;
@@ -384,6 +320,25 @@ export interface FrontierPointEvidence {
   latencySeed?: number;
   suiteId?: string;
   suiteVersion?: string;
+  /**
+   * TOKENS THIS STRATEGY ACTUALLY CONSUMED, meaned over the run (2026-09-06).
+   *
+   * costPer1K is a scalar measured at the SUITE's prompt size, and a strategy
+   * that rewrites or prefixes the prompt carries a fixed input overhead the
+   * scalar hides. On the classification suite (~125-token items) a transform
+   * adding ~64 tokens is +51%; for a customer sending 24-token prompts the
+   * same transform is +267%. Ranking on the scalar therefore ranks for
+   * someone else's prompt length — which is how a `min_cost` policy came to
+   * serve the most expensive arm in a design partner's own study.
+   *
+   * A MULTIPLICATIVE overhead would be size-invariant and could stay inside
+   * the scalar safely. It is the ADDITIVE part that must be carried
+   * separately, because its relative weight moves with the request.
+   *
+   * Absent = measured before this existed. Selection then falls back to the
+   * scalar for the WHOLE frontier rather than mixing two bases.
+   */
+  tokens?: { inputMean: number; outputMean: number };
   /** The rubric the llm-judge evidence was scored under (0022 identity). */
   rubricHash?: string;
   /** judge_calibrations uuid backing trust in that rubric×judge. */
@@ -485,10 +440,6 @@ export interface ShadowConfig {
  */
 export interface GuaranteeConfig {
   minQuality: number; // 0..1 rolling-mean floor
-  /** C5: P(success) floor on served traffic, from customer outcome signals.
-   *  Optional and additive — see core/reliability.ts for why reliability is a
-   *  floor here and not a fourth frontier axis. */
-  minSuccessRate?: number | undefined;
   windowMin: number; // rolling window length in minutes
   sampleRate: number; // 0..1, per-request sampling probability
   action: 'rollback' | 'alert';

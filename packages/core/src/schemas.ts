@@ -1,8 +1,5 @@
 import { z } from 'zod';
-import { MAX_PROGRAM_CALLS, programCallCount } from './coverage.js';
-import { REASONING_EFFORT } from './types.js';
-import { PROMPT_VARIANT } from './prompt-variant.js';
-import type { ChatMessage, ProgramCheck, ProgramNode } from './types.js';
+import type { ChatMessage } from './types.js';
 
 /** Evidence provenance (M1a). Absence of the field on a value object means
  * 'unknown' — only 'live' may ever be served as live evidence. */
@@ -125,98 +122,6 @@ export const FusionConfigSchema = z.object({
   testWriters: z.array(JudgeConfigSchema).min(1).max(3).optional(),
 });
 
-/**
- * THE PROGRAM GRAMMAR AT THE BOUNDARY (compiler IR rung 1).
- *
- * The interpreter has run programs since MIXING rung 3, but nothing outside
- * this process could ever hand it one: `program` was in the TypeScript union
- * and absent from this schema, so /v1/jobs and the harness CLI refused every
- * program on the way in. The VM was reachable only from its own tests.
- *
- * What a schema member buys is not "one more strategy type". It is the
- * difference between a mechanism that must be WRITTEN and one that can be
- * DISCOVERED: a synthesizer emits data, data survives a database, and the
- * gate that promotes a recipe promotes a program the same way it promotes a
- * cascade. Nothing downstream needed changing — strategyModels, the cost and
- * p95 estimators, dominance, the receipt hash all already walk programs.
- *
- * Three things are refused HERE rather than mid-run, because a program that
- * only fails while serving has already reached a customer's request:
- *   · a call budget over MAX_PROGRAM_CALLS (static, from the tree);
- *   · a regex check whose pattern does not compile;
- *   · a `vote` of fewer than three branches — a two-way vote resolves ties to
- *     the first branch, so it is "take the first" wearing the word consensus.
- */
-export const ProgramCheckSchema: z.ZodType<ProgramCheck> = z.lazy(() =>
-  z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('agree'), of: z.tuple([ProgramNodeSchema, ProgramNodeSchema]) }),
-    z.object({ kind: z.literal('confidence'), of: ProgramNodeSchema, min: z.number().min(0).max(1) }),
-    z.object({
-      kind: z.literal('regex'),
-      of: ProgramNodeSchema,
-      pattern: z.string().min(1).refine(
-        (p) => {
-          try {
-            new RegExp(p, 's');
-            return true;
-          } catch {
-            return false;
-          }
-        },
-        { message: 'not a compilable regular expression' },
-      ),
-    }),
-    z.object({ kind: z.literal('json'), of: ProgramNodeSchema, requiredKeys: z.array(z.string()).optional() }),
-    /** C4 rung 4: the only check that may see a tool call, because it observes
-     *  one rather than judging it. */
-    z.object({ kind: z.literal('tool-called'), of: ProgramNodeSchema }),
-  ]),
-);
-
-export const ProgramNodeSchema: z.ZodType<ProgramNode> = z.lazy(() =>
-  z.discriminatedUnion('op', [
-    z.object({
-      op: z.literal('call'),
-      model: z.string().min(1),
-      /** C4: absent ⇒ the provider's default, which is not 'low'. */
-      reasoningEffort: z.enum(REASONING_EFFORT).optional(),
-      /** C4 rung 2: a NAME from a closed set. Free text is refused here on
-       *  purpose — a program whose behaviour lives in English is not data. */
-      promptVariant: z.enum(PROMPT_VARIANT).optional(),
-      /** C4 rung 3: bounded on purpose — a selection that keeps everything is
-       *  not a selection, and one that keeps hundreds is not a compiler
-       *  decision. */
-      contextSelect: z.object({ keepParagraphs: z.number().int().min(1).max(50) }).optional(),
-      /** C4 rung 4: bounded for the same reason — offering all of them is not
-       *  a selection, and offering one is rarely a decision either. */
-      toolSelect: z.object({ keepTools: z.number().int().min(1).max(64) }).optional(),
-    }),
-    z.object({ op: z.literal('if'), check: ProgramCheckSchema, then: ProgramNodeSchema, else: ProgramNodeSchema }),
-    z.object({ op: z.literal('vote'), of: z.array(ProgramNodeSchema).min(3) }),
-    z.object({
-      op: z.literal('pick'),
-      of: z.array(ProgramNodeSchema).min(2),
-      by: z.union([
-        z.object({ kind: z.literal('confidence') }),
-        z.object({ kind: z.literal('judge'), model: z.string().min(1) }),
-      ]),
-    }),
-  ]),
-);
-
-/** The body plus its static bound. The bound is checked on the FIELD so the
- *  strategy union stays a plain discriminated union (a zod-3 refinement on a
- *  member would make it a ZodEffects and break the discriminator). */
-export const ProgramBodySchema = ProgramNodeSchema.superRefine((body, ctx) => {
-  const calls = programCallCount(body);
-  if (calls > MAX_PROGRAM_CALLS) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `program needs ${calls} calls, over the static bound of ${MAX_PROGRAM_CALLS}`,
-    });
-  }
-});
-
 export const StrategyConfigSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('single'), model: z.string() }),
   z.object({
@@ -253,12 +158,6 @@ export const StrategyConfigSchema = z.discriminatedUnion('type', [
     upgradeModel: z.string(),
     upgradeIf: z.object({ confidenceBelow: z.number().min(0).max(1) }),
   }),
-  // Compiler IR rung 1: a mechanism as DATA — see ProgramNodeSchema above.
-  z.object({
-    type: z.literal('program'),
-    name: z.string().min(1).max(64),
-    body: ProgramBodySchema,
-  }),
 ]);
 
 /** Shadow mode (M3 #21, SPEC §12.4) — ADDITIVE optional member on Policy. */
@@ -270,12 +169,6 @@ export const ShadowConfigSchema = z.object({
 /** Quality guarantee (M3 #22, SPEC §12.5) — ADDITIVE optional member on Policy. */
 export const GuaranteeConfigSchema = z.object({
   minQuality: z.number().min(0).max(1),
-  /** C5: P(success) floor on SERVED traffic, from customer outcome signals.
-   *  Additive and optional — a policy without it behaves exactly as before.
-   *  Deliberately a floor and not a frontier axis: outcome evidence is
-   *  observational, so it can say whether a deployed strategy is holding up
-   *  and cannot say which candidate is better. See core/reliability.ts. */
-  minSuccessRate: z.number().min(0).max(1).optional(),
   windowMin: z.number().positive(),
   sampleRate: z.number().min(0).max(1),
   action: z.enum(['rollback', 'alert']),
@@ -369,6 +262,8 @@ export const EvalItemSchema = z.object({
   tools: z.array(ToolSchema).optional(),
   reference: z.unknown().optional(),
   scoring: ScoringMethodSchema,
+  /** Boundary-suite parent slice (see EvalItem.slice). */
+  slice: z.string().optional(),
   /** Journey follow-on steps (prompt = step 1); see EvalItem.journeySteps. */
   journeySteps: z
     .array(z.object({ clusterId: z.string(), prompt: z.string().min(1) }))

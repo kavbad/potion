@@ -38,10 +38,11 @@ import {
 import { registerOpenAiParityRoutes } from './routes/openai-parity.js';
 // M3 #28 jobs (m3-queue-workers) — appended imports (append-only block).
 import { createArtifactStore, type ArtifactStore } from '@potion/artifacts';
-import { createQueue, resolveQueueKind, type PotionQueue } from '@potion/queue';
+import { createQueue, type PotionQueue } from '@potion/queue';
+import { runWorker,
+  createOrgDeleteHandler,
+} from '@potion/workers';
 import { registerJobRoutes } from './routes/jobs.js';
-import { startPotionWorker, workerModeFromEnv } from './worker-runtime.js';
-import type { WorkerHandle } from '@potion/workers';
 // ---- M3 #21 shadow (m3-shadow) — appended import ----
 import { registerReportRoutes } from './routes/reports.js';
 import { registerGuaranteeReportRoutes } from './routes/guarantee-report.js';
@@ -53,6 +54,7 @@ import { registerChallengerRoutes } from './routes/challengers.js';
 // G1 randomized incumbent holdout — appended import.
 import { registerHoldoutRoutes } from './routes/holdout.js';
 // ---- M3 #22 guarantee (m3-guarantee) — appended imports ----
+import { createAlertsDispatchHandler, createGuaranteeEvaluateHandler } from '@potion/workers';
 import { registerGuaranteeRoutes } from './routes/guarantee.js';
 import { GUARANTEE_EVALUATE_JOB } from './guarantee.js';
 // ---- end M3 #22 guarantee imports ----
@@ -90,6 +92,7 @@ import { registerCertificationRoutes } from './routes/certifications.js';
 import { registerLabRoutes } from './routes/lab.js';
 import { registerOperatorRoutes } from './routes/operator.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
+import { createBudgetEvaluateHandler } from '@potion/workers';
 // ---- end M4 #33/#35 imports ----
 
 /** M4 #35: nightly budget:evaluate cadence (24h, SPEC §13.7). */
@@ -188,18 +191,16 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
     embedder: ctx.embedderInfo,
     providerMode: ctx.providerMode,
     pricesVersion: ctx.prices.version,
-    // P0-2: the assignment cache reports its own bound and hit rate. An
-    // operator watching for the OOM this replaced needs entries-vs-cap, and a
-    // hit rate rebuilt from request logs cannot see an eviction.
-    assignCache: ctx.assignCache.stats(),
   }));
 
   // ---- M3 #27 HA (m3-ha) ----
-  // /readyz (load-balancer probe, SPEC §12.8): 200 only when db ping
-  // (`SELECT 1`, 2s timeout) AND queue ping (memory: always ok; bullmq:
-  // redis ping) succeed; payload always carries the circuit-breaker summary.
-  // Any failed check → 503 with per-check detail. /healthz above stays
-  // "process up" (no dependencies) on purpose.
+  // /readyz (load-balancer probe, SPEC §12.8): 200 when the db and queue
+  // pings succeed; payload always carries the circuit-breaker summary. A
+  // BROKEN dependency → 503 with per-check detail, so the balancer drains.
+  // A SLOW one → 200 with `degraded: true`: draining a saturated instance
+  // removes capacity from a system already short of it, and under load that
+  // turned this probe into the cause of a 32%-failure outage (readiness.ts
+  // carries the full account). /healthz above stays "process up".
   app.get('/readyz', async (_req, reply) => {
     const report = await checkReadiness(ctx);
     return reply.code(report.ok ? 200 : 503).send(report);
@@ -213,10 +214,8 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // ── M2 Wave 2 auth (#14): magic-link session auth + dashboard guard ──────
   // /auth/* routes (request-link / verify / logout / invite / me) and the
   // /api/* guard: session-or-apikey auth + viewer read-only / member write /
-  // admin invite RBAC. Dev-mode bypass POTION_DEV_AUTH=1 keeps the pre-auth
-  // local-tool behaviour; since P1-2 its DEFAULT is an allow-list — on only
-  // when NODE_ENV names a non-production runtime, never merely because
-  // NODE_ENV is absent or misspelled. See auth.ts header.
+  // admin invite RBAC. Dev-mode bypass POTION_DEV_AUTH=1 (default ON outside
+  // production) keeps the pre-auth local-tool behavior — see auth.ts header.
   app.decorateRequest('potionOrg', null);
   app.decorateRequest('potionAuth', null);
   app.addHook('onRequest', dashboardAuthHook(ctx));
@@ -231,10 +230,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // reports its RESOLVED state and where that state came from, because a
   // scaffolded-empty variable reads as unset, takes a default nobody chose,
   // and is invisible to any check that tests presence. See boot-report.ts.
-  // The queue is RESOLVED by now, so the boot gate reads what this process
-  // actually got rather than re-deriving it: an injected queue (tests,
-  // embedders) is the caller's to manage and is never the P1-3 black hole.
-  logBootGates(app.log, process.env, ctx.providerMode, opts.queue !== undefined ? 'external' : resolveQueueKind());
+  logBootGates(app.log, process.env, ctx.providerMode);
 
   // ---- M2 Wave 2 metering (ROADMAP #17/#18): append-only registration ----
   // Rate limiting runs as an onRequest hook matched on routeOptions.url, so
@@ -301,32 +297,51 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
           ...(process.env.ARTIFACT_DIR !== undefined ? { dir: process.env.ARTIFACT_DIR } : {}),
         })
       : undefined);
-  // P1-3: the worker is no longer welded to the server. Unset POTION_WORKER
-  // keeps it in-process, which is right on one box; 'off' runs a server that
-  // enqueues and never consumes, for a deployment that runs
-  // apps/server/dist/worker.js as its own process. Node has ONE event loop:
-  // measured here, loop lag while idle maxed at 2ms and loop lag during a
-  // single in-process job maxed at 1188ms — every in-flight request, streaming
-  // included, frozen for the duration.
-  const workerMode = workerModeFromEnv();
-  const worker =
-    workerMode === 'in-process'
-      ? await startPotionWorker({
-          ctx,
-          queue,
-          artifacts,
+  const worker = await runWorker({
+    queue,
+    db: ctx.db,
+    // The worker holds the SAME prices path the context resolved — never its
+    // own env/default fallback. A diverging worker is how the pre-S5 scan
+    // writer (alive in any stale @potion/workers dist) reached the repo
+    // prices.json while the context sat safely on a tmp copy.
+    pricesPath: ctx.pricesPath,
+    ...(artifacts !== undefined ? { artifacts } : {}),
+    // M5 #36: traces:cluster embeds first-user-messages with the platform's
+    // dimension-guarded embedder (mock by default, OpenAI post-M1b).
+    embedder: ctx.embedder,
+    // ---- M3 #22 guarantee (m3-guarantee) ----
+    // The server's worker registers the guarantee:evaluate handler with the
+    // observability meter attached (the default handler in @potion/workers
+    // runs meter-less; every other kind keeps its default handler).
+    handlers: {
+      'guarantee:evaluate': createGuaranteeEvaluateHandler({ meter: observability.meter }),
+      // ---- G2.2 incident SLAs: alerts:dispatch with the latency meter +
+      // the app log as the redacted failure sink (the default handler in
+      // @potion/workers runs meter-less/log-less).
+      'alerts:dispatch': createAlertsDispatchHandler({
+        deps: {
           meter: observability.meter,
           log: (m: string) => app.log.warn(m),
-        })
-      : null;
-  app.decorate('potionWorker', worker);
+          // mailto: alert rules deliver through the same transport as
+          // sign-in links (2026-08-24) — the 'nobody is watching' fix.
+          sendEmail: (msg) => Promise.resolve(sendEmailFromEnv().sendEmail({ to: msg.to, subject: msg.subject, text: msg.text })).then(() => undefined),
+        },
+      }),
+      // ---- M4 #35 budget (m4-alerts-budget) ----
+      // budget:evaluate with the observability meter attached (same pattern
+      // as guarantee:evaluate above; alerts:dispatch keeps its default).
+      'budget:evaluate': createBudgetEvaluateHandler({ meter: observability.meter }),
+      // ---- G2.7 org deletion: cache invalidation after the cascade (the
+      // worker is in-process; a revoked key must not keep serving for a
+      // cache TTL after its org is erased).
+      'org:delete': createOrgDeleteHandler({ onOrgDeleted: ctx.invalidateOrgProviders }),
+      // ---- end M4 #35 budget handler ----
+    },
+    // ---- end M3 #22 guarantee handler ----
+  });
   registerJobRoutes(app, ctx, { queue });
   app.addHook('onClose', async () => {
-    // The worker owns the queue's consumer side and closes it on the way out.
-    // With the worker OFF nothing else would: the queue is still ours (routes
-    // and the guarantee sweep enqueue on it), so the server closes it itself.
-    if (worker !== null) await worker.close(); // drains in-flight jobs, then closes the queue
-    else await queue.close();
+    await worker.close(); // drains in-flight jobs, then closes the queue
   });
   // ---- end M3 #28 jobs ----
 
@@ -579,12 +594,5 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
 declare module 'fastify' {
   interface FastifyInstance {
     potion: PotionContext;
-    /**
-     * P1-3: the in-process worker, or null when POTION_WORKER=off and jobs are
-     * consumed by a separate process. Surfaced rather than hidden so a
-     * deployment can ASSERT what this process is doing instead of assuming it
-     * — the same reason WorkerHandle carries researchScanIntervalHours.
-     */
-    potionWorker: WorkerHandle | null;
   }
 }

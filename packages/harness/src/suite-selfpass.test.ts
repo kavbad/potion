@@ -122,9 +122,23 @@ describe('code-gen-hard-v2 shape (A3)', () => {
 });
 
 describe('classification-hard-v2 shape (A3)', () => {
-  it('40 items in 8 families; a constant guesser still cannot beat 0.45', () => {
+  // GREW TO 80 AT v1.1.0 (2026-09-07). At 40 items a Jeffreys interval is
+  // ±0.10, so a model measured at 0.950 has a lower bound of 0.849 — it
+  // missed an 0.85 quality floor by one thousandth, every cheap point on the
+  // frontier was excluded with it, and production routing became 5x more
+  // expensive until the floor was retuned. 80 items move that bound to
+  // ~0.903: a margin of +0.053 where there was −0.001.
+  //
+  // The count is pinned, not floored, for the reason the guesser bar is
+  // pinned: a suite that can grow silently can also be diluted silently, and
+  // the cheapest way to make an interval look tight is to add items a model
+  // already passes. The added families were validated against a cheap and a
+  // strong model first — they do not move the measured mean materially
+  // (0.950 → 0.963), which is the difference between measuring more precisely
+  // and saturating the suite the way classification-hard-v1 saturated.
+  it('80 items in 16 families; a constant guesser still cannot beat 0.45', () => {
     const { items, manifest } = loadSuiteV2('classification-hard-v2');
-    expect(items).toHaveLength(40);
+    expect(items).toHaveLength(80);
     expect(manifest.clusterId).toBe('classification');
     const byFamily = new Map<string, string[]>();
     for (const item of items) {
@@ -133,7 +147,7 @@ describe('classification-hard-v2 shape (A3)', () => {
       const family = item.id.slice(4, 5);
       byFamily.set(family, [...(byFamily.get(family) ?? []), item.reference as string]);
     }
-    expect(byFamily.size).toBe(8);
+    expect(byFamily.size).toBe(16);
     let floor = 0;
     for (const refs of byFamily.values()) {
       const counts = new Map<string, number>();
@@ -188,9 +202,16 @@ describe('classification-hard-v1 shape', () => {
 });
 
 describe('code-review-hard-v1 shape', () => {
-  it('28 items, majority judge-free, with no-bug controls on both scorers', () => {
+  // GREW TO 60 AT v1.1.0 (2026-09-07). At 42 items of evidence this cluster
+  // carried two points whose MEAN cleared the 0.84 floor while their interval
+  // did not, so the cheapest FEASIBLE point cost $1.4669/1K against an
+  // excluded $0.1794 — an 8.2x penalty paid for interval width rather than for
+  // quality. Classification hit the identical failure at 40 items and paid
+  // 19x. The added 32 are exact-scored defect localisation, validated against
+  // a cheap and a strong model at 81% vs 97% with NO item missed by both.
+  it('60 items, majority judge-free, with no-bug controls on both scorers', () => {
     const { items, manifest } = loadSuiteV2('code-review-hard-v1');
-    expect(items).toHaveLength(28);
+    expect(items).toHaveLength(60);
     expect(manifest.clusterId).toBe('code-review');
     const exact = items.filter((i) => i.scoring.kind === 'exact');
     const judge = items.filter((i) => i.scoring.kind === 'llm-judge');
@@ -203,6 +224,10 @@ describe('code-review-hard-v1 shape', () => {
     // "0 = declares the code correct", so it paid models to invent defects.
     const none = exact.filter((i) => i.reference === 'NONE');
     expect(none.length).toBeGreaterThanOrEqual(4);
+    // A quarter of the exact items must be controls: without them a model
+    // scores by always naming a line, and that is what the retired suite paid
+    // for. Expressed as a RATIO so growing the suite cannot dilute it.
+    expect(none.length / exact.length).toBeGreaterThanOrEqual(0.25);
     const cleanRubrics = judge.filter((i) =>
       (i.scoring as { rubric: string }).rubric.includes('NO CORRECTNESS DEFECT'),
     );
