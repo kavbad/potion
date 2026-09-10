@@ -19,8 +19,16 @@
 //    guard would block it there anyway; refusing here keeps the chain clean);
 //  · import refuses when the file's cluster+instrument already serve a
 //    frontier with the SAME point set (idempotence guard — a double-run must
-//    not mint a no-op version).
+//    not mint a no-op version);
+//  · import refuses when the file's pricesVersion differs from the one the
+//    target is serving — the cost axis is only comparable within a prices
+//    version (POTION_PROMOTE_ACCEPT_PRICES_CHANGE=1 to promote deliberately).
+//
+// The refusals themselves live in ./promote-frontier-guards.ts so they can be
+// tested; this file throws on a missing DB url at import, so nothing inline
+// here was ever reachable from a test.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { promotionRefusal } from './promote-frontier-guards.js';
 
 const [, , cmd, ...args] = process.argv;
 const DB_URL = process.env.POTION_PROMOTE_DB ?? process.env.DATABASE_URL;
@@ -49,15 +57,8 @@ try {
     const doc = JSON.parse(readFileSync(file, 'utf8')) as {
       sourceId: string; sourceVersion: number; clusterId: string; instrument: string;
       trigger: string; pricesVersion: string;
-      points: { strategyHash: string; providerMode?: string }[];
+      points: { strategyHash: string; providerMode?: string; quality?: number; evidence?: { runIds?: string[] } }[];
     };
-    const notLive = doc.points.filter((p) => p.providerMode !== 'live');
-    if (notLive.length > 0) {
-      throw new Error(
-        `REFUSED: ${notLive.length}/${doc.points.length} points are not provider_mode=live ` +
-          `(${notLive.map((p) => p.strategyHash.slice(0, 8)).join(', ')}) — simulated evidence never promotes`,
-      );
-    }
     let current;
     try {
       current = await getLatestFrontier(handle.db, doc.clusterId, null, doc.instrument as never);
@@ -71,28 +72,9 @@ try {
       }
       throw e;
     }
-    if (current) {
-      // Idempotence is by EVIDENCE, not by strategy set. A re-sweep's whole
-      // purpose is to replace stale evidence for the SAME strategies with
-      // fresh evidence (2026-09-02: the tools re-sweep re-measured
-      // or-gemini-flash + or-solar-pro4 on the multi-turn 1.1.0 suite, which
-      // the August blind measurement could not see). Comparing only the
-      // strategy-hash set would refuse exactly that promotion. So the
-      // signature folds in each point's measured quality and its evidence
-      // run ids — a genuine re-measurement differs on both; a true accidental
-      // re-run of the same export is byte-identical and still refused.
-      const sig = (pts: { strategyHash: string; quality?: number; evidence?: { runIds?: string[] } }[]): string =>
-        pts
-          .map((p) => `${p.strategyHash}:${p.quality ?? ''}:${(p.evidence?.runIds ?? []).slice().sort().join(',')}`)
-          .sort()
-          .join('|');
-      if (sig(current.points) === sig(doc.points as never)) {
-        throw new Error(
-          `REFUSED: target already serves v${current.version} with the identical points AND evidence ` +
-            `(same strategies, same quality, same run ids) — a re-run must not mint a no-op version`,
-        );
-      }
-    }
+    const refusal = promotionRefusal(current ?? null, doc);
+    if (refusal) throw new Error(refusal);
+
     const saved = await saveFrontier(
       handle.db,
       doc.clusterId,
