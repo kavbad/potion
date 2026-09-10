@@ -4,6 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   PRICES_OVERRIDE_ENV,
+  PROFILE_OVERRIDE_ENV,
+  tokenProfileCoverage,
+  tokenProfileRefusal,
   evidenceSignature,
   identicalEvidenceRefusal,
   notLiveRefusal,
@@ -54,7 +57,11 @@ describe('notLiveRefusal — simulated evidence never promotes', () => {
   });
 
   it('a MISSING providerMode is not live — the field is a claim, and its absence is not one', () => {
-    expect(notLiveRefusal(doc({ points: [pt({ providerMode: undefined })] }))).toContain('not provider_mode=live');
+    // Built by OMITTING the key rather than setting it undefined: under
+    // exactOptionalPropertyTypes those are different types, and only the
+    // omission is the shape a real file with no providerMode field has.
+    const noClaim: PromotablePoint = { strategyHash: 'nomode', quality: 0.9, evidence: { runIds: ['r'] } };
+    expect(notLiveRefusal(doc({ points: [noClaim] }))).toContain('not provider_mode=live');
   });
 });
 
@@ -112,6 +119,70 @@ describe('pricesBasisRefusal — the cost axis may not change silently', () => {
 
   it('a FIRST frontier has no basis to contradict', () => {
     expect(pricesBasisRefusal(null, doc({ pricesVersion: AUGUST }), {})).toBeNull();
+  });
+});
+
+describe('tokenProfileRefusal — a promotion may not drop the token profiles', () => {
+  // The real v5 → v6 promotion, with the profiles measured off production.
+  const v5 = (): ServingFrontier => ({
+    version: 5,
+    pricesVersion: LIVE,
+    points: [
+      pt({ strategyHash: 'solar', evidence: { runIds: ['r'], tokens: { outputMean: 24.5, inputMean: 104.1 } } }),
+      pt({ strategyHash: 'ling', evidence: { runIds: ['r'], tokens: { outputMean: 169.24, inputMean: 73.96 } } }),
+      pt({ strategyHash: 'deepseek', evidence: { runIds: ['r'], tokens: { outputMean: 89.68, inputMean: 123.1 } } }),
+      pt({ strategyHash: 'gemini37', evidence: { runIds: ['r'], tokens: { outputMean: 135.4, inputMean: 53.2 } } }),
+    ],
+  });
+  const v6Points = ['ling', 'nemotron', 'inklingS', 'geminiF', 'inkling', 'gemini37'].map((hash) =>
+    pt({ strategyHash: hash, evidence: { runIds: ['r2'] } }),
+  );
+
+  it('counts coverage, and a point without outputMean does not count', () => {
+    expect(tokenProfileCoverage(v5().points)).toBe(4);
+    expect(tokenProfileCoverage(v6Points)).toBe(0);
+    expect(tokenProfileCoverage([pt({ evidence: { runIds: ['r'], tokens: {} } })])).toBe(0);
+  });
+
+  it('REFUSES the 2026-09-08 v6 promotion, and says what it turns off', () => {
+    const r = tokenProfileRefusal(v5(), doc({ points: v6Points }), {});
+    expect(r, 'a frontier with no token profiles must not replace one that has them').not.toBeNull();
+    expect(r).toContain('all 4 points');
+    expect(r).toContain('0/6');
+    expect(r).toContain('output-budget');
+  });
+
+  it('refuses PARTIAL coverage too — one missing profile disables it for the cluster', () => {
+    const partial = [...v5().points.slice(0, 3), pt({ strategyHash: 'new', evidence: { runIds: ['r'] } })];
+    expect(tokenProfileRefusal(v5(), doc({ points: partial }), {})).toContain('3/4');
+  });
+
+  it('allows a promotion that keeps full coverage', () => {
+    expect(tokenProfileRefusal(v5(), doc({ points: v5().points }), {})).toBeNull();
+  });
+
+  it('GAINING profiles is never refused — the guard is one-directional', () => {
+    const bare: ServingFrontier = { version: 4, pricesVersion: LIVE, points: v6Points };
+    expect(tokenProfileRefusal(bare, doc({ points: v5().points }), {})).toBeNull();
+  });
+
+  it('a target that never had full coverage cannot lose it', () => {
+    const partialTarget: ServingFrontier = {
+      version: 4,
+      pricesVersion: LIVE,
+      points: [v5().points[0]!, pt({ strategyHash: 'x', evidence: { runIds: ['r'] } })],
+    };
+    expect(tokenProfileRefusal(partialTarget, doc({ points: v6Points }), {})).toBeNull();
+  });
+
+  it('the override releases it, and only the exact value does', () => {
+    const d = doc({ points: v6Points });
+    expect(tokenProfileRefusal(v5(), d, { [PROFILE_OVERRIDE_ENV]: '1' })).toBeNull();
+    expect(tokenProfileRefusal(v5(), d, { [PROFILE_OVERRIDE_ENV]: 'true' })).not.toBeNull();
+  });
+
+  it('a first frontier has nothing to lose', () => {
+    expect(tokenProfileRefusal(null, doc({ points: v6Points }), {})).toBeNull();
   });
 });
 

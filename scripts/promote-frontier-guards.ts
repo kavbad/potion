@@ -14,7 +14,7 @@ export interface PromotablePoint {
   strategyHash: string;
   providerMode?: string;
   quality?: number;
-  evidence?: { runIds?: string[] };
+  evidence?: { runIds?: string[]; tokens?: { outputMean?: number; inputMean?: number } };
 }
 
 export interface PromotionDoc {
@@ -107,6 +107,54 @@ export function pricesBasisRefusal(
   );
 }
 
+/**
+ * A PROMOTION MAY NOT DROP THE TOKEN PROFILES (2026-09-10).
+ *
+ * `selectPoint` turns two behaviours on only when EVERY point carries
+ * `evidence.tokens`: request-aware costing (pricing the frontier against the
+ * actual request rather than a measured scalar) and output-budget feasibility
+ * (excluding a point whose mean output exceeds the caller's max_tokens, so a
+ * knowingly-truncated answer is never served). One point without a profile
+ * disables both, for the whole cluster, silently — it fails open.
+ *
+ * Measured on production the day this was written: multi-step-reasoning v5
+ * carried a profile on all four points (outputMean 24.5 / 169.2 / 89.7 /
+ * 135.4). Its replacement, v6, carried none on any of its six. Nothing
+ * refused it, nothing logged it, and the cluster has been priced on a flat
+ * scalar with no output-budget check ever since.
+ *
+ * The test is coverage, not presence: full coverage may not become partial or
+ * none. Going the other way is a gain and never refused, and a target that
+ * never had profiles cannot lose them.
+ */
+export const PROFILE_OVERRIDE_ENV = 'POTION_PROMOTE_ACCEPT_PROFILE_LOSS';
+
+/** How many of these points carry the profile selectPoint requires. */
+export function tokenProfileCoverage(points: PromotablePoint[]): number {
+  if (points.length === 0) return 0;
+  return points.filter((p) => typeof p.evidence?.tokens?.outputMean === 'number').length;
+}
+
+export function tokenProfileRefusal(
+  current: ServingFrontier | null,
+  doc: PromotionDoc,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  if (!current) return null;
+  const had = tokenProfileCoverage(current.points);
+  if (had < current.points.length) return null; // never had full coverage
+  const has = tokenProfileCoverage(doc.points);
+  if (has === doc.points.length) return null; // still complete
+  if (env[PROFILE_OVERRIDE_ENV] === '1') return null;
+  return (
+    `REFUSED: ${doc.clusterId}/${doc.instrument} serves v${current.version} with a token profile on ` +
+    `all ${current.points.length} points, and this file carries one on ${has}/${doc.points.length}. ` +
+    `selectPoint enables request-aware costing and the output-budget check only when EVERY point has ` +
+    `one, so promoting this turns both off for the whole cluster without an error. Re-measure so the ` +
+    `profiles come with the evidence, or set ${PROFILE_OVERRIDE_ENV}=1 to promote deliberately.`
+  );
+}
+
 /** Every refusal, in the order they should be reported. First hit wins. */
 export function promotionRefusal(
   current: ServingFrontier | null,
@@ -114,6 +162,9 @@ export function promotionRefusal(
   env: Record<string, string | undefined> = process.env,
 ): string | null {
   return (
-    notLiveRefusal(doc) ?? identicalEvidenceRefusal(current, doc) ?? pricesBasisRefusal(current, doc, env)
+    notLiveRefusal(doc) ??
+    identicalEvidenceRefusal(current, doc) ??
+    pricesBasisRefusal(current, doc, env) ??
+    tokenProfileRefusal(current, doc, env)
   );
 }

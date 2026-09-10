@@ -22,7 +22,11 @@
 //    not mint a no-op version);
 //  · import refuses when the file's pricesVersion differs from the one the
 //    target is serving — the cost axis is only comparable within a prices
-//    version (POTION_PROMOTE_ACCEPT_PRICES_CHANGE=1 to promote deliberately).
+//    version (POTION_PROMOTE_ACCEPT_PRICES_CHANGE=1 to promote deliberately);
+//  · import refuses when the target has a token profile on every point and
+//    the file does not — selectPoint enables request-aware costing and the
+//    output-budget check only on full coverage, so losing it fails open
+//    (POTION_PROMOTE_ACCEPT_PROFILE_LOSS=1 to promote deliberately).
 //
 // The refusals themselves live in ./promote-frontier-guards.ts so they can be
 // tested; this file throws on a missing DB url at import, so nothing inline
