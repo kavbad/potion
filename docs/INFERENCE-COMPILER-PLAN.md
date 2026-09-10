@@ -873,6 +873,24 @@ thing that cannot be copied is accumulated evidence compounding through a
 closed loop — the compiler that has seen the most traffic makes the best
 programs, and the lead widens with use. Rungs 1, 2 and 4 are that loop.
 
+### The rule for all of C7: it must not come out broken
+
+Every rung below lands **behind a flag, default off**, exactly as
+`POTION_SYNTH_PROGRAMS` does today — the system serving this morning keeps
+serving this morning's programs until the rung has passed its own gate. Every
+rung names the files it touches, the **contracts that must hold** (by name),
+the **existing guards that must stay green**, the **new guard it adds**, and
+whether it needs a migration. A rung that cannot fill those five in is not
+ready to build. The attachment points are where this session found the repo's
+worst defects, so they are written down here rather than discovered again.
+
+Cross-cutting guards every rung keeps green: the P1-1 family-wise simulation
+(`gate.test.ts`), the cost-path power test, the mirror-drift guard, the
+type-escape ratchet (`scripts/test-typecheck-coverage.test.ts`), the env and
+doc inventories, the mock-eligibility inventory, and the export-set identity
+check from the handlers split — a refactor that widens a public surface is
+not a refactor.
+
 ### Rung 1 — Adaptive measurement
 
 **The gap.** The heldout is thirty items, measured once. The cost path — the
@@ -897,6 +915,26 @@ below the corrected level, measured the way P1-1 measured it.
 
 **Depends on.** Nothing. This is first.
 
+**How it attaches.**
+- *Files:* a new scheduler beside `packages/researcher/src/gate.ts`; the call
+  site in `packages/workers/src/handlers.ts` (`research:cycle`,
+  `liveHeldoutPairs`). `evaluatePromotion` itself is **not modified**.
+- *Contract that must hold:* the paired percentile bootstrap is **not
+  anytime-valid**. Stopping on what has been seen and then calling the
+  existing gate destroys the family-wise rate proved under P1-1. Therefore the
+  scheduler may only **drop losers early** — dropping never promotes, so it is
+  conservative — and **promotion still requires the existing gate on a
+  pre-registered n**, unchanged. True anytime promotion (confidence sequences,
+  e-values) is a *new statistic with its own proof* and a separate rung; it
+  does not go into this gate.
+- *Guards that stay green:* the P1-1 simulation (41.5% -> 8.7%), the cost-path
+  power test, `PROMOTION_MIN_PAIRS`, `comparisons` required on every call.
+- *New guard:* a seeded simulation showing the scheduler's early-drop never
+  promotes a candidate the full gate would have refused, and that item spend
+  falls by the stated fraction.
+- *Migration:* none. *Flag:* `POTION_RESEARCH_ADAPTIVE` — off, the cycle runs
+  today's fixed design.
+
 ### Rung 2 — A cost model driving search
 
 **The gap.** `programCandidates` enumerates the gate × escalation-target
@@ -919,6 +957,25 @@ rank correlation. A cycle's spend per promotion falls; the number is recorded.
 
 **Depends on.** Rung 1 — steered search only pays if measuring a candidate is
 cheap.
+
+**How it attaches.**
+- *Files:* `packages/researcher/src/generate.ts` (`programCandidates`,
+  `mutateIncumbent`, `generateCandidatesExplained`);
+  `packages/harness/src/estimate.ts`; `promotionFamilySize` in
+  `packages/workers/src/handlers.ts`.
+- *Contract that must hold:* **Bonferroni.** A larger search space that
+  *measures* more candidates shrinks alpha and makes the gate deaf. The bandit
+  **proposes** from the large space and **measures** a bounded set, and
+  `comparisons` equals the measured set exactly — the family-size guard fails
+  by name otherwise. `classRepresentative` and the unhealthy-model exclusion
+  (0094) still filter the pool. `generateCandidatesExplained`'s output shape is
+  read by the ledger and the UI and does not change. The C2 mutation source
+  over compiled incumbents is the **seed** of the search, not replaced by it.
+- *Guards that stay green:* `promotionFamilySize` tests, `false-live.test.ts`,
+  the registry health tests, the P1-1 simulation.
+- *New guard:* estimator predicted rank vs measured rank on held-out cycles,
+  with the lower bound asserted — the test fails if the model stops steering.
+- *Migration:* none. *Flag:* `POTION_RESEARCH_STEERED` — off, enumeration.
 
 ### Rung 3 — Caching and prompt compilation as IR ops
 
@@ -945,6 +1002,37 @@ gate, on the paired design.
 
 **Depends on.** Rung 1. (b) builds on C4 rung 2.
 
+**How it attaches.** This rung has the most edges; each one has already bitten
+once.
+- *Files:* the IR union in `packages/core/src/types.ts` + `schemas.ts`; the
+  interpreter `packages/strategies/src/program.ts`; `MAX_PROGRAM_CALLS` and
+  `programNodeKey` in `core/src/coverage.ts`; `core/src/prompt-variant.ts`;
+  every exhaustive switch over `op` — the dashboard's `describeStrategy`,
+  `scripts/m1b-sweep.ts`'s walker, the interpreter.
+- *Contracts that must hold:*
+  (1) **Strategy hashes do not move.** `strategy_configs` rows are
+  content-addressed and every frontier points at them. A compiled-prompt
+  artifact must be an **optional, absent-by-default** field so every existing
+  config hashes as it does today. `promptVariant`'s closed vocabulary keeps
+  its three values; the artifact is an additional shape, not a replacement.
+  (2) A `cache` op is a **candidate the gate measures**, never a serving-path
+  shortcut — otherwise cache correctness bypasses evidence. The P0-2
+  `AssignCache` is a *classification* cache and is unrelated.
+  (3) Whether a cache hit counts against `MAX_PROGRAM_CALLS` is **decided
+  before the interpreter is touched** (proposed: it does not; the ceiling
+  bounds provider calls) and pinned by a test.
+  (4) `programNodeKey` must canonicalize the new op or dedupe silently breaks.
+- *Guards that stay green:* the mirror-drift guard and the type-escape ratchet
+  — they exist for exactly the "new union member, missing case" failure;
+  `program.test.ts`; `coverage.ts` tests; the schema round-trip tests.
+- *New guards:* (a) a hit scores >= a miss on the heldout, under the rung-1
+  instrument; (b) hash stability — a fixture of today's strategy configs
+  hashes identically after the schema change.
+- *Migration:* **none by design** — additive fields only. If a migration
+  turns out to be needed, the design is wrong. *Flags:* `POTION_IR_CACHE`,
+  `POTION_PROMPT_COMPILE` — off, the interpreter refuses the op at parse time
+  the way it refuses an over-budget program.
+
 ### Rung 4 — Outcomes into selection
 
 **The gap.** `/v1/outcomes` collects the customer's own verdicts and then
@@ -964,6 +1052,31 @@ change is named on the receipt, and holdout-verified savings are not degraded.
 
 **Depends on.** Real traffic (C6). Specified now; runs when traffic exists.
 
+**How it attaches.**
+- *Files:* `servingDecisionFor` in `@potion/pareto` (the ONE RESOLVER);
+  `packages/pareto/src/outcome-evidence.ts`; the routerHash computation;
+  generations; the randomized holdout (0086).
+- *Contracts that must hold:*
+  (1) **Selection changes go through the one resolver.** A side path is the
+  defect G0 killed (`cae78d4`).
+  (2) Outcomes are excluded from the routerHash **on purpose** so churn does
+  not mint versions. A prior that changes the pick mints a version through
+  generations, deliberately, or the receipt lies about what served.
+  (3) Only **holdout** outcomes are causal. Non-holdout outcomes stay
+  monitoring; the observational caveat is a contract, not a caveat.
+  (4) `OutcomeRowLike` carries **no customer or session key**, so
+  `clusteredQualityCi` cannot apply and the Jeffreys bound overclaims under
+  heavy callers (coverage 95% -> 72% at two sources). **Add the grouping key
+  first**; a prior built on that interval is built on an overclaim.
+- *Guards that stay green:* the one-resolver tests, `routerHash` stability
+  tests, the holdout labeling (`;holdout=1`) tests, the billing-basis test
+  (savings bill the holdout-verified lower bound only).
+- *New guard:* a served fixture where the outcome prior changes the pick and
+  the receipt names the new version; and one where non-holdout outcomes alone
+  change nothing.
+- *Migration:* a nullable grouping column on outcome rows. *Flag:*
+  `POTION_OUTCOME_PRIOR` — off, monitoring only, as today.
+
 ### Rung 5 — Distillation as a compile target
 
 **The gap.** The compiler emits programs over API models. The strongest form of
@@ -980,6 +1093,28 @@ path — if it does not reach the frontier it is not served.
 under the paired gate at the corrected alpha.
 
 **Depends on.** Rungs 1 and 4; a fine-tuning provider; the consent gate.
+
+**How it attaches.**
+- *Files:* `packages/researcher/src/registry.ts` (`ModelRegistryEntry`);
+  `prices.json` and its version guard; the provider factory; custody; the
+  org consent surface.
+- *Contracts that must hold:*
+  (1) A distilled model **enters through the registry and the prices path
+  like any model**, with a price entry at the current `pricesVersion`. A
+  model with no price, or a stale one, is the 2026-09-08 promotion (nemotron
+  live at 3/10, then 25x fallback) — the import guard that refused the restore
+  is the guard here too.
+  (2) The holdout's consent gate covers **sampling**. Training on customer
+  data needs its **own** gate, per org, default off. That is a legal
+  boundary and not a config flag; it is named here so nobody treats it as one.
+  (3) The frontier records **lineage** — which workload, which run, which
+  pairs — or "measured on release" is no longer true of that point.
+- *Guards that stay green:* registry health tests, the prices-version import
+  guard, provenance tests, custody tests.
+- *New guard:* a distilled candidate with a missing or stale price is refused
+  at registration, by name.
+- *Migration:* lineage columns on the frontier point; the training-consent
+  column on orgs. *Flag:* `POTION_DISTILL` — off.
 
 ### Sequencing, and what it changes about C2/C3
 
