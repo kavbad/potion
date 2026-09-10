@@ -850,6 +850,150 @@ is the customer-facing autonomy CONTRACT — "deploy anything that saves ≥10% 
 
 ---
 
+## C7 — From a compiler to one that cannot be beaten by hand  ·  PLANNED (2026-09-10)
+
+C1–C6 finish the **language**. When they land, Potion has the shape nobody
+else in the category has: a spec in, an IR, a synthesizer over it, an
+optimizer promoting on measured evidence, executable programs out. That is a
+real inference compiler — in the profile-guided, autotuning sense, which is the
+honest sense; the word must never be allowed to imply correctness by
+construction.
+
+It is not a world-class one, and the reason is specific: the plan leaves the
+**optimizer** and the **measurement engine** at their current depth. Today's
+synthesis is *enumerate, then filter*. Exhaustive over a tiny space, gated by
+an honest statistic on thirty items, and no better at finding programs on its
+thousandth cycle than on its first. A compiler that a competent engineer with
+an afternoon can beat by picking a model by hand is not the compiler for
+inference. The five rungs below are what close that gap, ordered by leverage.
+The first two are load-bearing for everything above them.
+
+"Unbeatable" is not a state, it is a rate. The IR can be copied in a month. The
+thing that cannot be copied is accumulated evidence compounding through a
+closed loop — the compiler that has seen the most traffic makes the best
+programs, and the lead widens with use. Rungs 1, 2 and 4 are that loop.
+
+### Rung 1 — Adaptive measurement
+
+**The gap.** The heldout is thirty items, measured once. The cost path — the
+one that buys savings — needs ~300 paired items for a coin's chance and
+~1,000–2,000 to be reliable (measured under P1-1, above). Every promotion in
+the system is only as real as the heldout behind it, and this is the binding
+constraint on every rung that follows.
+
+**What lands.** Sequential testing. Evaluation budget goes where the interval
+is widest; clear losers are dropped early (successive halving / racing over
+the candidate set); the paired design and the family-wise correction are
+kept. Peeking must be legal: either an anytime-valid method (confidence
+sequences / e-values) or a pre-registered spending function — the current
+percentile bootstrap read repeatedly is not valid and must not be used that
+way.
+
+**Done when.** A cycle certifies a cost-path non-inferiority verdict at a stated
+alpha using ≤ 25% of the items a fixed design needs for the same power, proven
+by seeded simulation in the gate's own test pattern, then by one live cycle.
+The family-wise false-promotion rate under continuous monitoring stays at or
+below the corrected level, measured the way P1-1 measured it.
+
+**Depends on.** Nothing. This is first.
+
+### Rung 2 — A cost model driving search
+
+**The gap.** `programCandidates` enumerates the gate × escalation-target
+product and the gate says yes or no. The preflight estimator
+(`packages/harness/src/estimate.ts`) already predicts cost before a call is
+made and is used only as a sanity check afterward. Evidence gates search; it
+does not steer it.
+
+**What lands.** The estimator becomes the objective the synthesizer searches
+against. Candidate proposal is a bandit over the program space with the
+estimator as prior; measured results update it; the candidate set is bounded
+by expected dominance, not by enumeration order. The space grows — depth-3
+programs, mixed checks, per-node effort — because search, unlike enumeration,
+can afford it.
+
+**Done when.** The synthesizer proposes a bounded candidate set from a space at
+least 10× today's enumeration, and the estimator's predicted rank agrees with
+the measured rank on a held-out set of cycles, with a stated lower bound on the
+rank correlation. A cycle's spend per promotion falls; the number is recorded.
+
+**Depends on.** Rung 1 — steered search only pays if measuring a candidate is
+cheap.
+
+### Rung 3 — Caching and prompt compilation as IR ops
+
+**The gap.** Two of the review's seven layers are the ones that dominate real
+bills, and both are outside the instruction set. *Semantic caching* is
+untouched. *Per-model adaptation* was named from two directions (C4, the
+second review) and has no rung: the same prompt goes to every target model,
+which is the compiler emitting unoptimized code.
+
+**What lands.**
+(a) A `cache` op: exact-then-semantic, keyed on the normalized request,
+invalidated on frontier version, credited by the cost model. Correctness is a
+measured claim: a hit must score at or above a miss on the heldout, under the
+rung-1 instrument.
+(b) The prompt as compiled code: per-target rewriting, few-shot selection from
+the workload's own items, format adaptation per model. `promptVariant` stops
+being a closed vocabulary of three and becomes a compiled artifact with a
+hash, promoted through the same gate as everything else.
+
+**Done when.** (a) A workload with repeat structure shows a measured cost
+reduction with quality held to within the margin. (b) At least one
+model×workload pair where the compiled prompt beats the shared prompt at the
+gate, on the paired design.
+
+**Depends on.** Rung 1. (b) builds on C4 rung 2.
+
+### Rung 4 — Outcomes into selection
+
+**The gap.** `/v1/outcomes` collects the customer's own verdicts and then
+excludes them from the router hash. C5 made them monitoring for a good reason
+— observational evidence cannot rank candidates, because routing chose which
+requests each one saw — and that reason still holds. It stops at monitoring
+because nothing was built past it.
+
+**What lands.** Outcomes as a *constraint and a prior*, never a ranking. The
+randomized incumbent holdout (G1) is already the causal instrument; its
+outcomes update per-strategy success estimates with honest intervals. The
+success floor becomes a hard constraint on the choice set; the Pareto set
+stays the choice set; the pick is traced on the receipt.
+
+**Done when.** One served workload where outcome evidence changes the pick, the
+change is named on the receipt, and holdout-verified savings are not degraded.
+
+**Depends on.** Real traffic (C6). Specified now; runs when traffic exists.
+
+### Rung 5 — Distillation as a compile target
+
+**The gap.** The compiler emits programs over API models. The strongest form of
+the claim emits a *smaller model*: the workload's own measured traffic,
+compiled into weights.
+
+**What lands.** A `distill` target. Pairs of (input, best-program output) are
+collected from measured runs under a per-org data-use consent gate (the
+holdout already has one); a small open model is fine-tuned on them; the result
+is registered as a candidate like any other and the gate decides. No special
+path — if it does not reach the frontier it is not served.
+
+**Done when.** One workload where the distilled candidate reaches the frontier
+under the paired gate at the corrected alpha.
+
+**Depends on.** Rungs 1 and 4; a fine-tuning provider; the consent gate.
+
+### Sequencing, and what it changes about C2/C3
+
+1 → 2 → 3 → 4 → 5. Rungs 1 and 2 go **before** finishing C2's shelf
+retirement and C3's predictive half: arming synthesis without steered search
+spends money enumerating, and predictive branching is blocked on program
+traffic that steered search produces faster. Rung 4 and 5 wait on traffic.
+
+The design-partner question is set aside here by the operator's instruction.
+It is not set aside by the plan: rungs 4 and 5 cannot run without it, and rung
+3(a) cannot be *measured* without repeat structure that only real traffic has.
+
+---
+
 ## The positioning gate
 
 The review names an explicit condition: once #1–3 are done — IR, synthesizer,
@@ -1696,7 +1840,9 @@ Its other two direction points are new here and worth recording:
 | tool-selection strategy | **landed** |
 | tool-use programs | **partial** — IR is tool-correct; execution blocked |
 | retrieval strategy | **partial** — selection only |
-| semantic caching | **untouched** |
+| semantic caching | **planned** — C7 rung 3(a) |
+| per-model prompt compilation | **planned** — C7 rung 3(b); not on the review's list, named twice since |
+| distillation as a target | **planned** — C7 rung 5; not on the review's list |
 
 Also on the review's axis list and untouched: **retries** as a compiler
 parameter. Serving has an empty-answer retry; the IR has no retry op.
@@ -1714,6 +1860,15 @@ parameter. Serving has an empty-answer retry; the IR has no retry op.
 4. Instruction set — **4 of 7**, above.
 5. Autonomous loop — **untouched**. Adoption and generations are still admin;
    nothing in C6 was built.
+
+**Beyond the review's list — C7, added 2026-09-10** (what separates a compiler
+from one that cannot be beaten by hand):
+
+6. Adaptive measurement — **planned**, first.
+7. A cost model driving search — **planned**; depends on 6.
+8. Caching + prompt compilation as IR ops — **planned**; depends on 6.
+9. Outcomes into selection — **specified**; runs on real traffic.
+10. Distillation as a compile target — **planned**; depends on 6 and 9.
 
 **Against the review's positioning gate** (#1–3 done ⇒ the phrase belongs on
 the site): #1 yes, #2 substantially, #3 in its reactive half only. The

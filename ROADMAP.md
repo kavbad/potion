@@ -69,5 +69,15 @@ Proofs: 464 tests, walkthrough 10/10. See tasks/todo.md → M2 Gate Proofs.
 - ✅ **Per-workload measurement** (0088): each discovered workload derives a suite from its own members (membership fixed at discovery; tools/attachments excluded with named reasons) and measures the PARENT's serving pick vs the incumbent on that work — the per-workload verdict the aggregate bar hides, rendered under each discovered row. Eval rows land at the WORKLOAD id coordinate (org-scoped), ready for per-workload org frontiers. Shares the learning period's daily cap; unmeasured stays NULL with a reason.
 - ⬜ Discovered-workload adoption: explicit routing proposals per workload (never silent) → serve-path sub-assignment within the parent (adopted centroids) → org frontiers per adopted workload → router generations with shadow/canary/promote/rollback.
 
+
+## C — The inference compiler (docs/INFERENCE-COMPILER-PLAN.md; adopted from the 2026-09-04 review, C7 added 2026-09-10)
+- ✅ **C1 IR** — `call/if/vote/pick`, five checks, parse-time ceiling, on the wire and the receipt.
+- 🚧 **C2 synthesizer** — writes mechanisms over compiled incumbents, workload-conditioned; **disarmed by default**, and the template shelf still emits alongside it. Left: retire the shelf, arm it.
+- 🚧 **C3 conditional** — reactive shipped and measured; **predictive not built**, blocked on program traffic.
+- 🚧 **C4 instruction set** — 4 of 7: effort, variants, context selection, tool selection. Left: tool execution (product decision first), retrieval fetch (needs a corpus), retries as an op.
+- ✅ **C5 reliability** — cost-per-success + success floor as monitoring; deliberately not a dominance axis.
+- ⬜ **C6 close the loop** — customer autonomy contract; nothing built. North star: first design partner on real traffic.
+- ⬜ **C7 the optimizer and the measurement engine** — the five rungs that make it a compiler a competent engineer cannot beat by hand: (1) adaptive measurement, (2) a cost model driving search, (3) caching + per-model prompt compilation as IR ops, (4) outcomes into selection, (5) distillation as a compile target. 1 → 2 → 3 before finishing C2/C3; 4 and 5 wait on traffic.
+
 ---
 Spend discipline: all live calls budget-capped through the harness; ledger in tasks/todo.md. OpenRouter key in gitignored `.env` only; revoke after M1b.
