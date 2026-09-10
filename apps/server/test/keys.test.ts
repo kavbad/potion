@@ -90,7 +90,7 @@ function chat(rawKey: string) {
   });
 }
 
-function authed(method: 'GET' | 'POST', url: string, rawKey: string, payload?: unknown) {
+function authed(method: 'GET' | 'POST' | 'PUT', url: string, rawKey: string, payload?: unknown) {
   return app.inject({
     method,
     url,
@@ -393,6 +393,60 @@ describe('api_keys lifecycle (named keys, scopes, revoke, expiry)', () => {
     expect(demo.env).toBe('test');
     expect(demo.revokedAt).toBeTruthy();
     expect(JSON.stringify(keys)).not.toContain('pk_');
+  });
+});
+
+// PUT /api/api-keys/:id/limits (2026-09-06). rate_rps has existed since
+// migration 0006 and was writable ONLY at key creation — two call sites pick
+// a number and nothing could ever change it. Raising a partner's ceiling
+// meant an UPDATE typed against the production database, with no audit trail
+// and no bounds. A limit you cannot change is not a limit, it is a wall.
+describe('PUT /api/api-keys/:id/limits — a rate limit that can be changed', () => {
+  let keyId = '';
+  beforeAll(async () => {
+    const mint = await authed('POST', '/api/api-keys', RAW_A_ADMIN, { name: 'limits demo', policyId: 'pol-a' });
+    keyId = mint.json().id as string;
+  });
+
+  it('sets the per-key rate limit and reports what is SET, not what it resolves to', async () => {
+    const res = await authed('PUT', `/api/api-keys/${keyId}/limits`, RAW_A_ADMIN, { rateRps: 50 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().rateRps).toBe(50);
+    // untouched columns stay unset — null means "platform default applies",
+    // which is a different fact from being pinned to the default's value
+    expect(res.json().dailyCap).toBeNull();
+  });
+
+  it('null restores the platform default rather than meaning zero', async () => {
+    await authed('PUT', `/api/api-keys/${keyId}/limits`, RAW_A_ADMIN, { rateRps: 50 });
+    const res = await authed('PUT', `/api/api-keys/${keyId}/limits`, RAW_A_ADMIN, { rateRps: null });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().rateRps).toBeNull();
+  });
+
+  it('refuses a rate limit of 0, which would lock a customer out of their own API', async () => {
+    const res = await authed('PUT', `/api/api-keys/${keyId}/limits`, RAW_A_ADMIN, { rateRps: 0 });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('refuses to raise a revoked key', async () => {
+    const mint = await authed('POST', '/api/api-keys', RAW_A_ADMIN, { name: 'doomed', policyId: 'pol-a' });
+    const id = mint.json().id as string;
+    await authed('POST', `/api/api-keys/${id}/revoke`, RAW_A_ADMIN);
+    const res = await authed('PUT', `/api/api-keys/${id}/limits`, RAW_A_ADMIN, { rateRps: 50 });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('is admin-only', async () => {
+    const mint = await authed('POST', '/api/api-keys', RAW_A_ADMIN, { name: 'serve scope', policyId: 'pol-a' });
+    const raw = mint.json().apiKey as string;
+    const res = await authed('PUT', `/api/api-keys/${keyId}/limits`, raw, { rateRps: 999 });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('404s a key from another org rather than confirming it exists', async () => {
+    const res = await authed('PUT', '/api/api-keys/key-does-not-exist/limits', RAW_A_ADMIN, { rateRps: 50 });
+    expect(res.statusCode).toBe(404);
   });
 });
 

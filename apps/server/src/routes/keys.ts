@@ -66,7 +66,7 @@ import {
   rotateProviderKey,
   setProviderKeyStatus,
   touchProviderKeyValidation,
-  type ProviderKeyRow, listServingPolicies, insertPolicy, insertCustodyAudit } from '@potion/db';
+  type ProviderKeyRow, listServingPolicies, insertPolicy, insertCustodyAudit, updateApiKeyLimits } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -503,5 +503,63 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
     }
     const next = (await getApiKeyById(db, org.orgId, id))!;
     return reply.send({ id: next.id, revokedAt: next.revokedAt });
+  });
+  /**
+   * PUT /api/api-keys/:id/limits — the per-key throughput ceiling (admin).
+   *
+   * rate_rps has been a column since 0006 and was set at creation and never
+   * again, so raising a partner's limit meant an UPDATE typed against the
+   * production database. That is not an operation, it is an incident waiting
+   * for a typo, and it leaves nothing in the custody audit.
+   *
+   * Bounds exist because these numbers are a promise the box has to keep:
+   * the limiter is a token bucket whose capacity IS the rps, so a large
+   * value is also the burst a single key may fire at once. `null` restores
+   * the platform default rather than meaning zero — the columns are
+   * nullable for exactly that reason, and a rate limit of 0 would silently
+   * lock a customer out of their own API.
+   */
+
+  app.put('/api/api-keys/:id/limits', { preHandler: [requireRole('admin')] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const org = req.potionOrg!;
+    const Body = z
+      .object({
+        rateRps: z.number().int().min(1).max(1000).nullable().optional(),
+        dailyCap: z.number().int().min(1).max(50_000_000).nullable().optional(),
+        maxBodyKb: z.number().int().min(1).max(1024).nullable().optional(),
+      })
+      .strict();
+    const parsed = Body.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send(openAiError(parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '), 'invalid_request_error'));
+    }
+    const key = await getApiKeyById(db, org.orgId, id);
+    if (!key) return reply.code(404).send(openAiError(`unknown api key '${id}'`, 'invalid_request_error'));
+    if (key.revokedAt) {
+      return reply
+        .code(409)
+        .send(openAiError(`api key '${id}' is revoked — mint a new one rather than raising a dead key`, 'invalid_request_error'));
+    }
+    await updateApiKeyLimits(db, org.orgId, id, parsed.data);
+    // NOT AUDITED YET, deliberately. A throughput change is the same class of
+    // fact as a rotate or a revoke and belongs in custody_audit — but
+    // `custody_audit_action_check` (0005) is a DB CHECK constraint listing the
+    // permitted actions, so recording it is a migration, not a type widening.
+    // Writing an unpermitted action fails the insert and 500s the request, so
+    // the choice is a migration or no audit row; a migration does not belong
+    // inside an unrelated fix. Follow-up: widen the constraint, then record.
+    const next = (await getApiKeyById(db, org.orgId, id))!;
+    return reply.send({
+      id: next.id,
+      // NULL is reported as null, not as the default it resolves to: the
+      // caller asked what is SET on this key, and "unset, so the platform
+      // default applies" is a different fact from "pinned to 10".
+      rateRps: next.rateRps ?? null,
+      dailyCap: next.dailyCap ?? null,
+      maxBodyKb: next.maxBodyKb ?? null,
+    });
   });
 }

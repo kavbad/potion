@@ -31,6 +31,7 @@ import {
 import type { PriceTable } from '@potion/core';
 import { eligibleIncumbent } from '../routing/holdout.js';
 import { buildVerifiedSavings, type VerifiedSavings } from '../verified-savings.js';
+import { baselineBasisByCluster } from '@potion/db';
 
 export const DEFAULT_MARGIN_PCT = 0;
 export const PRICING_MODEL_V1 = 'pass-through-plus-margin' as const;
@@ -62,6 +63,22 @@ export interface InvoiceLineItem {
    * minus platform cost, floored at 0) — CONTEXT, never billed. The
    * billable savings number is the invoice-level verified lower bound. */
   projectedSavedUsd: number;
+  /**
+   * WHAT THAT NUMBER WAS MEASURED AGAINST (0089's read side).
+   *
+   * 'org-incumbent' / 'cluster-incumbent' — the model the customer told us
+   * they use. A figure they can reproduce.
+   * 'best-of-frontier' — NO incumbent was named, so the comparator is the
+   * priciest measured option. That was never anyone's alternative, so the
+   * number is not reproducible by the customer and must not be read as
+   * "what you saved".
+   * 'mixed' — the period spans a change; honest, and better than picking
+   * whichever basis sorted first.
+   * null — nothing carried a baseline.
+   *
+   * A savings caption that cannot name its comparator is the same class of
+   * defect as a savings figure with no evidence behind it. */
+  projectedBasis: 'org-incumbent' | 'cluster-incumbent' | 'best-of-frontier' | 'mixed' | null;
   /** What the customer pays for this line (= platform + margin). */
   totalUsd: number;
   /** Stripe-ready mapping (Stripe amounts are integer cents). */
@@ -105,6 +122,8 @@ export interface Invoice {
     marginUsd: number;
     /** Context, never billed. */
     projectedSavedUsd: number;
+    /** The basis across every line — 'mixed' when they disagree. */
+    projectedBasis: 'org-incumbent' | 'cluster-incumbent' | 'best-of-frontier' | 'mixed' | null;
     savingsShareUsd: number;
     totalUsd: number;
   };
@@ -190,6 +209,25 @@ export async function generateInvoice(
     `invoice|${orgId}|${period}`,
   );
 
+  // The comparator behind projectedSavedUsd, per cluster. Read from the
+  // request rows rather than usage_daily, which rolls up the baseline COST
+  // and drops the basis that makes it meaningful.
+  const basisRows = await baselineBasisByCluster(db, orgId, range);
+  const basisByCluster = new Map<string, InvoiceLineItem['projectedBasis']>();
+  for (const clusterId of new Set(basisRows.map((r) => r.clusterId))) {
+    const distinct = [
+      ...new Set(
+        basisRows
+          .filter((r) => r.clusterId === clusterId && r.basis !== null && r.requests > 0)
+          .map((r) => r.basis as string),
+      ),
+    ];
+    basisByCluster.set(
+      clusterId,
+      distinct.length === 0 ? null : distinct.length > 1 ? 'mixed' : (distinct[0] as InvoiceLineItem['projectedBasis']),
+    );
+  }
+
   const lineItems: InvoiceLineItem[] = [...byCluster.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([clusterId, acc]) => {
@@ -214,6 +252,7 @@ export async function generateInvoice(
         marginPct,
         marginUsd: centsToUsd(marginCents),
         projectedSavedUsd: centsToUsd(projectedCents),
+        projectedBasis: basisByCluster.get(clusterId) ?? null,
         totalUsd: centsToUsd(totalCents),
         stripe: {
           currency: 'usd' as const,
@@ -237,6 +276,24 @@ export async function generateInvoice(
     { requests: 0, inputTokens: 0, outputTokens: 0, platformCostUsd: 0, marginUsd: 0, projectedSavedUsd: 0, totalUsd: 0 },
   );
 
+  // One basis for the whole invoice, or 'mixed'. A line that contributed no
+  // projected savings cannot claim a basis for the total, so it is ignored:
+  // otherwise a single zero-savings best-of-frontier line would relabel an
+  // otherwise incumbent-backed invoice.
+  const contributingBases = [
+    ...new Set(
+      lineItems
+        .filter((l) => l.projectedSavedUsd > 0 && l.projectedBasis !== null)
+        .map((l) => l.projectedBasis as string),
+    ),
+  ];
+  const projectedBasis: InvoiceLineItem['projectedBasis'] =
+    contributingBases.length === 0
+      ? null
+      : contributingBases.length > 1
+        ? 'mixed'
+        : (contributingBases[0] as InvoiceLineItem['projectedBasis']);
+
   // The one billable savings line: share % of the verified LOWER bound,
   // floored at 0 (a negative bound bills nothing — it never charges the
   // customer for uncertainty).
@@ -257,6 +314,7 @@ export async function generateInvoice(
       : null;
   const totals = {
     ...lineTotals,
+    projectedBasis,
     savingsShareUsd: centsToUsd(shareCents),
     totalUsd: centsToUsd(toCents(lineTotals.totalUsd) + shareCents),
   };
