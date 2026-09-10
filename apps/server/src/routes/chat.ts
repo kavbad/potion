@@ -1238,6 +1238,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // policy) and cost nobody anything, so they correctly keep paid_by NULL.
     logBase.paidBy = orgProviders.byok ? 'byok' : 'platform';
     let emptyAnswerRetry = false;
+    let providerFailover = false;
     // Caller sampling/format parameters (only the ones set), OpenAI names.
     const sampling: SamplingParams = {};
     for (const k of ['temperature', 'top_p', 'stop', 'seed', 'user', 'response_format', 'parallel_tool_calls'] as const) {
@@ -1264,6 +1265,48 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const wantStream = body.stream === true;
     const includeUsage = body.stream_options?.include_usage === true;
 
+    /**
+     * A SERVED POINT THAT THROWS IS A ROUTING FACT, NOT JUST A 500 (2026-09-10).
+     *
+     * `nextPointExcluding` was wired for empty answers and for the reasoning
+     * skip, and a THROWN provider error reached neither: every catch below
+     * returned 503 having never asked whether another measured point could
+     * answer. A model dying upstream therefore took its whole cluster down
+     * for as long as it stayed dead, even where the frontier held four other
+     * points that clear the same floor. That is exactly the shape of the
+     * kat-coder death on 2026-09-02, where the only fix available was to
+     * hand-retire the dead point from the frontier.
+     *
+     * The rules, all of them deliberate:
+     *  · SINGLE points only, matching the empty-answer retry — a composite
+     *    that dies mid-run has partial stage state, and re-running the whole
+     *    shape is a different question from swapping one model.
+     *  · Never when the customer PINNED a model. The pin is the request; a
+     *    silent swap would answer a question nobody asked.
+     *  · ONE extra execution per request, ever. A retry that can itself
+     *    retry is a way to turn one dead provider into an outage.
+     *  · `nextPointExcluding` already refuses to return the fallback
+     *    strategy (fallback === 1), so a failover can only ever land on
+     *    another MEASURED point — never on an unmeasured default.
+     * The receipt says `retry=provider_error` when it fires.
+     */
+    const failoverPoint = (err: unknown, committed: boolean): OperatingPoint | null => {
+      if (committed) return null;
+      if (pinnedModel !== null || op.config === null || op.config.type !== 'single') return null;
+      void err; // any throw from the provider call qualifies; the cause is logged, not classified
+      const next = nextPointExcluding(
+        policy,
+        op.frontier,
+        sh,
+        fallbackStrategyFor(ctx.providerMode, ctx.prices),
+        {
+          toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined,
+          maxOutputTokens: execBase.maxOutputTokens,
+        },
+      );
+      return next?.config ? next : null;
+    };
+
     // ---- 5a. SSE path: stream:true + single strategy ----
     const streamBranch = wantStream ? streamingBranch(op.config) : null;
     if (streamBranch === 'single' && op.config.type === 'single') {
@@ -1284,14 +1327,46 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       };
       writeData(sseChunk(base, { role: 'assistant' }));
       let result;
+      // The config that actually answered. Tracked locally rather than by
+      // reassigning `op`, whose narrowing to 'single' this branch stands on.
+      let streamServed: StrategyConfig = op.config;
       try {
+        // Whether any content chunk has reached the client yet. A stream that
+        // has already emitted tokens CANNOT be failed over: the second
+        // answer's tokens would be spliced onto the first one's partial text
+        // and the client would see one incoherent message. Before the first
+        // token nothing is committed, so the swap is invisible.
+        let emitted = false;
         const sseCtx = {
           ...execBase,
-          stream: (token: string) => writeData(sseChunk(base, { content: token })),
+          stream: (token: string) => {
+            emitted = true;
+            writeData(sseChunk(base, { content: token }));
+          },
         };
-        result = await execute(op.config, messages, sseCtx);
-        if (op.config.type === 'single') learnFromAnswer(op.config.model, result, execBase.maxOutputTokens);
-        if (op.config.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
+        try {
+          result = await execute(op.config, messages, sseCtx);
+        } catch (err) {
+          const next = failoverPoint(err, emitted);
+          if (!next) throw err;
+          app.log.warn(
+            { orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config!), err: (err as Error).message },
+            'provider failed before the first token (stream) — served once more on the next point',
+          );
+          try {
+            result = await execute(next.config!, messages, sseCtx);
+          } catch (retryErr) {
+            // The failover was a rescue attempt; when it fails too, the
+            // ORIGINAL failure is the one that explains the request.
+            app.log.warn({ orgId: auth.org.orgId, clusterId, err: (retryErr as Error).message }, 'failover point failed as well (stream)');
+            throw err;
+          }
+          streamServed = next.config!;
+          providerFailover = true;
+          implicitSignals.push('failover_provider_error');
+        }
+        if (streamServed.type === 'single') learnFromAnswer(streamServed.model, result, execBase.maxOutputTokens);
+        if (!providerFailover && streamServed.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
           const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
           if (next?.config) {
             app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget (stream) — served once more on the next point');
@@ -1494,10 +1569,31 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
 
     // ---- 5b. JSON path (non-stream, or stream:true on a non-streamable multi-call strategy) ----
     try {
-      let result = await execute(op.config, messages, execBase);
-      if (op.config.type === 'single') learnFromAnswer(op.config.model, result, execBase.maxOutputTokens);
       let servedConfig: StrategyConfig = op.config;
-      if (op.config.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
+      let result;
+      try {
+        result = await execute(op.config, messages, execBase);
+      } catch (err) {
+        // Nothing has been sent on the JSON path, so `committed` is false:
+        // the swap is invisible to the caller either way.
+        const next = failoverPoint(err, false);
+        if (!next) throw err;
+        app.log.warn(
+          { orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config!), err: (err as Error).message },
+          'provider failed — served once more on the next point',
+        );
+        try {
+          result = await execute(next.config!, messages, execBase);
+        } catch (retryErr) {
+          app.log.warn({ orgId: auth.org.orgId, clusterId, err: (retryErr as Error).message }, 'failover point failed as well');
+          throw err;
+        }
+        servedConfig = next.config!;
+        providerFailover = true;
+        implicitSignals.push('failover_provider_error');
+      }
+      if (servedConfig.type === 'single') learnFromAnswer(servedConfig.model, result, execBase.maxOutputTokens);
+      if (!providerFailover && servedConfig.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
         const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
         if (next?.config) {
           app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget — served once more on the next point');
@@ -1557,6 +1653,13 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         logBase.trace = `${trace};retry=empty_answer`;
         void reply.header('x-frontier-trace', logBase.trace);
       }
+      // A point that threw and was replaced is on the receipt for the same
+      // reason an empty answer is: the model named by x-potion-model is not
+      // the one the frontier selected, and only the trace can say so.
+      if (providerFailover) {
+        logBase.trace = `${trace};retry=provider_error`;
+        void reply.header('x-frontier-trace', logBase.trace);
+      }
       void reply.header('x-potion-model', strategyModelLabel(servedConfig));
       if (result.finishReason === 'length' && !implicitSignals.includes('finish_length')) implicitSignals.push('finish_length');
       await logRequest({
@@ -1606,6 +1709,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
           ...(op.fallbackReason !== undefined ? { fallback_reason: op.fallbackReason } : {}),
           ...(servedInstrument !== null ? { instrument: servedInstrument } : {}),
           ...(emptyAnswerRetry ? { retry: 'empty_answer' } : {}),
+          ...(providerFailover ? { retry: 'provider_error' } : {}),
           provenance,
         },
       });
