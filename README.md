@@ -41,19 +41,29 @@ Three rules shape everything here:
 curl https://api.withpotion.com/v1/chat/completions \
   -H "authorization: Bearer $POTION_API_KEY" \
   -H "content-type: application/json" \
-  -d '{"model":"potion","messages":[{"role":"user","content":"Merge overlapping date ranges."}]}' \
+  -d '{"model":"potion-auto","messages":[{"role":"user","content":"Merge overlapping date ranges."}]}' \
   -i | grep -i x-frontier-trace
 ```
 
 Any OpenAI SDK works against the **Chat Completions** surface: set `baseURL` to
 `https://api.withpotion.com/v1` and the API key to a Potion key. Potion serves
-`/v1/chat/completions` (plus `/v1/models`, `/v1/embeddings`, `/v1/completions`,
-and `POST /v1/outcomes` — report what actually happened after a response, keyed
-by its completion id; see SPEC §16);
-the Responses API (`/responses`) is not served — Vercel AI SDK users must call
-`potion.chat('potion-auto')`, since the bare `potion('potion-auto')` constructor
-builds a Responses-API model and POSTs to `/responses`. Keys, policies, usage,
-and receipts are managed in the dashboard at `app.withpotion.com`.
+`/v1/chat/completions`, plus `/v1/models`, `/v1/embeddings`, `/v1/completions`
+and `POST /v1/outcomes` (report what actually happened after a response; see
+SPEC §16). The Responses API (`/responses`) is not served — Vercel AI SDK users
+must call `potion.chat('potion-auto')`, since the bare `potion('potion-auto')`
+constructor builds a Responses-API model and POSTs to `/responses`. Keys,
+policies, usage, and receipts are managed in the dashboard at
+`app.withpotion.com`.
+
+`model` takes `potion-auto` to route by measurement, or a known model name to
+pin to exactly that model. An unrecognised name is a 400, never a silent
+reroute.
+
+One trap worth naming on the Outcome API: its body field is `request_id`, but
+the value it wants is the **completion id** — the `id` on the response body,
+`chatcmpl-…`. The `x-request-id` response header is a different value and
+answers 404. The body is `.strict()`, so a misnamed field is a 400 rather than
+a silent no-op.
 
 ## Developing
 
