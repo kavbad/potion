@@ -86,3 +86,35 @@ describe('audio serving (G, same gate as vision)', () => {
     expect(msgs[0]!.parts?.some((p) => p.type === 'input_audio')).toBe(true);
   });
 });
+
+// 2026-09-06 (Replit evaluation, B9-image): every test above hints the cluster
+// with x-potion-cluster, which SKIPS classification — so no test ever sent an
+// image-only message down the classifier. An image-only message flattens to
+// content '', the route embedded that empty string, and the live embedder
+// refuses it: the customer got an upstream provider error in a non-OpenAI
+// envelope instead of the unsupported_content refusal this file pins. The
+// embedder is asked to embed nothing on ANY empty prompt, image or not.
+describe('nothing to classify (no cluster hint)', () => {
+  const postUnhinted = (content: unknown) =>
+    app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}` }, payload: { model: 'potion-auto', messages: [{ role: 'user', content }] } });
+
+  it('never asks the embedder to embed an empty string', async () => {
+    const asked: string[] = [];
+    const real = app.potion.assigner;
+    app.potion.assigner = { ...real, assignRanked: async (text: string) => { asked.push(text); return real.assignRanked(text); } };
+    try {
+      await postUnhinted([IMG]);
+      await postUnhinted('');
+    } finally {
+      app.potion.assigner = real;
+    }
+    expect(asked.filter((t) => t.trim() === '')).toEqual([]);
+  });
+
+  it('an unhinted image-only request is refused in the OpenAI envelope, not by an upstream provider', async () => {
+    const res = await postUnhinted([IMG]);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('unsupported_content');
+    expect(res.json().error.type).toBe('invalid_request_error');
+  });
+});
