@@ -5,7 +5,7 @@
 # being configured; until then the push line stays commented and the deploy
 # step only echoes what it would do.
 #
-# Triggers: manual workflow_dispatch (any ref) + push to master (gated: the
+# Triggers: manual workflow_dispatch (any ref) + push to main (gated: the
 # job runs the build, the push/deploy placeholders stay inert without the
 # REGISTRY secret).
 name: deploy
@@ -13,7 +13,7 @@ name: deploy
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [main]
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -22,8 +22,8 @@ concurrency:
 jobs:
   docker:
     runs-on: ubuntu-latest
-    # Only master pushes and manual dispatches reach this job.
-    if: github.ref == 'refs/heads/master'
+    # Only main pushes and manual dispatches reach this job.
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
