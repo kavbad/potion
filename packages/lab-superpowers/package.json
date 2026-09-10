@@ -22,7 +22,6 @@
   },
   "devDependencies": {
     "@potion/db": "workspace:*",
-    "@potion/lab-runtime": "workspace:*",
     "@potion/lab-spec": "workspace:*",
     "@potion/custody": "workspace:*",
     "@types/node": "^20.14.0",

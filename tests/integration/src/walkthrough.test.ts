@@ -22,10 +22,10 @@ import {
 import { inArray, eq } from 'drizzle-orm';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { buildServer } from '@potion/server/server';
-import { ServingClient } from './serving-client.js';
-import type { ServingClientLike } from './serving-client.js';
-import { startRun, resumeRun } from './cli.js';
-import type { StepPayload } from './checkpoint.js';
+import { ServingClient } from '@potion/lab-runtime';
+import type { ServingClientLike } from '@potion/lab-runtime';
+import { startRun, resumeRun } from '@potion/lab-runtime';
+import type { StepPayload } from '@potion/lab-runtime';
 
 const ORG = 'org_lab_wt';
 const RAW_KEY = 'pk_lab_walkthrough_key_0001';
@@ -375,7 +375,7 @@ describe('Step 10 — MCP connect leg ($0): severed → healed → gated call �
     const { sealEnvelope } = await import('@potion/custody');
     const sealFor = (m: Buffer, v: string): string => sealEnvelope(m, v);
     const { MockMcpServer } = await import('@potion/lab-mcp/mock-server');
-    const { buildMcpLabTools } = await import('./mcp-tools.js');
+    const { buildMcpLabTools } = await import('@potion/lab-runtime');
     const { upsertLabGrant, getLabGrant, grantConnectionStatus, markLabGrantStatus, answerLabRun } =
       await import('@potion/db');
 

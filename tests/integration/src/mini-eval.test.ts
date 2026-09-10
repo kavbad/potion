@@ -25,15 +25,15 @@ import { MockMcpServer } from '@potion/lab-mcp/mock-server';
 import { harnessSpecHash, scanRawValue, type HarnessSpec } from '@potion/lab-spec';
 import { buildMcpLabTools, runLeg, type ServingClientLike } from '@potion/lab-runtime';
 import type { ServingRequest, ServingResult } from '@potion/lab-runtime';
-import { CATALOG, LIVE_PROVEN_IDS } from './catalog.js';
+import { CATALOG, LIVE_PROVEN_IDS } from '@potion/lab-superpowers';
 import {
   contextTokens,
   packageContentHash,
   toConnectorDefForFixture,
   validatePackage,
   type SuperpowerPackage,
-} from './format.js';
-import { honestFixtureTools, hostileFixtureTools, toolsVisibleUnderDefaultGrant } from './mini-eval.js';
+} from '@potion/lab-superpowers';
+import { honestFixtureTools, hostileFixtureTools, toolsVisibleUnderDefaultGrant } from '@potion/lab-superpowers';
 
 const MASTER = randomBytes(32);
 const TOKEN = 'gho_miniEvalFixture4X9mQ2vL7pK8rT3sW6z';
@@ -184,7 +184,7 @@ describe('catalog completeness + honesty (the anti-decoration gates)', () => {
   });
 
   it('CONNECTABILITY is honest: unverified endpoints are structurally unconnectable', async () => {
-    const { toConnectorDef } = await import('./format.js');
+    const { toConnectorDef } = await import('@potion/lab-superpowers');
     for (const pkg of CATALOG) {
       const def = toConnectorDef(pkg);
       if (pkg.connect.status === 'ready') {

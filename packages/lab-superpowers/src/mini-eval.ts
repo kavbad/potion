@@ -5,8 +5,8 @@
 //
 // This module holds the PURE pieces: the fixture-server script builder, the
 // context-provenance comparison, and the assertion helpers. The pore-fires
-// proof needs a real loop and lives in mini-eval.test.ts, which imports
-// @potion/lab-runtime as a DEV dependency — that keeps this package's
+// proof needs a real loop and lives in tests/integration/src/mini-eval.test.ts,
+// which imports @potion/lab-runtime. That keeps this package's
 // production dependency surface at lab-mcp + core, so lab-gen can read the
 // catalog's least-privilege defaults without pulling the runtime in.
 //

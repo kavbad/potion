@@ -50,6 +50,25 @@ RLIMIT_AS_BYTES = 768 * 1024 * 1024
 RLIMIT_CPU_S = 60
 RLIMIT_NPROC = 64
 
+# RLIMIT_NPROC is counted PER REAL UID across the whole host, not per process
+# tree. A ceiling therefore means "this exec cannot fork-bomb" only where the
+# sandbox OWNS its uid — true in the container (its own `sandbox` USER, a
+# handful of processes), false anywhere the uid is shared. The Dockerfile
+# declares that invariant where it establishes it.
+#
+# Two earlier attempts, both measured wrong (2026-09-04):
+#   · `sys.platform != "darwin"` — a proxy for the invariant, true in the
+#     container and false on a CI runner where one uid owns the whole box.
+#     There the 64 ceiling is spent before the exec starts, and the shell dies
+#     on `fork: Resource temporarily unavailable` (exit 254) having written
+#     nothing.
+#   · headroom over a boot-time /proc count — the count drifts far more than
+#     the headroom when a parallel test suite is spawning vitest workers and
+#     PGlite instances around it.
+# The condition is not measurable from inside; it is a property of the
+# deployment, so the deployment states it.
+_DEDICATED_UID = os.environ.get("POTION_SANDBOX_DEDICATED_UID") == "1"
+
 
 def child_limits():
     # Each limit is best-effort. RLIMIT_AS and RLIMIT_CPU bound THIS exec and
@@ -77,7 +96,7 @@ def child_limits():
         (resource.RLIMIT_AS, RLIMIT_AS_BYTES),
         (resource.RLIMIT_CPU, RLIMIT_CPU_S),
     ]
-    if os.environ.get("POTION_SANDBOX_DEDICATED_UID") == "1":
+    if _DEDICATED_UID:
         limits.append((resource.RLIMIT_NPROC, RLIMIT_NPROC))
     for lim, val in limits:
         try:

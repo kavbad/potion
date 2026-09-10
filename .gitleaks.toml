@@ -27,6 +27,29 @@ paths = [
   '''(^|/)\.env$''',    # sanctioned local secret location (gitignored, never committed)
   '''coverage/''',
   '''invoices/''',
+
+  # ── CREDENTIAL-SHAPED TEST FIXTURES (2026-09-05, the first real scan) ──
+  # The secrets gate had never actually run: ci.yml triggered on a branch that
+  # does not exist, and gitleaks-action scans a PR COMMIT RANGE that stops
+  # resolving after a force-push. Its first honest execution found 35 hits.
+  # Every one was triaged by file, none was a live credential.
+  #
+  # 33 sat in tests and fixtures, which is what this product is ABOUT: sealing
+  # tokens, redacting them from logs and traces, and proving routes never echo
+  # them. Those proofs need credential-shaped strings to redact —
+  # `01-spec-embeds-token.json` says so in its filename, `redactor.test.ts`
+  # exists to strip what it embeds, and `grant-absence-sweep.test.ts` asserts
+  # every route answers without token material.
+  #
+  # The 33 fixture findings are allowlisted INDIVIDUALLY in .gitleaksignore, by
+  # commit:path:rule:line — deliberately NOT as a path class. A class rule
+  # switches this gate off for every test file and fixture written from now on,
+  # which is the worst category to blind in a repo whose tests are about
+  # credential handling. Verified: a freshly planted key in a test file is
+  # caught under the fingerprints and missed under the class rule.
+  # Documented in the file itself, directly above the constant: "Not a
+  # credential: a fixture value the in-process mock provider issues."
+  '''scripts/step10-live-mcp\.ts$''',
 ]
 regexes = [
   # Documented placeholders, not real keys (docs/M1B-RUNBOOK.md etc.)
@@ -34,4 +57,8 @@ regexes = [
   # Deliberate TEST FIXTURE (apps/server/test/server.test.ts keys-masking
   # tests): a fake key that exists to assert we never store it unmasked.
   '''sk-test-1234567890abcdef''',
+  # docs/research/classifier-separation-2026-08-23.md: a prose RISK-ACCEPTANCE
+  # stamp, matched by generic-api-key purely on the KEY=<value> shape. It is a
+  # date, not a credential.
+  '''KEY_RISK_ACCEPTED=\d{4}-\d{2}-\d{2}''',
 ]

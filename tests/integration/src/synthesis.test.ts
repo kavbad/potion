@@ -24,10 +24,10 @@ import { eq } from 'drizzle-orm';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { buildServer } from '@potion/server/server';
 import { orgHashOf, toolSignatureSlug, tracesClusterHandler, type JobContext } from '@potion/workers';
-import { runLeg, type LabTool } from './loop.js';
-import { ServingClient } from './serving-client.js';
-import { spansForSteps } from './spans.js';
-import type { ServingClientLike, ServingResult } from './serving-client.js';
+import { runLeg, type LabTool } from '@potion/lab-runtime';
+import { ServingClient } from '@potion/lab-runtime';
+import { spansForSteps } from '@potion/lab-runtime';
+import type { ServingClientLike, ServingResult } from '@potion/lab-runtime';
 
 const ORG = 'org_lab_synth';
 const RAW_KEY = 'pk_lab_synth_key_0001';

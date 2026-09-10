@@ -31,11 +31,11 @@ import { ServingClient, startRun } from '@potion/lab-runtime';
 import type { StepPayload } from '@potion/lab-runtime';
 import { buildServer } from '@potion/server/server';
 import { eq } from 'drizzle-orm';
-import { buildDialDomain, dialViews, viewPosition } from './geometry.js';
-import { dialPolicyName, materializeDialPolicy } from './materialize.js';
-import { feltSweep, missionProbe, requestLogCostLookup, type FeltCache, type FeltPositionRequest } from './felt.js';
-import { loadDialContext } from './context.js';
-import { domainFromContext } from './geometry.js';
+import { buildDialDomain, dialViews, viewPosition } from '@potion/lab-dial';
+import { dialPolicyName, materializeDialPolicy } from '@potion/lab-dial';
+import { feltSweep, missionProbe, requestLogCostLookup, type FeltCache, type FeltPositionRequest } from '@potion/lab-dial';
+import { loadDialContext } from '@potion/lab-dial';
+import { domainFromContext } from '@potion/lab-dial';
 
 const ORG = 'org_lab_dial_wt';
 const RAW_KEY = 'pk_lab_dial_walkthrough_1';

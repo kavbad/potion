@@ -32,9 +32,9 @@ import { ServingClient, startRun } from '@potion/lab-runtime';
 import type { ServingClientLike, ServingResult } from '@potion/lab-runtime';
 import { buildServer } from '@potion/server/server';
 import { eq } from 'drizzle-orm';
-import { GEN_MAX_MODEL_CALLS } from './constants.js';
-import { generateSpec, verifyChoicesBinding } from './generate.js';
-import type { InterviewAnswers, TaxonomyCluster } from './interview.js';
+import { GEN_MAX_MODEL_CALLS } from '@potion/lab-gen';
+import { generateSpec, verifyChoicesBinding } from '@potion/lab-gen';
+import type { InterviewAnswers, TaxonomyCluster } from '@potion/lab-gen';
 
 const ORG = 'org_lab_gen_wt';
 const RAW_KEY = 'pk_lab_gen_walkthrough_01';

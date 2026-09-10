@@ -482,7 +482,7 @@ until Step 8's activation leg.
   lab_harnesses edit (name, specText, sidecar, clusterId), a pre-edit run's
   replay input bytes and replay verdict are identical (0037 tied to Step 4).
 - **The toolPolicy activation leg (Step 7's exit, verbatim):**
-  packages/lab-runtime/src/walkthrough.test.ts — one run against the REAL
+  tests/integration/src/walkthrough.test.ts — one run against the REAL
   route with a test-local tool: step payloads carry BOTH slot values;
   every call's x-frontier-trace shows `policy_override=` of ITS slot's row;
   the two slots rode DIFFERENT strategies (0.8 floor vs 0); the wrap-up is

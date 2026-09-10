@@ -6,6 +6,10 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/node_modules/**',
+      // Stale worktree copies of THIS repo (agent sessions). Without this, every
+      // problem in the real tree is reported once per worktree — 36 errors where
+      // there are 8 (found 2026-09-03).
+      '**/.claude/**',
       '**/coverage/**',
       '**/.next/**',
       '**/drizzle/**',

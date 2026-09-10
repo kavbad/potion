@@ -878,14 +878,20 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
     const { fileURLToPath } = await import('node:url');
     const serverPath = fileURLToPath(new URL('../../../deploy/sandbox/sandbox_server.py', import.meta.url));
     const port = 19000 + Math.floor(Math.random() * 200);
-    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: 'ignore' });
+    // stderr CAPTURED, not discarded: a sandbox integration test that cannot say
+    // WHY the sandbox failed can only be debugged by hypothesis, and this one
+    // cost two wrong ones (2026-09-04). Both the server's stderr and the
+    // shell's own output are surfaced in the assertion below.
+    const proc = spawn(python, [serverPath], { env: { ...process.env, SANDBOX_PORT: String(port) }, stdio: ['ignore', 'ignore', 'pipe'] });
+    let sandboxErr = '';
+    proc.stderr?.on('data', (d: Buffer) => { sandboxErr += d.toString(); });
     try {
       let up = false;
       for (let i = 0; i < 40 && !up; i++) {
         await new Promise((r) => setTimeout(r, 150));
         up = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok).catch(() => false);
       }
-      expect(up, 'sandbox failed to start').toBe(true);
+      expect(up, `sandbox failed to start. stderr:\n${sandboxErr}`).toBe(true);
 
       const s = spec({
         name: 'dev hands harness',
@@ -940,31 +946,27 @@ describe('X7 — the sealed shell + workspace trees (REAL sandbox integration)',
 
       const files = await listLabRunFiles(db.db, ORG, runId);
       const names = files.map((f) => f.name);
-      // What the shell actually did, in the failure message. Without this the
-      // CI failure that prompted these lines was undiagnosable: the only thing
-      // the log said was "expected [ 'repo/src/lib.js' ] to include
-      // 'out/report/result.txt'" — and `repo/src/lib.js` is PRE-SEEDED above,
-      // so its presence proves nothing about whether run_shell ran at all.
-      // WHAT THE SHELL SAID, in the failure message.
-      //
-      // The first version of this filtered steps on `payload includes
-      // 'run_shell'` — which matches the MODEL step carrying the tool CALL,
-      // and a 2000-char slice then spent the whole budget printing the
-      // prompt back. A CI failure reported the command it had already sent
-      // and nothing about what happened to it. The result lives on the step
-      // whose kind is 'tool', in `toolOutput`.
-      const { listLabSteps: listSteps } = await import('@potion/db');
-      const shellEvidence = JSON.stringify(
-        (await listSteps(db.db, runId, ORG))
-          .filter((st) => st.kind === 'tool')
-          .map((st) => st.payload),
-      ).slice(0, 4000);
-      // Assert on the OUTPUT before the files: a shell that failed explains
-      // the missing file, and "expected [...] to include 'out/report/...'"
-      // does not explain anything.
-      expect(shellEvidence, 'no tool step recorded — run_shell never executed').toContain('run_shell');
-      expect(names, `shell said: ${shellEvidence}`).toContain('repo/src/lib.js');
-      expect(names, `shell said: ${shellEvidence}`).toContain('out/report/result.txt');
+      // What the shell ITSELF reported — exit code, stdout, stderr — so a
+      // failure names its cause instead of only its symptom.
+      const { listLabSteps: _steps } = await import('@potion/db');
+      const allSteps = await _steps(db.db, runId, ORG);
+      // The TOOL steps carry the result (exit code, stdout, stderr). The model
+      // step also mentions run_shell — it holds the CALL — so selecting by
+      // substring picks the wrong one, as it did on 33930537416.
+      const toolSteps = allSteps.filter((st) => st.kind === 'tool');
+      const shellSays =
+        `\n--- files that landed: ${JSON.stringify(names)}` +
+        `\n--- ${toolSteps.length} tool step(s):\n` +
+        toolSteps.map((st) => JSON.stringify(st.payload, null, 2).slice(0, 3000)).join('\n---\n') +
+        `\n--- step kinds in order: ${JSON.stringify(allSteps.map((st) => st.kind))}` +
+        `\n--- sandbox stderr:\n${sandboxErr.slice(0, 3000) || '(empty)'}`;
+      // Assert the shell RAN before asserting what it produced: `repo/src/lib.js`
+      // is pre-seeded above, so its presence proves nothing about run_shell, and
+      // "expected [...] to include 'out/report/result.txt'" names a symptom three
+      // layers from the cause. Zero tool steps means the call never executed.
+      expect(toolSteps.length, shellSays).toBeGreaterThan(0);
+      expect(names, shellSays).toContain('repo/src/lib.js');
+      expect(names, shellSays).toContain('out/report/result.txt');
       // No loose .git objects ever persist — the storage boundary refuses them.
       expect(names.some((n) => n.includes('.git/'))).toBe(false);
       const { getLabRunFile } = await import('@potion/db');

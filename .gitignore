@@ -37,6 +37,22 @@ invoices/
 # suite sizes, retention verdict, per-leg spend). The raw leg logs stay
 # ignored — reproducible, and the ledger carries their numbers.
 !/artifacts/g28-parameters.md
+# G2.4 tenancy classification: tenancy-report.test.ts reads THIS FILE and
+# asserts it matches the route + mock-eligibility inventories, so a fixture
+# change without a regeneration fails there instead of shipping a stale
+# security answer. While it stayed ignored the test threw ENOENT on any clean
+# checkout — it only ever passed on machines that happened to have a local
+# copy, which is to say it never guarded CI at all (found 2026-09-04, the
+# first time the suite was run on a clean tree). Regenerate with:
+#   pnpm --filter @potion/server tenancy-report
+!/artifacts/tenancy-classification.md
+# Step 12 adversarial target register: step12-targets.test.ts calls this "a
+# committed artifact" and exists to stop rows vanishing ("a row cannot close
+# by silence, by prose, or by deletion") — but it was ignored, so NOTHING
+# generates it, no clone has it, and the test that guards it threw ENOENT on
+# every clean checkout. A hand-authored security register that lived on one
+# laptop (found 2026-09-04).
+!/artifacts/step-12-targets.json
 !/artifacts/g28-capstone-live.json
 
 # campaign run logs are records, not source

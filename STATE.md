@@ -7,7 +7,18 @@ should gain a `SUPERSEDED BY STATE.md` stamp when touched. (Rule adopted
 2026-08-25 after an external review found stale prose functioning as
 executable misinformation for coding agents.)
 
-_Last updated: 2026-09-01 (core-API review ladder: ALL P0s closed — one
+_Last updated: 2026-09-04 (THE GATE RUNS: `ci.yml` triggered on `master`, a
+branch that never existed — 0 workflow runs in 523 commits. Turning it on
+exposed five defects that only a clean checkout can show; all fixed, full gate
+green. See docs/HARDENING-PLAN.md.)_
+
+**Verification baseline (2026-09-04, clean tree, `rm -rf */dist` first):**
+`pnpm build` 23s · `pnpm typecheck` 21s · `pnpm lint` 4s (0 errors, 25
+warnings) · `pnpm test` 337s — 26 packages, **3,083 workspace tests + 62
+script tests, 0 failed, 0 skipped, 0 timeouts**. A slowdown, a skip, or a
+package that stops reporting is now measurable against this.
+
+_Previously: 2026-09-01 (core-API review ladder: ALL P0s closed — one
 resolver, lower-bound law, serve-time router stamping, prod research live,
 shadow judge + shadow evidence on the compiled plan)._
 
