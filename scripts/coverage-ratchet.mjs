@@ -18,7 +18,9 @@ const BASELINE = path.join(ROOT, 'coverage-baseline.json');
 const TOLERANCE = 0.5;
 
 const summaries = [];
-const skip = new Set(['node_modules', 'dist', '.next', '.git', '.claude']);
+// `coverage-artifacts` is skipped when walking the repo so a local run that
+// has both the originals and a staged copy counts each package ONCE.
+const skip = new Set(['node_modules', 'dist', '.next', '.git', '.claude', 'coverage-artifacts']);
 const walk = (dir, depth = 0) => {
   if (depth > 4) return;
   let entries;
@@ -30,7 +32,18 @@ const walk = (dir, depth = 0) => {
     else if (e.name === 'coverage-summary.json') summaries.push(full);
   }
 };
-walk(ROOT);
+// THE STAGED SET WINS WHEN IT EXISTS (2026-09-11). CI runs the suite in two
+// jobs, so neither can see the whole tree; each stages its summaries with
+// scripts/collect-coverage.mjs and the `coverage` job downloads both into
+// coverage-artifacts/ before judging. Locally, with no staging directory,
+// this walks the repo exactly as it always did.
+const STAGED = path.join(ROOT, 'coverage-artifacts');
+if (existsSync(STAGED)) {
+  walk(STAGED);
+  console.log(`coverage-ratchet: reading the staged union in coverage-artifacts/ (${summaries.length} summaries)`);
+} else {
+  walk(ROOT);
+}
 
 if (summaries.length === 0) {
   console.error('coverage-ratchet: no coverage-summary.json found. Run with POTION_COVERAGE=1.');

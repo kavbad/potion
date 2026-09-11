@@ -137,14 +137,21 @@ jobs:
       # exclude a tenth of the codebase while still calling itself a floor.
       # So each job uploads its coverage and the `coverage` job judges the
       # union.
+      # Staged explicitly, not by glob: pnpm symlinks every workspace dep, so
+      # `**/coverage/coverage-summary.json` matches the same file dozens of
+      # times through node_modules, and upload-artifact rebases paths against
+      # their common ancestor — stripping the very segment the ratchet skips
+      # on. Measured on run 34640840618: the union came out at 164,023 lines
+      # against a true 72,800 and failed by 28.89pp on an unchanged tree.
+      - name: Stage coverage (verify tree)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: node scripts/collect-coverage.mjs
       - name: Coverage artifact (verify tree)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-verify
-          path: |
-            **/coverage/coverage-summary.json
-            !**/node_modules/**
+          path: coverage-artifacts/
           if-no-files-found: error
           retention-days: 1
 
@@ -281,14 +288,15 @@ jobs:
           POTION_COVERAGE: '1'
         run: pnpm --filter @potion/workers test
 
+      - name: Stage coverage (workers tree)
+        if: ${{ !cancelled() }}
+        run: node scripts/collect-coverage.mjs
       - name: Coverage artifact (workers tree)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-workers
-          path: |
-            **/coverage/coverage-summary.json
-            !**/node_modules/**
+          path: coverage-artifacts/
           if-no-files-found: error
           retention-days: 1
 
@@ -320,12 +328,17 @@ jobs:
 
       # Both artifacts unpack at the workspace root, restoring the paths the
       # ratchet's own tree-walk expects (it skips node_modules by name).
+      # Both unpack into coverage-artifacts/, keyed by package path — so the
+      # merge is idempotent: a package measured by both jobs is replaced, not
+      # counted twice.
       - uses: actions/download-artifact@v4
         with:
           name: coverage-verify
+          path: coverage-artifacts/
       - uses: actions/download-artifact@v4
         with:
           name: coverage-workers
+          path: coverage-artifacts/
 
       - name: Coverage ratchet (whole tree)
         run: node scripts/coverage-ratchet.mjs
