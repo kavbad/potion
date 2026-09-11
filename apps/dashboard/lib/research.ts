@@ -111,3 +111,29 @@ export function correctionsForByline(byline: string): Array<IssueCorrection & { 
     .flatMap((i) => (i.corrections ?? []).map((c) => ({ ...c, slug: i.slug, title: i.title })))
     .sort((a, b) => (a.at < b.at ? 1 : -1));
 }
+
+/**
+ * What the author page may claim about independent verification.
+ *
+ * It used to assert, flatly, that "every issue is drafted in a recorded run,
+ * independently verified by Auditor before publication" — while the stats
+ * block three sections above derived "N publications (M independently
+ * verified)" from the corpus. When M < N the page contradicted itself, and
+ * the false half was the one written in prose. It was false for the four
+ * dailies of 2026-09-07..10, which published with no verification record
+ * because the daily Auditor was never wired (fixed ac2db2f).
+ *
+ * Verification is the publication BAR, which is a claim about intent and
+ * stays true. That every issue cleared it is a claim about the record, and
+ * only the record gets to make it.
+ */
+export function verificationClaim(total: number, verified: number): string {
+  if (total === 0) return 'Independent verification by Auditor — a separate research-integrity worker — is the publication bar.';
+  if (verified === total)
+    return `Every one of the ${total} issues above was independently verified by Auditor — a separate research-integrity worker — before publication, and names the run that did it.`;
+  return (
+    `Independent verification by Auditor — a separate research-integrity worker — is the publication bar: ` +
+    `${verified} of ${total} issues above carry that record and name the run that made it. ` +
+    `The rest published before the daily verifier was wired; they are marked by the absence of a verification run, never by a claim that one happened.`
+  );
+}

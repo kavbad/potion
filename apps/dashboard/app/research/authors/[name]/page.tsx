@@ -7,7 +7,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteShell } from '@/components/site-header';
-import { correctionsForByline, listIssues, RESEARCH_TITLE } from '@/lib/research';
+import { correctionsForByline, listIssues, RESEARCH_TITLE, verificationClaim } from '@/lib/research';
 import { getResearchAuthor } from '@/lib/research-authors';
 
 export const dynamic = 'force-dynamic';
@@ -127,9 +127,9 @@ export default async function AuthorPage({ params }: Params) {
         <section className="mt-10 border border-dashed border-[#b8b3a6] bg-[#fbfaf7] px-5 py-4">
           <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Built with Potion</div>
           <p className="mt-1.5 text-[14px] leading-relaxed text-soft">
-            {a.name} is a persistent worker built and operated on Potion&apos;s own agent platform. Every issue is drafted in a recorded run, independently verified by
-            Auditor — a separate research-integrity worker — before publication, and published through the same permission gateway every Potion worker answers to.
-            The run ids above are those records.
+            {a.name} is a persistent worker built and operated on Potion&apos;s own agent platform. Every issue is drafted in a recorded run and published
+            through the same permission gateway every Potion worker answers to. {verificationClaim(issues.length, verifiedCount)} The run ids above are
+            those records.
           </p>
         </section>
       </main>

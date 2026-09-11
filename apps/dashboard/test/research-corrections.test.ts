@@ -73,3 +73,38 @@ describe('corrections are derived from the corpus, never asserted', () => {
     expect(correctionsForByline('Delta')).toEqual([]);
   });
 });
+
+// The same discipline, applied to the claim next to it. The page asserted
+// "every issue is ... independently verified by Auditor before publication"
+// in prose, while its own stats block derived "N publications (M
+// independently verified)" from the corpus. When M < N the page contradicted
+// itself and the false half was the prose — false, specifically, for the four
+// dailies of 2026-09-07..10 that published with no verification record.
+describe('the verification claim is bounded by the record', () => {
+  it('never says "every" when any issue lacks a verification run', async () => {
+    const { verificationClaim } = await import('@/lib/research');
+    const c = verificationClaim(4, 0);
+    expect(c, 'four unverified issues must not be described as verified').not.toMatch(/every/i);
+    expect(c).toContain('0 of 4');
+  });
+
+  it('says so plainly when the record is partial, and names the absence as the marker', async () => {
+    const { verificationClaim } = await import('@/lib/research');
+    const c = verificationClaim(10, 6);
+    expect(c).toContain('6 of 10');
+    expect(c).toMatch(/absence of a verification run/);
+  });
+
+  it('earns the strong claim only when the record is complete', async () => {
+    const { verificationClaim } = await import('@/lib/research');
+    expect(verificationClaim(5, 5)).toMatch(/every one of the 5/i);
+    expect(verificationClaim(5, 5)).not.toMatch(/\bof 5 issues above carry\b/);
+  });
+
+  it('an author with nothing published claims nothing about the record', async () => {
+    const { verificationClaim } = await import('@/lib/research');
+    const c = verificationClaim(0, 0);
+    expect(c).not.toMatch(/every/i);
+    expect(c).toMatch(/publication bar/);
+  });
+});
