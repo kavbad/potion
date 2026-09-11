@@ -104,7 +104,16 @@ describe('route inventory completeness (the anti-20th-site diff)', () => {
     const classified = new Set(ROUTE_INVENTORY.map((r) => `${r.method} ${r.path}`));
     const unclassified = [...live].filter((r) => !classified.has(r));
     const stale = [...classified].filter((r) => !live.has(r));
-    expect(unclassified, `routes with NO inventory row (classify them in fixtures/route-inventory.ts): ${unclassified.join(', ')}`).toEqual([]);
+    expect(
+      unclassified,
+      // The path has to be the REAL one: this message is read by someone who
+      // has just added a route and does not know where the inventory lives.
+      // It said `fixtures/route-inventory.ts`, which does not exist and never
+      // did — found 2026-09-11 by following it.
+      `routes with NO inventory row — classify each in apps/server/src/security/route-inventory.ts ` +
+        `(copy the nearest row: guard, tenancyClass, resourceParam, crossOrgProbe), then regenerate ` +
+        `the committed exhibit with \`pnpm --filter @potion/server tenancy-report\`: ${unclassified.join(', ')}`,
+    ).toEqual([]);
     expect(stale, `inventory rows with no live route (stale fixture): ${stale.join(', ')}`).toEqual([]);
     // The fixture is exhaustive by construction, and non-trivially so.
     expect(ROUTE_INVENTORY.length).toBe(live.size);
