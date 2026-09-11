@@ -23,6 +23,14 @@ grant ledger.
     hollow-completed.
 - Current generations (2026-09-02): Delta v6 dialed `8aec3d6c…`,
   Auditor v4 dialed `03ba2065…`.
+- Daily generations (committed compose defaults since 2026-09-10): piece
+  writer `08a81fd4…` (`scripts/delta-piece-hire.ts`), piece verifier
+  `a8ae19dd…` (`scripts/auditor-piece-hire.ts`, hired 2026-09-05 — it sat
+  UNWIRED for five days: compose defaulted the env to "" and `?? null`
+  kept "", so the clock started a run on harness "" every 60s and four
+  Delta dailies stood unverified. Blank is now absent, in the clock and
+  in the env read.) Not yet dialed: rung 0–3 all resolve to the same
+  strategy on its frontier, so dial when convenient and promote the hash.
 
 ## The weekly ceremony
 

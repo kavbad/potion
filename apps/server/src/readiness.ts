@@ -8,6 +8,33 @@
 //
 // It also REPORTS, without gating on, whether anything is draining the job
 // queue (P1-3). See assessConsumers for why that must not 503.
+//
+// A TIMEOUT IS NOT AN OUTAGE (2026-09-06, found by load testing production).
+//
+// Caddy health-checks this endpoint every 10s and drains the upstream when it
+// 503s. Under sustained load the db ping exceeded its 2s budget — not because
+// the database was down, but because WE were busy — so /readyz reported
+// unhealthy, Caddy pulled the only replica out of rotation, and 478 of 1500
+// requests were answered with 503 by the proxy while the server sat there
+// able to serve them. Load drained, the ping recovered, the instance came
+// back, and the cycle repeated. The probe designed to protect the service was
+// the thing taking it down, at roughly 15 rps.
+//
+// Draining a SATURATED instance is precisely the wrong move: with one replica
+// it is a self-inflicted outage, and with several it moves that load onto the
+// rest and cascades. Saturation already has correct, visible backpressure —
+// 429s from the rate limiter and rising latency — and those are per-request
+// signals a client can act on, which a health check is not.
+//
+// So the two failure modes are separated at the source:
+//   · TIMEOUT (slow) → ok, `degraded: true`. Keep taking traffic; say so.
+//   · ERROR (broken: refused, auth, bad query) → not ready. Drain, which is
+//     what draining is for, and what deploy gating needs to stay strict.
+//
+// The 503 those requests received also never reached the route, so nothing
+// was written to request_logs: the ledger showed 1072 ok and no failures for
+// a window in which a third of traffic failed. Recording proxy-level refusals
+// is a separate, still-open problem — this file can only stop causing them.
 import { pingDb } from '@potion/db';
 import { breakerStates, type BreakerState } from '@potion/providers';
 import type { PotionContext } from './context.js';
@@ -15,17 +42,34 @@ import type { PotionContext } from './context.js';
 export const READYZ_DB_TIMEOUT_MS = 2_000;
 export const READYZ_QUEUE_TIMEOUT_MS = 2_000;
 
+/** Thrown by `withTimeout` so a slow dependency is distinguishable from a
+ *  broken one. The distinction is the whole point of this module. */
+export class ProbeTimeoutError extends Error {
+  readonly timeout = true as const;
+  constructor(ms: number) {
+    super(`timeout after ${ms}ms`);
+    this.name = 'ProbeTimeoutError';
+  }
+}
+
 export interface ReadinessCheck {
+  /** Can this instance serve? A slow dependency does not make it false. */
   ok: boolean;
   /** Driver/probe identity (e.g. 'pglite', 'memory', 'bullmq'). */
   driver: string;
-  /** Failure detail when ok=false (timeout message or db/driver error). */
+  /** The probe exceeded its budget: we are SLOW, not down. Still ok. */
+  degraded?: true;
+  /** Detail for a failed or degraded check. */
   detail?: string;
   latencyMs?: number;
 }
 
 export interface ReadinessReport {
   ok: boolean;
+  /** TRUE when a probe timed out. The instance keeps taking traffic — this
+   *  is the honest label for it, and what an operator should page on before
+   *  it becomes an outage. */
+  degraded?: true;
   checks: {
     db: ReadinessCheck;
     queue: ReadinessCheck;
@@ -141,7 +185,7 @@ async function withTimeout(promise: Promise<unknown>, ms: number): Promise<void>
     await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
+        timer = setTimeout(() => reject(new ProbeTimeoutError(ms)), ms);
         timer.unref?.();
       }),
     ]);
@@ -156,6 +200,11 @@ async function checkDb(ctx: PotionContext, timeoutMs: number, now: () => number)
     await withTimeout(pingDb(ctx.db.db), timeoutMs);
     return { ok: true, driver: ctx.db.driver, latencyMs: Math.max(0, Math.round(now() - start)) };
   } catch (err) {
+    // Slow ≠ down. A ping that ran out of budget means this instance is busy;
+    // draining it would remove capacity from a system that is short of it.
+    if (err instanceof ProbeTimeoutError) {
+      return { ok: true, degraded: true, driver: ctx.db.driver, detail: err.message };
+    }
     return { ok: false, driver: ctx.db.driver, detail: (err as Error).message };
   }
 }
@@ -182,6 +231,9 @@ async function checkQueue(ctx: PotionContext, timeoutMs: number): Promise<Readin
     await withTimeout(probe(), timeoutMs);
     return { ok: true, driver };
   } catch (err) {
+    if (err instanceof ProbeTimeoutError) {
+      return { ok: true, degraded: true, driver, detail: err.message };
+    }
     return { ok: false, driver, detail: (err as Error).message };
   }
 }
@@ -201,9 +253,11 @@ export async function checkReadiness(
     checkQueue(ctx, opts.queueTimeoutMs ?? READYZ_QUEUE_TIMEOUT_MS),
     checkConsumers(ctx),
   ]);
+  const degraded = db.degraded === true || queue.degraded === true;
   return {
     // `consumers` is deliberately absent from this conjunction.
     ok: db.ok && queue.ok,
+    ...(degraded ? { degraded: true as const } : {}),
     checks: { db, queue },
     breakers: breakerStates(),
     ...(consumers !== undefined ? { consumers } : {}),

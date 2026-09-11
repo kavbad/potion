@@ -74,10 +74,12 @@ export function registerFrontierNotesClock(
   // F6: the DAILY framing generation. Unset = no framing attempt; the
   // code-composed ledger publishes on its own. Never the weekly harness:
   // a worker briefed on fact sheets, handed a ledger, parks and asks.
-  const dailyHarness = process.env.POTION_RESEARCH_DELTA_DAILY_HARNESS ?? null;
+  // `|| null`, not `?? null`: compose defaults these to "" (found live
+  // 2026-09-10 — "" passed as a harness and threw on every tick).
+  const dailyHarness = process.env.POTION_RESEARCH_DELTA_DAILY_HARNESS || null;
   // The daily's verifier. Absent, the daily still publishes — the composed
   // piece does, because model prose does not go unverified (fleet R2).
-  const dailyAuditorHarness = process.env.POTION_RESEARCH_AUDITOR_DAILY_HARNESS ?? null;
+  const dailyAuditorHarness = process.env.POTION_RESEARCH_AUDITOR_DAILY_HARNESS || null;
   const armed = Boolean(envDir && orgId && deltaHarness && auditorHarness);
   /** The primary dir plus any rehearsal dirs armed via the route (in-memory
    * by design: a rehearsal that does not survive a restart is a feature). */

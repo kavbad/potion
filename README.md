@@ -116,5 +116,7 @@ pnpm --filter @potion/server test        # one package
 
 ## Status
 
-Private, early, and live with a first deployment. Production is operator-onboarded
-(no self-serve sign-up). Measurements are re-run as models are released.
+Early and live. **Signup is open** — any email provisions an org, and the
+sign-in link is emailed (Resend). Operator-credentialed onboarding
+(`POST /operator/orgs`) still exists for partners who want it; it is no
+longer the only way in. Measurements are re-run as models are released.

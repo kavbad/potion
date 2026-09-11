@@ -431,6 +431,40 @@ describe('the state machine', () => {
     expect(w.log.join(' ')).toMatch(/no verdict from/);
   });
 
+  // FOUND LIVE 2026-09-10: compose defaults the daily Auditor env to "" and
+  // `process.env.X ?? null` keeps "". The tick then started a run on harness
+  // "" every 60 seconds — 2,650 swallowed throws in 44 hours — before it
+  // could write state, so the retract ceiling never fired and four days of
+  // Delta prose stood with no verdict. An empty string is an ABSENT harness.
+  it('treats an empty-string auditor harness as absent — never a run on harness ""', async () => {
+    const { w, tick } = dailyWorld({
+      auditorHarness: '',
+      startWorkerRun: async (hash) => {
+        if (hash.trim() === '') throw new Error('harness … not found in org-research');
+        const id = `run-v${w.started.length + 1}`;
+        w.runs.set(id, { state: null, files: new Map() });
+        w.started.push(id);
+        return id;
+      },
+    });
+    await tick();
+    const delta = w.started[0]!;
+    w.runs.get(delta)!.state = 'completed';
+    w.runs.get(delta)!.files.set('piece.json', GOOD_PIECE);
+    expect(await tick()).toBe('daily-published');
+    expect(w.states.get('2026-09-01')!.phase).toBe('done');
+    expect(await tick()).toBeNull();
+    expect(w.started).toHaveLength(1);
+  });
+
+  it('treats an empty-string writer harness as absent — the composed piece publishes', async () => {
+    const { w, tick } = dailyWorld({ deltaHarness: '' });
+    expect(await tick()).toBe('daily-published');
+    expect(w.started).toHaveLength(0);
+    expect(w.issues.get('2026-09-01')!.byline).toBe('Potion Research');
+    expect(w.issues.get('2026-09-01')!.writer).toBeNull();
+  });
+
   it('does not verify the COMPOSED piece — code needs no verifier', async () => {
     const { w, tick } = dailyWorld();
     await tick();

@@ -194,8 +194,15 @@ services:
       # F6: the DAILY framing generation (scripts/delta-daily-hire.ts).
       # Unset = the code-composed ledger publishes unframed — still a post
       # every day, just without the model's plain-words opening.
-      POTION_RESEARCH_DELTA_DAILY_HARNESS: ${POTION_RESEARCH_DELTA_DAILY_HARNESS:-}
-      POTION_RESEARCH_AUDITOR_DAILY_HARNESS: ${POTION_RESEARCH_AUDITOR_DAILY_HARNESS:-}
+      # Committed defaults like the weekly pair above: an .env.prod replacement
+      # silently DISARMED the daily verifier once (the value was "" — and ""
+      # is not unset to `??`; the clock now treats blank as absent either way).
+      # Daily writer: scripts/delta-piece-hire.ts (hired 2026-09-05).
+      # Daily verifier: scripts/auditor-piece-hire.ts (hired 2026-09-05,
+      # wired 2026-09-10; dial with POST /api/lab/harnesses/<hash>/dial
+      # {"slot":"brain","qualityIndex":2} and promote the new hash here).
+      POTION_RESEARCH_DELTA_DAILY_HARNESS: ${POTION_RESEARCH_DELTA_DAILY_HARNESS:-08a81fd40b46a13f77cb9655dbad10dc5b34a53661365bf08cc18113c92ee1ef}
+      POTION_RESEARCH_AUDITOR_DAILY_HARNESS: ${POTION_RESEARCH_AUDITOR_DAILY_HARNESS:-a8ae19dde6f5695b400df46255dd432494ac1d59c8dbe0b4cafd434b5cb29100}
     # F4: the research mount (rw — the clock writes notes + its state files;
     # the dashboard keeps its own ro mount of artifacts/notes).
     volumes:

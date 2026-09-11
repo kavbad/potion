@@ -40,8 +40,11 @@ Product loop: customer traffic in → per-customer frontier over models AND
 compositions → policy floor (`min_cost(qualityFloor)` is the flagship shape,
 already implemented in core/select.ts) → OpenAI-compatible endpoint →
 continuous rolling quality measurement → breach ⇒ first-class incident.
-Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
-(Stripe deliberately absent).
+SELF-SERVE (2026-09-02, b1504a3 "the front door matches the distribution
+push"): signup is open in production — any email provisions an org. The
+operator path (hand-issued keys via POST /operator/orgs) remains for
+partners; it is no longer the default or the only way in. Billing is still
+invoiced (Stripe rails implemented, charging off until the live-key test).
 
 ## State as of 2026-08-06
 
@@ -242,9 +245,13 @@ Sales-assisted, design-partner-first: hand-issued keys, invoiced billing
   Redis rate limiting + shared caches — only incorrect across replicas,
   build when deployment demands it (seam documented).
 - **DEMOTED indefinitely:** public model/pricing page, catalog breadth,
-  self-serve signup funnel, SDK publishing, cloud-KMS custody (BYOK works),
-  SMTP (dev-link hand-delivery suffices for partners), Stripe (LAST;
-  invoiced billing already works — `pnpm --filter @potion/server invoice`).
+  SDK publishing, cloud-KMS custody (BYOK works), Stripe (LAST; invoiced
+  billing already works — `pnpm --filter @potion/server invoice`).
+  NO LONGER DEMOTED: the self-serve signup funnel SHIPPED 2026-09-02 and is
+  on in production, and SMTP is live via Resend — both were listed here as
+  indefinitely deferred for eight days after the decision that reversed
+  them, which is how a Sept 5 audit came to file the open signup default as
+  a defect. This product is self-serve.
 - **Potion Lab (L0–L6, paper-only, gated behind Gate B):** the
   harness-builder product line — see `docs/LAB-ROADMAP.md` (assumption
   verification: `docs/LAB-ROADMAP-VERIFICATION.md`). Build ladder:
