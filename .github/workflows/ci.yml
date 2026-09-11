@@ -128,9 +128,25 @@ jobs:
       # Two-sided, like the escape-hatch ratchet: a fall must be explained, a
       # RISE must be locked in. A number policed in one direction only drifts in
       # the other for free, and then nobody knows what the floor is (P1.4).
-      - name: Coverage ratchet
+      # The ratchet does NOT run here. This job's coverage tree excludes
+      # @potion/workers (its own runner, below), and the baseline is a
+      # WHOLE-TREE number — measured 2026-09-11: 56.84% here against 58.60%
+      # with workers included. Comparing the partial tree to the whole-tree
+      # floor fails by 1.10pp and invites the one fix that must never happen,
+      # lowering the baseline, which would silently redefine the gate to
+      # exclude a tenth of the codebase while still calling itself a floor.
+      # So each job uploads its coverage and the `coverage` job judges the
+      # union.
+      - name: Coverage artifact (verify tree)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: node scripts/coverage-ratchet.mjs
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-verify
+          path: |
+            **/coverage/coverage-summary.json
+            !**/node_modules/**
+          if-no-files-found: error
+          retention-days: 1
 
       # The Python SDK is not a pnpm package, so `pnpm -r test` cannot reach it
       # — it sat outside every repo-level command until 2026-09-05 (P1.2). The
@@ -257,4 +273,59 @@ jobs:
           command -v python3
           command -v git
 
-      - run: pnpm --filter @potion/workers test
+      # POTION_COVERAGE here for the same reason as the verify job: the
+      # ratchet's baseline counts this package, so a run that does not
+      # measure it cannot be compared against that baseline.
+      - name: Test
+        env:
+          POTION_COVERAGE: '1'
+        run: pnpm --filter @potion/workers test
+
+      - name: Coverage artifact (workers tree)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-workers
+          path: |
+            **/coverage/coverage-summary.json
+            !**/node_modules/**
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # THE RATCHET JUDGES THE UNION, NOT A HALF (2026-09-11).
+  #
+  # coverage-baseline.json is a whole-tree number and must stay one: a floor
+  # that quietly stops counting a package is not a floor. Since the suite runs
+  # in two jobs, neither of them can evaluate it alone — so both upload what
+  # they measured and this job reassembles the tree before judging.
+  #
+  # It needs no install and no build: the ratchet reads JSON summaries and the
+  # baseline, nothing else.
+  # ---------------------------------------------------------------------------
+  coverage:
+    needs: [verify, workers]
+    # Judge whenever both jobs produced coverage, including when one of them
+    # failed a later step — a drop is worth knowing about even on a red build.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Both artifacts unpack at the workspace root, restoring the paths the
+      # ratchet's own tree-walk expects (it skips node_modules by name).
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-verify
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-workers
+
+      - name: Coverage ratchet (whole tree)
+        run: node scripts/coverage-ratchet.mjs
