@@ -210,7 +210,12 @@ const ESCAPE_HATCH_BUDGET = 4;
  * this entry is here so the gap is closed before that lands, and so the
  * rebase has nothing to drop.
  */
-const TEST_ROOTS = ['packages', 'apps', 'scripts', 'tests'];
+// 'sdks' joined the workspace with P1.2 — and the moment it did, this file
+// stopped seeing a root that holds tests. The completeness check below caught
+// it on the first CI run after the rebase, which is the whole reason that
+// check exists: a root left out is not a smaller number, it is an unwatched
+// directory reporting success.
+const TEST_ROOTS = ['packages', 'apps', 'scripts', 'tests', 'sdks'];
 
 /** An escape hatch as the PARSER sees it — see ESCAPE_HATCH_BUDGET above. */
 function isEscapeHatch(node: ts.Node): boolean {
