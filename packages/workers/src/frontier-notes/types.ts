@@ -145,6 +145,29 @@ export interface Issue {
    * verdict let the model-written draft publish — the "Verified by Auditor"
    * line's evidence. */
   writer: { model: string; costUsd: number; receipt?: WriterReceipt; runId?: string; verifiedBy?: { runId: string; costUsd: number } } | null;
+  /**
+   * Corrections to a published issue, oldest first (2026-09-10).
+   *
+   * The author page promised readers that every correction would be listed
+   * permanently, next to a hardcoded "no corrections on record" — so it would
+   * have kept saying that through any number of them. The first real one, an
+   * item count published as a model count, is what made the promise false
+   * rather than merely decorative. A corrected issue keeps its address and
+   * carries the correction in its own body: the record is amended in public,
+   * never quietly rewritten.
+   */
+  corrections?: IssueCorrection[];
+}
+
+/** A published claim that was wrong, and what replaced it. Mirrored in
+ *  apps/dashboard/lib/research.ts — the dashboard never bundles workers. */
+export interface IssueCorrection {
+  /** ISO instant the correction was made, not when the error published. */
+  at: string;
+  was: string;
+  now: string;
+  /** Why it happened, in the author's own accounting. */
+  why?: string;
 }
 
 /** What Potion's own API said about the request that wrote the issue — the dogfood receipt. */

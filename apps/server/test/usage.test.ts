@@ -244,6 +244,22 @@ describe('usage read routes (org isolation)', () => {
     expect(body.today).toMatchObject({ day: today, requests: 1, inputTokens: 40, outputTokens: 20 });
     expect(body.today.costUsd).toBeCloseTo(0.004, 10);
     expect(body.mtd.requests).toBeGreaterThanOrEqual(1);
+    // 2026-09-11: measurement (eval_live) is in costUsd — it is real spend,
+    // budgets see it — but NOT in servingCostUsd, the only figure a "you
+    // spent … where it would have billed …" sentence may use. The hero
+    // once compared $3.46 (with $2.95 of measurement) to a $2.68 serving
+    // counterfactual and printed "$0.0000 saved".
+    await insertRequestLog(db(), { ts: now, orgId: ORG_B, clusterId: 'extraction', status: 'eval_live', usage: usage(0, 0, 0.5) });
+    // …and a policy_infeasible serve is counted on its own line.
+    await insertRequestLog(db(), {
+      ts: now, orgId: ORG_B, clusterId: 'extraction', status: 'ok', usage: usage(10, 5, 0.02),
+      implicitSignals: ['fallback_policy_infeasible'],
+    });
+    const again = (await authedGet('/api/usage/current', RAW_B)).json();
+    expect(again.today.costUsd).toBeCloseTo(0.524, 10);
+    expect(again.today.servingCostUsd).toBeCloseTo(0.024, 10);
+    expect(again.today.infeasibleCostUsd).toBeCloseTo(0.02, 10);
+    expect(again.measurementUsd).toBeCloseTo(0.5, 10);
     // org isolation on the live path too
     const aRes = await authedGet('/api/usage/current', RAW_A);
     expect(aRes.json().today.requests).toBe(0);

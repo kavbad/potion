@@ -128,6 +128,7 @@ describe('the frontier table — every measured strategy, and a row binds a POLI
     // latency. So min_cost at flash's quality serves FULL, and a naive
     // binding would have shown "Applied ✓" on a row it was not serving.
     const { selectPoint } = await import('@potion/core');
+    const { policyForCluster } = await import('@potion/pareto');
     const points = [
       pt({ strategyHash: 'pro', quality: 0.98, costPer1K: 7.494, latencyP95: 12358 }),
       pt({ strategyHash: 'full', quality: 0.64, costPer1K: 0.1477, latencyP95: 3052 }),
@@ -141,11 +142,59 @@ describe('the frontier table — every measured strategy, and a row binds a POLI
     for (const p of points) {
       const policy = policyBinding(p, points);
       if (policy === null) continue; // reported as not bindable, never mis-bound
+      // the serve path applies the CLUSTER floor before selecting (chat.ts,
+      // compile-router.ts) — verify the way it serves
       expect(
-        selectPoint(policy, frontier)?.strategyHash,
+        selectPoint(policyForCluster(policy, 'code-gen'), frontier)?.strategyHash,
         `row ${p.strategyHash} bound a policy that serves something else`,
       ).toBe(p.strategyHash);
     }
+  });
+
+  // 2026-09-11, found by reading a design partner's September receipts.
+  //
+  // The 2026-09-06 fix below stopped minting the floor from the mean, but
+  // kept writing it to the policy's TOP-LEVEL qualityFloor — so a bar bound
+  // from ONE classification row governed every other kind of work the key
+  // served. On agentic-tool-use and rewrite-edit nothing cleared it, the
+  // resolver fell through to the highest-quality point, and the customer
+  // paid $44 and $30 per 1K tokens where a $0.14 point of the same measured
+  // quality sat on the frontier — recorded as "$0 saved" because the served
+  // point was also the comparator. It also wrote the bound RAW
+  // (0.978543771043771) while the proposal-apply path floors to 2dp.
+  it('binds a CLUSTER floor: other kinds of work keep the platform default', async () => {
+    const { DEFAULT_ORG_POLICY } = await import('@potion/pareto');
+    const { floorFor } = await import('../src/routing/floors.js');
+    const points = [
+      pt({ strategyHash: 'cheap', quality: 0.90, costPer1K: 0.10, latencyP95: 900, evidence: ev(0.90, 0.03) }),
+      pt({ strategyHash: 'good', quality: 0.98, costPer1K: 1.00, latencyP95: 800, evidence: ev(0.98, 0.02) }),
+    ];
+    const bound = policyBinding(points[1]!, points)!;
+    expect(bound).not.toBeNull();
+    expect(bound.type).toBe('min_cost');
+    if (bound.type !== 'min_cost') throw new Error('unreachable');
+    expect(Object.keys(bound.clusterFloors ?? {})).toEqual(['code-gen']);
+    // the bar lives on THIS cluster…
+    expect(floorFor(bound, 'code-gen')).toBeGreaterThan(0.95);
+    // …and every other cluster sees what a fresh key would have seen
+    const dflt = DEFAULT_ORG_POLICY.type === 'min_cost' ? DEFAULT_ORG_POLICY.qualityFloor : Number.NaN;
+    expect(bound.qualityFloor).toBe(dflt);
+    expect(floorFor(bound, 'agentic-tool-use')).toBe(dflt);
+  });
+
+  it('the floor it mints is a 2dp FLOOR of the bound — one rule with proposal apply', async () => {
+    const { qualityLowerBound } = await import('@potion/core');
+    const { floorFor, mintFloor } = await import('../src/routing/floors.js');
+    const points = [
+      pt({ strategyHash: 'cheap', quality: 0.90, costPer1K: 0.10, latencyP95: 900, evidence: ev(0.90, 0.03) }),
+      pt({ strategyHash: 'good', quality: 0.98, costPer1K: 1.00, latencyP95: 800, evidence: ev(0.98, 0.0121) }),
+    ];
+    const target = points[1]!;
+    const bound = policyBinding(target, points)!;
+    const floor = floorFor(bound, 'code-gen')!;
+    expect(floor).toBe(mintFloor(qualityLowerBound(target)));
+    expect(floor, 'two decimals, never the raw bound').toBe(Math.floor(floor * 100) / 100);
+    expect(floor).toBeLessThanOrEqual(qualityLowerBound(target));
   });
 
   it('needs a COMPOUND rule for a row that survives only on latency', () => {
@@ -182,6 +231,7 @@ describe('the frontier table — every measured strategy, and a row binds a POLI
 
   it('the floor it mints is tested the way the SELECTOR tests it', async () => {
     const { selectPoint } = await import('@potion/core');
+    const { policyForCluster } = await import('@potion/pareto');
     const points = [
       pt({ strategyHash: 'cheap', quality: 0.90, costPer1K: 0.10, latencyP95: 900, evidence: ev(0.90, 0.03) }),
       pt({ strategyHash: 'good', quality: 0.98, costPer1K: 1.00, latencyP95: 800, evidence: ev(0.98, 0.02) }),
@@ -192,8 +242,9 @@ describe('the frontier table — every measured strategy, and a row binds a POLI
     };
     const bound = policyBinding(points[1]!, points)!;
     expect(bound).not.toBeNull();
-    // The floor must be satisfiable by the very point it was derived from.
-    expect(selectPoint(bound, frontier)?.strategyHash).toBe('good');
+    // The floor must be satisfiable by the very point it was derived from —
+    // under the cluster floor the serve path applies before selecting.
+    expect(selectPoint(policyForCluster(bound, 'code-gen'), frontier)?.strategyHash).toBe('good');
   });
 
   it('the three priorities may COLLAPSE onto one row — which is why the table exists', () => {

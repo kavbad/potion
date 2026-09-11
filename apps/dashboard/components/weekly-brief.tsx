@@ -39,7 +39,12 @@ export function WeeklyBrief() {
         j('/api/budgets') as Promise<BudgetState | null>,
       ]);
       const rows = usage?.rows ?? [];
-      const k = rows.reduce((s, r) => s + Math.max(0, (r.baselineCostUsd ?? 0) - r.costUsd), 0);
+      // No per-day clamp (2026-09-11): a day that cost more than the
+      // comparator subtracts, as it should — clamping each day to zero
+      // overstated the week. (These rows are the usage_daily rollup, whose
+      // costUsd still carries measurement; the serving split lands with the
+      // rollup column — see today-pulse for the live month figure.)
+      const k = rows.reduce((s, r) => s + ((r.baselineCostUsd ?? 0) - r.costUsd), 0);
       setKept(k);
       setRequests(rows.reduce((s, r) => s + (r.requests ?? 0), 0));
       setMoves((log?.entries ?? []).filter((e) => new Date(e.at).getTime() >= weekAgo).slice(0, 2));
@@ -63,6 +68,8 @@ export function WeeklyBrief() {
       <p className="mt-4 text-[14px] leading-[1.75] text-soft">
         {kept > 0 ? (
           <><span className="font-semibold text-ink">You kept {money(kept)} this week</span> across {requests.toLocaleString()} request{requests === 1 ? '' : 's'}, verified receipt by receipt.</>
+        ) : kept < 0 ? (
+          <><span className="font-semibold text-warn">This week cost {money(-kept)} more than the comparator</span> across {requests.toLocaleString()} request{requests === 1 ? '' : 's'} — a bar nothing measured can clear, or a max-quality policy, sends work to the priciest point. The receipts say which.</>
         ) : (
           <><span className="font-medium text-ink">I served {requests.toLocaleString()} request{requests === 1 ? '' : 's'} this week.</span> The kept line starts moving once your baseline is named and measured.</>
         )}

@@ -258,13 +258,23 @@ export interface UsageTotalsDto {
    * the org designated or named for that kind of work where it is on the
    * frontier, else the highest-quality point. 0 where nothing recorded one. */
   baselineCostUsd?: number;
+  /** Serving spend only (status ok). `costUsd` also carries measurement
+   * (eval_live), which has no counterfactual — any "you spent … where it
+   * would have billed …" sentence must use THIS figure (2026-09-11). */
+  servingCostUsd?: number;
+  /** Serving spend on requests served under a policy_infeasible fallback:
+   * nothing cleared the bound floor, the best measured point served, and the
+   * counterfactual IS that point. $0 saved by construction — a symptom. */
+  infeasibleCostUsd?: number;
 }
 
 export interface UsageCurrentResponse {
   orgId: string;
   today: { day: string } & UsageTotalsDto;
   mtd: { from: string; to: string } & UsageTotalsDto;
-  /** What measuring this org's workloads cost this month (billed to the org). */
+  /** What measuring this org's workloads cost this month. Covered by Potion
+   * (operator, 2026-09-11) — shown so the number is honest, never subtracted
+   * from a saving and never in "you spent". */
   measurementUsd?: number;
 }
 
@@ -597,12 +607,19 @@ export interface RoutingActivityRow {
   costUsd: number | null;
   /** Serve-time counterfactual for this request; null when not recorded. */
   baselineCostUsd: number | null;
+  /** WHICH comparator produced baselineCostUsd; 'policy-infeasible' = the
+   * bound floor admitted no point, the best measured point served, and the
+   * counterfactual is that same point (never a saving). */
+  baselineBasis: 'cluster-incumbent' | 'org-incumbent' | 'best-of-frontier' | 'policy-infeasible' | null;
   clusterId: string | null;
   strategy: string | null;
   frontierVersion: number | null;
   policyType: string | null;
   /** null = no routing decision on this row (auth failures, budget refusals). */
   fallback: 0 | 1 | null;
+  /** The resolver's reason when fallback=1 ('no_frontier', 'policy_infeasible',
+   * 'reasoning_budget', 'no_point_resolvable'); null when unknown. */
+  fallbackReason: string | null;
   provenance: 'live' | 'mock' | 'blocked' | null;
   /** Requires BOTH a real frontier and a policy-selected point. Unknown ⇒ false. */
   routed: boolean;

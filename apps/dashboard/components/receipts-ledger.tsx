@@ -11,6 +11,30 @@ import type { RoutingActivityResponse, RoutingActivityRow } from '@/lib/types';
 
 const POLL_MS = 4000;
 
+/** The resolver's fallback reasons in the customer's words (2026-09-11: every
+ * fallback row read "default (not measured yet)", including the ones where
+ * a measured frontier existed and an unreachable bar sent the request to
+ * its priciest point). */
+const FALLBACK_LABEL: Record<string, string> = {
+  no_frontier: 'default (not measured yet)',
+  policy_infeasible: 'your bar is unreachable here — served the best measured point',
+  reasoning_budget: 'reasoning model skipped under your output budget',
+  no_point_resolvable: 'no measured route resolvable — served the default',
+};
+
+/** The comparator a recorded counterfactual actually came from — the caption
+ * may only name what the row proves (caption-vs-provenance). */
+function comparatorOf(basis: RoutingActivityRow['baselineBasis']): string {
+  switch (basis) {
+    case 'org-incumbent':
+      return 'the model you named';
+    case 'cluster-incumbent':
+      return 'the model you designated for this kind of work';
+    default:
+      return 'the best measured model';
+  }
+}
+
 function keptOfRow(r: RoutingActivityRow): number | null {
   if (r.baselineCostUsd === null || r.costUsd === null) return null;
   const kept = r.baselineCostUsd - r.costUsd;
@@ -116,7 +140,7 @@ export function ReceiptsLedger() {
                       {' → '}
                       {r.servedModel ?? (r.strategy ? r.strategy.slice(0, 8) : '—')}
                       {r.policyType === 'pinned' && <> <Stamp kind="pinned">pinned</Stamp></>}
-                      {r.fallback === 1 && <span className="text-faint"> · default (not measured yet)</span>}
+                      {r.fallback === 1 && <span className="text-faint"> · {FALLBACK_LABEL[r.fallbackReason ?? ''] ?? 'default (not measured yet)'}</span>}
                       {r.routerVersion !== null && <span className="font-mono text-[12px] text-faint"> · plan v{r.routerVersion}</span>}
                     </>
                   ) : (
@@ -136,11 +160,15 @@ export function ReceiptsLedger() {
               {open && ok && (
                 <div className="pb-4 pl-[92px] sm:pl-24">
                   <ReceiptCard r={rowToReceipt(r)} subtitle={`${new Date(r.ts).toLocaleString()} · from your request log`} />
-                  {kept !== null && r.baselineCostUsd !== null && (
-                    <p className="mt-2 max-w-md font-mono text-[12px] leading-relaxed text-faint">
-                      counterfactual recorded at serve time: your named baseline would have cost ${r.baselineCostUsd.toFixed(5)} — kept ${kept.toFixed(5)}.
+                  {r.baselineBasis === 'policy-infeasible' && r.baselineCostUsd !== null ? (
+                    <p className="mt-2 max-w-md font-mono text-[12px] leading-relaxed text-warn">
+                      no saving to claim: nothing measured clears your quality bar for this kind of work, so the best measured point served and it is also the counterfactual (${r.baselineCostUsd.toFixed(5)}). Relax the bar in Controls and cheaper measured points can serve.
                     </p>
-                  )}
+                  ) : kept !== null && r.baselineCostUsd !== null ? (
+                    <p className="mt-2 max-w-md font-mono text-[12px] leading-relaxed text-faint">
+                      counterfactual recorded at serve time: {comparatorOf(r.baselineBasis)} would have cost ${r.baselineCostUsd.toFixed(5)} — kept ${kept.toFixed(5)}.
+                    </p>
+                  ) : null}
                 </div>
               )}
             </div>

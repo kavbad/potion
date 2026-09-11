@@ -49,10 +49,11 @@ import {
   type StrategyConfig,
 } from '@potion/core';
 import { loadTaxonomy } from '@potion/cluster';
-import { loadCurrentFrontier } from '@potion/pareto';
+import { DEFAULT_ORG_POLICY, loadCurrentFrontier, policyForCluster } from '@potion/pareto';
 import { clusterEvidenceCounts } from '@potion/db';
 import { openAiError } from '../auth.js';
 import { bindServingLatency } from '../latency-policy.js';
+import { mintFloor } from '../routing/floors.js';
 import type { PotionContext } from '../context.js';
 import { guardFrontierProvenance } from './chat.js';
 import { describeStrategyBrief } from './reports.js';
@@ -267,6 +268,23 @@ export interface FrontierRow {
  * satisfy its own filter by construction. The verification below still
  * decides whether the rule ISOLATES the row; this only stops it from
  * excluding the row it was built for.
+ *
+ * THE FLOOR IS A CLUSTER FLOOR, AND IT IS MINTED (2026-09-11). The fix
+ * above kept two habits that the same incident had already shown to be
+ * wrong. (1) The floor was written to the policy's TOP-LEVEL `qualityFloor`,
+ * so a bar derived from one classification point governed every other kind
+ * of work the key served — on agentic-tool-use and rewrite-edit nothing
+ * cleared it, the resolver fell through to the highest-quality point, and
+ * the customer paid $44 and $30 per 1K tokens where a $0.14 point at the
+ * same measured quality was on the frontier. The binding now carries the
+ * bar in `clusterFloors[target.clusterId]`, the top-level floor stays the
+ * platform default a fresh key would have had anyway, and verification runs
+ * through `policyForCluster` — exactly what the serve path does before
+ * `selectPoint`. (2) The raw lower bound (0.978543771043771) was written
+ * unrounded, while the proposal-apply path floors to 2dp: two floors for
+ * the same measurement. `mintFloor` is now the one rule; the exact bound is
+ * tried only when the 2dp floor admits a cheaper row and cannot isolate the
+ * target.
  */
 export function policyBinding(target: FrontierPoint, points: FrontierPoint[]): Policy | null {
   const frontier = {
@@ -279,13 +297,19 @@ export function policyBinding(target: FrontierPoint, points: FrontierPoint[]): P
     pricesVersion: 'binding',
     createdAt: new Date(0).toISOString(),
   };
-  const floor = qualityLowerBound(target);
-  const candidates: Policy[] = [
-    { type: 'min_cost', qualityFloor: floor },
-    { type: 'compound', qualityFloor: floor, p95Ms: Math.ceil(target.latencyP95) },
-  ];
+  const exact = qualityLowerBound(target);
+  const minted = mintFloor(exact);
+  const base = DEFAULT_ORG_POLICY.type === 'min_cost' ? DEFAULT_ORG_POLICY.qualityFloor : 0.95;
+  const clusterId = target.clusterId;
+  const candidates: Policy[] = [];
+  for (const floor of minted === exact ? [minted] : [minted, exact]) {
+    candidates.push(
+      { type: 'min_cost', qualityFloor: base, clusterFloors: { [clusterId]: floor } },
+      { type: 'compound', qualityFloor: base, clusterFloors: { [clusterId]: floor }, p95Ms: Math.ceil(target.latencyP95) },
+    );
+  }
   for (const policy of candidates) {
-    if (selectPoint(policy, frontier)?.strategyHash === target.strategyHash) return policy;
+    if (selectPoint(policyForCluster(policy, clusterId), frontier)?.strategyHash === target.strategyHash) return policy;
   }
   return null;
 }

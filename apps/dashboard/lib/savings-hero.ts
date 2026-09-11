@@ -29,7 +29,7 @@
 // this org named ANY incumbent" is the best available proxy, and it errs
 // toward the ratio — the conservative side.
 
-export type HeroMode = 'dollars' | 'ratio' | 'kept-only';
+export type HeroMode = 'dollars' | 'ratio' | 'kept-only' | 'loss';
 
 export interface HeroInput {
   /** What the org actually spent this month. */
@@ -65,6 +65,13 @@ export function heroDecision(input: HeroInput): HeroDecision {
   // only honest thing on the page, and it is allowed to be $0.00.
   if (!(baselineSpend > 0) || !(actualSpend > 0)) {
     return { mode: 'kept-only', comparator, namedIncumbent };
+  }
+  // 2026-09-11 (operator: "do you see where the mistake is here?"): a month
+  // where routing cost MORE than the comparator used to be clamped to
+  // "$0.0000 saved" — a loss rendered as a break-even. It is a loss; the
+  // hero says so and the caption names the cause. Never a rounded-away zero.
+  if (actualSpend > baselineSpend) {
+    return { mode: 'loss', comparator, namedIncumbent };
   }
   return { mode: namedIncumbent ? 'dollars' : 'ratio', comparator, namedIncumbent };
 }

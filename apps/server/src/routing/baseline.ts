@@ -28,6 +28,14 @@ export function clearBaselineCache(): void {
   cache.clear();
 }
 
+/**
+ * WHICH comparator a recorded baseline_cost_usd came from (request_logs
+ * .baseline_basis). 'policy-infeasible' (2026-09-11): the bound floor
+ * admitted no point, the highest-quality point served, and the comparator
+ * is that same point — a $0 gap that is a symptom, not a saving.
+ */
+export type BaselineBasis = 'cluster-incumbent' | 'org-incumbent' | 'best-of-frontier' | 'policy-infeasible';
+
 export interface Baseline {
   hash: string;
   basis: 'cluster-incumbent' | 'org-incumbent';

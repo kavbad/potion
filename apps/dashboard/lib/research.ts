@@ -6,6 +6,24 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export interface IssueFaq { q: string; a: string }
+/**
+ * A published claim that was wrong, and what replaced it.
+ *
+ * The author page has always promised readers that "every correction will be
+ * listed here, permanently" — and that sentence was hardcoded next to no data,
+ * so it would have gone on saying "no corrections on record" through any
+ * number of them. The first real correction (2026-09-10, an item count
+ * published as a model count) is what turned a decorative promise into a
+ * false one. This is the field that backs it.
+ */
+export interface IssueCorrection {
+  /** ISO instant the correction was made — not when the error was published. */
+  at: string;
+  was: string;
+  now: string;
+  /** Why it happened, in the author's own accounting. */
+  why?: string;
+}
 export interface ClusterFact { clusterId: string; family: string; pick: string; storedQuality: number; storedCi95: number; observedMean: number | null; n: number; verdict: 'ok' | 'drift' | 'inconclusive' }
 export interface AuditionFact { alias: string; clusterId: string; lane: string; outcome: string }
 export interface MixingFact { clusterId?: string; family: string; kind: string; meanQuality: number; qualityDeltaVsBestSingle: number; costSaving: number; n: number; vague: boolean; costBand: string }
@@ -25,6 +43,9 @@ export interface Issue {
   faq: IssueFaq[]; facts: FactSheet | null; status: 'published' | 'held'; heldReason?: string;
   writer: { model: string; costUsd: number; receipt?: { cluster: string; strategy8: string; policy: string; provenance: string; promptTokens: number; completionTokens: number }; runId?: string; verifiedBy?: { runId: string; costUsd: number } } | null;
   publishGate?: { decision: 'allow' | 'hold' | 'blocked'; audit?: boolean; runId: string; actionId: string; argsHash: string; priorResolution?: boolean };
+  /** Corrections to this issue, oldest first. Absent = none, which is a
+   *  different fact from an empty array and is rendered the same way. */
+  corrections?: IssueCorrection[];
 }
 
 function dirs(): string[] {
@@ -74,4 +95,45 @@ export const RESEARCH_TAGLINE = 'Weekly measurements of which AI models are chea
  *  where the public host genuinely differs (a staging domain). */
 export function siteOrigin(): string {
   return (process.env.POTION_PUBLIC_URL ?? 'https://withpotion.com').replace(/\/$/, '');
+}
+
+/**
+ * Every correction on an author's published issues, newest first.
+ *
+ * Derived, like every other countable on an author page: an author cannot
+ * have a clean record because nobody wrote a correction down, only because
+ * the corpus holds none.
+ */
+export function correctionsForByline(byline: string): Array<IssueCorrection & { slug: string; title: string }> {
+  const name = byline.trim().toLowerCase();
+  return listIssues()
+    .filter((i) => i.byline.trim().toLowerCase() === name)
+    .flatMap((i) => (i.corrections ?? []).map((c) => ({ ...c, slug: i.slug, title: i.title })))
+    .sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/**
+ * What the author page may claim about independent verification.
+ *
+ * It used to assert, flatly, that "every issue is drafted in a recorded run,
+ * independently verified by Auditor before publication" — while the stats
+ * block three sections above derived "N publications (M independently
+ * verified)" from the corpus. When M < N the page contradicted itself, and
+ * the false half was the one written in prose. It was false for the four
+ * dailies of 2026-09-07..10, which published with no verification record
+ * because the daily Auditor was never wired (fixed ac2db2f).
+ *
+ * Verification is the publication BAR, which is a claim about intent and
+ * stays true. That every issue cleared it is a claim about the record, and
+ * only the record gets to make it.
+ */
+export function verificationClaim(total: number, verified: number): string {
+  if (total === 0) return 'Independent verification by Auditor — a separate research-integrity worker — is the publication bar.';
+  if (verified === total)
+    return `Every one of the ${total} issues above was independently verified by Auditor — a separate research-integrity worker — before publication, and names the run that did it.`;
+  return (
+    `Independent verification by Auditor — a separate research-integrity worker — is the publication bar: ` +
+    `${verified} of ${total} issues above carry that record and name the run that made it. ` +
+    `The rest published before the daily verifier was wired; they are marked by the absence of a verification run, never by a claim that one happened.`
+  );
 }
