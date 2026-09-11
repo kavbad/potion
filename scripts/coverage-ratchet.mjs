@@ -74,16 +74,38 @@ console.log(`coverage-ratchet: ${rounded}% lines (${covered}/${total}) across ${
 if (rounded < base - TOLERANCE) {
   console.error(
     `coverage-ratchet: FAIL — coverage fell ${(base - rounded).toFixed(2)}pp below the baseline.\n` +
-    `  Tests were removed, or code landed with none. Add tests, or if the drop is\n` +
-    `  correct (deleted covered code), lower coverage-baseline.json IN THE SAME\n` +
-    `  COMMIT so the reason is reviewable.`);
+    `\n` +
+    `  FIRST, CHECK THE DENOMINATOR — it is usually the denominator.\n` +
+    `    ${summaries.length} packages, ${total} lines. If either looks wrong, the tree being\n` +
+    `    measured is wrong and the coverage is fine. Twice on 2026-09-11 this\n` +
+    `    "drop" was a measurement artifact: once when @potion/workers moved to\n` +
+    `    its own CI job and its tree went missing (63,663 lines, -1.10pp), once\n` +
+    `    when a repo-root aggregate double-counted every file (164,088 lines,\n` +
+    `    -28.90pp). A real regression moves the covered count, not the total.\n` +
+    `\n` +
+    `  THEN, if the tree is right: tests were removed, or code landed with none.\n` +
+    `    Add tests.\n` +
+    `\n` +
+    `  LOWERING THE BASELINE IS ALMOST NEVER THE ANSWER, and it is the only\n` +
+    `    action here that cannot be undone by review — the floor is gone and\n` +
+    `    nobody can tell it ever moved. It is correct in exactly one case:\n` +
+    `    covered code was deliberately DELETED. If that is genuinely what\n` +
+    `    happened, lower it in the same commit as the deletion, so the diff\n` +
+    `    carries its own reason.`);
   process.exit(1);
 }
 if (rounded > base + TOLERANCE) {
   console.error(
     `coverage-ratchet: FAIL — coverage ROSE ${(rounded - base).toFixed(2)}pp above the baseline.\n` +
-    `  Lock it in: pnpm coverage:baseline. A number policed only downward drifts\n` +
-    `  back up unrecorded, and then nobody knows what the floor actually is.`);
+    `\n` +
+    `  CHECK THE DENOMINATOR FIRST here too: ${summaries.length} packages, ${total} lines.\n` +
+    `    A rise can be a measurement artifact as easily as a fall — a summary\n` +
+    `    counted twice raises the number without anyone writing a test.\n` +
+    `\n` +
+    `  If the tree is right, this is good news and locking it in is the whole\n` +
+    `    point: pnpm coverage:baseline, committed with the work that earned it.\n` +
+    `    A number policed only downward drifts back up unrecorded, and then\n` +
+    `    nobody knows what the floor actually is.`);
   process.exit(1);
 }
 console.log('coverage-ratchet: ok');

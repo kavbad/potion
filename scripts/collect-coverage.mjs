@@ -43,10 +43,27 @@ if (found.length === 0) {
   process.exit(1);
 }
 
+let staged = 0;
 for (const f of found) {
   // `packages/db/coverage/coverage-summary.json` -> `packages__db`
-  const slug = path.relative(ROOT, path.dirname(path.dirname(f))).split(path.sep).join('__') || 'root';
+  const slug = path.relative(ROOT, path.dirname(path.dirname(f))).split(path.sep).join('__');
+
+  // THE REPO-ROOT AGGREGATE IS NOT A PACKAGE (2026-09-11). `pnpm test:scripts`
+  // runs vitest at the root, and its summary counts EVERY file in the repo —
+  // 91,288 lines at 6,078 covered — which then lands on top of the per-package
+  // summaries that already counted the same files properly. Measured on run
+  // 34645540691: the union read 164,088 lines against a true 72,800, and the
+  // ratchet failed by 28.90pp on a tree nobody had touched. The baseline was
+  // never computed with it (`pnpm -r test` does not produce one), so including
+  // it here compares two different things.
+  //
+  // The cost is real and worth naming: scripts/ coverage is counted by nothing
+  // as a result. That was already true of the baseline; it is a gap to close by
+  // giving scripts a scoped config, not by re-adding a whole-repo aggregate.
+  if (slug === '') continue;
+
   mkdirSync(path.join(OUT, slug), { recursive: true });
   copyFileSync(f, path.join(OUT, slug, 'coverage-summary.json'));
+  staged += 1;
 }
-console.log(`collect-coverage: staged ${found.length} summaries into coverage-artifacts/`);
+console.log(`collect-coverage: staged ${staged} summaries into coverage-artifacts/ (${found.length - staged} skipped as non-package)`);
