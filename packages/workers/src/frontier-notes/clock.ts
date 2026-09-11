@@ -86,8 +86,17 @@ export interface DailyIo {
  * prove that has not just been said), NOTHING publishes: an empty agenda is
  * a real answer, and silence beats filler.
  */
+/** An empty string is an ABSENT harness. Compose defaults the daily
+ *  generations to "" and `?? null` keeps "" — which started a run on harness
+ *  "" every tick for four days (2026-09-07..10) before anything could write
+ *  state, so the verdict ceiling never fired and Delta's prose stood
+ *  unverified. Presence is a non-blank hash, nothing weaker. */
+const presentHarness = (h: string | null | undefined): string | null => (typeof h === 'string' && h.trim() !== '' ? h : null);
+
 export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   const day = utcDay(io.now());
+  const deltaHarness = presentHarness(io.deltaHarness);
+  const auditorHarness = presentHarness(io.auditorHarness);
   const state = io.readState(day);
   // Today is filed — unless the day still owes work on it: a writer that has
   // not landed yet (THE LATE WRITER) or a verdict that has not come back
@@ -113,7 +122,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   if (state?.phase === 'awaiting-auditor') {
     const filed = io.readIssue(day);
     const assigned = state.assignment;
-    const auditor = io.auditorHarness ?? null;
+    const auditor = auditorHarness;
     if (filed === null || assigned === undefined || auditor === null) {
       io.writeState({ ...state, phase: 'done' });
       return null;
@@ -173,7 +182,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   if (state?.phase === 'awaiting-writer') {
     const filed = io.readIssue(day);
     const runId = state.deltaRunId;
-    if (filed === null || runId === undefined || io.deltaHarness === null) {
+    if (filed === null || runId === undefined || deltaHarness === null) {
       io.writeState({ ...state, phase: 'done' });
       return null;
     }
@@ -207,12 +216,12 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
     const upgraded = assemblePieceIssue(assigned, { ...parsed, mixingNote: '', auditionNote: footer, faq: [] }, day, {
       publishedAt: filed.publishedAt,
       byline: 'Delta',
-      writer: { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId },
+      writer: { model: `delta:${deltaHarness.slice(0, 8)}`, costUsd: 0, runId },
     });
     io.writeIssueFiles(upgraded);
     // A late writer's prose is prose like any other: it publishes now and
     // earns its byline from the record, same as one that arrived on time.
-    if ((io.auditorHarness ?? null) !== null) {
+    if (auditorHarness !== null) {
       io.writeState({ ...state, phase: 'awaiting-auditor', assignment: assigned, note: `written by Delta (${runId}): ${assigned.id}` });
       delete (state as { auditorRunId?: string }).auditorRunId;
     }
@@ -234,8 +243,8 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
 
   if (state === null) {
     if (!io.writeState({ week: day, phase: 'delta', startedAt: io.now().toISOString(), attempts: 1, note: candidate.id }, { exclusive: true })) return null;
-    if (io.deltaHarness !== null) {
-      const runId = await io.startWorkerRun(io.deltaHarness, {
+    if (deltaHarness !== null) {
+      const runId = await io.startWorkerRun(deltaHarness, {
         name: 'assignment.json',
         content: JSON.stringify(
           { headline: candidate.headline, dek: candidate.dek, question: candidate.demandQuery, clusterId: candidate.clusterId, evidence: candidate.evidence },
@@ -270,9 +279,9 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
         : parsed === null
           ? `no usable piece.json (run ended ${terminal})`
           : (auditPieceNumbers(parsed, candidate, io.now()) ?? auditRepetition(parsed) ?? lintDraft({ ...parsed, faq: [] }));
-    if (parsed !== null && violation === null && io.deltaHarness !== null) {
+    if (parsed !== null && violation === null && deltaHarness !== null) {
       draft = { ...parsed, mixingNote: '', auditionNote: footer, faq: [] };
-      writer = { model: `delta:${io.deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };
+      writer = { model: `delta:${deltaHarness.slice(0, 8)}`, costUsd: 0, runId: state.deltaRunId };
       note = `written by Delta (${state.deltaRunId}): ${candidate.id}`;
     } else {
       io.log(`fnotes daily ${day}: writing refused (${violation}) — the composed piece publishes`);
@@ -291,7 +300,7 @@ export async function dailyPieceTick(io: DailyIo): Promise<string | null> {
   // never held for a verdict (that is the queue-latency trap again), so the
   // prose goes up and Auditor checks it next. The byline earns its
   // "verified" line, or the prose comes down. See THE VERDICT COMES AFTER.
-  const verifying = writer !== null && (io.auditorHarness ?? null) !== null;
+  const verifying = writer !== null && auditorHarness !== null;
   io.writeState({
     week: day, startedAt: state?.startedAt ?? io.now().toISOString(), attempts: state?.attempts ?? 1, ...state,
     phase: late ? 'awaiting-writer' : verifying ? 'awaiting-auditor' : 'done', note,
