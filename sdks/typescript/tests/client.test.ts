@@ -7,6 +7,7 @@
  */
 
 import { createServer, type Server } from 'node:http';
+import type { ChatCompletion } from 'openai/resources/chat/completions';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -23,7 +24,23 @@ const TRACE =
   'cluster=code-gen;strategy=1a2b3c4d;frontier=v3;policy=min_cost;fallback=0;' +
   'provenance=mock;policy_override=quality-first';
 
-const COMPLETION = {
+/**
+ * The Potion wire shape: OpenAI's completion, plus the `cost` the server
+ * reports on usage — the same extension src/client.ts reads off it.
+ */
+type PotionWireCompletion = Omit<ChatCompletion, 'usage'> & {
+  usage?: ChatCompletion['usage'] & { cost?: number };
+};
+
+// TYPED, not cast (2026-09-11). This fixture reached
+// `new PotionChatCompletion(COMPLETION as never, ...)`, and `as never` means
+// the fixture is checked against NOTHING. Annotating it — what the
+// escape-hatch ratchet means by "fix the type instead" — immediately found
+// three real defects it had been hiding: `refusal` and `logprobs` are
+// required by the OpenAI types and were absent, and `cost` is not a field of
+// CompletionUsage, so the fixture was only ever a valid POTION completion,
+// never an OpenAI one. Both are now said out loud instead of cast away.
+const COMPLETION: PotionWireCompletion = {
   id: 'chatcmpl-test',
   object: 'chat.completion',
   created: 1_700_000_000,
@@ -31,7 +48,8 @@ const COMPLETION = {
   choices: [
     {
       index: 0,
-      message: { role: 'assistant', content: 'hello back' },
+      message: { role: 'assistant', content: 'hello back', refusal: null },
+      logprobs: null,
       finish_reason: 'stop',
     },
   ],
@@ -213,7 +231,7 @@ describe('response wrapper', () => {
   });
 
   it('null frontierTrace when header absent', async () => {
-    const resp = new PotionChatCompletion(COMPLETION as never, new Headers());
+    const resp = new PotionChatCompletion(COMPLETION, new Headers());
     expect(resp.frontierTrace).toBeNull();
   });
 });

@@ -2,3 +2,7 @@ packages:
   - "packages/*"
   - "apps/*"
   - "tests/*"
+  # The customer-facing SDK. Outside the workspace it sat outside
+  # `pnpm -r test|typecheck|build` entirely — a test file no repo-level
+  # command had ever run (P1.2).
+  - "sdks/typescript"

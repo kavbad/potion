@@ -9,6 +9,19 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // COVERAGE (P1.4). Opt-in via POTION_COVERAGE=1 so a normal `pnpm test`
+    // keeps its current ergonomics; CI turns it on for the one suite run it
+    // already does. Measured overhead is ~11% (packages/db 45s -> 50s), which
+    // is far cheaper than a second full run.
+    //
+    // v8 provider, json-summary per package; scripts/coverage-ratchet.mjs
+    // aggregates them into one number and compares it to coverage-baseline.json.
+    coverage: {
+      enabled: process.env.POTION_COVERAGE === '1',
+      provider: 'v8',
+      reporter: ['json-summary', 'text-summary'],
+      reportsDirectory: './coverage',
+    },
     // The SAME phantom multiplier the eslint config carries an ignore for
     // (P0.4): .claude/worktrees holds stale checkouts of this repo, and any
     // tool that walks the tree finds each test once per worktree. `vitest run
