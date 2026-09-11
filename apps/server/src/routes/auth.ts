@@ -217,11 +217,18 @@ export async function recordAuthEvent(
 }
 
 /**
- * Self-serve org provisioning gate (G2.7): the auto-provision path (any
- * email → new solo org, admin) is an operator decision, not a default.
- * POTION_SELF_SERVE=1/0 overrides explicitly; unset defaults to ON only
- * when the dev bypass is on (walkthrough/tests), OFF otherwise — production
- * onboarding is operator-credentialed (POST /operator/orgs).
+ * Self-serve org provisioning gate (G2.7): the auto-provision path — any
+ * email → new solo org, admin.
+ *
+ * PRODUCTION RUNS THIS ON (2026-09-02, b1504a3): Potion is a self-serve
+ * product, and deploy/docker-compose.prod.yml sets POTION_SELF_SERVE=1.
+ * The operator path (POST /operator/orgs) still exists for partners.
+ *
+ * The DEFAULT here stays fail-closed on purpose, and the two are not in
+ * conflict: an unconfigured deployment — someone's laptop, a CI runner, a
+ * fresh box — should not silently accept public signups because a flag went
+ * unset. Production states its intent explicitly; everything else has to.
+ * POTION_SELF_SERVE=1/0 overrides; unset follows the dev bypass.
  */
 export function selfServeEnabled(): boolean {
   const v = process.env.POTION_SELF_SERVE;
@@ -233,17 +240,23 @@ export function selfServeEnabled(): boolean {
 /**
  * Return the magic link IN THE RESPONSE instead of only emailing/logging it.
  *
- * There is no SMTP (honest-stub convention), so with self-serve ON in
- * production a signup completes, the org is created, and the link exists
- * only in the server log — the person who signed up can never sign in. This
- * flag closes that loop for a PRIVATE deployment being tested.
+ * WHY IT EXISTED: before real email, a self-serve signup completed, the org
+ * was created, and the link existed only in the server log — the person who
+ * signed up could never sign in. This flag closed that loop for a private
+ * test box.
+ *
+ * THAT ERA IS OVER (email is live via Resend; production boots with
+ * `transport: resend` and POTION_MAGIC_LINK_IN_RESPONSE off). The comment
+ * above outlived it by long enough to be read, in 2026-09-10, as evidence
+ * that self-serve signup was broken in production — it is not. Kept because
+ * a deployment without an email transport still needs the escape hatch.
  *
  * It is off unless explicitly set, and it is deliberately its own flag
  * rather than riding `POTION_SELF_SERVE`, because the two decisions are
  * different: one opens signup, this one hands the caller a session-minting
  * token for whatever email they typed. With both on, anyone who can reach
  * the endpoint can sign in AS any address — fine for a closed test box,
- * never for a public one. Real SMTP is what retires it.
+ * never for a public one. Real email is what retires it, and has.
  */
 export function magicLinkInResponseEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const v = env.POTION_MAGIC_LINK_IN_RESPONSE;
