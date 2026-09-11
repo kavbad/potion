@@ -103,19 +103,39 @@ export default async function UsagePage({
       {/* live today / month-to-date cards (read from request_logs, not the batch rollup) */}
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="Today — requests" value={formatInt(current.today.requests)} />
-        <StatCard label="Today — cost" value={formatUsd(current.today.costUsd)} />
+        {/* 2026-09-11: SERVING cost — costUsd also carries measurement (eval_live),
+            which Potion covers and which has no counterfactual; the "not counted
+            in the cost above" sentence below used to be false. */}
+        <StatCard label="Today — cost" value={formatUsd(current.today.servingCostUsd ?? current.today.costUsd)} />
         <StatCard label="Month-to-date — requests" value={formatInt(current.mtd.requests)} />
-        <StatCard label="Month-to-date — cost" value={formatUsd(current.mtd.costUsd)} />
+        <StatCard label="Month-to-date — cost" value={formatUsd(current.mtd.servingCostUsd ?? current.mtd.costUsd)} />
       </div>
-      {(current.mtd.baselineCostUsd ?? 0) > current.mtd.costUsd && (
-        <p className="mb-6 text-[13px] leading-relaxed text-soft">
-          Saved month-to-date: <span className="text-ink">{formatUsd((current.mtd.baselineCostUsd ?? 0) - current.mtd.costUsd)}</span> — measured against
-          the model you named for each kind of work where you named one, otherwise against the best measured model on that frontier.
-        </p>
-      )}
+      {(() => {
+        const serving = current.mtd.servingCostUsd ?? current.mtd.costUsd;
+        const baseline = current.mtd.baselineCostUsd ?? 0;
+        if (baseline > serving) {
+          return (
+            <p className="mb-6 text-[13px] leading-relaxed text-soft">
+              Saved month-to-date: <span className="text-ink">{formatUsd(baseline - serving)}</span> — measured against
+              the model you named for each kind of work where you named one, otherwise against the best measured model on that frontier.
+            </p>
+          );
+        }
+        if (baseline > 0 && serving > baseline) {
+          return (
+            <p className="mb-6 text-[13px] leading-relaxed text-soft">
+              Spent <span className="text-ink">{formatUsd(serving - baseline)}</span> more than the comparator month-to-date.
+              {(current.mtd.infeasibleCostUsd ?? 0) > 0 && (
+                <> <span className="text-ink">{formatUsd(current.mtd.infeasibleCostUsd ?? 0)}</span> of it went to requests where nothing measured clears your quality bar, so the best measured point served with nothing to save against — relax the bar in Controls.</>
+              )}
+            </p>
+          );
+        }
+        return null;
+      })()}
       {(current.measurementUsd ?? 0) > 0 && (
         <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
-          Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date, billed to this account and not counted in the cost above.
+          Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date — on us, and not in the cost above.
         </p>
       )}
       {/* stacked bar: requests/day by cluster */}

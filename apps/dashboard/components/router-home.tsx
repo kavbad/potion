@@ -102,6 +102,22 @@ interface RouterResponse {
 
 const HAIR = 'border-[#d9d5cb]';
 
+/** The resolver's fallback reasons, in the customer's words (2026-09-11:
+ * a bare "FALLBACK" chip hid that 7 of 10 kinds of work were serving the
+ * priciest point because nothing cleared an unreachable bar). */
+const FALLBACK_LABEL: Record<string, string> = {
+  policy_infeasible: 'bar unreachable · best point served',
+  no_frontier: 'not measured yet',
+  reasoning_budget: 'reasoning skipped',
+  no_point_resolvable: 'no measured route',
+};
+const FALLBACK_TITLE: Record<string, string> = {
+  policy_infeasible: 'No measured point clears your quality bar for this kind of work, so the highest-quality point serves — usually the most expensive one. Relax the bar in Controls to let cheaper measured points serve.',
+  no_frontier: 'This kind of work has no measured frontier yet; the default strategy serves.',
+  reasoning_budget: 'The measured pick is a reasoning model and your output budget is too small for it; the next measured point serves.',
+  no_point_resolvable: 'No measured point is resolvable under your provider set; the default strategy serves.',
+};
+
 /** Deterministic ink tint per workload for the composition bar — hue from
  * the cluster id, muted to sit on paper (identity, not decoration). */
 function tintOf(clusterId: string): string {
@@ -212,7 +228,11 @@ function AssignmentsTable({ assignments }: { assignments: Assignment[] }) {
                   <td className="py-2 pr-4 text-ink">{a.clusterId}</td>
                   <td className="py-2 pr-4 text-ink">
                     {a.strategy.label}
-                    {a.fallback !== null ? <span className="ml-2 text-[11px] uppercase text-warn">fallback</span> : null}
+                    {a.fallback !== null ? (
+                      <span className="ml-2 text-[11px] uppercase text-warn" title={FALLBACK_TITLE[a.fallback] ?? a.fallback}>
+                        {FALLBACK_LABEL[a.fallback] ?? 'fallback'}
+                      </span>
+                    ) : null}
                     {a.provenance !== 'live' ? <span className="ml-2 text-[11px] uppercase text-warn">{a.provenance}</span> : null}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">{a.quality?.toFixed(3) ?? '—'}</td>

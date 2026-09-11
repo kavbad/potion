@@ -29,7 +29,7 @@ import {
 } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { Policy } from '@potion/core';
-import { floorFor, withClusterFloor } from '../routing/floors.js';
+import { floorFor, mintFloor, withClusterFloor } from '../routing/floors.js';
 import type { PotionContext } from '../context.js';
 import type { PotionQueue } from '@potion/queue';
 import { incumbentRoster, resolveTypedModel } from '../incumbents/roster.js';
@@ -162,7 +162,9 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
       const message = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ');
       return reply.code(400).send(openAiError(message, 'invalid_request_error'));
     }
-    const f = Math.round(parsed.data.qualityFloor * 100) / 100;
+    // One minting rule with apply and the plan binding (routing/floors.ts):
+    // FLOOR to 2dp, never round up past what was asked for.
+    const f = mintFloor(parsed.data.qualityFloor);
     const first = await getFirstApiKeyWithPolicy(db, org.orgId);
     const current = first?.policyId ? ((await getPolicyById(db, org.orgId, first.policyId))?.config ?? null) : null;
     const carried = { ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
@@ -196,7 +198,7 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
       // 2dp (the worker's own suggestedFloorFor semantics — conservative,
       // never rounded up past the measurement), bounded only by [0, 1],
       // which is all core PolicySchema requires.
-      const floor = Math.max(0, Math.min(1, Math.floor(p.suggestedFloor * 100) / 100));
+      const floor = mintFloor(p.suggestedFloor);
       policy = withClusterFloor(policy, p.clusterId, floor);
     }
     const merged = policy as Policy;

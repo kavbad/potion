@@ -7,7 +7,7 @@ import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/c
 import { createOrg, getFirstApiKeyWithPolicy, getPolicyById, insertApiKey, insertLearningProposal, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
-import { floorFor, policyForCluster, withClusterFloor } from '../src/routing/floors.js';
+import { floorFor, mintFloor, policyForCluster, withClusterFloor } from '../src/routing/floors.js';
 
 const ORG = 'org-floors';
 const KEY = 'pk_floors';
@@ -30,8 +30,23 @@ describe('floors helpers', () => {
   });
   it('withClusterFloor merges into min_cost/compound and seeds min_cost otherwise', () => {
     expect(withClusterFloor(base, 'classification', 0.8)).toEqual({ type: 'min_cost', qualityFloor: 0.7, clusterFloors: { 'code-gen': 0.9, classification: 0.8 } });
-    expect(withClusterFloor(null, 'code-gen', 0.85)).toEqual({ type: 'min_cost', qualityFloor: 0.85, clusterFloors: { 'code-gen': 0.85 } });
-    expect(withClusterFloor({ type: 'max_quality', costCeilingPer1K: 1 }, 'x', 0.6)).toEqual({ type: 'min_cost', qualityFloor: 0.6, clusterFloors: { x: 0.6 } });
+    // 2026-09-11: a seeded policy carries THIS cluster's floor for THIS
+    // cluster only. The top-level floor is the platform default (what a
+    // fresh key gets), never the measurement — a classification bar of 1.0
+    // once became the global floor and put every other kind of work on the
+    // priciest point.
+    expect(withClusterFloor(null, 'code-gen', 0.85)).toEqual({ type: 'min_cost', qualityFloor: 0.95, clusterFloors: { 'code-gen': 0.85 } });
+    expect(withClusterFloor({ type: 'max_quality', costCeilingPer1K: 1 }, 'x', 0.6)).toEqual({ type: 'min_cost', qualityFloor: 0.95, clusterFloors: { x: 0.6 } });
+    expect(floorFor(withClusterFloor(null, 'code-gen', 0.85), 'classification')).toBe(0.95);
+  });
+  it('mintFloor is the ONE rule: floors to 2dp (never rounds up), clamps to [0, 1]', () => {
+    // The production value: a lower bound written raw as a floor.
+    expect(mintFloor(0.978543771043771)).toBe(0.97);
+    expect(mintFloor(0.855), 'a bar is a promise — never rounded up past the measurement').toBe(0.85);
+    expect(mintFloor(0.859)).toBe(0.85);
+    expect(mintFloor(1.2)).toBe(1);
+    expect(mintFloor(-0.1)).toBe(0);
+    expect(mintFloor(Number.NaN)).toBe(0);
   });
 });
 

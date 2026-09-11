@@ -446,7 +446,10 @@ export const requestLogs = pgTable('request_logs', {
   /** WHICH comparator produced baselineCostUsd (0089, review P0 "savings
    * baseline asymmetry"): 'cluster-incumbent' (G2.1 designation),
    * 'org-incumbent' (onboarding-named model on this frontier), or
-   * 'best-of-frontier' (the silent fallback — highest-quality point).
+   * 'best-of-frontier' (the silent fallback — highest-quality point), or
+   * 'policy-infeasible' (2026-09-11: the bound floor admitted no point, the
+   * highest-quality point served, and the comparator is that same point —
+   * a $0 gap that is a symptom of an unreachable bar, never a saving).
    * NULL = no baseline number on this row. A savings caption may only
    * name the comparator this column proves. */
   baselineBasis: text('baseline_basis'),

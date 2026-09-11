@@ -117,3 +117,61 @@ describe('the baseline on a served request', () => {
     expectScaling(H(TOP), 4.0 / 0.2); // the designated point — same ratio as best here, but a different hash
   });
 });
+
+// 2026-09-11, found in a design partner's September receipts: a bound floor
+// that no point on the frontier clears. The resolver falls through to the
+// highest-quality point (fallback=1, reason policy_infeasible), and the
+// silent best-of-frontier comparator is THAT SAME POINT — so the row records
+// baseline == cost and every caption read it as "$0 saved". It is not a
+// saving; it is a bar the customer cannot reach, and the row must say so.
+describe('an unreachable floor is stamped, never read as "$0 saved"', () => {
+  it('records basis policy-infeasible and the fallback reason on the row', async () => {
+    // its own org: no incumbent named or designated, so the comparator is
+    // the silent best-of-frontier fallback — the served point itself
+    const ORG2 = 'org-unreachable';
+    await createOrg(db(), { id: ORG2, name: 'Unreachable' });
+    await insertPolicy(db(), { id: 'pol-unreachable', orgId: ORG2, name: 'floor-0.99', config: { type: 'min_cost', qualityFloor: 0.99 } });
+    await insertApiKey(db(), { id: 'key-unreachable', keyHash: sha256('pk_unreachable'), name: 'serve-unreachable', orgId: ORG2, policyId: 'pol-unreachable' });
+    clearBaselineCache();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: 'Bearer pk_unreachable', 'x-potion-cluster': 'code-gen' },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'unreachable bar' }] },
+    });
+    expect(res.statusCode).toBe(200);
+    // nothing clears 0.99 (TOP is 0.95, CI-less) → the highest-quality point serves
+    expect(res.headers['x-potion-model']).toBe('mock-frontier');
+    const [row] = await db().select().from(requestLogs).orderBy(desc(requestLogs.id)).limit(1);
+    expect(row?.strategyHash).toBe(H(TOP));
+    expect(row?.implicitSignals ?? []).toContain('fallback_policy_infeasible');
+    expect(row?.baselineBasis, 'the comparator is the served point itself — a symptom, not a saving').toBe('policy-infeasible');
+    expect(row?.baselineCostUsd).not.toBeNull();
+    // …and a reachable floor on the same frontier never carries that basis
+    const ok = await serve('reachable bar');
+    expect(ok.basis).not.toBe('policy-infeasible');
+  });
+
+  it('a NAMED incumbent keeps its basis under an unreachable floor — the row records a loss against THEIR model', async () => {
+    const ORG3 = 'org-unreachable-named';
+    await createOrg(db(), { id: ORG3, name: 'Unreachable, named' });
+    await upsertOrgIncumbents(db(), { orgId: ORG3, models: ['mock-mid'], other: null, samplingConsent: false });
+    await insertPolicy(db(), { id: 'pol-unreachable-named', orgId: ORG3, name: 'floor-0.99', config: { type: 'min_cost', qualityFloor: 0.99 } });
+    await insertApiKey(db(), { id: 'key-unreachable-named', keyHash: sha256('pk_unreachable_named'), name: 'serve', orgId: ORG3, policyId: 'pol-unreachable-named' });
+    clearBaselineCache();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: 'Bearer pk_unreachable_named', 'x-potion-cluster': 'code-gen' },
+      payload: { model: 'potion-auto', messages: [{ role: 'user', content: 'unreachable bar, named incumbent' }] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-potion-model']).toBe('mock-frontier');
+    const [row] = await db().select().from(requestLogs).orderBy(desc(requestLogs.id)).limit(1);
+    expect(row?.implicitSignals ?? []).toContain('fallback_policy_infeasible');
+    expect(row?.baselineBasis).toBe('org-incumbent');
+    // the comparator (MID, $1.0/1K) is cheaper than what served (TOP, $4.0/1K):
+    // scaled at a visible cost this is a LOSS, and the hero must show it as one
+    expect(baselineCostUsd(FRONTIER, H(TOP), 0.04, H(MID))).toBeCloseTo(0.01, 9);
+  });
+});

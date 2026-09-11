@@ -1119,7 +1119,17 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // hash. (2026-09-04, found by the mutation audit.)
       if (heldOut !== null) return { baselineCostUsd: null, baselineBasis: null };
       const cost = baselineCostUsd(op.frontier, sh2, costUsd, baseline?.hash ?? null);
-      return { baselineCostUsd: cost, baselineBasis: cost === null ? null : (baseline?.basis ?? 'best-of-frontier') };
+      if (cost === null) return { baselineCostUsd: null, baselineBasis: null };
+      // 2026-09-11: nothing cleared the bound floor, so the resolver served
+      // the highest-quality point — which, with no incumbent named, is ALSO
+      // the silent best-of-frontier comparator. The number is true (that
+      // point is what the request cost) but it is not a saving of $0; it is
+      // a bar the customer cannot reach. Stamp the basis so no caption or
+      // invoice can read it as one. A NAMED incumbent keeps its basis: the
+      // row then honestly records a loss against the model they named, and
+      // the fallback reason in implicit_signals says why.
+      if (op.fallbackReason === 'policy_infeasible' && baseline === null) return { baselineCostUsd: cost, baselineBasis: 'policy-infeasible' as const };
+      return { baselineCostUsd: cost, baselineBasis: baseline?.basis ?? 'best-of-frontier' };
     };
     logBase.frontierVersion = op.frontierVersion;
     // G0 (0082): the receipt names the version that served — decided NOW

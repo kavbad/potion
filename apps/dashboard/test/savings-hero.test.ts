@@ -36,6 +36,18 @@ describe('what leads the router page', () => {
     expect(d.namedIncumbent).toBe(false);
   });
 
+  it('spending MORE than the comparator is a LOSS, never a clamped "$0 saved" (2026-09-11)', () => {
+    // The screen that found it: spent $3.46 where it would have billed
+    // $2.68, headlined "$0.0000 saved". A loss renders as a loss.
+    const d = heroDecision({ ...base, actualSpend: 3.46, baselineSpend: 2.68 });
+    expect(d.mode).toBe('loss');
+    expect(d.comparator).toBe('the best scorer');
+    // …and a named incumbent does not turn a loss into dollars saved.
+    expect(heroDecision({ ...base, actualSpend: 3.46, baselineSpend: 2.68, incumbentModels: ['or-sonnet'] }).mode).toBe('loss');
+    // exact break-even is not a loss
+    expect(heroDecision({ ...base, actualSpend: 2.68, baselineSpend: 2.68 }).mode).toBe('ratio');
+  });
+
   it('no baseline recorded: the kept counter leads, named incumbent or not', () => {
     expect(heroDecision({ ...base, baselineSpend: 0 }).mode).toBe('kept-only');
     expect(heroDecision({ ...base, baselineSpend: 0, incumbentModels: ['or-sonnet'] }).mode).toBe('kept-only');

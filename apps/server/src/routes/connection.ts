@@ -232,6 +232,12 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
         frontierVersion: t.frontierVersion,
         policyType: t.policyType,
         fallback: t.fallback,
+        /** WHY the row rode the fallback (2026-09-11): the resolver's reason,
+         * stamped at serve time into implicit_signals as `fallback_<reason>`.
+         * 'policy_infeasible' means the bound floor admitted no point and
+         * the highest-quality point served — the ledger must say that, not
+         * "default (not measured yet)". */
+        fallbackReason: (r.implicitSignals ?? []).find((s) => s.startsWith('fallback_'))?.slice('fallback_'.length) ?? null,
         provenance: t.provenance,
         /** The whole claim, in one field — see traceWasRouted. */
         routed: traceWasRouted(t),

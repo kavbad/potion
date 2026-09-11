@@ -78,10 +78,24 @@ export function TodayPulse() {
     return () => { clearInterval(t); window.removeEventListener('focus', onFocus); };
   }, []);
 
-  const kept = current ? Math.max(0, (current.mtd.baselineCostUsd ?? 0) - current.mtd.costUsd) : 0;
-  const shown = useEased(kept);
+  // 2026-09-11 (operator: "do you see where the mistake is here?" — the hero
+  // read "$0.0000 saved … you spent $3.46 where it would have billed $2.68").
+  // Two defects, both fixed HERE and not in the sentence:
+  //   · SERVING spend against the SERVING counterfactual. mtd.costUsd sums
+  //     every billable status including measurement (eval_live), which has
+  //     no counterfactual by definition — $2.95 of it sat on one side of a
+  //     subtraction whose other side could never contain it, and a 5x
+  //     saving rendered as a loss. Measurement is covered by Potion and
+  //     shown on its own line below.
+  //   · NO CLAMP. A month where routing cost more than the comparator is a
+  //     loss; it renders as one, with its cause, never as a rounded-away
+  //     zero. Math.max(0, …) turned a symptom into a break-even.
+  const actualSpend = current ? (current.mtd.servingCostUsd ?? current.mtd.costUsd) : 0;
   const spentWithout = current ? (current.mtd.baselineCostUsd ?? 0) : 0;
-  const actualSpend = current?.mtd.costUsd ?? 0;
+  const kept = current ? spentWithout - actualSpend : 0;
+  const shown = useEased(kept);
+  const measurementUsd = current?.measurementUsd ?? 0;
+  const infeasibleUsd = current?.mtd.infeasibleCostUsd ?? 0;
   // Day-2 honesty: cents-rounding tiny sums turns "kept $0.0186 of $0.0189"
   // into "kept $0.02 of $0.02" — a 98% claim rounded into a 100% one.
   const money = (n: number) => (n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
@@ -107,6 +121,7 @@ export function TodayPulse() {
   });
   const comparator = hero.comparator;
   const dollarsHero = hero.mode === 'dollars';
+  const lossHero = hero.mode === 'loss';
 
   // ---- needs-you, composed; each ask carries its time cost ----
   const needs: Array<{ text: string; href: string; time: string }> = [];
@@ -216,11 +231,14 @@ export function TodayPulse() {
           in the sub-line, so the hero is a difference the reader can check,
           and the rounding stays one-directional (kept floors, baseline
           ceils) so this can never round up into a claim. */}
-      <div className="mt-2 font-sans text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-kept tabular-nums sm:text-[3.4rem]">
-        {hero.mode === 'ratio' ? priceVsBaseline(actualSpend, spentWithout) : moneyFloor(shown)}
+      <div className={`mt-2 font-sans text-[2.6rem] font-semibold leading-none tracking-[-0.03em] tabular-nums sm:text-[3.4rem] ${lossHero ? 'text-warn' : 'text-kept'}`}>
+        {/* a LOSS ceils (never understated), a saving floors (never overstated) */}
+        {hero.mode === 'ratio' ? priceVsBaseline(actualSpend, spentWithout) : lossHero ? `−${moneyCeil(Math.max(0, -shown))}` : moneyFloor(Math.max(0, shown))}
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-soft">
-        {dollarsHero ? (
+        {lossHero ? (
+          <>more than <span className="text-ink">{comparator}</span> would have billed on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyFloor(spentWithout)}</span>, counted receipt by receipt</>
+        ) : dollarsHero ? (
           <>saved against <span className="text-ink">{comparator}</span> on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, counted receipt by receipt</>
         ) : hero.mode === 'ratio' ? (
           <>the price of the best scorer on your own requests this month — you spent <span className="text-ink">{money(actualSpend)}</span> where it would have billed <span className="text-ink">{moneyCeil(spentWithout)}</span>, counted receipt by receipt</>
@@ -232,6 +250,16 @@ export function TodayPulse() {
           <>kept so far. Send traffic to your endpoint and this number starts moving.</>
         )}
       </p>
+      {infeasibleUsd > 0 && (
+        <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-soft">
+          <span className="text-ink">{money(infeasibleUsd)}</span> of that went to requests where nothing measured clears your quality bar, so the compiler served the best measured point — the most expensive one, with nothing to save against. <Link href="/settings/controls" className="text-accent underline">Relax the bar</Link> for those kinds of work and cheaper measured points can serve.
+        </p>
+      )}
+      {measurementUsd > 0 && (
+        <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
+          Potion spent {money(measurementUsd)} measuring your workloads this month — on us, and not in the numbers above.
+        </p>
+      )}
 
       {feedItems.length > 0 && (
         <div className="mt-7">

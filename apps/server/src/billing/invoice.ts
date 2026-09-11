@@ -78,7 +78,7 @@ export interface InvoiceLineItem {
    *
    * A savings caption that cannot name its comparator is the same class of
    * defect as a savings figure with no evidence behind it. */
-  projectedBasis: 'org-incumbent' | 'cluster-incumbent' | 'best-of-frontier' | 'mixed' | null;
+  projectedBasis: 'org-incumbent' | 'cluster-incumbent' | 'best-of-frontier' | 'policy-infeasible' | 'mixed' | null;
   /** What the customer pays for this line (= platform + margin). */
   totalUsd: number;
   /** Stripe-ready mapping (Stripe amounts are integer cents). */
@@ -123,7 +123,7 @@ export interface Invoice {
     /** Context, never billed. */
     projectedSavedUsd: number;
     /** The basis across every line — 'mixed' when they disagree. */
-    projectedBasis: 'org-incumbent' | 'cluster-incumbent' | 'best-of-frontier' | 'mixed' | null;
+    projectedBasis: 'org-incumbent' | 'cluster-incumbent' | 'best-of-frontier' | 'policy-infeasible' | 'mixed' | null;
     savingsShareUsd: number;
     totalUsd: number;
   };

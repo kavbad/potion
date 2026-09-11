@@ -75,6 +75,24 @@ export interface UsageRollupRow {
   /** COGS: what Potion paid the provider. Equal to costUsd — the two diverge
    *  at INVOICE time via margin, not here (BYOK is no longer offered). */
   platformCostUsd: number;
+  /**
+   * Serving spend only — status='ok' rows (2026-09-11, the "$0.0000 saved"
+   * hero). `costUsd` above sums EVERY billable status, including
+   * 'eval_live' measurement, while `baselineCostUsd` is a counterfactual
+   * for served requests only. Comparing the two put $2.95 of measurement on
+   * one side of a subtraction whose other side could never contain it, and
+   * a 5x saving rendered as a loss clamped to zero. Any "you spent … where
+   * it would have billed …" sentence must use THIS figure. Not persisted to
+   * usage_daily (no column); live rollups and totals carry it.
+   */
+  servingCostUsd: number;
+  /**
+   * Serving spend on rows the resolver served under `policy_infeasible`:
+   * nothing cleared the bound quality floor, so the highest-quality point
+   * served and the recorded counterfactual IS that point. Such a row saves
+   * $0 by construction; the caption must say why instead of "$0 saved".
+   */
+  infeasibleCostUsd: number;
   /** S3: what the same traffic would have cost on the highest-quality point.
    *  The counterfactual for outcome pricing; 0 where nothing recorded one. */
   baselineCostUsd: number;
@@ -88,6 +106,10 @@ export interface UsageTotals {
   costUsd: number;
   platformCostUsd: number;
   baselineCostUsd: number;
+  /** Serving-only spend (status='ok'); see UsageRollupRow. */
+  servingCostUsd: number;
+  /** Serving spend under a policy_infeasible fallback; see UsageRollupRow. */
+  infeasibleCostUsd: number;
 }
 
 // The rollup SELECT shared by aggregateUsage (writes usage_daily) and
@@ -145,7 +167,9 @@ function rollupQuery(range: UsageRange, orgId?: string): SQL {
            coalesce(sum((usage->>'outputTokens')::numeric) FILTER (WHERE status = 'ok'), 0)::int AS output_tokens,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS cost_usd,
            coalesce(sum((usage->>'costUsd')::numeric), 0)::float8 AS platform_cost_usd,
-           coalesce(sum(baseline_cost_usd) FILTER (WHERE status = 'ok' AND NOT holdout), 0)::float8 AS baseline_cost_usd
+           coalesce(sum(baseline_cost_usd) FILTER (WHERE status = 'ok' AND NOT holdout), 0)::float8 AS baseline_cost_usd,
+           coalesce(sum((usage->>'costUsd')::numeric) FILTER (WHERE status = 'ok'), 0)::float8 AS serving_cost_usd,
+           coalesce(sum((usage->>'costUsd')::numeric) FILTER (WHERE status = 'ok' AND 'fallback_policy_infeasible' = ANY(implicit_signals)), 0)::float8 AS infeasible_cost_usd
     FROM request_logs
     WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen', 'eval_live')
       AND to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') BETWEEN ${range.fromDay} AND ${range.toDay}
@@ -165,6 +189,8 @@ function toRollupRow(r: Record<string, unknown>): UsageRollupRow {
     costUsd: Number(r.cost_usd),
     platformCostUsd: Number(r.platform_cost_usd),
     baselineCostUsd: Number(r.baseline_cost_usd),
+    servingCostUsd: Number(r.serving_cost_usd),
+    infeasibleCostUsd: Number(r.infeasible_cost_usd),
   };
 }
 
@@ -245,8 +271,10 @@ export function sumRollup(rows: UsageRollupRow[]): UsageTotals {
       costUsd: acc.costUsd + r.costUsd,
       platformCostUsd: acc.platformCostUsd + r.platformCostUsd,
       baselineCostUsd: acc.baselineCostUsd + r.baselineCostUsd,
+      servingCostUsd: acc.servingCostUsd + r.servingCostUsd,
+      infeasibleCostUsd: acc.infeasibleCostUsd + r.infeasibleCostUsd,
     }),
-    { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0, baselineCostUsd: 0 },
+    { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, platformCostUsd: 0, baselineCostUsd: 0, servingCostUsd: 0, infeasibleCostUsd: 0 },
   );
 }
 
