@@ -7,7 +7,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteShell } from '@/components/site-header';
-import { listIssues, RESEARCH_TITLE } from '@/lib/research';
+import { correctionsForByline, listIssues, RESEARCH_TITLE } from '@/lib/research';
 import { getResearchAuthor } from '@/lib/research-authors';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,7 @@ export default async function AuthorPage({ params }: Params) {
   const latestWriter = issues.find((i) => i.writer?.runId)?.writer;
   const generation = latestWriter?.model?.startsWith('delta:') ? latestWriter.model.slice('delta:'.length) : null;
   const verifiedCount = issues.filter((i) => i.writer?.verifiedBy).length;
+  const corrections = correctionsForByline(a.name);
 
   return (
     <SiteShell current="research">
@@ -91,10 +92,36 @@ export default async function AuthorPage({ params }: Params) {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Corrections</h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-soft">
-            No corrections on record. Every correction associated with {a.name} will be listed here, permanently.
-          </p>
+          <h2 className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">
+            Corrections{corrections.length > 0 && <> · {corrections.length}</>}
+          </h2>
+          {corrections.length === 0 ? (
+            <p className="mt-2 text-[15px] leading-relaxed text-soft">
+              No corrections on record. Every correction associated with {a.name} will be listed here, permanently.
+            </p>
+          ) : (
+            <>
+              <p className="mt-2 text-[15px] leading-relaxed text-soft">
+                Every correction associated with {a.name} is listed here, permanently. A corrected issue keeps its
+                original address and carries the correction in its own text — nothing is quietly rewritten.
+              </p>
+              <ul className="mt-4 space-y-5">
+                {corrections.map((c) => (
+                  <li key={`${c.slug}-${c.at}`} className="border-l-2 border-[#b8b3a6] pl-4">
+                    <div className="font-mono text-[11.5px] text-faint">
+                      {c.at.slice(0, 10)} ·{' '}
+                      <Link href={`/research/${c.slug}`} className="text-ink hover:text-accent">{c.title}</Link>
+                    </div>
+                    <p className="mt-2 text-[15px] leading-relaxed text-soft">
+                      <span className="text-faint line-through">{c.was}</span>
+                    </p>
+                    <p className="mt-1 text-[15px] leading-relaxed text-ink">{c.now}</p>
+                    {c.why && <p className="mt-1.5 text-[14px] leading-relaxed text-soft">{c.why}</p>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
 
         <section className="mt-10 border border-dashed border-[#b8b3a6] bg-[#fbfaf7] px-5 py-4">
