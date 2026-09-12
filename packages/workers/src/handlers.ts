@@ -3,15 +3,15 @@
 // live-provider sweeps stay an operator-run script affair (scripts/m1b-sweep).
 import { fileURLToPath } from 'node:url';
 import {
-  redactPii, BOOTSTRAP_RESAMPLES, bootstrapMeanCi, costUsd, roundCost,
+  redactPii,   costUsd, roundCost,
   type ProviderId, seedFromString, sha256, strategyHash, suiteContentHash, wrapUntrustedData,
   UNTRUSTED_DATA_BEGIN, UNTRUSTED_DATA_END,
-  type ChatMessage, type ClusterId, type EvalItem, type Policy, type PriceTable, type StrategyConfig } from '@potion/core';
+  type ChatMessage, type ClusterId, type EvalItem, type Policy,  type StrategyConfig } from '@potion/core';
 import {
   listParkedRunsDue,
   markParkedRunReminded,
   addScannedModels,
-  loadModelRegistry,
+  
   listModelCatalog,
   singleModelLatencyP95,
   getFrontierById,
@@ -21,17 +21,17 @@ import {
   type LearningRunStatus,
   approvedRubricForCluster,
   retireEvalResultsByItemIds,
-  certificationStateForCluster,
-  claimJobExecution,
-  completeJobExecution,
+  
+  
+  
   derivedSuiteIdFor,
   insertClusterRubric,
   insertJudgeCalibration,
-  insertSuiteCertificationTx,
+  
   loadDerivedSuite,
   purgeDerivedSuiteItems,
   invalidateDriftedCertifications,
-  computeSuiteContentHash,
+  
   upsertDerivedSuite,
   backfillRedactSpans,
   distinctSampledTargets,
@@ -39,24 +39,24 @@ import {
   evaluateGuarantee,
   listPoliciesWithGuarantee,
   activeIncumbent,
-  getPolicyById,
-  insertIncidentRow,
-  insertGuaranteeVerdict,
+  
+  
+  
   pairedQualities,
-  type UnpairableItem,
-  resolveAdvisoryWithEvidence,
-  resolveIncidentWithEvidence,
-  resolveRollbackTarget,
-  appendIncidentVerifyAttempt,
-  getIncidentByIdForOrg,
+  
+  
+  
+  
+  
+  
   latestActiveRollback,
   listOpenAdvisories,
   markAdvisoryEscalated,
-  markRecoveryUnconfirmed,
-  openContractualIncidentForTuple,
+  
+  
   stampIncidentDetail,
   strategyConfigs,
-  type DbHandle,
+  
   type GuaranteeEvaluation,
   type PotionDb,
   recordModelFailure,
@@ -65,26 +65,26 @@ import {
 } from '@potion/db';
 // ---- M4 #33 alerts + #35 budget autopilot (SPEC §13.5/§13.7) ----
 import {
-  ALERT_EVENTS,
+  
   BUDGET_ZSCORE_THRESHOLD,
   dailySpendSeries,
   forecastMtdUsd,
   getBudget,
-  insertAlertDelivery,
+  
   listBudgets,
-  matchingAlertRules,
+  
   mtdSpendUsd,
   recordBudgetEvent,
-  redactUrl,
-  redactUrlsInText,
+  
+  
   spendZScore,
   utcDay,
   warnAtUsd,
-  type AlertEvent,
-  type AlertRuleRow,
+  
+  
   type BudgetEventKind,
 } from '@potion/db';
-import type { PotionQueue } from '@potion/queue';
+import type {  } from '@potion/queue';
 // ---- end M4 #33/#35 imports ----
 import {
   BudgetCapError,
@@ -102,7 +102,7 @@ import {
   type StaleCounts,
 } from '@potion/harness';
 import { perCallRequestLogSink, reconcileMetering } from './spend-sink.js';
-import { createProviders, ENV_VAR_BY_PROVIDER, loadPrices } from '@potion/providers';
+import { createProviders, ENV_VAR_BY_PROVIDER } from '@potion/providers';
 // ---- M4b #37 autoresearcher (SPEC §15) ----
 import {
   diffModelListings,
@@ -161,8 +161,8 @@ import {
   type TraceClusterSource,
 } from '@potion/db';
 import type { SuiteManifest } from '@potion/harness';
-import type { JobKind } from './jobs.js';
-import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload, GuaranteeSuiteVerifyPayload, LabRunJobPayload, LearningProbePayload, RubricGeneratePayload, SuiteCertifyPayload, TracesClusterPayload, TracesPurgePayload } from './jobs.js';
+import type {  } from './jobs.js';
+import type { FrontierLiveSweepPayload, FrontierPlatformSweepPayload,  LabRunJobPayload, LearningProbePayload, RubricGeneratePayload,  TracesClusterPayload, TracesPurgePayload } from './jobs.js';
 import { filterByCapability, isRefusal, learningAutonomyFromEnv, planProbe } from './learning.js';
 import {
   apiKeys,
@@ -200,7 +200,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 // ---- end M4b #37 imports ----
 import type { ArtifactStore } from '@potion/artifacts';
 import type {
-  AlertsDispatchPayload,
+  
   BudgetEvaluatePayload,
   EvalRunPayload,
   GuaranteeEvaluatePayload,
@@ -212,33 +212,32 @@ import type {
   SweepRunPayload,
 } from './jobs.js';
 
+// ---------------------------------------------------------------------------
+// EXTRACTED 2026-09-09 — pure moves out of a 6,709-line file, re-exported here
+// so every existing import site keeps working unchanged.
+//
+// Explicit re-export rather than `export *` for handler-shared: registryPrices
+// was PRIVATE to this file and stays off the public surface.
+// ---------------------------------------------------------------------------
+export {
+  RECOVERY_UNCONFIRMED_AFTER, AGENT_SUITE_ITEM_CAP_V2,
+  LIVE_SWEEP_ANSWER_MAX_TOKENS, LIVE_SWEEP_JUDGE_MAX_TOKENS,
+  type JobContext, type WorkerHandler,
+} from './handler-shared.js';
+export * from './alerts-job.js';
+export * from './suite-verify-job.js';
+import {
+  registryPrices,  AGENT_SUITE_ITEM_CAP_V2,
+  LIVE_SWEEP_ANSWER_MAX_TOKENS, LIVE_SWEEP_JUDGE_MAX_TOKENS,
+  type JobContext, type WorkerHandler,
+} from './handler-shared.js';
+import { alertsDispatchHandler,  emitAlertEvent } from './alerts-job.js';
+import {
+  guaranteeSuiteVerifyHandler, suiteCertifyHandler, withDeliveryGuard, 
+} from './suite-verify-job.js';
 
-/**
- * The price table every handler should read: THE REGISTRY, from the database.
- *
- * S5 moved the catalog out of prices.json, which a scan used to grow with
- * writeFileSync — so discoveries died on the next redeploy and never reached
- * the running process. Reading the db here is what makes a scan take effect
- * IMMEDIATELY, in-process, for every later cycle and sweep in the same run.
- *
- * It also fixes a bug this move introduced and an existing test caught: the
- * scan diffed new listings against the FILE. With writes redirected to the
- * database, the file never changed, so every re-scan would have re-discovered
- * the same models forever and re-enqueued a cycle for each.
- *
- * Falls back to the file when the registry is empty or unreadable. A stale
- * catalog is a worse answer than a fresh one and a far better answer than
- * none — an empty price table resolves no models at all.
- */
-async function registryPrices(ctx: { db: PotionDb; pricesPath: string }): Promise<PriceTable> {
-  try {
-    const registry = await loadModelRegistry(ctx.db);
-    if (registry) return registry as PriceTable;
-  } catch {
-    // fall through to the seed file
-  }
-  return loadPrices(ctx.pricesPath).table;
-}
+
+
 
 
 /** Repo-root prices.json — works from src/ (tsx/vitest) and dist/. */
@@ -252,60 +251,7 @@ export const DEFAULT_EVAL_CAP_USD = 10;
 /** Budget-fit tolerance shared with scripts/m1b-sweep (IEEE754 noise). */
 const BUDGET_TOLERANCE = 1e-9;
 
-/** Everything a handler needs beyond its payload. */
-export interface JobContext {
-  db: PotionDb;
-  dbHandle: DbHandle;
-  artifacts?: ArtifactStore | undefined;
-  pricesPath: string;
-  suitesDir?: string | undefined;
-  /** M4 #33/#35: the queue the worker consumes on. Handlers that EMIT
-   * follow-up jobs (guarantee:evaluate breach → alerts:dispatch;
-   * budget:evaluate event → alerts:dispatch) enqueue here when present,
-   * else fall back to the in-process path. */
-  queue?: PotionQueue | undefined;
-  /** M5 #36: platform embedder for agent-session clustering (structural
-   * twin of @potion/cluster's Embedder — workers deliberately do not depend
-   * on the cluster package). */
-  embedder?: { embed(t: string[]): Promise<number[][]> } | undefined;
-  /**
-   * G2.8: which KIND of embedder the above is. The cosine threshold that
-   * works for one is catastrophic for the other (G0.5: 96% @0.2 vs 6% @0.62
-   * on real embeddings), and the handler cannot tell them apart by duck
-   * typing. Absent → the handler warns rather than guesses.
-   */
-  embedderKind?: 'mock' | 'live' | undefined;
-  /** M5 #36: dir for synthesized agent replay suites (suite v2 layout).
-   * Default: the harness repo suites dir (SUITES_V2_DIR), mirroring the
-   * prices.json precedent — tests/walkthrough override to a tmp copy. */
-  suitesV2Dir?: string | undefined;
-  /**
-   * F10: which DELIVERY of the job this is. Absent when a handler is called
-   * directly (tests, operator scripts) — such a call is deliberate by
-   * construction, so the delivery guard lets it run unguarded.
-   */
-  delivery?: { jobId: string; attempt: number } | undefined;
-}
 
-/**
- * A job handler, keyed by job name.
- *
- * `R` carries the handler's RESULT type (2026-09-02). Every concrete handler
- * below already annotates its own return — `: Promise<EvalRunResult>` and so
- * on — but annotating the const as `WorkerHandler<'eval:run'>` erased that to
- * `unknown`, because the declared type of the binding wins. Anything reading a
- * handler's result (tests, operator scripts, the in-process callers) then got
- * `unknown` and had to cast its way back to the type the handler already
- * promised, which is how a fixture drifts out of shape unnoticed.
- *
- * Defaulted to `unknown`, so every existing `WorkerHandler<'job:name'>`
- * annotation keeps working unchanged; pass the second argument where the
- * result is read.
- */
-export type WorkerHandler<K extends keyof JobPayloads = keyof JobPayloads, R = unknown> = (
-  payload: JobPayloads[K],
-  ctx: JobContext,
-) => Promise<R>;
 
 async function writeJsonArtifact(
   artifacts: ArtifactStore | undefined,
@@ -554,10 +500,6 @@ export const GUARANTEE_VERIFY_SLA_MIN = 240;
  * throttled on max(createdAt, lastVerifyAttemptAt, verifyEnqueuedAt) so a
  * queued-but-not-yet-run verify does not re-enqueue every 60s sweep. */
 export const VERIFY_RETRY_MIN = 30;
-/** Consecutive NON-confident all-clears on a restore verify before
- * 'guarantee_recovery_unconfirmed' escalates for human review (owner
- * refinement: uncertainty never auto-restores and never silently persists). */
-export const RECOVERY_UNCONFIRMED_AFTER = 3;
 
 export interface GuaranteeEvaluateResult {
   /** Rolling evaluations performed (1 per-target; N in sweep mode). */
@@ -917,261 +859,6 @@ export const guaranteeEvaluateHandler: WorkerHandler<'guarantee:evaluate'> =
   createGuaranteeEvaluateHandler({});
 
 // ---------------------------------------------------------------------------
-// alerts:dispatch — alert delivery (M4 #33, SPEC §13.5). One job per alert
-// EVENT; the handler resolves the org's ENABLED rules subscribed to the
-// event and POSTs each one. Per-rule outcomes land in alert_deliveries
-// (audit). target_url NEVER leaves alert_rules: delivery rows and error
-// text are query-string-redacted (webhook secrets ride query strings).
-//
-// RETRY SEMANTICS (documented): delivery retries are PER-RULE INLINE (up to
-// ALERT_DISPATCH_ATTEMPTS with backoff). The memory queue driver does not
-// retry jobs at all, and a job-level retry would re-deliver the rules that
-// already succeeded (duplicate notifications) — inline per-rule attempts
-// keep delivery idempotent across both drivers. The bullmq driver's 3×
-// job-level retry still covers infrastructure faults (db down mid-job).
-// ---------------------------------------------------------------------------
-
-/** Attempts per rule before the delivery is marked failed. */
-export const ALERT_DISPATCH_ATTEMPTS = 3;
-/** Per-attempt POST timeout. */
-export const ALERT_DISPATCH_TIMEOUT_MS = 5_000;
-/** Backoff BEFORE attempt i+1 (ms) — index 0 is the first attempt. */
-export const ALERT_DISPATCH_BACKOFF_MS = [0, 50, 150] as const;
-
-/** Injectable seams (tests / server in-process fallback). */
-export interface AlertDispatchDeps {
-  fetchImpl?: typeof fetch;
-  /** Email transport for mailto: rules (2026-08-24) — the server registers
-   * its Resend sender; without one a mailto rule records a failed delivery
-   * instead of silently succeeding. */
-  sendEmail?: (msg: { to: string; subject: string; text: string }) => Promise<void>;
-  sleep?: (ms: number) => Promise<void>;
-  now?: () => Date;
-  /** Failure/observability log — receives ONLY redacted text. */
-  log?: (msg: string) => void;
-  /** G2.2: SLA latency observation per DELIVERED rule (server-registered). */
-  meter?: { observeAlertNotificationLatency?(o: { orgId: string; event: string; latencyMs: number }): void };
-}
-
-/** Slack-compatible text form of an alert event (kind=slack → {text}). */
-export function alertSlackText(payload: AlertsDispatchPayload): string {
-  const detail = JSON.stringify(payload.detail ?? {});
-  return `*[potion] ${payload.event}* org=${payload.orgId} — ${detail}`;
-}
-
-/** The POST body for a rule kind: webhook gets the contract JSON
- * {event, org_id, detail, ts}; slack gets {text} (incoming-webhook shape). */
-export function alertRequestBody(
-  kind: AlertRuleRow['kind'],
-  payload: AlertsDispatchPayload,
-  ts: string,
-): string {
-  if (kind === 'slack') return JSON.stringify({ text: alertSlackText(payload) });
-  return JSON.stringify({
-    event: payload.event,
-    org_id: payload.orgId,
-    detail: payload.detail ?? {},
-    ts,
-  });
-}
-
-export interface AlertDeliveryOutcome {
-  ruleId: string;
-  kind: AlertRuleRow['kind'];
-  status: 'delivered' | 'failed';
-  attempts: number;
-  /** Query-string-redacted failure detail (null on success). */
-  lastError: string | null;
-}
-
-export interface AlertsDispatchResult {
-  orgId: string;
-  event: AlertEvent;
-  /** Enabled rules matching the event subscription. */
-  matched: number;
-  delivered: number;
-  failed: number;
-  outcomes: AlertDeliveryOutcome[];
-}
-
-/** POST one rule with inline per-rule retry; append the audit row. */
-async function deliverByEmail(
-  db: PotionDb,
-  rule: AlertRuleRow,
-  payload: AlertsDispatchPayload,
-  body: string,
-  ts: string,
-  deps: AlertDispatchDeps,
-): Promise<AlertDeliveryOutcome> {
-  const to = rule.targetUrl.slice('mailto:'.length);
-  let delivered = false;
-  let lastError: string | null = null;
-  if (deps.sendEmail === undefined) {
-    lastError = 'no email transport registered for mailto rules';
-  } else {
-    try {
-      await deps.sendEmail({
-        to,
-        subject: `[potion alert] ${payload.event} — org ${payload.orgId}`,
-        text: `Alert: ${payload.event}\nOrg: ${payload.orgId}\nAt: ${ts}\n\n${body}\n`,
-      });
-      delivered = true;
-    } catch (e) {
-      lastError = e instanceof Error ? e.message : String(e);
-    }
-  }
-  await insertAlertDelivery(db, {
-    ruleId: rule.id,
-    event: payload.event,
-    status: delivered ? 'delivered' : 'failed',
-    attempts: 1,
-    ...(lastError !== null ? { lastError } : {}),
-    ...(delivered ? { deliveredAt: deps.now?.() ?? new Date() } : {}),
-    ...(payload.incidentId !== undefined ? { incidentId: payload.incidentId } : {}),
-  });
-  return { ruleId: rule.id, kind: rule.kind, status: delivered ? 'delivered' : 'failed', attempts: 1, lastError };
-}
-
-async function deliverToRule(
-  db: PotionDb,
-  rule: AlertRuleRow,
-  payload: AlertsDispatchPayload,
-  deps: AlertDispatchDeps,
-): Promise<AlertDeliveryOutcome> {
-  const fetchImpl = deps.fetchImpl ?? fetch;
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const now = deps.now ?? (() => new Date());
-  const ts = now().toISOString();
-  const body = alertRequestBody(rule.kind, payload, ts);
-  // mailto: rules deliver by email (2026-08-24) — same retries, same
-  // delivery record, a different transport.
-  if (rule.targetUrl.startsWith('mailto:')) {
-    return deliverByEmail(db, rule, payload, body, ts, deps);
-  }
-  // The redacted target is safe to put in logs/audit; the raw URL is not.
-  const redactedTarget = redactUrl(rule.targetUrl);
-  let attempts = 0;
-  let lastError: string | null = null;
-  let delivered = false;
-  for (let i = 0; i < ALERT_DISPATCH_ATTEMPTS; i++) {
-    const backoff = ALERT_DISPATCH_BACKOFF_MS[Math.min(i, ALERT_DISPATCH_BACKOFF_MS.length - 1)]!;
-    if (backoff > 0) await sleep(backoff);
-    attempts += 1;
-    try {
-      const res = await fetchImpl(rule.targetUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body,
-        signal: AbortSignal.timeout(ALERT_DISPATCH_TIMEOUT_MS),
-      });
-      if (res.ok) {
-        delivered = true;
-        lastError = null;
-        break;
-      }
-      lastError = `HTTP ${res.status} from ${redactedTarget}`;
-    } catch (err) {
-      // fetch errors never embed the URL, but redact defensively anyway.
-      lastError = redactUrlsInText(
-        `POST ${redactedTarget} failed: ${(err as Error).message}`,
-      );
-    }
-  }
-  // G2.2 SLA latency: measured at the SUCCESSFUL POST against the clock
-  // the EMITTER bound (advisory creation on the hierarchy path). Clamped
-  // ≥ 0 against db/app clock skew. A failed delivery has NO latency —
-  // the row still carries the clock so the gap is auditable.
-  const clockStartMs = payload.clockStartAt !== undefined ? Date.parse(payload.clockStartAt) : NaN;
-  const latencyMs =
-    delivered && Number.isFinite(clockStartMs)
-      ? Math.max(0, now().getTime() - clockStartMs)
-      : null;
-  await insertAlertDelivery(db, {
-    ruleId: rule.id,
-    event: payload.event,
-    status: delivered ? 'delivered' : 'failed',
-    attempts,
-    ...(lastError !== null ? { lastError } : {}),
-    ...(delivered ? { deliveredAt: now() } : {}),
-    ...(payload.incidentId !== undefined ? { incidentId: payload.incidentId } : {}),
-    ...(Number.isFinite(clockStartMs) ? { clockStartAt: new Date(clockStartMs) } : {}),
-    ...(latencyMs !== null ? { latencyMs } : {}),
-  });
-  if (latencyMs !== null) {
-    deps.meter?.observeAlertNotificationLatency?.({
-      orgId: payload.orgId,
-      event: payload.event,
-      latencyMs,
-    });
-  }
-  if (!delivered) {
-    deps.log?.(
-      `alerts: rule ${rule.id} (${rule.kind}) event ${payload.event} FAILED after ` +
-        `${attempts} attempt(s): ${lastError ?? 'unknown'}`,
-    );
-  }
-  return { ruleId: rule.id, kind: rule.kind, status: delivered ? 'delivered' : 'failed', attempts, lastError };
-}
-
-/**
- * Dispatch one alert event to the org's matching enabled rules. Shared by
- * the alerts:dispatch job handler AND the server's in-process fire-and-
- * forget fallback (no queue on ctx — see apps/server/src/alerts.ts).
- */
-export async function dispatchAlertEvent(
-  db: PotionDb,
-  payload: AlertsDispatchPayload,
-  deps: AlertDispatchDeps = {},
-): Promise<AlertsDispatchResult> {
-  if (!ALERT_EVENTS.includes(payload.event)) {
-    throw new Error(`alerts:dispatch unknown event '${payload.event}'`);
-  }
-  const rules = await matchingAlertRules(db, payload.orgId, payload.event);
-  const outcomes: AlertDeliveryOutcome[] = [];
-  for (const rule of rules) {
-    outcomes.push(await deliverToRule(db, rule, payload, deps));
-  }
-  return {
-    orgId: payload.orgId,
-    event: payload.event,
-    matched: rules.length,
-    delivered: outcomes.filter((o) => o.status === 'delivered').length,
-    failed: outcomes.filter((o) => o.status === 'failed').length,
-    outcomes,
-  };
-}
-
-/** alerts:dispatch handler factory (G2.2): the server registers it with
- * its observability meter + log sink; the meter-less default below keeps
- * bare workers working. */
-export function createAlertsDispatchHandler(opts: {
-  deps?: AlertDispatchDeps;
-}): WorkerHandler<'alerts:dispatch'> {
-  return async (payload: AlertsDispatchPayload, ctx: JobContext): Promise<AlertsDispatchResult> =>
-    dispatchAlertEvent(ctx.db, payload, opts.deps ?? {});
-}
-
-export const alertsDispatchHandler: WorkerHandler<'alerts:dispatch'> =
-  createAlertsDispatchHandler({});
-
-/**
- * Emit an alert event: enqueue alerts:dispatch when the job context carries
- * a queue, else deliver in-process (the same fallback contract the server
- * uses — see apps/server/src/alerts.ts). NEVER throws into the caller's
- * control flow beyond queue/db faults the caller already tolerates; callers
- * wrap in try/catch like every other fire-and-forget emission.
- */
-export async function emitAlertEvent(
-  ctx: Pick<JobContext, 'db' | 'queue'>,
-  payload: AlertsDispatchPayload,
-): Promise<void> {
-  if (ctx.queue) {
-    await ctx.queue.enqueue('alerts:dispatch', payload);
-    return;
-  }
-  await dispatchAlertEvent(ctx.db, payload);
-}
-
 // ---------------------------------------------------------------------------
 // budget:evaluate — budget autopilot sweep (M4 #35, SPEC §13.7). Per org
 // with a budget row:
@@ -2306,15 +1993,6 @@ export const AGENT_EXEMPLAR_CAP = 8;
  * run-to-run (the item-(0) discipline).
  */
 export const AGENT_STEPS_PER_SESSION_CAP = 8;
-/**
- * Step items per cluster suite, filled session-ROUND-ROBIN in deterministic
- * session order so no long session monopolizes the suite. At the capstone
- * corpus (23 sessions × ~40 steps ≈ 920 raw) this yields 23×8 = 184 items —
- * the volume the cost projection in the item plan is computed against.
- * Selection happens HERE, in synthesis: the db-side roster cap is a sorted-id
- * prefix and would otherwise select steps by hash order.
- */
-export const AGENT_SUITE_ITEM_CAP_V2 = 200;
 
 /** Evenly-spaced deterministic sample of step indices: first + last always,
  * interior at round(k·(n−1)/(cap−1)). Exported for the volume tests. */
@@ -3415,8 +3093,6 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate', RubricGener
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_LIVE_SWEEP_CAP_USD = 5;
-export const LIVE_SWEEP_JUDGE_MAX_TOKENS = 768;
-export const LIVE_SWEEP_ANSWER_MAX_TOKENS = 1600;
 
 export class OrgBudgetRefusalError extends Error {
   constructor(orgId: string, mtdUsd: number, capUsd: number, monthlyCapUsd: number) {
@@ -5375,1131 +5051,6 @@ export function createLabGrantRevokeHandler(
 export const labGrantRevokeHandler: WorkerHandler<'lab:grant-revoke', LabGrantRevokeResult> = createLabGrantRevokeHandler();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// G2.1 — guarantee:suite-verify: the trust hierarchy's CONTRACTUAL leg.
-//
-// The advisory serve leg only ever trips a wire; THIS job renders the
-// verdict, by re-evaluating the serving strategy and the org's designated
-// incumbent on the derived suite and measuring per-item retention
-// r_i = serving_i / incumbent_i. Runs in the env's provider mode — mock
-// deployments render mock-LABELED verdicts (providerMode is stamped on
-// every verdict; modes structurally cannot mix in the pairing). Every
-// non-verdict outcome is a RECORDED refusal — appended to the incident's
-// durable verifyAttempts ledger (G2.2) — never a silent drop; the advisory
-// stays open and the sweep's retry pass re-enqueues the verify.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const DEFAULT_SUITE_VERIFY_CAP_USD = 5;
-/**
- * Per-(item × strategy) budget slice for the DERIVED default cap
- * (post-capstone item 2). Empirical: capstone leg 5b metered $1.1045 over
- * 23 items × 2 strategies ≈ $0.024/cell at the live ceilings; $0.03 gives
- * ~25% headroom. A step-level suite (184 items × 2 strategies → ~$11) blows
- * the flat $5 default by design — the default must scale with the suite or
- * every step-suite verify would be refused by its own preflight. An explicit
- * payload capUsd always wins; the fail-closed budget pre-check and the
- * projection preflight are unchanged and still bind.
- */
-export const SUITE_VERIFY_CAP_PER_CELL_USD = 0.03;
-export function deriveSuiteVerifyCapUsd(itemCount: number, strategies = 2): number {
-  return Math.max(DEFAULT_SUITE_VERIFY_CAP_USD, itemCount * strategies * SUITE_VERIFY_CAP_PER_CELL_USD);
-}
-/** Items where the incumbent itself scores below this are EXCLUDED from
- * retention (smoothing would fabricate retention on items the baseline
- * fails); the exclusion count is always reported. */
-export const SUITE_VERIFY_EPSILON = 0.05;
-export const DEFAULT_RETENTION_FLOOR = 0.9;
-/** Minimum usable pairs for a verdict (mirrors GUARANTEE_MIN_SAMPLES). */
-export const SUITE_VERIFY_MIN_PAIRS = 5;
-
-/** One item's contribution to a retention verdict (G2.8-followup). */
-export interface RetentionPairEvidence {
-  itemId: string;
-  candidateQuality: number;
-  incumbentQuality: number;
-  ratio: number;
-}
-
-export interface SuiteVerifyRetention {
-  mean: number;
-  ci95: [number, number];
-  seed: number;
-  resamples: number;
-  pairs: number;
-  excludedPairs: number;
-  epsilon: number;
-  floor: number;
-  /** The interval's alpha AFTER family-wise correction (2026-09-11): 0.05
-   * divided by `comparisons`. 0.05 when no correction was requested. */
-  alpha?: number;
-  /** The size of the comparison family this verdict belongs to: the
-   * strategies tested beside the reference in this run PLUS the earlier
-   * looks at the same cluster since its last applied promotion — a
-   * re-measure every eight samples is a repeated look, and P1-1 measured
-   * the uncorrected version of that at 41.5% family-wise. */
-  comparisons?: number;
-  /** The per-item evidence, ordered by itemId. A verdict without this cannot
-   * be diffed against another verdict, which is how G2.8's contradiction
-   * became unexplainable. */
-  pairEvidence: RetentionPairEvidence[];
-}
-
-/**
- * Pure retention arithmetic (unit-testable): epsilon exclusion → guards →
- * seeded bootstrap over per-item ratios. Returns either the retention
- * block or the insufficiency reason — never both, never neither.
- */
-export function computeRetention(
-  pairs: Array<{ itemId: string; candidateQuality: number; incumbentQuality: number }>,
-  opts: { seedKey: string; floor: number; epsilon?: number; minPairs?: number; comparisons?: number },
-): { retention: SuiteVerifyRetention | null; insufficient: string | null } {
-  const epsilon = opts.epsilon ?? SUITE_VERIFY_EPSILON;
-  const minPairs = opts.minPairs ?? SUITE_VERIFY_MIN_PAIRS;
-  const usable = pairs.filter((p) => p.incumbentQuality >= epsilon);
-  const excludedPairs = pairs.length - usable.length;
-  if (usable.length < minPairs || excludedPairs > pairs.length / 2) {
-    return {
-      retention: null,
-      insufficient: `${usable.length} usable pairs (${excludedPairs} excluded below epsilon ${epsilon}) — need ${minPairs}+ with a usable majority`,
-    };
-  }
-  // G2.8-followup: SORT BY ITEM ID before doing anything order-sensitive.
-  //
-  // Two order dependencies lived here, and both reached a contractual number:
-  //   1. the seed was `sha256(JSON.stringify(ratios))` over the ratio array in
-  //      whatever order the rows arrived, so a different scan order produced a
-  //      different seed and therefore a different CI95;
-  //   2. `bootstrapMeanCi` draws `values[floor(rand()*n)]`, so even with a
-  //      fixed seed the resamples land on different items when the array is
-  //      permuted — the mean is order-invariant, the INTERVAL is not.
-  // Sorting by itemId makes the pair sequence a function of the pair SET.
-  // (`pairedQualities` now also orders in SQL; this is the belt to that
-  // braces, because computeRetention is exported and unit-tested directly with
-  // caller-supplied arrays.)
-  const ordered = [...usable].sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
-  const ratios = ordered.map((p) => p.candidateQuality / p.incumbentQuality);
-  // Seed from the item-keyed pair CONTENT, not from the bare ratio array: two
-  // different pairings can produce the same multiset of ratios, and they are
-  // not the same evidence.
-  const seedBody = ordered
-    .map((p) => `${p.itemId}:${p.candidateQuality}/${p.incumbentQuality}`)
-    .join('|');
-  const seed = seedFromString(`${opts.seedKey}|${ordered.length}|${sha256(seedBody)}`);
-  // Family-wise correction (P1-1, extended to the learning period
-  // 2026-09-11): Bonferroni over the comparisons this verdict is one of. A
-  // smaller alpha widens the interval, which is what the lower-bound law
-  // then tests — the gate gets deafer as the family grows, never looser.
-  const comparisons = Math.max(1, Math.floor(opts.comparisons ?? 1));
-  const alpha = 0.05 / comparisons;
-  const { mean, ci95 } = bootstrapMeanCi(ratios, seed, BOOTSTRAP_RESAMPLES, alpha);
-  return {
-    retention: {
-      mean,
-      ci95: ci95 as [number, number],
-      seed,
-      resamples: BOOTSTRAP_RESAMPLES,
-      pairs: ordered.length,
-      excludedPairs,
-      epsilon,
-      floor: opts.floor,
-      alpha,
-      comparisons,
-      // The per-item evidence behind this number, ordered. Without it a later
-      // disagreement between two verdicts is undiagnosable — which is exactly
-      // the position G2.8 ended in.
-      pairEvidence: ordered.map((p) => ({
-        itemId: p.itemId,
-        candidateQuality: p.candidateQuality,
-        incumbentQuality: p.incumbentQuality,
-        ratio: p.candidateQuality / p.incumbentQuality,
-      })),
-    },
-    insufficient: null,
-  };
-}
-
-export interface GuaranteeSuiteVerifyResult {
-  /** The durable guarantee_verdicts row this run wrote (0029). Null never
-   * happens in practice — the write is load-bearing — but the field is
-   * nullable so pre-0029 stored job results still parse. */
-  verdictId: string | null;
-  outcome:
-    | 'contractual-breach'
-    | 'all-clear'
-    | 'self-incumbent'
-    | 'no-incumbent'
-    | 'incumbent-unresolvable'
-    | 'no-suite'
-    | 'insufficient-pairs'
-    | 'budget-refused'
-    /** Post-capstone item 1 guard: a MOCK verify against a cluster that holds
-     * LIVE evidence is a false-live event — the leg-5c defect (env unset →
-     * silent mock degrade → 1.0645 "all-clear" on a live contract). Refused
-     * and recorded, never stamped-and-proceeded. */
-    | 'mode-mismatch';
-  providerMode: ProviderMode;
-  runId: string | null;
-  spendUsd: number;
-  retention: SuiteVerifyRetention | null;
-  /** The contractual incident this verdict lands on. On a DEDUPED breach
-   * (an unresolved contractual incident already covers the tuple — G2.2)
-   * this is the EXISTING incident's id and no new row/alert is produced. */
-  verdictIncidentId: string | null;
-  advisoryResolved: boolean;
-  /** G2.2 auto-restore: the rollback incident lifted on CONFIDENT recovery
-   * (retention CI95 lower ≥ floor); null otherwise. */
-  restoredIncidentId: string | null;
-  /** G2.2: 'guarantee_recovery_unconfirmed' escalated this run (Nth
-   * consecutive non-confident all-clear on a restore verify). */
-  recoveryUnconfirmed: boolean;
-  detail: string | null;
-  /** Post-capstone item 3 (Decision 2, owner-selected full gating): when the
-   * suite is UNCERTIFIED the verdict is still measured and durably recorded,
-   * but contractual effects — incident open/dedupe, advisory resolution,
-   * auto-restore, alert emission — are WITHHELD: an uncertified suite is one
-   * the instrument declined to vouch for; letting it page a customer or roll
-   * back traffic would act on evidence we won't publish. Absent on outcomes
-   * with no contractual reach (refusals, self-incumbent identity). */
-  contractualEffects?: 'applied' | 'withheld-uncertified';
-}
-
-/** Provenance the verdict row needs that the result shape never carried —
- * accumulated as the run learns it, so the ONE chokepoint write below has it
- * whatever the outcome. */
-interface VerdictProvenance {
-  incumbentHash: string | null;
-  incumbentDesignationId: string | null;
-  suiteId: string | null;
-  suiteVersion: string | null;
-  pricesVersion: string | null;
-  rubricHash: string | null;
-  calibrationId: string | null;
-  unpairable: UnpairableItem[];
-}
-
-const runSuiteVerify = async (
-  payload: GuaranteeSuiteVerifyPayload,
-  ctx: JobContext,
-  prov: VerdictProvenance,
-): Promise<Omit<GuaranteeSuiteVerifyResult, 'verdictId'>> => {
-  const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
-  const base = {
-    providerMode,
-    runId: null,
-    spendUsd: 0,
-    retention: null,
-    verdictIncidentId: null,
-    advisoryResolved: false,
-    restoredIncidentId: null,
-    recoveryUnconfirmed: false,
-    detail: null,
-  };
-
-  // Ownership — misuse, not an outcome: throw.
-  const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
-  const cluster = clusterRows[0];
-  if (!cluster) throw new Error(`unknown cluster '${payload.clusterId}'`);
-  if (cluster.orgId !== payload.orgId) {
-    throw new Error(`cluster '${payload.clusterId}' does not belong to org '${payload.orgId}'`);
-  }
-  const policyRow = await getPolicyById(ctx.db, payload.orgId, payload.policyId);
-  if (!policyRow) throw new Error(`unknown policy '${payload.policyId}' for org '${payload.orgId}'`);
-  const guarantee = policyRow.config.guarantee;
-  if (!guarantee) throw new Error(`policy '${payload.policyId}' carries no guarantee config`);
-
-  // G2.2: fetch the attached incidents UP FRONT — org-ownership misuse
-  // throws, and the advisory's db createdAt is the SLA clock the verdict's
-  // notification binds ("clocks start at advisory creation").
-  const advisoryRow = payload.advisoryIncidentId
-    ? await getIncidentByIdForOrg(ctx.db, payload.orgId, payload.advisoryIncidentId)
-    : null;
-  if (payload.advisoryIncidentId && (!advisoryRow || advisoryRow.kind !== 'advisory')) {
-    throw new Error(`advisory '${payload.advisoryIncidentId}' not found for org '${payload.orgId}'`);
-  }
-  const restoreRow = payload.restoreForIncidentId
-    ? await getIncidentByIdForOrg(ctx.db, payload.orgId, payload.restoreForIncidentId)
-    : null;
-  if (payload.restoreForIncidentId && (!restoreRow || restoreRow.kind !== 'rollback')) {
-    throw new Error(`rollback '${payload.restoreForIncidentId}' not found for org '${payload.orgId}'`);
-  }
-  // Every open-leaving outcome records a durable attempt on the attached
-  // incident(s) — the row is the lifecycle ledger (starved verification is
-  // visible evidence, never a lost job result).
-  const recordAttempt = async (outcome: string, detail: string | null): Promise<void> => {
-    const at = new Date().toISOString();
-    if (payload.advisoryIncidentId) {
-      await appendIncidentVerifyAttempt(ctx.db, payload.orgId, payload.advisoryIncidentId, { at, outcome, detail });
-    }
-    if (payload.restoreForIncidentId) {
-      await appendIncidentVerifyAttempt(ctx.db, payload.orgId, payload.restoreForIncidentId, { at, outcome, detail });
-    }
-  };
-
-  // Mode guard (post-capstone item 1, the companion to Decision 2's
-  // suite-certification gate): a mock verify on a cluster with LIVE evidence
-  // would render a mock verdict against a live contract — exactly the leg-5c
-  // false-live event (POTION_EVAL_PROVIDER unset → silent degrade → mock
-  // 1.0645 "all-clear" superseding a live 0.2707 breach). Certification
-  // asserts the suite measures what the guarantee promises; this refusal is
-  // its negative half — the instrument declines to measure a live contract in
-  // mock mode. A RECORDED outcome, not a throw: the 0029 chokepoint makes the
-  // refusal durable, recordAttempt keeps the advisory ledger honest, and the
-  // advisory stays open for a correctly-configured retry. Mock-on-mock stays
-  // fully allowed (the walkthrough world has no live evidence).
-  if (providerMode === 'mock' && (await hasLiveEvidence(ctx.db, payload.clusterId, payload.orgId))) {
-    const detail =
-      `mode mismatch: cluster '${payload.clusterId}' holds LIVE evidence but this verify would run ` +
-      'MOCK (POTION_EVAL_PROVIDER is not "live") — a mock verdict on a live-evidence cluster is a ' +
-      'false-live event; re-run with POTION_EVAL_PROVIDER=live. No spend occurred.';
-    await recordAttempt('mode-mismatch', detail);
-    return { ...base, outcome: 'mode-mismatch', detail };
-  }
-
-  // Designation — recorded outcomes (the advisory stays open).
-  const incumbent = await activeIncumbent(ctx.db, payload.orgId, payload.clusterId);
-  if (!incumbent) {
-    const detail = 'no active incumbent designation — designate one to enable retention verdicts';
-    await recordAttempt('no-incumbent', detail);
-    return { ...base, outcome: 'no-incumbent', detail };
-  }
-  prov.incumbentHash = incumbent.strategyHash;
-  prov.incumbentDesignationId = incumbent.id;
-  const loadCfg = async (hash: string): Promise<StrategyConfig | null> => {
-    const rows = await ctx.db.select().from(strategyConfigs).where(eq(strategyConfigs.hash, hash));
-    return rows[0]?.config ?? null;
-  };
-  const incumbentCfg = await loadCfg(incumbent.strategyHash);
-  if (!incumbentCfg) {
-    const detail = `incumbent strategy '${incumbent.strategyHash}' not in strategy_configs — re-designate`;
-    await recordAttempt('incumbent-unresolvable', detail);
-    return { ...base, outcome: 'incumbent-unresolvable', detail };
-  }
-  const servingCfg = await loadCfg(payload.servingStrategyHash);
-  if (!servingCfg) {
-    const detail = `serving strategy '${payload.servingStrategyHash}' not in strategy_configs`;
-    await recordAttempt('incumbent-unresolvable', detail);
-    return { ...base, outcome: 'incumbent-unresolvable', detail };
-  }
-  const floor = guarantee.retentionFloor ?? DEFAULT_RETENTION_FLOOR;
-
-  // Serving the incumbent itself: retention is 1.0 by identity — all-clear
-  // without spend (durable record on the advisory).
-  if (payload.servingStrategyHash === incumbent.strategyHash) {
-    let advisoryResolved = false;
-    if (payload.advisoryIncidentId) {
-      advisoryResolved =
-        (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
-          verdict: 'all-clear',
-          reason: 'self-incumbent',
-          providerMode,
-          floor,
-        })) !== null;
-    }
-    // G2.2 auto-restore: retention 1.0 by identity IS confident recovery.
-    let restoredIncidentId: string | null = null;
-    if (payload.restoreForIncidentId && restoreRow) {
-      const restored = await resolveIncidentWithEvidence(
-        ctx.db, payload.orgId, payload.restoreForIncidentId, 'rollback',
-        { resolvedBy: 'auto-restore', verdict: 'self-incumbent', providerMode, floor },
-      );
-      if (restored) {
-        restoredIncidentId = restored.id;
-        try {
-          await emitAlertEvent(ctx, {
-            orgId: payload.orgId,
-            event: 'guarantee_restored',
-            incidentId: restored.id,
-            clockStartAt: restoreRow.createdAt.toISOString(),
-            detail: { clusterId: payload.clusterId, fromStrategy: payload.servingStrategyHash, reason: 'self-incumbent', providerMode },
-          });
-        } catch {
-          // resolution is the durable record
-        }
-      }
-    }
-    return { ...base, outcome: 'self-incumbent', advisoryResolved, restoredIncidentId, detail: 'serving strategy IS the incumbent — retention 1.0 by identity' };
-  }
-
-  const suiteId = await derivedSuiteIdFor(ctx.db, payload.clusterId);
-  prov.suiteId = suiteId;
-  const loaded = await loadDerivedSuite(ctx.db, suiteId);
-  if (!loaded || loaded.items.length === 0) {
-    const detail = `derived suite '${suiteId}' is empty — nothing to verify against`;
-    await recordAttempt('no-suite', detail);
-    return { ...base, outcome: 'no-suite', detail };
-  }
-  prov.suiteVersion = loaded.suite.version;
-  // Default cap scales with the suite (step-level suites are ~8× larger);
-  // explicit payload capUsd always wins.
-  const capUsd = payload.capUsd ?? deriveSuiteVerifyCapUsd(loaded.items.length);
-
-  // FAIL-CLOSED budget refusal (live spend only) — RECORDED durably on the
-  // incident's ledger (G2.2 starved verification), no throw: the advisory
-  // stays open, its SLA clock keeps running, and the sweep keeps retrying.
-  if (providerMode === 'live') {
-    const budget = await getBudget(ctx.db, payload.orgId);
-    if (budget !== null && budget.hardStop) {
-      const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
-      if (mtd + capUsd > budget.monthlyCapUsd) {
-        const detail = `hard-stop budget would be exceeded (MTD $${mtd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly $${budget.monthlyCapUsd.toFixed(2)}) — no spend occurred`;
-        await recordAttempt('budget-refused', detail);
-        return { ...base, outcome: 'budget-refused', detail };
-      }
-    }
-  }
-
-  const prices = await registryPrices(ctx);
-  prov.pricesVersion = prices.version;
-  let judgeModelOverride: string | undefined;
-  if (providerMode === 'live') {
-    // Live reachability — explicit refusal, never a silent drop (G1.7
-    // live-leg finding: partial spend then ProviderAuthError).
-    const reachable = (p: string): boolean =>
-      p !== 'mock' &&
-      process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
-    const registry = buildRegistry(prices).filter((e) => reachable(e.provider));
-    const judgeEntry = classRepresentative(registry, 'judge');
-    if (!judgeEntry) {
-      throw new Error('suite-verify refused: no reachable live judge-class model (set OPENROUTER_API_KEY or peers) — no spend occurred');
-    }
-    judgeModelOverride = judgeEntry.alias;
-  }
-
-  // The paired re-eval: |org / mode-suffixed cache keys make the incumbent
-  // leg cheap on repeat verifies (resume:true). Live spend meters PER CALL
-  // as it occurs (post-capstone item 1) — the pre-0030 aggregate row billed
-  // summary.spendUsd at completion, which is cache-INCLUSIVE: the filed
-  // $1.1045 over-metering was THIS site re-billing a fully-cached re-verify.
-  // Cache hits never reach a provider, so they meter zero by construction.
-  const meter =
-    providerMode === 'live'
-      ? perCallRequestLogSink(ctx.db, {
-          orgId: payload.orgId,
-          clusterId: payload.clusterId,
-          status: 'eval_live',
-        })
-      : null;
-  const summary: RunSummary = await runEval(
-    {
-      suiteIds: [],
-      suiteV2Ids: [suiteId],
-      strategies: [servingCfg, incumbentCfg],
-      budgetCapUsd: capUsd,
-      provider: providerMode,
-      resume: true,
-      orgId: payload.orgId,
-      ...(judgeModelOverride !== undefined ? { judgeModelOverride } : {}),
-      ...(providerMode === 'live'
-        ? { judgeMaxTokens: LIVE_SWEEP_JUDGE_MAX_TOKENS, maxOutputTokens: LIVE_SWEEP_ANSWER_MAX_TOKENS }
-        : {}),
-    },
-    {
-      db: ctx.dbHandle,
-      pricesPath: ctx.pricesPath,
-      prices,
-      ...(meter !== null ? { spendSink: meter.sink } : {}),
-    },
-  );
-  // Completion RECONCILES the per-call record — it never writes spend anew.
-  await ctx.db.insert(evalRuns).values({
-    id: summary.runId,
-    options: {
-      suiteIds: [],
-      suiteV2Ids: [suiteId],
-      strategyHashes: [payload.servingStrategyHash, incumbent.strategyHash],
-      agentCluster: payload.clusterId,
-      purpose: 'guarantee:suite-verify',
-      ...(meter !== null
-        ? { metering: reconcileMetering(meter, summary, `suite-verify ${payload.clusterId}`) }
-        : {}),
-    },
-    budgetCapUsd: capUsd,
-    provider: providerMode,
-    status: 'completed',
-    spendUsd: summary.spendUsd,
-    orgId: payload.orgId,
-  });
-  const spent = { ...base, runId: summary.runId, spendUsd: summary.spendUsd };
-
-  // Retention over identical items, mode-filtered pairing.
-  const { pairs, unpairable } = await pairedQualities(ctx.db, {
-    clusterId: payload.clusterId,
-    candidateHash: payload.servingStrategyHash,
-    incumbentHash: incumbent.strategyHash,
-    pricesVersion: prices.version,
-    providerMode,
-    orgId: payload.orgId,
-    // THE VERDICT IS MEASURED ON THE SUITE IT STAMPS. Without this roster the
-    // pairing spans every generation the cluster has ever had (see
-    // pairedQualities' doc): a v2 verdict was being computed over abandoned
-    // v1 evidence, reporting more pairs than the suite has items.
-    itemIds: loaded.items.map((i) => i.id),
-  });
-  prov.unpairable = unpairable;
-  const computed = computeRetention(pairs, {
-    seedKey:
-      `suite-verify|${payload.orgId}|${payload.policyId}|${payload.clusterId}|` +
-      `${payload.servingStrategyHash}|${incumbent.strategyHash}`,
-    floor,
-  });
-  if (computed.retention === null) {
-    await recordAttempt('insufficient-pairs', computed.insufficient);
-    return { ...spent, outcome: 'insufficient-pairs', detail: computed.insufficient };
-  }
-  const retention = computed.retention;
-  const { mean, ci95 } = retention;
-  const approvedRubric = await approvedRubricForCluster(ctx.db, payload.clusterId);
-  prov.rubricHash = approvedRubric?.rubricHash ?? null;
-  prov.calibrationId = approvedRubric?.calibrationId ?? null;
-  // The FULL evidence block — a verdict without provenance is a test
-  // failure (owner rule: status + evidence, always).
-  const evidence = {
-    leg: 'suite',
-    policyId: payload.policyId,
-    clusterId: payload.clusterId,
-    fromStrategy: payload.servingStrategyHash,
-    retention,
-    // G2.8-followup: COVERAGE, carried with the verdict. Items evaluated for
-    // one strategy but not the other used to vanish inside pairedQualities, so
-    // a verdict over a partial suite read exactly like one over a whole suite.
-    // `retention.pairs` says what was measured; this says what was not.
-    unpairableItems: unpairable,
-    suiteId,
-    suiteVersion: loaded.suite.version,
-    ...(approvedRubric !== null
-      ? {
-          rubricHash: approvedRubric.rubricHash,
-          ...(approvedRubric.calibrationId !== null ? { calibrationId: approvedRubric.calibrationId } : {}),
-        }
-      : {}),
-    incumbent: { hash: incumbent.strategyHash, designationId: incumbent.id },
-    runId: summary.runId,
-    spendUsd: summary.spendUsd,
-    providerMode,
-    ...(payload.advisoryIncidentId !== undefined ? { advisoryIncidentId: payload.advisoryIncidentId } : {}),
-  };
-
-  // Certification gate (post-capstone item 3, Decision 2 — owner-selected
-  // FULL scope): the verdict above is measured and will be durably recorded
-  // by the chokepoint whatever happens next, but an UNCERTIFIED suite backs
-  // no contractual claim — no incident, no advisory resolution, no
-  // auto-restore, no alert. The withholding is itself a recorded outcome:
-  // the attempt lands on any attached incident ledger and the verdict row's
-  // detail names the reason, so a certified retry can pick the work up.
-  // (The self-incumbent identity path above is deliberately ungated —
-  // retention 1.0 by identity involves no suite instrument at all.)
-  const certState = await certificationStateForCluster(ctx.db, payload.clusterId, payload.orgId);
-  if (!certState.certified) {
-    const measuredOutcome = ci95[1] < floor ? ('contractual-breach' as const) : ('all-clear' as const);
-    const withheldDetail = `uncertified-suite: contractual effects withheld — ${certState.reason ?? 'suite not certified'}`;
-    await recordAttempt(measuredOutcome, withheldDetail);
-    return {
-      ...spent,
-      outcome: measuredOutcome,
-      retention,
-      detail: withheldDetail,
-      contractualEffects: 'withheld-uncertified',
-    };
-  }
-
-  // CONTRACTUAL verdict: breach iff the retention CI95 UPPER bound is
-  // below the floor (confidently under, the G0.3 rigor).
-  if (ci95[1] < floor) {
-    await recordAttempt('contractual-breach', null);
-    // G2.2 dedupe: while an unresolved contractual incident already covers
-    // this tuple (incl. the active rollback a restore verify runs against),
-    // sweep-driven retries must not mint a duplicate incident or alert —
-    // the advisory still resolves, pointing at the EXISTING incident.
-    const existing = await openContractualIncidentForTuple(ctx.db, {
-      orgId: payload.orgId,
-      policyId: payload.policyId,
-      clusterId: payload.clusterId,
-      fromStrategy: payload.servingStrategyHash,
-    });
-    if (existing) {
-      let advisoryResolved = false;
-      if (payload.advisoryIncidentId) {
-        advisoryResolved =
-          (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
-            verdict: 'contractual-breach',
-            escalatedTo: existing.id,
-            deduped: true,
-            retention,
-            providerMode,
-          })) !== null;
-      }
-      return {
-        ...spent,
-        outcome: 'contractual-breach',
-        retention,
-        verdictIncidentId: existing.id,
-        advisoryResolved,
-        detail: 'deduped: an unresolved contractual incident already covers this tuple',
-        contractualEffects: 'applied',
-      };
-    }
-    let verdictIncident: { id: string; createdAt: Date };
-    if (guarantee.action === 'rollback') {
-      const target = await resolveRollbackTarget(ctx.db, {
-        clusterId: payload.clusterId,
-        policy: policyRow.config,
-        fromStrategyHash: payload.servingStrategyHash,
-      });
-      verdictIncident = target
-        ? await insertIncidentRow(ctx.db, {
-            orgId: payload.orgId,
-            kind: 'rollback',
-            detail: {
-              ...evidence,
-              toStrategy: target.strategyHash,
-              toFrontierVersion: target.frontierVersion,
-              targetSource: target.source,
-            },
-          })
-        : await insertIncidentRow(ctx.db, {
-            orgId: payload.orgId,
-            kind: 'quality_breach',
-            detail: { ...evidence, intendedAction: 'rollback', reason: 'no-rollback-target' },
-          });
-    } else {
-      verdictIncident = await insertIncidentRow(ctx.db, {
-        orgId: payload.orgId,
-        kind: 'quality_breach',
-        detail: evidence,
-      });
-    }
-    const verdictIncidentId = verdictIncident.id;
-    let advisoryResolved = false;
-    if (payload.advisoryIncidentId) {
-      advisoryResolved =
-        (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
-          verdict: 'contractual-breach',
-          escalatedTo: verdictIncidentId,
-          retention,
-          providerMode,
-        })) !== null;
-    }
-    try {
-      await emitAlertEvent(ctx, {
-        orgId: payload.orgId,
-        event: guarantee.action === 'rollback' ? 'rollback' : 'quality_breach',
-        // THE SLA BINDING lands here: the hierarchy path's notification
-        // latency is measured from ADVISORY CREATION to this verdict's
-        // delivered POST; a manual/no-advisory verify binds the verdict's
-        // own createdAt.
-        incidentId: verdictIncidentId,
-        clockStartAt: (advisoryRow?.createdAt ?? verdictIncident.createdAt).toISOString(),
-        detail: { incidentId: verdictIncidentId, clusterId: payload.clusterId, strategyHash: payload.servingStrategyHash, retention: mean, retentionCi95: ci95, floor },
-      });
-    } catch {
-      // alert faults never fail the verdict — the incident is durable
-    }
-    return { ...spent, outcome: 'contractual-breach', retention, verdictIncidentId, advisoryResolved, contractualEffects: 'applied' };
-  }
-
-  // All-clear — durable record on the advisory (when one is attached).
-  let advisoryResolved = false;
-  if (payload.advisoryIncidentId) {
-    advisoryResolved =
-      (await resolveAdvisoryWithEvidence(ctx.db, payload.orgId, payload.advisoryIncidentId, {
-        verdict: 'all-clear',
-        retention,
-        providerMode,
-        evidence,
-      })) !== null;
-  }
-
-  // G2.2 auto-restore: only CONFIDENT recovery lifts the rollback —
-  // retention CI95 LOWER ≥ floor, the symmetric rigor of the breach test
-  // (owner decision). A non-confident all-clear is recorded, never
-  // restores, and after RECOVERY_UNCONFIRMED_AFTER consecutive ones
-  // escalates 'guarantee_recovery_unconfirmed' for human review — the
-  // uncertain zone is bounded in TIME, not outcome (owner refinement).
-  let restoredIncidentId: string | null = null;
-  let recoveryUnconfirmed = false;
-  if (payload.restoreForIncidentId && restoreRow) {
-    if (ci95[0] >= floor) {
-      const restored = await resolveIncidentWithEvidence(
-        ctx.db, payload.orgId, payload.restoreForIncidentId, 'rollback',
-        { resolvedBy: 'auto-restore', verdict: 'confident-recovery', retention, providerMode, runId: summary.runId, floor },
-      );
-      if (restored) {
-        restoredIncidentId = restored.id;
-        try {
-          await emitAlertEvent(ctx, {
-            orgId: payload.orgId,
-            event: 'guarantee_restored',
-            incidentId: restored.id,
-            clockStartAt: restoreRow.createdAt.toISOString(),
-            detail: {
-              clusterId: payload.clusterId,
-              fromStrategy: payload.servingStrategyHash,
-              toStrategy: (restoreRow.detail as Record<string, unknown>).toStrategy ?? null,
-              retention,
-              floor,
-              providerMode,
-            },
-          });
-        } catch {
-          // the resolution row is the durable record
-        }
-      }
-    } else {
-      const appended = await appendIncidentVerifyAttempt(
-        ctx.db, payload.orgId, payload.restoreForIncidentId,
-        {
-          at: new Date().toISOString(),
-          outcome: 'all-clear-not-confident',
-          detail: `retention CI95 lower ${ci95[0].toFixed(3)} < floor ${floor} — uncertainty never auto-restores`,
-        },
-      );
-      // Trailing consecutive non-confident run (a confident restore or a
-      // breach would have ended the rollback's open ledger by now).
-      const attempts = Array.isArray((appended?.detail as Record<string, unknown> | undefined)?.verifyAttempts)
-        ? ((appended!.detail as Record<string, unknown>).verifyAttempts as Array<{ outcome: string }>)
-        : [];
-      let run = 0;
-      for (let i = attempts.length - 1; i >= 0; i--) {
-        if (attempts[i]!.outcome === 'all-clear-not-confident') run += 1;
-        else break;
-      }
-      if (run >= RECOVERY_UNCONFIRMED_AFTER) {
-        const won = await markRecoveryUnconfirmed(ctx.db, payload.orgId, payload.restoreForIncidentId, {
-          at: new Date().toISOString(),
-          consecutiveNonConfident: run,
-          floor,
-        });
-        if (won) {
-          recoveryUnconfirmed = true;
-          try {
-            await emitAlertEvent(ctx, {
-              orgId: payload.orgId,
-              event: 'guarantee_recovery_unconfirmed',
-              incidentId: payload.restoreForIncidentId,
-              clockStartAt: restoreRow.createdAt.toISOString(),
-              detail: {
-                clusterId: payload.clusterId,
-                fromStrategy: payload.servingStrategyHash,
-                consecutiveNonConfident: run,
-                retention,
-                floor,
-                providerMode,
-                note: 'uncertainty never auto-restores and never silently persists — human review',
-              },
-            });
-          } catch {
-            // the CAS stamp is the durable record
-          }
-        }
-      }
-    }
-  }
-  return { ...spent, outcome: 'all-clear', retention, advisoryResolved, restoredIncidentId, recoveryUnconfirmed, contractualEffects: 'applied' };
-};
-
-/**
- * The exported handler is a CHOKEPOINT around runSuiteVerify (0029): one
- * durable guarantee_verdicts row per run, for EVERY outcome — all-clears
- * included. Pre-0029 an all-clear with no advisory attached wrote nothing,
- * which is why G2.8's contradictory 1.0645 verdict could never be
- * root-caused: the instrument recorded its failures and not its passes.
- *
- * A wrapper, not per-site calls, on purpose: seven return sites is seven
- * chances for the next edit to add an eighth that forgets to record — the
- * exact "handled in one route is not handled" class this repo keeps paying
- * for. Here a new outcome is durable by construction.
- *
- * The write is LOAD-BEARING (awaited, throws through): a verdict that cannot
- * be recorded must not report success. Ownership-misuse throws inside the
- * runner happen before any verdict exists and stay exceptions, not outcomes.
- */
-export const guaranteeSuiteVerifyHandler: WorkerHandler<'guarantee:suite-verify', GuaranteeSuiteVerifyResult> = async (
-  payload: GuaranteeSuiteVerifyPayload,
-  ctx: JobContext,
-): Promise<GuaranteeSuiteVerifyResult> =>
-  withDeliveryGuard('guarantee:suite-verify', ctx, payload.orgId, async () => {
-  const prov: VerdictProvenance = {
-    incumbentHash: null,
-    incumbentDesignationId: null,
-    suiteId: null,
-    suiteVersion: null,
-    pricesVersion: null,
-    rubricHash: null,
-    calibrationId: null,
-    unpairable: [],
-  };
-  const result = await runSuiteVerify(payload, ctx, prov);
-  const verdictId = await insertGuaranteeVerdict(ctx.db, {
-    orgId: payload.orgId,
-    policyId: payload.policyId,
-    clusterId: payload.clusterId,
-    suiteId: prov.suiteId ?? (await derivedSuiteIdFor(ctx.db, payload.clusterId)),
-    suiteVersion: prov.suiteVersion,
-    candidateHash: payload.servingStrategyHash,
-    incumbentHash: prov.incumbentHash,
-    incumbentDesignationId: prov.incumbentDesignationId,
-    providerMode: result.providerMode ?? 'unknown',
-    pricesVersion: prov.pricesVersion,
-    outcome: result.outcome,
-    retention: result.retention as unknown as Record<string, unknown> | null,
-    unpairable: prov.unpairable,
-    detail: result.detail,
-    runId: result.runId,
-    spendUsd: result.spendUsd,
-    rubricHash: prov.rubricHash,
-    calibrationId: prov.calibrationId,
-    advisoryIncidentId: payload.advisoryIncidentId ?? null,
-    verdictIncidentId: result.verdictIncidentId,
-  });
-  return { ...result, verdictId };
-  });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// suite:certify (post-capstone item 3, Decision 2) — the suite-validity gate.
-// A derived suite is certified for guarantee use only if the org's designated
-// incumbent RETAINS ITS OWN BASELINE when fresh-re-evaluated against it: the
-// items' references are recorded outputs of the incumbent's own sessions, so
-// self-retention below the floor means the suite measures the instrument,
-// not the strategy (the capstone's 0.2000). The re-eval is FRESH by
-// construction — runEval without resume never reuses cached rows and never
-// overwrites them; the metric is computed from summary.results IN MEMORY
-// (reading back through the db would return stale cached qualities).
-// Every outcome writes a durable suite_certifications row at the chokepoint
-// wrapper; refusals are recorded rows (evidence.refused), never throws.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** = DEFAULT_RETENTION_FLOOR: if the incumbent cannot hit the contractual
- * floor against its OWN recorded outputs, a floor verdict rendered from that
- * suite is unfalsifiable — certification and the guarantee share the bar. */
-export const CERTIFICATION_SELF_RETENTION_FLOOR = 0.9;
-
-export interface SuiteCertifyResult {
-  /** The durable suite_certifications row (write is load-bearing). */
-  certificationId: string | null;
-  status: 'certified' | 'failed';
-  outcome:
-    | 'certified'
-    | 'not-certified'
-    | 'no-suite'
-    | 'no-incumbent'
-    | 'budget-refused'
-    | 'mode-mismatch';
-  suiteId: string;
-  suiteVersion: string | null;
-  selfRetentionMean: number | null;
-  providerMode: ProviderMode;
-  runId: string | null;
-  spendUsd: number;
-  detail: string | null;
-}
-
-interface CertifyProvenance {
-  suiteVersion: string | null;
-  incumbentHash: string | null;
-  incumbentDesignationId: string | null;
-  evidence: Record<string, unknown>;
-}
-
-const runSuiteCertify = async (
-  payload: SuiteCertifyPayload,
-  ctx: JobContext,
-  prov: CertifyProvenance,
-): Promise<Omit<SuiteCertifyResult, 'certificationId' | 'status' | 'suiteVersion'>> => {
-  const providerMode: ProviderMode = process.env.POTION_EVAL_PROVIDER === 'live' ? 'live' : 'mock';
-  const base = { providerMode, runId: null, spendUsd: 0, selfRetentionMean: null, detail: null };
-
-  // Ownership — misuse, not an outcome: throw (forged payloads die here).
-  const clusterRows = await ctx.db.select().from(clusters).where(eq(clusters.id, payload.clusterId));
-  const cluster = clusterRows[0];
-  if (!cluster) throw new Error(`unknown cluster '${payload.clusterId}'`);
-  if (cluster.orgId !== payload.orgId) {
-    throw new Error(`cluster '${payload.clusterId}' does not belong to org '${payload.orgId}'`);
-  }
-  const suiteId = payload.suiteId ?? (await derivedSuiteIdFor(ctx.db, payload.clusterId));
-  const loaded = await loadDerivedSuite(ctx.db, suiteId);
-  if (payload.suiteId !== undefined && loaded !== null) {
-    // An explicit suiteId (the comparability leg) must be the CLUSTER'S suite.
-    if (loaded.suite.clusterId !== payload.clusterId || loaded.suite.orgId !== payload.orgId) {
-      throw new Error(`suite '${suiteId}' does not belong to cluster '${payload.clusterId}'`);
-    }
-  }
-  if (!loaded || loaded.items.length === 0) {
-    return {
-      ...base,
-      suiteId,
-      outcome: 'no-suite',
-      detail: `derived suite '${suiteId}' is empty — nothing to certify against. No spend occurred.`,
-    };
-  }
-  prov.suiteVersion = loaded.suite.version;
-
-  // The item-1 guard, positive half: certifying a live-evidence cluster with
-  // a mock instrument would stamp a false-live validity claim.
-  if (providerMode === 'mock' && (await hasLiveEvidence(ctx.db, payload.clusterId, payload.orgId))) {
-    return {
-      ...base,
-      suiteId,
-      outcome: 'mode-mismatch',
-      detail:
-        `mode mismatch: cluster '${payload.clusterId}' holds LIVE evidence but this certification ` +
-        'would run MOCK (POTION_EVAL_PROVIDER is not "live") — re-run with POTION_EVAL_PROVIDER=live. ' +
-        'No spend occurred.',
-    };
-  }
-
-  const incumbent = await activeIncumbent(ctx.db, payload.orgId, payload.clusterId);
-  if (!incumbent) {
-    return {
-      ...base,
-      suiteId,
-      outcome: 'no-incumbent',
-      detail: 'no active incumbent designation — certification measures the incumbent against its own outputs. No spend occurred.',
-    };
-  }
-  prov.incumbentHash = incumbent.strategyHash;
-  prov.incumbentDesignationId = incumbent.id;
-  const cfgRows = await ctx.db
-    .select()
-    .from(strategyConfigs)
-    .where(eq(strategyConfigs.hash, incumbent.strategyHash));
-  const incumbentCfg = cfgRows[0]?.config;
-  if (!incumbentCfg) {
-    return {
-      ...base,
-      suiteId,
-      outcome: 'no-incumbent',
-      detail: `incumbent strategy '${incumbent.strategyHash}' not in strategy_configs — re-designate. No spend occurred.`,
-    };
-  }
-
-  const capUsd = payload.capUsd ?? deriveSuiteVerifyCapUsd(loaded.items.length, 1);
-  // FAIL-CLOSED budget refusal (live spend only) — recorded, never thrown.
-  if (providerMode === 'live') {
-    const budget = await getBudget(ctx.db, payload.orgId);
-    if (budget !== null && budget.hardStop) {
-      const mtd = await mtdSpendUsd(ctx.db, payload.orgId, new Date());
-      if (mtd + capUsd > budget.monthlyCapUsd) {
-        return {
-          ...base,
-          suiteId,
-          outcome: 'budget-refused',
-          detail: `hard-stop budget would be exceeded (MTD $${mtd.toFixed(2)} + cap $${capUsd.toFixed(2)} > monthly $${budget.monthlyCapUsd.toFixed(2)}) — no spend occurred`,
-        };
-      }
-    }
-  }
-
-  const prices = await registryPrices(ctx);
-  let judgeModelOverride: string | undefined;
-  if (providerMode === 'live') {
-    const reachable = (p: string): boolean =>
-      p !== 'mock' &&
-      process.env[ENV_VAR_BY_PROVIDER[p as Exclude<ProviderId, 'mock'>]] !== undefined;
-    const registry = buildRegistry(prices).filter((e) => reachable(e.provider));
-    const judgeEntry = classRepresentative(registry, 'judge');
-    if (!judgeEntry) {
-      throw new Error('suite:certify refused: no reachable live judge-class model — no spend occurred');
-    }
-    judgeModelOverride = judgeEntry.alias;
-  }
-
-  // FRESH re-eval of the incumbent only: no resume — cached rows are neither
-  // reused nor overwritten; summary.results carries only fresh qualities.
-  const meter =
-    providerMode === 'live'
-      ? perCallRequestLogSink(ctx.db, {
-          orgId: payload.orgId,
-          clusterId: payload.clusterId,
-          status: 'eval_live',
-        })
-      : null;
-  let summary: RunSummary;
-  try {
-    summary = await runEval(
-      {
-        suiteIds: [],
-        suiteV2Ids: [suiteId],
-        strategies: [incumbentCfg],
-        budgetCapUsd: capUsd,
-        provider: providerMode,
-        orgId: payload.orgId,
-        ...(judgeModelOverride !== undefined ? { judgeModelOverride } : {}),
-        ...(providerMode === 'live'
-          ? { judgeMaxTokens: LIVE_SWEEP_JUDGE_MAX_TOKENS, maxOutputTokens: LIVE_SWEEP_ANSWER_MAX_TOKENS }
-          : {}),
-      },
-      {
-        db: ctx.dbHandle,
-        pricesPath: ctx.pricesPath,
-      prices,
-        ...(ctx.suitesV2Dir !== undefined ? { suitesV2Dir: ctx.suitesV2Dir } : {}),
-        ...(meter !== null ? { spendSink: meter.sink } : {}),
-      },
-    );
-  } catch (e) {
-    if (e instanceof BudgetCapError) {
-      return {
-        ...base,
-        suiteId,
-        outcome: 'budget-refused',
-        detail: `${e.message} (projection preflight) — no spend occurred`,
-      };
-    }
-    throw e;
-  }
-
-  const metering = meter !== null ? reconcileMetering(meter, summary, `suite:certify ${suiteId}`) : null;
-  await ctx.db.insert(evalRuns).values({
-    id: summary.runId,
-    options: {
-      suiteIds: [],
-      suiteV2Ids: [suiteId],
-      strategyHashes: [incumbent.strategyHash],
-      agentCluster: payload.clusterId,
-      purpose: 'suite:certify',
-      ...(metering !== null ? { metering } : {}),
-    },
-    budgetCapUsd: capUsd,
-    provider: providerMode,
-    status: 'completed',
-    spendUsd: summary.spendUsd,
-    orgId: payload.orgId,
-  });
-
-  // The metric, IN MEMORY from the fresh results.
-  const qualities = summary.results.map((r) => ({ itemId: r.itemId, quality: r.quality }));
-  const selfRetentionMean =
-    qualities.length === 0
-      ? 0
-      : qualities.reduce((a, q) => a + q.quality, 0) / qualities.length;
-  prov.evidence = {
-    selfRetentionMean,
-    floor: CERTIFICATION_SELF_RETENTION_FLOOR,
-    items: loaded.items.length,
-    executed: summary.executed,
-    perItem: qualities.slice(0, AGENT_SUITE_ITEM_CAP_V2),
-    providerMode: summary.providerMode,
-    runId: summary.runId,
-    suiteVersion: loaded.suite.version,
-    ...(judgeModelOverride !== undefined ? { judgeModel: judgeModelOverride } : {}),
-    executedSpendUsd: summary.executedSpendUsd,
-    ...(metering !== null ? { metering } : {}),
-  };
-  const certified = selfRetentionMean >= CERTIFICATION_SELF_RETENTION_FLOOR;
-  return {
-    ...base,
-    suiteId,
-    outcome: certified ? 'certified' : 'not-certified',
-    selfRetentionMean,
-    runId: summary.runId,
-    spendUsd: summary.executedSpendUsd,
-    detail: certified
-      ? `incumbent self-retention ${selfRetentionMean.toFixed(4)} ≥ floor ${CERTIFICATION_SELF_RETENTION_FLOOR} over ${summary.executed} items`
-      : `incumbent self-retention ${selfRetentionMean.toFixed(4)} below floor ${CERTIFICATION_SELF_RETENTION_FLOOR} over ${summary.executed} items — the suite does not reproduce the incumbent's own baseline`,
-  };
-};
-
-/** Chokepoint wrapper (the 0029 shape): EVERY outcome — certified, failed,
- * or refused — writes exactly one durable suite_certifications row. */
-export const suiteCertifyHandler: WorkerHandler<'suite:certify', SuiteCertifyResult> = async (
-  payload: SuiteCertifyPayload,
-  ctx: JobContext,
-): Promise<SuiteCertifyResult> =>
-  withDeliveryGuard('suite:certify', ctx, payload.orgId, async () => {
-  const prov: CertifyProvenance = {
-    suiteVersion: null,
-    incumbentHash: null,
-    incumbentDesignationId: null,
-    evidence: {},
-  };
-  const r = await runSuiteCertify(payload, ctx, prov);
-  const measured = r.outcome === 'certified' || r.outcome === 'not-certified';
-  const status: SuiteCertifyResult['status'] = r.outcome === 'certified' ? 'certified' : 'failed';
-  const certificationId = await insertSuiteCertificationTx(ctx.db, {
-    orgId: payload.orgId,
-    clusterId: payload.clusterId,
-    suiteId: r.suiteId,
-    suiteVersion: prov.suiteVersion ?? 'unknown',
-    // F7: record WHAT was certified, not just which version label it carried.
-    // The gate recomputes this and refuses if the instrument has drifted; the
-    // customer surface shows it so "certified" names something inspectable.
-    suiteContentHash: await computeSuiteContentHash(ctx.db, r.suiteId),
-    incumbentHash: prov.incumbentHash,
-    incumbentDesignationId: prov.incumbentDesignationId,
-    providerMode: r.providerMode,
-    status,
-    statusReason: measured
-      ? r.outcome === 'certified'
-        ? null
-        : r.detail
-      : `refused-${r.outcome}: ${r.detail ?? ''}`,
-    evidence: measured ? prov.evidence : { refused: true, kind: r.outcome },
-    spendUsd: r.spendUsd,
-  });
-  return { ...r, status, certificationId, suiteVersion: prov.suiteVersion };
-  });
-
-/**
- * F10 — the delivery guard for SPEND-BEARING and CONTRACT-BEARING handlers.
- *
- * Production retries every job 3× (SPEC §12.2) and BullMQ redelivers stalled
- * jobs after a worker crash regardless of the attempt limit. Nothing here was
- * idempotent: a throw AFTER runEval re-ran the whole handler — fresh provider
- * money, a fresh runId, a duplicate verdict row, and a second pass through
- * contractual branches whose preconditions had already been mutated (the
- * advisory now resolved, the rollback now restored, and the verifyAttempts
- * ledger inflated toward an EARLY recovery-unconfirmed escalation).
- *
- * Three delivery states, three answers:
- *   - first delivery      -> run
- *   - prior COMPLETED     -> replay its recorded result; run nothing
- *   - prior INCOMPLETE    -> REFUSE. Re-running would spend against an
- *                            attempt whose spend we cannot account for, and
- *                            the platform rule is that any doubt means no
- *                            spend. Recovery is a deliberate re-enqueue,
- *                            which mints a new job id.
- *
- * A handler invoked WITHOUT a delivery (tests, operator scripts) is by
- * definition a deliberate call and runs unguarded — two verdicts for one
- * tuple are correct when a human asked twice.
- */
-export class JobRedeliveryRefusedError extends Error {
-  constructor(
-    readonly jobId: string,
-    readonly jobKind: string,
-  ) {
-    super(
-      `job '${jobId}' (${jobKind}) was already claimed by an attempt that did not complete — ` +
-        'refusing to re-execute: a retry would spend against unaccounted prior spend. ' +
-        're-enqueue deliberately to run it again',
-    );
-    this.name = 'JobRedeliveryRefusedError';
-  }
-}
-
-export async function withDeliveryGuard<T>(
-  kind: JobKind,
-  ctx: JobContext,
-  orgId: string | undefined,
-  run: () => Promise<T>,
-): Promise<T> {
-  const delivery = ctx.delivery;
-  if (!delivery) return run(); // direct call — deliberate by construction
-  const claim = await claimJobExecution(ctx.db, {
-    jobId: delivery.jobId,
-    jobKind: kind,
-    orgId,
-    attempt: delivery.attempt,
-  });
-  if (claim.decision === 'already-completed') return claim.result as T;
-  if (claim.decision === 'refuse-incomplete') {
-    throw new JobRedeliveryRefusedError(delivery.jobId, kind);
-  }
-  const result = await run();
-  await completeJobExecution(ctx.db, delivery.jobId, result);
-  return result;
-}
-
-
 // ---------------------------------------------------------------------------
 // S7 L4 — learning:probe: demand chooses the next measurement.
 // ---------------------------------------------------------------------------
