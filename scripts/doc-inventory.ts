@@ -56,7 +56,14 @@ function resolveBases(root: string): string[] {
 export function deadPathRefs(root: string): Map<string, string[]> {
   const bases = resolveBases(root);
   const alive = (p: string): boolean =>
-    bases.some((b) => existsSync(join(root, b, p)));
+    // BUILD OUTPUTS ARE NOT DOC STALENESS. A runbook naming
+    // `apps/server/dist/worker.js` is naming the command an operator runs, and
+    // whether that file exists is a fact about whether the tree happens to be
+    // built — not about whether the doc is accurate. Scanning them made this
+    // guard pass on CI (which builds first) and fail in a fresh worktree,
+    // which is a check that reports the environment rather than the thing it
+    // is meant to check.
+    p.includes('/dist/') || bases.some((b) => existsSync(join(root, b, p)));
   const out = new Map<string, Set<string>>();
   for (const doc of docFiles(root)) {
     for (const m of readFileSync(doc, 'utf8').matchAll(PATH_RE)) {
