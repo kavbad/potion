@@ -126,18 +126,14 @@ export default async function UsagePage({
             <p className="mb-6 text-[13px] leading-relaxed text-soft">
               Spent <span className="text-ink">{formatUsd(serving - baseline)}</span> more than the comparator month-to-date.
               {(current.mtd.infeasibleCostUsd ?? 0) > 0 && (
-                <> <span className="text-ink">{formatUsd(current.mtd.infeasibleCostUsd ?? 0)}</span> of it went to requests where nothing measured clears your quality bar, so the best measured point served with nothing to save against — relax the bar in Controls.</>
+                <> <span className="text-ink">{formatUsd(current.mtd.infeasibleCostUsd ?? 0)}</span> of it went to requests where nothing measured clears your quality bar, so the cheapest point the evidence cannot rank below the best served — relax the bar in Controls to route on price again.</>
               )}
             </p>
           );
         }
         return null;
       })()}
-      {(current.measurementUsd ?? 0) > 0 && (
-        <p className="mt-3 font-mono text-[12px] leading-relaxed text-faint">
-          Measuring your workloads (to route each kind of work to the right model): <span className="text-ink">{formatUsd(current.measurementUsd ?? 0)}</span> month-to-date — on us, and not in the cost above.
-        </p>
-      )}
+      {/* measurement (eval_live) is covered by Potion and not shown (operator, 2026-09-11) */}
       {/* stacked bar: requests/day by cluster */}
       <section className="mb-8 border border-[#d9d5cb] bg-[#fbfaf7] px-8 py-8">
         <div className="mb-6 flex items-baseline justify-between">

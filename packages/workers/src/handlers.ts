@@ -5293,6 +5293,7 @@ export const defaultHandlers: { [K in keyof JobPayloads]: WorkerHandler<K> } = {
   'workloads:discover': (payload, ctx) => import('./workload-discovery.js').then((m) => m.workloadsDiscoverHandler(payload, ctx)),
   // ---- S7 L4: the autonomous probe ----
   'learning:probe': learningProbeHandler,
+  'drift:canary': (payload, ctx) => import('./drift-canary.js').then((m) => m.driftCanaryHandler(payload, ctx)),
 };
 
 /** Compute the strategy_configs hash for a config (re-export of core helper,

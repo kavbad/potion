@@ -78,6 +78,15 @@ export interface SuiteVerifyRetention {
   excludedPairs: number;
   epsilon: number;
   floor: number;
+  /** The interval's alpha AFTER family-wise correction (2026-09-11): 0.05
+   * divided by `comparisons`. 0.05 when no correction was requested. */
+  alpha?: number;
+  /** The size of the comparison family this verdict belongs to: the
+   * strategies tested beside the reference in this run PLUS the earlier
+   * looks at the same cluster since its last applied promotion — a
+   * re-measure every eight samples is a repeated look, and P1-1 measured
+   * the uncorrected version of that at 41.5% family-wise. */
+  comparisons?: number;
   /** The per-item evidence, ordered by itemId. A verdict without this cannot
    * be diffed against another verdict, which is how G2.8's contradiction
    * became unexplainable. */
@@ -91,7 +100,7 @@ export interface SuiteVerifyRetention {
  */
 export function computeRetention(
   pairs: Array<{ itemId: string; candidateQuality: number; incumbentQuality: number }>,
-  opts: { seedKey: string; floor: number; epsilon?: number; minPairs?: number },
+  opts: { seedKey: string; floor: number; epsilon?: number; minPairs?: number; comparisons?: number },
 ): { retention: SuiteVerifyRetention | null; insufficient: string | null } {
   const epsilon = opts.epsilon ?? SUITE_VERIFY_EPSILON;
   const minPairs = opts.minPairs ?? SUITE_VERIFY_MIN_PAIRS;
@@ -125,7 +134,13 @@ export function computeRetention(
     .map((p) => `${p.itemId}:${p.candidateQuality}/${p.incumbentQuality}`)
     .join('|');
   const seed = seedFromString(`${opts.seedKey}|${ordered.length}|${sha256(seedBody)}`);
-  const { mean, ci95 } = bootstrapMeanCi(ratios, seed, BOOTSTRAP_RESAMPLES);
+  // Family-wise correction (P1-1, extended to the learning period
+  // 2026-09-11): Bonferroni over the comparisons this verdict is one of. A
+  // smaller alpha widens the interval, which is what the lower-bound law
+  // then tests — the gate gets deafer as the family grows, never looser.
+  const comparisons = Math.max(1, Math.floor(opts.comparisons ?? 1));
+  const alpha = 0.05 / comparisons;
+  const { mean, ci95 } = bootstrapMeanCi(ratios, seed, BOOTSTRAP_RESAMPLES, alpha);
   return {
     retention: {
       mean,
@@ -136,6 +151,8 @@ export function computeRetention(
       excludedPairs,
       epsilon,
       floor: opts.floor,
+      alpha,
+      comparisons,
       // The per-item evidence behind this number, ordered. Without it a later
       // disagreement between two verdicts is undiagnosable — which is exactly
       // the position G2.8 ended in.

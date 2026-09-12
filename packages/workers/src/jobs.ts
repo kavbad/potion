@@ -39,7 +39,9 @@ export type JobKind =
   | 'suite:certify'
   | 'learning:period'
   // ---- S7 L4: the autonomous probe (demand → capped measurement) ----
-  | 'learning:probe';
+  | 'learning:probe'
+  // ---- 2026-09-11: the provider-drift tripwire — the ONE clocked measurement ----
+  | 'drift:canary';
 
 export const JOB_KINDS: readonly JobKind[] = [
   'eval:run',
@@ -66,6 +68,7 @@ export const JOB_KINDS: readonly JobKind[] = [
   'suite:certify',
   'learning:period',
   'learning:probe',
+  'drift:canary',
 ] as const;
 
 export interface EvalRunPayload {
@@ -146,6 +149,14 @@ export interface JobPayloads {
   'suite:certify': SuiteCertifyPayload;
   'learning:period': LearningPeriodPayload;
   'learning:probe': LearningProbePayload;
+  'drift:canary': DriftCanaryPayload;
+}
+
+/** The provider-drift tripwire (2026-09-11). Idempotent per ISO week unless
+ * `force`; `week` defaults to the current one. */
+export interface DriftCanaryPayload {
+  week?: string;
+  force?: boolean;
 }
 
 /**

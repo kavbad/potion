@@ -8,6 +8,12 @@ without a human in the loop (operator decision 2026-08-22; a review gate can
 be switched on with `FRONTIER_NOTES_GATE=1`, which holds the issue as a draft
 and posts the draft link to Notion instead).
 
+> **2026-09-11 — the input changed.** The Observatory's weekly full run is
+> retired. The run record an issue is written from is now composed from the
+> ledgers: the provider-drift canaries (`drift_canaries`) and the week's
+> learning proposals (`learning_proposals`); there are no auditions. The
+> fact sheet carries a `proposals` list beside `frontier` and `auditions`.
+
 **Why it exists.** To own the category "measured model routing" in search and
 in answer engines — the place you land when you ask *which model is cheapest
 for classification this week*, *do small models beat frontier models on
@@ -91,7 +97,9 @@ cheaper") and drops the cluster to its family ("structured-output work").
   citation.
 
 ## Pipeline
-`scripts/observatory-week.ts` → run JSON + replay findings →
+the week's run JSON — materialised by the server's Monday tick from
+`drift_canaries` + `learning_proposals` (2026-09-11; the weekly script is
+retired) — + replay findings →
 `frontier-notes/compose.ts` (deterministic fact sheet: only public names,
 only permitted fields) → `frontier-notes/write.ts` (LLM drafts from the fact
 sheet ONLY — it never sees raw artifacts) → `frontier-notes/redact.ts`

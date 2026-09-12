@@ -1121,13 +1121,14 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const cost = baselineCostUsd(op.frontier, sh2, costUsd, baseline?.hash ?? null);
       if (cost === null) return { baselineCostUsd: null, baselineBasis: null };
       // 2026-09-11: nothing cleared the bound floor, so the resolver served
-      // the highest-quality point — which, with no incumbent named, is ALSO
-      // the silent best-of-frontier comparator. The number is true (that
-      // point is what the request cost) but it is not a saving of $0; it is
-      // a bar the customer cannot reach. Stamp the basis so no caption or
-      // invoice can read it as one. A NAMED incumbent keeps its basis: the
-      // row then honestly records a loss against the model they named, and
-      // the fallback reason in implicit_signals says why.
+      // the infeasible fallback (pareto/serving.ts: the cheapest point the
+      // evidence cannot rank below the best). With no incumbent named the
+      // comparator is the silent best-of-frontier point, so any gap here is
+      // a bar the customer cannot reach, not a saving to claim. Stamp the
+      // basis so no caption or invoice reads it as one. A NAMED incumbent
+      // keeps its basis: the row then honestly records the gap against the
+      // model they named, and the fallback reason in implicit_signals says
+      // why.
       if (op.fallbackReason === 'policy_infeasible' && baseline === null) return { baselineCostUsd: cost, baselineBasis: 'policy-infeasible' as const };
       return { baselineCostUsd: cost, baselineBasis: baseline?.basis ?? 'best-of-frontier' };
     };

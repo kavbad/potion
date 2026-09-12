@@ -10,7 +10,7 @@
 import type { ObservatoryRun } from '../observatory.js';
 import type { ClusterReplay, Recipe } from '../replay.js';
 import { NEVER_NAME } from './redact.js';
-import type { AuditionFact, ClusterFact, ClusterFamily, FactSheet, MixingFact } from './types.js';
+import type { AuditionFact, ClusterFact, ClusterFamily, FactSheet, MixingFact, ProposalFact } from './types.js';
 
 export const FAMILY_BY_CLUSTER: Record<string, ClusterFamily> = {
   'code-gen': 'code',
@@ -101,6 +101,21 @@ export function composeFactSheet(run: ObservatoryRun, replays: ClusterReplay[], 
     }))
     .sort((a, b) => a.clusterId.localeCompare(b.clusterId));
 
+  // 2026-09-11: the proposal ledger is the measurement record now that the
+  // weekly auditions are retired; a note may state what was proposed.
+  const proposals: ProposalFact[] = (run.proposals ?? []).map((p) => ({
+    clusterId: p.clusterId,
+    family: familyOf(p.clusterId),
+    incumbent: publicName(p.incumbentModel, extra),
+    serving: publicName(p.servingModel, extra),
+    incumbentQuality: round3(p.incumbentQuality),
+    servingQuality: round3(p.servingQuality),
+    suggestedFloor: round3(p.suggestedFloor),
+    projectedSaving: p.projectedSaving === null ? null : round3(p.projectedSaving),
+    n: p.items,
+    status: p.status,
+  }));
+
   const auditions: AuditionFact[] = run.auditions.map((a) => ({
     alias: publicName(a.alias, extra),
     clusterId: a.clusterId,
@@ -146,6 +161,7 @@ export function composeFactSheet(run: ObservatoryRun, replays: ClusterReplay[], 
     at: run.at,
     frontier,
     auditions,
+    proposals,
     mixing,
     numbers: {
       canaries: run.canaries.length,

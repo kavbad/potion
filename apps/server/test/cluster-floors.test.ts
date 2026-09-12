@@ -112,3 +112,48 @@ describe('applying proposals merges floors', () => {
     expect(again.statusCode).toBe(409);
   });
 });
+
+// 2026-09-11: a proposal may only be applied over the world it measured.
+// The 2026-09-08 incident was a proposal applied over a frontier it had
+// never seen at prices it had never seen. Frontier version and prices
+// version are both recorded on the proposal; apply refuses when either moved.
+describe('a stale proposal is refused at apply', () => {
+  const proposal = (id: string, over: Partial<{ frontierVersion: number | null; pricesVersion: string | null }>) =>
+    insertLearningProposal(db(), {
+      id, orgId: ORG, clusterId: 'classification', suiteId: 'learn-classification',
+      incumbentModel: 'mock-mid', incumbentHash: strategyHash(MID), incumbentQuality: 0.92, incumbentCostPer1K: 1.0,
+      servingHash: strategyHash(CHEAP), servingModel: 'mock-cheap', servingQuality: 0.8, servingCostPer1K: 0.2,
+      retention: 0.87, suggestedFloor: 0.8, projectedSaving: 0.8, items: 10, spendUsd: 0.01, status: 'proposed',
+      ...over,
+    });
+  const apply = (id: string) => app.inject({ method: 'POST', url: `/api/learning/proposals/${id}/apply`, headers: { authorization: `Bearer ${ADMIN}` } });
+
+  it('refuses when the frontier it measured against has moved', async () => {
+    await proposal('lp-stale-frontier', { frontierVersion: 999 });
+    const res = await apply('lp-stale-frontier');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('proposal_stale');
+    expect(res.json().error.message).toMatch(/frontier moved v999/);
+  });
+
+  it('refuses when the prices it measured against have moved', async () => {
+    await proposal('lp-stale-prices', { pricesVersion: 'prices-from-another-era' });
+    const res = await apply('lp-stale-prices');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.message).toMatch(/prices moved prices-from-another-era/);
+  });
+
+  it('applies when both match what serves now, and apply-all names the stale ones it left', async () => {
+    const { loadCurrentFrontier } = await import('@potion/pareto');
+    const now = await loadCurrentFrontier(db(), 'classification', ORG);
+    expect(now).not.toBeNull();
+    await proposal('lp-fresh', { frontierVersion: now!.version, pricesVersion: app.potion.prices.version });
+    await proposal('lp-stale-2', { frontierVersion: 998 });
+    const all = await app.inject({ method: 'POST', url: '/api/learning/proposals/apply-all', headers: { authorization: `Bearer ${ADMIN}` } });
+    expect(all.statusCode).toBe(200);
+    const body = all.json();
+    expect(body.applied).toBeGreaterThanOrEqual(1);
+    expect(body.stale.map((s: { id: string }) => s.id)).toContain('lp-stale-2');
+    expect(body.stale.map((s: { id: string }) => s.id)).not.toContain('lp-fresh');
+  });
+});

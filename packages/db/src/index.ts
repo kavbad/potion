@@ -16,6 +16,7 @@ export * from './repos/demand.js';
 export * from './repos/learning-runs.js';
 export * from './repos/org-incumbents.js';
 export * from './repos/learning-proposals.js';
+export * from './repos/drift-canaries.js';
 export * from './repos/request-logs.js';
 export * from './repos/usage.js';
 export * from './repos/shadow.js';

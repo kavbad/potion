@@ -2198,6 +2198,13 @@ export const learningProposals = pgTable(
     projectedSaving: doublePrecision('projected_saving'),
     items: integer('items').notNull(),
     spendUsd: doublePrecision('spend_usd').notNull().default(0),
+    /** The platform/org frontier version this proposal measured against
+     * (0095, 2026-09-11). The change trigger compares it to the version
+     * serving now; NULL = written before tracking, re-measured once. */
+    frontierVersion: integer('frontier_version'),
+    /** The prices version this proposal measured against (0096). Apply
+     * refuses when it differs from the prices serving now. */
+    pricesVersion: text('prices_version'),
     status: text('status').notNull().default('proposed'),
     statusReason: text('status_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2206,3 +2213,39 @@ export const learningProposals = pgTable(
   },
   (t) => [index('learning_proposals_org_idx').on(t.orgId, t.createdAt)],
 );
+
+/**
+ * THE PROVIDER-DRIFT TRIPWIRE (0097, 2026-09-11). Content-addressed cells
+ * cannot see a provider change the model behind a fixed name: the key is
+ * (strategy, item, prompt, scoring), so a swapped model is still a hit and
+ * a point that measured 0.90 keeps re-verifying at 0.90 from cache while
+ * the live model is at 0.70. Once a week — the only clocked measurement —
+ * each served platform point is re-asked a few fixed items under a cache
+ * salt (never a hit). A reading below the stored interval (widened by the
+ * canary's own noise; better is never drift) is recorded here as 'drift',
+ * that strategy's cells are retired (stale=true, so resume re-measures
+ * them), and the learning period re-measures through the proposal path.
+ */
+export const driftCanaries = pgTable(
+  'drift_canaries',
+  {
+    id: text('id').primaryKey(),
+    week: text('week').notNull(),
+    clusterId: text('cluster_id').notNull(),
+    model: text('model').notNull(),
+    strategyHash: text('strategy_hash').notNull(),
+    storedQuality: doublePrecision('stored_quality').notNull(),
+    storedCi95: doublePrecision('stored_ci95').notNull(),
+    observedMean: doublePrecision('observed_mean'),
+    n: integer('n').notNull().default(0),
+    /** 'ok' | 'drift' | 'inconclusive' */
+    verdict: text('verdict').notNull(),
+    spendUsd: doublePrecision('spend_usd').notNull().default(0),
+    error: text('error'),
+    cellsRetired: integer('cells_retired').notNull().default(0),
+    detectedAt: timestamp('detected_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('drift_canaries_week_idx').on(t.week, t.clusterId)],
+);
+export type DriftCanaryRow = typeof driftCanaries.$inferSelect;
+export type NewDriftCanary = typeof driftCanaries.$inferInsert;

@@ -17,7 +17,7 @@ import {
   type Usage,
 } from '@potion/core';
 import {
-  loadDerivedSuite, createDb, getEvalResultByCacheKey, insertEvalResult, migrate, type DbHandle } from '@potion/db';
+  loadDerivedSuite, createDb, getLiveEvalResultByCacheKey, upsertEvalResult, migrate, type DbHandle } from '@potion/db';
 import {
   createMockProvider,
   createProviders,
@@ -600,7 +600,11 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         // deterministic (identical content); live rows now live under
         // distinct |live keys, so a live run can neither cache-hit mock
         // evidence nor silently skip persisting its own (G1.7).
-        const cached = await getEvalResultByCacheKey(handle.db, cacheKey);
+        // A STALE row is a miss (2026-09-11): a retired cell — a drifted
+        // model's, a re-priced one's — is re-asked, and the fresh answer
+        // REPLACES the retired row under the same key below. Before this the
+        // staleness flag was decorative: flagged rows were still hits.
+        const cached = await getLiveEvalResultByCacheKey(handle.db, cacheKey);
         if (cached && opts.resume) {
           cacheHits++;
           // The SAME measurement under THIS suite: the stored row carries the
@@ -701,7 +705,7 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           cacheKey,
           createdAt: new Date().toISOString(),
         };
-        if (!cached) await insertEvalResult(handle.db, result);
+        if (!cached) await upsertEvalResult(handle.db, result);
         executed++;
         judgeSpendUsd += scorerUsage?.costUsd ?? 0;
         executedSpendUsd += usage.costUsd + (scorerUsage?.costUsd ?? 0);

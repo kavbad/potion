@@ -361,3 +361,38 @@ export async function measurementSpendUsd(db: PotionDb, orgId: string, fromDay: 
   const r = (rows.rows as Array<{ cost_usd: number | string }>)[0];
   return Number(r?.cost_usd ?? 0);
 }
+
+/**
+ * Measurement spend (status='eval_live') since a moment — THE ledger the
+ * learning period's daily cap reads (2026-09-11). It used to read
+ * learning_proposals.spend_usd, which only ever held the spend of runs that
+ * PRODUCED a proposal: workload-discovery measurements wrote their spend to
+ * the workload row, and runs that ended "insufficient pairs" or on a refused
+ * provider wrote nothing — so on 2026-09-07 the org spent $0.91 and the cap
+ * saw $0.13. The request log is where the money is actually recorded.
+ */
+export async function measurementSpendSince(db: PotionDb, orgId: string, since: Date): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT coalesce(sum((usage ->> 'costUsd')::double precision), 0) AS cost_usd
+      FROM request_logs
+     WHERE org_id = ${orgId}
+       AND status = 'eval_live'
+       AND ts >= ${since}
+  `);
+  const r = (rows.rows as Array<{ cost_usd: number | string }>)[0];
+  return Number(r?.cost_usd ?? 0);
+}
+
+/** Serving spend (status='ok') since a moment — what the org's own traffic
+ * cost; the base a measurement ceiling is sized against. */
+export async function servingSpendSince(db: PotionDb, orgId: string, since: Date): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT coalesce(sum((usage ->> 'costUsd')::double precision), 0) AS cost_usd
+      FROM request_logs
+     WHERE org_id = ${orgId}
+       AND status = 'ok'
+       AND ts >= ${since}
+  `);
+  const r = (rows.rows as Array<{ cost_usd: number | string }>)[0];
+  return Number(r?.cost_usd ?? 0);
+}

@@ -34,6 +34,9 @@ import {
   type ProviderMode,
   type ServingLatencySample,
   type StrategyConfig,
+  qualityLowerBound,
+  qualityUpperBound,
+  type FrontierPoint,
 } from '@potion/core';
 import { servingDegenerateCounts, servingDegenerateCountsPlatform, servingLatencyP95, type PotionDb } from '@potion/db';
 import { strategyCapabilities } from '@potion/strategies';
@@ -282,7 +285,35 @@ export function resolveOperatingPoint(
   if (!best) {
     return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_point_resolvable', frontierVersion: frontier.version, frontier };
   }
-  return { config: best.strategyConfig, fallback: 1, fallbackReason: 'policy_infeasible', frontierVersion: frontier.version, frontier };
+  const served = infeasibleFallbackPoint(frontier.points, best);
+  return { config: served.strategyConfig, fallback: 1, fallbackReason: 'policy_infeasible', frontierVersion: frontier.version, frontier };
+}
+
+/**
+ * QUALITY-INFEASIBLE FALLBACK: the cheapest point statistically tied with
+ * the best (2026-09-11).
+ *
+ * When no point clears the bound floor, this used to serve the
+ * highest-quality point outright. On a design partner's agentic-tool-use
+ * frontier that was $44/1K (q 0.972) while a $0.14/1K point measured
+ * q 0.950 — inside the best point's own confidence interval — sat beside
+ * it: 300x the price for a difference the evidence cannot distinguish,
+ * recorded as "$0 saved" because the served point was also the comparator.
+ *
+ * The rule: take the best point's quality LOWER bound as the bar, admit
+ * every point whose quality UPPER bound reaches it (the evidence cannot
+ * rank them below the best), and serve the cheapest of those. Points
+ * without an interval collapse to their mean, so a CI-less frontier
+ * behaves exactly as before (only equal-or-better quality qualifies).
+ * Quality is not traded for cost here — nothing the evidence can call
+ * worse than the best is admitted; only the spread the evidence cannot
+ * resolve is.
+ */
+export function infeasibleFallbackPoint(points: readonly FrontierPoint[], best: FrontierPoint): FrontierPoint {
+  const bar = qualityLowerBound(best);
+  const tied = points.filter((p) => qualityUpperBound(p) >= bar);
+  const cheapest = [...tied].sort((a, b) => a.costPer1K - b.costPer1K || b.quality - a.quality)[0];
+  return cheapest ?? best;
 }
 
 /**
