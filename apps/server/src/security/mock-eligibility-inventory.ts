@@ -116,7 +116,10 @@ export const MOCK_ELIGIBILITY_INVENTORY: MockEligibilityRow[] = [
     notes: 'G1.7: registry filtered by reachable() — non-mock AND an env key present; refuses when empty.',
   },
   {
-    file: 'packages/workers/src/handlers.ts',
+    // Moved 2026-09-09 when handlers.ts was split; the code is unchanged, but
+    // this inventory is keyed on FILE, so a pure move still has to be recorded
+    // here or the completeness guard reports an unclassified resolution site.
+    file: 'packages/workers/src/suite-verify-job.ts',
     symbol: 'guaranteeSuiteVerifyHandler (judge resolution)',
     kind: 'class-resolution',
     mockPosture: 'excluded-live',
