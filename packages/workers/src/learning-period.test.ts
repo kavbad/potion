@@ -61,7 +61,9 @@ describe('learning:period', () => {
     // a second run within the week does not propose again
     const again = await runLearningPeriodForOrg(ctx, 'org_lp');
     expect(again.proposals).toHaveLength(0);
-    expect(again.skipped.some((s) => s.why === 'fresh proposal')).toBe(true);
+    // 2026-09-11: nothing changed (same frontier version, no new samples,
+    // no challenger) → not re-measured. A clock no longer re-spends.
+    expect(again.skipped.some((s) => s.why.startsWith('unchanged since the last proposal')), JSON.stringify(again.skipped)).toBe(true);
   });
 
   it('GREENFIELD: "building from scratch" measures against the frontier\'s premium single', async () => {

@@ -94,7 +94,8 @@ export function TodayPulse() {
   const spentWithout = current ? (current.mtd.baselineCostUsd ?? 0) : 0;
   const kept = current ? spentWithout - actualSpend : 0;
   const shown = useEased(kept);
-  const measurementUsd = current?.measurementUsd ?? 0;
+  // measurement (eval_live) is covered by Potion and is not shown here
+  // (operator, 2026-09-11); the API still carries `measurementUsd`.
   const infeasibleUsd = current?.mtd.infeasibleCostUsd ?? 0;
   // Day-2 honesty: cents-rounding tiny sums turns "kept $0.0186 of $0.0189"
   // into "kept $0.02 of $0.02" — a 98% claim rounded into a 100% one.
@@ -252,12 +253,7 @@ export function TodayPulse() {
       </p>
       {infeasibleUsd > 0 && (
         <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-soft">
-          <span className="text-ink">{money(infeasibleUsd)}</span> of that went to requests where nothing measured clears your quality bar, so the compiler served the best measured point — the most expensive one, with nothing to save against. <Link href="/settings/controls" className="text-accent underline">Relax the bar</Link> for those kinds of work and cheaper measured points can serve.
-        </p>
-      )}
-      {measurementUsd > 0 && (
-        <p className="mt-2 font-mono text-[12px] leading-relaxed text-faint">
-          Potion spent {money(measurementUsd)} measuring your workloads this month — on us, and not in the numbers above.
+          <span className="text-ink">{money(infeasibleUsd)}</span> of that went to requests where nothing measured clears your quality bar, so the compiler served the cheapest point the evidence cannot rank below the best. <Link href="/settings/controls" className="text-accent underline">Relax the bar</Link> for those kinds of work and it routes on price again.
         </p>
       )}
 

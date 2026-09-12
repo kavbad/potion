@@ -36,6 +36,16 @@ import { strategyModels } from './coverage.js';
  * judged by its mean, exactly as before. Only evidence-bearing points
  * near floors change behavior, which is precisely the honest set.
  */
+/** The optimistic end of a point's quality interval — mirror of
+ * qualityLowerBound; the mean when the point carries no interval. */
+export function qualityUpperBound(p: FrontierPoint): number {
+  const ci = p.evidence?.qualityCi;
+  if (ci !== undefined && ci.length === 2 && ci[1] >= ci[0]) return Math.min(1, ci[1]);
+  const half = p.evidence?.qualityCi95;
+  if (half !== undefined && half > 0) return Math.min(1, p.quality + half);
+  return p.quality;
+}
+
 export function qualityLowerBound(p: FrontierPoint): number {
   const ci = p.evidence?.qualityCi;
   if (ci !== undefined && ci.length === 2 && ci[0] >= 0) return ci[0];

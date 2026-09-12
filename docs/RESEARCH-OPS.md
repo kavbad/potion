@@ -8,6 +8,19 @@ independently verifies, four deterministic guards screen every draft, and
 publication passes the Action Gateway — born supervised, earned per the
 grant ledger.
 
+> **2026-09-11 — the weekly full run is retired.** `scripts/observatory-week.ts`
+> (canaries + auditions + digest + the Monday artifact) is gone. The only
+> clocked measurement is now the provider-drift tripwire
+> (`packages/workers/src/drift-canary.ts`, scheduled weekly by the server as
+> the `drift:canary` job; `scripts/drift-canary.ts` runs it once from a shell
+> and is what the compose `observatory` profile now executes). On drift it
+> retires that model's cells and the learning period re-measures through the
+> proposal path. The week's run record (`artifacts/runs/<week>.json`) is
+> materialised by the server's Monday tick from two ledgers — `drift_canaries`
+> and `learning_proposals` — so Frontier Notes read the proposal ledger, not a
+> script's output. The host cron `/etc/cron.d/potion-observatory` can be
+> removed; if left, it runs the tripwire, which is idempotent per ISO week.
+
 ## The rig (org-research, on prod)
 
 - Org `org-research` ("Potion Research"), user `user-research-ops` —

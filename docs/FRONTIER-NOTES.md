@@ -8,6 +8,12 @@ without a human in the loop (operator decision 2026-08-22; a review gate can
 be switched on with `FRONTIER_NOTES_GATE=1`, which holds the issue as a draft
 and posts the draft link to Notion instead).
 
+> **2026-09-11 — the input changed.** The Observatory's weekly full run is
+> retired. The run record an issue is written from is now composed from the
+> ledgers: the provider-drift canaries (`drift_canaries`) and the week's
+> learning proposals (`learning_proposals`); there are no auditions. The
+> fact sheet carries a `proposals` list beside `frontier` and `auditions`.
+
 **Why it exists.** To own the category "measured model routing" in search and
 in answer engines — the place you land when you ask *which model is cheapest
 for classification this week*, *do small models beat frontier models on

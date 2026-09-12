@@ -16,6 +16,7 @@
 //     can weigh it.
 //   · Snapshot semantics: each run replaces the org's rows — the table is
 //     the current observed structure, not history.
+import { budgetExhaustedReason, measurementBudgetFor } from './measurement-budget.js';
 import { and, eq, gt } from 'drizzle-orm';
 import { PolicySchema, strategyHash, type ChatMessage, type EvalItem, type Policy } from '@potion/core';
 import { DEFAULT_ORG_POLICY, servingDecisionFor } from '@potion/pareto';
@@ -24,7 +25,6 @@ import {
   getFirstApiKeyWithPolicy,
   getOrgIncumbents,
   getPolicyById,
-  learningSpendSince,
   listAdoptedWorkloads,
   listOrgIdsWithSpans,
   loadDerivedSuite,
@@ -53,7 +53,6 @@ import {
   type WorkerHandler,
 } from './handlers.js';
 import {
-  LEARNING_PERIOD_DAILY_CAP_USD,
   LEARNING_SPAN_NAME,
   LEARNING_SUITE_CAP,
   parseSampledMessages,
@@ -328,12 +327,15 @@ export const workloadsDiscoverHandler: WorkerHandler<'workloads:discover', Workl
           result.measurementSkipped.push({ id: w.id, why: 'no reference model (no named incumbent, no single on the parent frontier)' });
           continue;
         }
-        const spentToday = await learningSpendSince(ctx.db, orgId, new Date(Date.now() - 24 * 3600 * 1000));
-        const remaining = LEARNING_PERIOD_DAILY_CAP_USD - spentToday;
-        if (remaining <= 0.05) {
-          result.measurementSkipped.push({ id: w.id, why: 'daily measurement cap reached' });
+        // The shared measurement budget (measurement-budget.ts): daily cap +
+        // a monthly ceiling sized to serving spend, read from the request
+        // log — this path's spend used to be invisible to the cap.
+        const budget = await measurementBudgetFor(ctx.db, orgId);
+        if (budget.exhausted !== null) {
+          result.measurementSkipped.push({ id: w.id, why: budgetExhaustedReason(budget) });
           continue;
         }
+        const remaining = budget.remainingUsd;
         // db-derived suites resolve by PREFIX in the harness (runner.ts:
         // agent-/learn-) — the learn- prefix keeps this zero-blast-radius.
         const suiteId = `learn-${w.id}-v1`;

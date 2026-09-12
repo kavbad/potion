@@ -24,6 +24,7 @@ import {
   type BudgetRow,
 } from '../schema.js';
 import { liveUsageRollup, utcDay } from './usage.js';
+import { measurementSpendUsd } from './request-logs.js';
 
 // ---------------------------------------------------------------------------
 // budgets
@@ -89,15 +90,29 @@ export async function dailySpendSeries(
   return out;
 }
 
-/** Month-to-date customer-facing spend (1st of the UTC month → today). */
+/**
+ * Month-to-date spend the BUDGET BELT sees (1st of the UTC month → today):
+ * billable usage PLUS measurement.
+ *
+ * 2026-09-11: measurement (eval_live) left the usage rollup — Potion covers
+ * it, so it is not on any invoice or usage page. But the hard-stop belt is
+ * not a bill; it is the ratchet that refuses the NEXT sweep when an org's
+ * total spend would blow through its cap, and the platform-ops org's cap is
+ * the only guard on the platform's own measurement spend. A belt that
+ * cannot see measurement cannot stop it. So the belt adds it back here, on
+ * purpose, from the request log where it is recorded.
+ */
 export async function mtdSpendUsd(
   db: PotionDb,
   orgId: string,
   now: Date = new Date(),
 ): Promise<number> {
   const today = utcDay(now);
-  const rows = await liveUsageRollup(db, orgId, { fromDay: `${today.slice(0, 7)}-01`, toDay: today });
-  return rows.reduce((sum, r) => sum + r.costUsd, 0);
+  const fromDay = `${today.slice(0, 7)}-01`;
+  const rows = await liveUsageRollup(db, orgId, { fromDay, toDay: today });
+  const billable = rows.reduce((sum, r) => sum + r.costUsd, 0);
+  const measurement = await measurementSpendUsd(db, orgId, fromDay, today);
+  return billable + measurement;
 }
 
 // ---------------------------------------------------------------------------

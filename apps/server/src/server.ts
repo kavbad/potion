@@ -2,6 +2,7 @@
 // the boot context (db + migrate → taxonomy centroids + assigner → demo seed
 // when empty), registers the routes, and returns the configured instance
 // WITHOUT listening (tests drive it via app.inject; src/index.ts listens).
+import { aggregateUsage, utcDay } from '@potion/db';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerPolicyRoutes } from './routes/policies.js';
@@ -114,6 +115,14 @@ export const RESEARCH_SCAN_INTERVAL_MS = 24 * 3600 * 1000;
 export /** The learning period: every six hours, every consenting org gets its bar re-measured under the per-org cap. */
 const LEARNING_PERIOD_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const LEARNING_PROBE_INTERVAL_MS = 24 * 3600 * 1000;
+const USAGE_ROLLUP_INTERVAL_MS = 60 * 60 * 1000;
+const USAGE_ROLLUP_FIRST_DELAY_MS = 60 * 1000;
+const USAGE_ROLLUP_BACKFILL_DAYS = 7;
+/** The provider-drift tripwire — the ONE clocked measurement (workers drift-canary.ts).
+ * Weekly, plus a check shortly after boot (idempotent per ISO week, so a
+ * redeploy neither double-runs nor loses the week). */
+const DRIFT_CANARY_INTERVAL_MS = 7 * 24 * 3600 * 1000;
+const DRIFT_CANARY_FIRST_DELAY_MS = 10 * 60 * 1000;
 // ---- M5 #36 agent workloads ----
 /** Nightly agent-session clustering (SPEC §14.2). */
 export const TRACES_CLUSTER_INTERVAL_MS = 24 * 3600 * 1000;
@@ -512,6 +521,19 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
     app.addHook('onClose', () => {
       clearInterval(learningPeriod);
     });
+    const driftCanary = () => {
+      queue.enqueue('drift:canary', {}).catch((err: unknown) => {
+        app.log.warn(err, 'drift canary enqueue failed — swallowed');
+      });
+    };
+    const driftFirst = setTimeout(driftCanary, DRIFT_CANARY_FIRST_DELAY_MS);
+    driftFirst.unref();
+    const driftWeekly = setInterval(driftCanary, DRIFT_CANARY_INTERVAL_MS);
+    driftWeekly.unref();
+    app.addHook('onClose', () => {
+      clearTimeout(driftFirst);
+      clearInterval(driftWeekly);
+    });
     const learningProbe = setInterval(() => {
       queue.enqueue('learning:probe', {}).catch((err: unknown) => {
         app.log.warn(err, 'learning probe enqueue failed — swallowed');
@@ -522,6 +544,31 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
       clearInterval(learningProbe);
     });
   }
+
+  // USAGE ROLLUP ON A CLOCK (2026-09-11). usage_daily — what invoices, the
+  // per-day usage page and the weekly brief read — was only ever written by
+  // the aggregate-usage CLI, the invoice route and an admin POST; nothing
+  // scheduled it, so it stopped at whatever day someone last looked (found
+  // 2026-09-11: 09-06 for one org, 09-02 for the rest). Hourly, idempotent
+  // (full-replace upsert per org/day/cluster), over a trailing window so a
+  // late-landing row or a restart gap is repaired without anyone noticing.
+  const rollUpUsage = () => {
+    const toDay = utcDay();
+    const from = new Date(`${toDay}T00:00:00Z`);
+    from.setUTCDate(from.getUTCDate() - USAGE_ROLLUP_BACKFILL_DAYS);
+    const fromDay = from.toISOString().slice(0, 10);
+    aggregateUsage(ctx.db.db, { fromDay, toDay }).catch((err: unknown) => {
+      app.log.warn(err, 'usage rollup failed — swallowed, next hour retries');
+    });
+  };
+  const rollupFirst = setTimeout(rollUpUsage, USAGE_ROLLUP_FIRST_DELAY_MS);
+  rollupFirst.unref();
+  const usageRollup = setInterval(rollUpUsage, USAGE_ROLLUP_INTERVAL_MS);
+  usageRollup.unref();
+  app.addHook('onClose', () => {
+    clearTimeout(rollupFirst);
+    clearInterval(usageRollup);
+  });
   // ---- end S7 L2/L4 ----
   // ---- the second ask (2026-09-05) ----
   // A run parked on a person mails once and then goes silent; on production

@@ -17,7 +17,11 @@ function providerModeFromDb(raw: string): ProviderMode | undefined {
 
 /** Insert one eval result, keyed by its content-addressed cacheKey. */
 export async function insertEvalResult(db: PotionDb, result: EvalResult): Promise<void> {
-  await db.insert(evalResults).values({
+  await db.insert(evalResults).values(evalResultValues(result));
+}
+
+function evalResultValues(result: EvalResult) {
+  return {
     cacheKey: result.cacheKey,
     runId: result.runId,
     itemId: result.itemId,
@@ -38,7 +42,7 @@ export async function insertEvalResult(db: PotionDb, result: EvalResult): Promis
     providerMode: providerModeToDb(result.providerMode),
     orgId: result.orgId ?? null,
     createdAt: result.createdAt,
-  });
+  };
 }
 
 function rowToEvalResult(row: typeof evalResults.$inferSelect): EvalResult {
@@ -92,6 +96,46 @@ export async function retireEvalResultsByItemIds(
 }
 
 /** Cache lookup for harness resume (SPEC §5). */
+/**
+ * The resume lookup (2026-09-11): a STALE row is a MISS. The staleness
+ * engine has flagged rows for a year, and the runner never looked — a
+ * retired cell was still a cache hit, so "invalidate" invalidated nothing.
+ * The provider-drift tripwire depends on this: retiring a drifted model's
+ * cells must make the next run re-ask the provider.
+ */
+export async function getLiveEvalResultByCacheKey(db: PotionDb, cacheKey: string): Promise<EvalResult | null> {
+  const rows = await db
+    .select()
+    .from(evalResults)
+    .where(and(eq(evalResults.cacheKey, cacheKey), eq(evalResults.stale, false)))
+    .limit(1);
+  const row = rows[0];
+  return row ? rowToEvalResult(row) : null;
+}
+
+/** Insert, or REPLACE a retired row under the same key (stale → false). A
+ * live cell that already exists is never overwritten by the runner — it
+ * only reaches here when the row is absent or was retired. */
+export async function upsertEvalResult(db: PotionDb, result: EvalResult): Promise<void> {
+  const values = evalResultValues(result);
+  const { cacheKey: _k, ...rest } = values;
+  await db
+    .insert(evalResults)
+    .values(values)
+    .onConflictDoUpdate({ target: evalResults.cacheKey, set: { ...rest, stale: false } });
+}
+
+/** Retire every live cell of one strategy (a drifted model): the tripwire's
+ * invalidation. Scoped to an org when given; platform cells otherwise too. */
+export async function retireEvalResultsByStrategyHash(db: PotionDb, strategyHash: string): Promise<number> {
+  const rows = await db
+    .update(evalResults)
+    .set({ stale: true })
+    .where(and(eq(evalResults.strategyHash, strategyHash), eq(evalResults.stale, false)))
+    .returning({ cacheKey: evalResults.cacheKey });
+  return rows.length;
+}
+
 export async function getEvalResultByCacheKey(
   db: PotionDb,
   cacheKey: string,

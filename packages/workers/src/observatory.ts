@@ -24,6 +24,20 @@ export function isoWeek(d: Date): string {
 // ---------------------------------------------------------------------------
 // Envelope
 
+/** The UTC [start, end) of an ISO week id such as '2026-W37'. */
+export function isoWeekRange(week: string): { from: Date; to: Date } {
+  const m = /^(\d{4})-W(\d{2})$/.exec(week);
+  if (!m) throw new Error(`not an ISO week id: ${week}`);
+  const year = Number(m[1]);
+  const wk = Number(m[2]);
+  // ISO week 1 contains Jan 4; weeks start on Monday.
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4.getTime() - (jan4Day - 1) * 86400000);
+  const from = new Date(week1Monday.getTime() + (wk - 1) * 7 * 86400000);
+  return { from, to: new Date(from.getTime() + 7 * 86400000) };
+}
+
 export interface LedgerRow {
   /** ISO date-time of the run. */
   at: string;
@@ -299,8 +313,65 @@ export interface ObservatoryRun {
   catalogue: { listings: number; newSinceRegistry: number; skippedNoPricing: number; freeTierExcluded: number; ranked: number };
   /** A3: instrument-saturation readings per cluster ($0, from stored frontiers). */
   saturation?: ClusterSaturation[];
+  /** 2026-09-11: the week's learning proposals — the measurement record
+   * Frontier Notes read now that auditions are retired. */
+  proposals?: ProposalRecord[];
   spendUsd: number;
   envelopeAfter: Envelope;
+}
+
+/** A learning-period proposal as the run record carries it (redacted to
+ * what a note may say: no org names, no prompts). */
+export interface ProposalRecord {
+  clusterId: string;
+  incumbentModel: string;
+  servingModel: string;
+  incumbentQuality: number;
+  servingQuality: number;
+  suggestedFloor: number;
+  projectedSaving: number | null;
+  items: number;
+  status: string;
+  createdAt: string;
+}
+
+/**
+ * The weekly run record, composed from the ledgers instead of written by
+ * the retired weekly script (2026-09-11): canaries from drift_canaries,
+ * proposals from learning_proposals, no auditions. Same shape, so Frontier
+ * Notes and the Delta/Auditor harnesses read it unchanged.
+ */
+export function observatoryRunFromLedger(
+  week: string,
+  canaries: CanaryResult[],
+  proposals: ProposalRecord[],
+  at: Date = new Date(),
+): ObservatoryRun {
+  const spendUsd = canaries.reduce((s, c) => s + c.spendUsd, 0);
+  const envelope: Envelope = {
+    monthKey: at.toISOString().slice(0, 7),
+    capUsd: OBSERVATORY_ENVELOPE_USD,
+    mtdUsd: spendUsd,
+    remainingUsd: Math.max(0, OBSERVATORY_ENVELOPE_USD - spendUsd),
+  };
+  return {
+    week,
+    at: at.toISOString(),
+    envelopeBefore: envelope,
+    plan: {
+      canaryClusters: canaries.map((c) => c.clusterId),
+      canaryBudgetUsd: canaries.length * CANARY_EXPECTED_USD,
+      auditions: 0,
+      auditionBudgetUsd: 0,
+      notes: ['auditions retired 2026-09-11 — the proposal ledger is the measurement record; canaries are the drift tripwire'],
+    },
+    canaries,
+    auditions: [],
+    catalogue: { listings: 0, newSinceRegistry: 0, skippedNoPricing: 0, freeTierExcluded: 0, ranked: 0 },
+    proposals,
+    spendUsd,
+    envelopeAfter: envelope,
+  };
 }
 
 /** The one line a human reads. Quiet weeks say so. */

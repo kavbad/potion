@@ -130,6 +130,15 @@ export interface UsageTotals {
  * only clusters render quantity-0 lines labeled "routed requests" — the
  * relabel is G2.1 scope.)
  *
+ * MEASUREMENT IS NOT BILLABLE USAGE (operator, 2026-09-11: "cover it").
+ * 'eval_live' rows — the learning period and workload discovery measuring
+ * the org's own prompts — used to enter this rollup as cost (G1.7), so they
+ * reached budgets, hard-stops, forecasts and invoices, and for one design
+ * partner were 85% of the month's "you spent". Potion pays for measurement;
+ * it is excluded HERE, at the one chokepoint, and read on its own through
+ * `measurementSpendUsd` / `measurementSpendSince` (request-logs.ts). The
+ * learning period's own ceiling bounds it (workers/measurement-budget.ts).
+ *
  * S3 (migration 0039) adds `baseline_cost_usd`: what the same traffic would
  * have cost on the highest-quality point — the counterfactual behind
  * outcome-based pricing. Summed only over rows that actually recorded one, so
@@ -171,7 +180,7 @@ function rollupQuery(range: UsageRange, orgId?: string): SQL {
            coalesce(sum((usage->>'costUsd')::numeric) FILTER (WHERE status = 'ok'), 0)::float8 AS serving_cost_usd,
            coalesce(sum((usage->>'costUsd')::numeric) FILTER (WHERE status = 'ok' AND 'fallback_policy_infeasible' = ANY(implicit_signals)), 0)::float8 AS infeasible_cost_usd
     FROM request_logs
-    WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen', 'eval_live')
+    WHERE status IN ('ok', 'guarantee_judge', 'rubric_gen')
       AND to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') BETWEEN ${range.fromDay} AND ${range.toDay}
       ${orgId !== undefined ? sql`AND org_id = ${orgId}` : sql``}
     GROUP BY 1, 2, 3

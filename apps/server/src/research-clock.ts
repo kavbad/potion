@@ -11,9 +11,10 @@
 //   POTION_RESEARCH_ORG              (org-research)
 //   POTION_RESEARCH_DELTA_HARNESS    (the author generation)
 //   POTION_RESEARCH_AUDITOR_HARNESS  (the verifier generation)
-import { spawn } from 'node:child_process';
+import { listDriftCanariesForWeek, listLearningProposalsBetween } from '@potion/db';
+import { isoWeekRange, observatoryRunFromLedger } from '@potion/workers';
 import { randomUUID } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -300,7 +301,9 @@ export function registerFrontierNotesClock(
   //      fleet's Tuesday chain owns the byline.
   const armDate = process.env.POTION_OBSERVATORY_ARM ?? '';
   const measureArmed = armed && /^\d{4}-\d{2}-\d{2}$/.test(armDate);
-  let measureRunning: { week: string; startedAt: string } | null = null;
+  // 2026-09-11: nothing runs in-process here any more (the tripwire is a
+  // queued job); the status payload keeps its shape.
+  const measureRunning: { week: string; startedAt: string } | null = null;
 
   /** Monday 06:00–23:59 PT — before the notes window opens on Tuesday. */
   function inMondayWindow(d: Date): boolean {
@@ -374,54 +377,51 @@ export function registerFrontierNotesClock(
     // the ~$8 a repeated week costs it looks not worth doing, and the money
     // is the part that is already defended.
     if (!opts.dry && io.readObservatoryRun(week) !== null) return null; // measured already
-    const stateDir = join(envDir!, 'artifacts', 'observatory-state');
-    const marker = join(stateDir, `${week}.json`);
-    if (!opts.dry) {
-      mkdirSync(stateDir, { recursive: true });
-      try {
-        // Exclusive create IS the lock: a second replica loses the race.
-        writeFileSync(marker, JSON.stringify({ week, startedAt: now.toISOString(), arm: armDate }, null, 1), { flag: 'wx' });
-      } catch {
-        return null;
-      }
+    // 2026-09-11: THE WEEKLY FULL RUN IS RETIRED. What used to spawn
+    // scripts/observatory-week.ts (canaries + auditions + digest + Monday
+    // artifact) now MATERIALISES the week's run record from two ledgers:
+    // drift_canaries — written by the provider-drift tripwire, the only
+    // clocked measurement, scheduled by server.ts as the 'drift:canary'
+    // job — and learning_proposals, the measurement record. Same file, same
+    // shape, so Frontier Notes and the Delta/Auditor harnesses read it
+    // unchanged; nothing is measured here and nothing is spent.
+    const rows = await listDriftCanariesForWeek(db, week);
+    if (rows.length === 0) {
+      app.log.info({ week }, 'observatory: the drift tripwire has not run this week yet — no run record to write');
+      return null;
     }
-    measureRunning = { week, startedAt: now.toISOString() };
-    const logPath = join(envDir!, 'artifacts', `observatory-${week}${opts.dry ? '-dry' : ''}.log`);
-    // The .bin/tsx entry is a SHELL wrapper, not a JS module — handing it
-    // to node fails with a syntax error (found by driving the real command
-    // in the container). Spawn the wrapper itself; its shebang runs it.
-    const tsx = join('/app', 'node_modules', '.bin', 'tsx');
-    const args = ['scripts/observatory-week.ts', ...(opts.dry ? ['--dry'] : [])];
-    app.log.info({ week, dry: opts.dry === true }, 'observatory: starting the weekly measurement');
-    const child = spawn(tsx, args, {
-      cwd: '/app',
-      env: {
-        ...process.env,
-        KEY_RISK_ACCEPTED: armDate,
-        OBSERVATORY_DB: join(envDir!, 'store'),
-        OBSERVATORY_ARTIFACTS: join(envDir!, 'artifacts'),
-        // The fleet publishes; the measurement never does.
-        FRONTIER_NOTES_SKIP: '1',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const log = createWriteStream(logPath, { flags: 'a' });
-    child.stdout.pipe(log);
-    child.stderr.pipe(log);
-    child.on('close', (code) => {
-      measureRunning = null;
-      app.log.info({ week, code, logPath }, `observatory: measurement exited ${code}`);
-      if (!opts.dry && code !== 0) {
-        // A failed week must not wedge the lane: clear the marker so the
-        // next Monday tick (or an operator trigger) can retry.
-        try {
-          rmSync(marker, { force: true });
-        } catch {
-          /* the marker is a convenience, never a correctness boundary */
-        }
-      }
-    });
-    return `observatory:${week}${opts.dry ? ' (dry)' : ''}`;
+    const canaries = rows.map((r) => ({
+      clusterId: r.clusterId,
+      model: r.model,
+      strategyHash: r.strategyHash,
+      storedQuality: r.storedQuality,
+      storedCi95: r.storedCi95,
+      observedMean: r.observedMean,
+      n: r.n,
+      verdict: r.verdict as 'ok' | 'drift' | 'inconclusive',
+      spendUsd: r.spendUsd,
+      ...(r.error !== null ? { error: r.error } : {}),
+    }));
+    const range = isoWeekRange(week);
+    const proposals = (await listLearningProposalsBetween(db, range.from, range.to)).map((p) => ({
+      clusterId: p.clusterId,
+      incumbentModel: p.incumbentModel,
+      servingModel: p.servingModel,
+      incumbentQuality: p.incumbentQuality,
+      servingQuality: p.servingQuality,
+      suggestedFloor: p.suggestedFloor,
+      projectedSaving: p.projectedSaving,
+      items: p.items,
+      status: p.status,
+      createdAt: p.createdAt.toISOString(),
+    }));
+    const run = observatoryRunFromLedger(week, canaries, proposals, now);
+    if (opts.dry) return `observatory:${week} (dry — ${canaries.length} canaries, ${proposals.length} proposals)`;
+    const runsDir = join(envDir!, 'artifacts', 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    writeFileSync(join(runsDir, `${week}.json`), JSON.stringify(run, null, 1));
+    app.log.info({ week, canaries: canaries.length, drift: canaries.filter((c) => c.verdict === 'drift').length, proposals: proposals.length }, 'observatory: run record materialised from the ledgers');
+    return `observatory:${week}`;
   }
 
   // ---- the tick ----

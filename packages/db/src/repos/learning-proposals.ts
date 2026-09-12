@@ -1,7 +1,7 @@
 // Proposals from the learning period: one per (org, kind of work)
 // measurement. Never auto-applied — the dashboard's one button does that,
 // and records which policy it created.
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { learningProposals } from '../schema.js';
 
@@ -46,4 +46,15 @@ export async function learningSpendSince(db: PotionDb, orgId: string, since: Dat
     .from(learningProposals)
     .where(and(eq(learningProposals.orgId, orgId), gte(learningProposals.createdAt, since)));
   return Number(rows[0]?.total ?? 0);
+}
+
+/** Every org's proposals in a window — the weekly run record's proposal
+ * ledger (2026-09-11, observatoryRunFromLedger). Newest first. */
+export async function listLearningProposalsBetween(db: PotionDb, from: Date, to: Date, limit = 500): Promise<LearningProposalRow[]> {
+  return db
+    .select()
+    .from(learningProposals)
+    .where(and(gte(learningProposals.createdAt, from), lt(learningProposals.createdAt, to)))
+    .orderBy(desc(learningProposals.createdAt))
+    .limit(limit);
 }

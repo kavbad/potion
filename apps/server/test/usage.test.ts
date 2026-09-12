@@ -97,7 +97,10 @@ describe('aggregateUsage rollup (hand-computed)', () => {
     // rubric_gen + G1.7 eval_live follow the same rule:
     // $0.004 + $0.002 + $0.003 = $0.009, 0 requests.
     expect(judgeOnly).toMatchObject({ requests: 0, inputTokens: 0, outputTokens: 0 });
-    expect(judgeOnly!.costUsd).toBeCloseTo(0.009, 10);
+    // guarantee_judge 0.004 + rubric_gen 0.002. The eval_live 0.003 is
+    // MEASUREMENT — covered by Potion since 2026-09-11, never billable
+    // usage, read only through measurementSpendUsd.
+    expect(judgeOnly!.costUsd).toBeCloseTo(0.006, 10);
     // hand math: code-gen 08-02 = rows 1+2 (rate_limited/error excluded)
     expect(cg).toMatchObject({ requests: 2, inputTokens: 300, outputTokens: 150 });
     expect(cg!.costUsd).toBeCloseTo(0.03, 10);
@@ -244,11 +247,12 @@ describe('usage read routes (org isolation)', () => {
     expect(body.today).toMatchObject({ day: today, requests: 1, inputTokens: 40, outputTokens: 20 });
     expect(body.today.costUsd).toBeCloseTo(0.004, 10);
     expect(body.mtd.requests).toBeGreaterThanOrEqual(1);
-    // 2026-09-11: measurement (eval_live) is in costUsd — it is real spend,
-    // budgets see it — but NOT in servingCostUsd, the only figure a "you
-    // spent … where it would have billed …" sentence may use. The hero
-    // once compared $3.46 (with $2.95 of measurement) to a $2.68 serving
-    // counterfactual and printed "$0.0000 saved".
+    // 2026-09-11: measurement (eval_live) is covered by Potion — it is NOT
+    // in costUsd (budgets, invoices) nor in servingCostUsd, the only figure
+    // a "you spent … where it would have billed …" sentence may use; it is
+    // read only through measurementUsd. The hero once compared $3.46 (with
+    // $2.95 of measurement) to a $2.68 serving counterfactual and printed
+    // "$0.0000 saved".
     await insertRequestLog(db(), { ts: now, orgId: ORG_B, clusterId: 'extraction', status: 'eval_live', usage: usage(0, 0, 0.5) });
     // …and a policy_infeasible serve is counted on its own line.
     await insertRequestLog(db(), {
@@ -256,7 +260,7 @@ describe('usage read routes (org isolation)', () => {
       implicitSignals: ['fallback_policy_infeasible'],
     });
     const again = (await authedGet('/api/usage/current', RAW_B)).json();
-    expect(again.today.costUsd).toBeCloseTo(0.524, 10);
+    expect(again.today.costUsd).toBeCloseTo(0.024, 10);
     expect(again.today.servingCostUsd).toBeCloseTo(0.024, 10);
     expect(again.today.infeasibleCostUsd).toBeCloseTo(0.02, 10);
     expect(again.measurementUsd).toBeCloseTo(0.5, 10);
@@ -281,7 +285,9 @@ describe('CSV export', () => {
     expect(lines[2]).toMatch(/^2026-08-02,extraction,1,10,5,/);
     expect(lines[3]).toMatch(/^2026-08-03,code-gen,1,0,0,0,0$/);
     // G0.1: judge-scoring spend row — 0 requests/tokens, cost billed
-    expect(lines[4]).toMatch(/^2026-08-03,extraction,0,0,0,0\.009,0\.009$/);
+    // (guarantee_judge 0.004 + rubric_gen 0.002; the eval_live 0.003 is
+    // measurement, covered by Potion since 2026-09-11 and never billed)
+    expect(lines[4]).toMatch(/^2026-08-03,extraction,0,0,0,0\.006,0\.006$/);
     // org B's CSV has only its own row
     const bRes = await authedGet('/api/usage/export.csv?from=2026-08-02&to=2026-08-03', RAW_B);
     expect(bRes.body.trim().split('\n')).toHaveLength(2);

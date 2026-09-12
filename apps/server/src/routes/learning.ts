@@ -9,6 +9,7 @@
 //
 // Nothing here spends money. Sampling happens on the serving path under
 // consent; measuring happens in the learning:period job under a cap.
+import { loadCurrentFrontier } from '@potion/pareto';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -131,6 +132,8 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     const p = await getLearningProposal(db, org.orgId, id);
     if (!p) return reply.code(404).send(openAiError(`unknown proposal '${id}'`, 'invalid_request_error', 'not_found'));
     if (p.status !== 'proposed') return reply.code(409).send(openAiError(`proposal is ${p.status}`, 'invalid_request_error', 'proposal_not_open'));
+    const stale = await proposalStaleness(org.orgId, p);
+    if (stale !== null) return reply.code(409).send(openAiError(`proposal is stale: ${stale} — measure again before applying`, 'invalid_request_error', 'proposal_stale'));
     const { policyId, policy, keysRebound } = await applyFloors(org.orgId, [p]);
     await markProposalApplied(db, org.orgId, id, policyId);
     return reply.send({ applied: true, policyId, qualityFloor: floorFor(policy, p.clusterId), clusterFloors: clusterFloorsOf(policy), keysRebound });
@@ -140,11 +143,19 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
   // work, every active key rebound to it.
   app.post('/api/learning/proposals/apply-all', { preHandler: [requireRole('admin')] }, async (req, reply) => {
     const org = req.potionOrg!;
-    const open = (await listLearningProposals(db, org.orgId)).filter((p) => p.status === 'proposed');
-    if (open.length === 0) return reply.code(409).send(openAiError('no open proposals', 'invalid_request_error', 'proposal_not_open'));
+    const candidates = (await listLearningProposals(db, org.orgId)).filter((p) => p.status === 'proposed');
+    if (candidates.length === 0) return reply.code(409).send(openAiError('no open proposals', 'invalid_request_error', 'proposal_not_open'));
+    const open: typeof candidates = [];
+    const stale: Array<{ id: string; clusterId: string; why: string }> = [];
+    for (const p of candidates) {
+      const why = await proposalStaleness(org.orgId, p);
+      if (why === null) open.push(p);
+      else stale.push({ id: p.id, clusterId: p.clusterId, why });
+    }
+    if (open.length === 0) return reply.code(409).send(openAiError(`every open proposal is stale — measure again before applying (${stale.map((s) => `${s.clusterId}: ${s.why}`).join('; ')})`, 'invalid_request_error', 'proposal_stale'));
     const { policyId, policy, keysRebound } = await applyFloors(org.orgId, open);
     for (const p of open) await markProposalApplied(db, org.orgId, p.id, policyId);
-    return reply.send({ applied: open.length, policyId, clusterFloors: clusterFloorsOf(policy), keysRebound });
+    return reply.send({ applied: open.length, policyId, clusterFloors: clusterFloorsOf(policy), keysRebound, stale });
   });
 
   // The org-wide quality floor, settable from /settings/controls (P1-7).
@@ -187,6 +198,25 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
 
   /** Merge the proposals' floors into the org's bound policy (routing/floors.ts)
    * as a NEW policy row — policies are immutable history — and rebind keys. */
+  /**
+   * A PROPOSAL MAY ONLY BE APPLIED OVER THE WORLD IT MEASURED (2026-09-11).
+   * The 2026-09-08 incident was a proposal applied over a frontier it had
+   * never seen at prices it had never seen. The proposal records both the
+   * frontier version and the prices version it measured against
+   * (migrations 0095/0096); apply refuses when either has moved. Rows
+   * written before tracking (NULL) cannot be checked and are let through —
+   * the learning period re-measures them once, after which they carry both.
+   */
+  async function proposalStaleness(orgId: string, p: { clusterId: string; frontierVersion: number | null; pricesVersion: string | null }): Promise<string | null> {
+    if (p.frontierVersion !== null) {
+      const now = await loadCurrentFrontier(db, p.clusterId, orgId);
+      if (now === null) return `no frontier serves ${p.clusterId} now (measured against v${p.frontierVersion})`;
+      if (now.version !== p.frontierVersion) return `frontier moved v${p.frontierVersion} → v${now.version}`;
+    }
+    if (p.pricesVersion !== null && p.pricesVersion !== ctx.prices.version) return `prices moved ${p.pricesVersion} → ${ctx.prices.version}`;
+    return null;
+  }
+
   async function applyFloors(orgId: string, proposals: { clusterId: string; suggestedFloor: number }[]) {
     const first = await getFirstApiKeyWithPolicy(db, orgId);
     const current = first?.policyId ? ((await getPolicyById(db, orgId, first.policyId))?.config ?? null) : null;

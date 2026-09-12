@@ -26,6 +26,21 @@ export interface AuditionFact {
   outcome: 'earned a frontier slot' | 'did not beat the incumbent' | 'not measurable';
 }
 
+/** 2026-09-11: a learning proposal as a note may state it — the measurement
+ * record now that auditions are retired. No org, no prompts. */
+export interface ProposalFact {
+  clusterId: string;
+  family: ClusterFamily;
+  incumbent: string;
+  serving: string;
+  incumbentQuality: number;
+  servingQuality: number;
+  suggestedFloor: number;
+  projectedSaving: number | null;
+  n: number;
+  status: string;
+}
+
 export interface MixingFact {
   /** Absent when the finding is vague: the writer must not know which cluster. */
   clusterId?: string;
@@ -62,6 +77,8 @@ export interface FactSheet {
   at: string;
   frontier: ClusterFact[];
   auditions: AuditionFact[];
+  /** Optional so older run records still compose. */
+  proposals?: ProposalFact[];
   mixing: MixingFact[];
   numbers: {
     canaries: number;

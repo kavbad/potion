@@ -10,6 +10,7 @@
 //   3. write a PROPOSAL: the incumbent's quality on their work, the serving
 //      pick's retention against it, the floor Potion suggests, the saving.
 // Never applies anything. The dashboard's one button does that.
+import { budgetExhaustedReason, measurementBudgetFor } from './measurement-budget.js';
 import { randomUUID } from 'node:crypto';
 import { PolicySchema, strategyHash, type FrontierPoint, type Policy, type StrategyConfig } from '@potion/core';
 import {
@@ -29,7 +30,8 @@ import {
   insertLearningProposal,
   latestChallengerProposalsByCluster,
   latestProposalsByCluster,
-  learningSpendSince,
+  latestDriftAmong,
+  listLearningProposals,
   listOrgIdsWithSpans,
   loadDerivedSuite,
   pairedQualities,
@@ -57,8 +59,75 @@ import {
 import { perCallRequestLogSink, reconcileMetering } from './spend-sink.js';
 
 export const LEARNING_PERIOD_MIN_ITEMS = 8;
-export const LEARNING_PERIOD_DAILY_CAP_USD = 3;
+export { LEARNING_PERIOD_DAILY_CAP_USD } from './measurement-budget.js';
+/** Challenger proposals only: a fresh challenger proposal is not re-minted
+ * inside this window. Bar proposals no longer refresh on a clock — see
+ * measurementTrigger. */
 export const LEARNING_PERIOD_REFRESH_DAYS = 7;
+
+/**
+ * WHEN TO RE-MEASURE A KIND OF WORK (2026-09-11: "isn't there an initial
+ * measurement phase?"). There was not: every cluster with enough samples
+ * was re-measured whenever its last proposal was older than seven days,
+ * applied or not, on the same samples, forever — summarization for one org
+ * was measured on Aug 29 and again on Sep 6 to reproduce the same 0.378.
+ * A measurement is worth paying for when something it depends on changed:
+ *   · no proposal yet (the first measurement is the learning period);
+ *   · the frontier it measured against has moved (its version differs —
+ *     a bar set against last month's points may now be unreachable or
+ *     loose);
+ *   · enough samples arrived after the proposal to be worth a run — at
+ *     least LEARNING_RETRIGGER_MIN_NEW_SAMPLES, so a trickle of one prompt
+ *     per six hours does not re-run the judge on the same suite every time
+ *     (only the new cells cost anything under content-addressed resume,
+ *     but each run still pays the judge on every new cell);
+ *   · a shadow-qualified challenger appeared (it rides this run to prove
+ *     itself beside the serving pick);
+ *   · PROVIDER DRIFT (trigger four, drift-canary.ts): the weekly tripwire
+ *     found the point this cluster serves or measures against reading
+ *     below its stored interval on salted items. Every trigger above is an
+ *     internal event; this is the only one that can see the provider change
+ *     the model behind a fixed name — and content-addressed cells cannot,
+ *     so the tripwire also retired that model's cells before enqueueing us.
+ * Otherwise the last proposal still describes the world, and re-running
+ * would spend judge money to learn nothing. A proposal written before
+ * frontier versions were recorded (NULL) is re-measured once, then tracked.
+ * Returns the reason to measure, or null when nothing changed.
+ */
+export const LEARNING_RETRIGGER_MIN_NEW_SAMPLES = 8;
+
+/** Earlier looks at a cluster since its last APPLIED proposal — the
+ * repeated-look half of the comparison family. Rows are newest-first. */
+export function looksSinceLastApplied(rows: ReadonlyArray<{ clusterId: string; status: string }>, clusterId: string): number {
+  let looks = 0;
+  for (const r of rows) {
+    if (r.clusterId !== clusterId) continue;
+    if (r.status === 'applied') break;
+    looks += 1;
+  }
+  return looks;
+}
+
+export function measurementTrigger(
+  prev: { createdAt: Date; frontierVersion: number | null } | undefined,
+  cur: {
+    frontierVersion: number;
+    sampleTs: readonly Date[];
+    challengerQualified: boolean;
+    /** The latest drift detection on the points this cluster serves or
+     * measures against, if any (drift_canaries, verdict 'drift'). */
+    drift?: { detectedAt: Date; model: string } | null;
+  },
+): string | null {
+  if (prev === undefined) return 'first measurement';
+  if (prev.frontierVersion === null) return 'previous proposal predates frontier tracking';
+  if (prev.frontierVersion !== cur.frontierVersion) return `frontier moved v${prev.frontierVersion} → v${cur.frontierVersion}`;
+  if (cur.drift && cur.drift.detectedAt > prev.createdAt) return `provider drift on ${cur.drift.model} (tripwire ${cur.drift.detectedAt.toISOString().slice(0, 10)})`;
+  const fresh = cur.sampleTs.filter((t) => t > prev.createdAt).length;
+  if (fresh >= LEARNING_RETRIGGER_MIN_NEW_SAMPLES) return `${fresh} new samples since the last proposal`;
+  if (cur.challengerQualified) return 'a challenger qualified';
+  return null;
+}
 
 export interface LearningPeriodOrgReport {
   orgId: string;
@@ -152,18 +221,23 @@ export async function deriveLearningSuites(
   ctx: JobContext,
   orgId: string,
   judgeModel: string,
-): Promise<{ sizes: Record<string, number>; excluded: Record<string, number> }> {
+): Promise<{ sizes: Record<string, number>; excluded: Record<string, number>; sampleTs: Record<string, Date[]> }> {
   const rows = await ctx.db
     .select({ traceId: traceSpans.traceId, attrs: traceSpans.attrs, ts: traceSpans.ts })
     .from(traceSpans)
     .where(and(eq(traceSpans.orgId, orgId), eq(traceSpans.name, LEARNING_SPAN_NAME)));
   const byCluster = new Map<string, Array<EvalItem & { sourceTraceId?: string }>>();
   const excluded: Record<string, number> = {};
+  // every usable sample's timestamp per cluster — the change trigger's "did
+  // the suite grow, and by enough"
+  const sampleTs: Record<string, Date[]> = {};
   for (const r of rows) {
     const a = r.attrs as Record<string, unknown>;
     const clusterId = typeof a['potion.cluster_id'] === 'string' ? a['potion.cluster_id'] : null;
     const completion = typeof a['gen_ai.completion'] === 'string' ? a['gen_ai.completion'] : null;
     if (!clusterId || !completion) continue;
+    const ts = r.ts instanceof Date ? r.ts : new Date(r.ts as unknown as string);
+    if (!Number.isNaN(ts.getTime())) (sampleTs[clusterId] ??= []).push(ts);
     const toolCount = typeof a['potion.tool_count'] === 'number' ? a['potion.tool_count'] : 0;
     const partCount = typeof a['potion.multimodal_parts'] === 'number' ? a['potion.multimodal_parts'] : 0;
     if (toolCount > 0 || partCount > 0) {
@@ -203,7 +277,7 @@ export async function deriveLearningSuites(
     const loaded = await loadDerivedSuite(ctx.db, suiteId);
     sizes[clusterId] = loaded?.items.length ?? 0;
   }
-  return { sizes, excluded };
+  return { sizes, excluded, sampleTs };
 }
 
 export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, now = new Date()): Promise<LearningPeriodOrgReport> {
@@ -225,16 +299,16 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   const { providerMode, judgeModelOverride } = resolveEvalJudge(prices);
 
   // 1. suites from what was sampled, one per kind of work
-  const { sizes, excluded } = await deriveLearningSuites(ctx, orgId, judgeModelOverride ?? 'mock-judge');
+  const { sizes, excluded, sampleTs } = await deriveLearningSuites(ctx, orgId, judgeModelOverride ?? 'mock-judge');
   // Excluded samples are named, never hidden: tool/attachment-carrying
   // requests were captured as metadata but cannot be replayed faithfully.
   for (const [clusterId, n] of Object.entries(excluded)) {
     report.skipped.push({ clusterId, why: `${n} sampled request${n === 1 ? '' : 's'} carry tools or attachments — not yet measurable` });
   }
 
-  const dayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
   const fresh = new Date(now.getTime() - LEARNING_PERIOD_REFRESH_DAYS * 24 * 3600 * 1000);
   const existing = await latestProposalsByCluster(ctx.db, orgId);
+  const priorProposals = await listLearningProposals(ctx.db, orgId, 200);
   let suites = 0;
 
   // The org's bound policy — the same anchor the learning routes bind floors
@@ -255,7 +329,6 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
 
   for (const clusterId of Object.keys(PLATFORM_SUITE_BY_CLUSTER).sort()) {
     const prev = existing.get(clusterId);
-    if (prev && prev.createdAt > fresh) { report.skipped.push({ clusterId, why: 'fresh proposal' }); continue; }
     if (!(clusterId in sizes)) continue;
     const suiteId = learningSuiteId(orgId, clusterId);
     const loaded = await loadDerivedSuite(ctx.db, suiteId);
@@ -318,11 +391,32 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
       else report.skipped.push({ clusterId, why: `challenger ${qualified.strategyHash.slice(0, 8)} has no resolvable config — skipped` });
     }
 
-    // the cap: per org per day, billed to the org's own usage (operator, 2026-08-22)
-    const spentToday = await learningSpendSince(ctx.db, orgId, dayAgo);
-    const remaining = LEARNING_PERIOD_DAILY_CAP_USD - spentToday;
-    if (remaining <= 0.05) { report.skipped.push({ clusterId, why: 'daily cap reached' }); continue; }
-    const capUsd = Math.min(remaining, deriveSuiteVerifyCapUsd(loaded.items.length, challenger !== null ? 3 : 2));
+    // MEASURE ON CHANGE, not on a clock (measurementTrigger above).
+    const drift = await latestDriftAmong(ctx.db, [serving.strategyHash, incumbentHash], prev?.createdAt ?? new Date(0));
+    const trigger = measurementTrigger(
+      prev === undefined ? undefined : { createdAt: prev.createdAt, frontierVersion: prev.frontierVersion ?? null },
+      { frontierVersion: frontier.version, sampleTs: sampleTs[clusterId] ?? [], challengerQualified: challenger !== null, drift },
+    );
+    if (trigger === null) { report.skipped.push({ clusterId, why: `unchanged since the last proposal (frontier v${frontier.version}, fewer than ${LEARNING_RETRIGGER_MIN_NEW_SAMPLES} new samples, no challenger, no drift)` }); continue; }
+
+    // THE COMPARISON FAMILY this run's verdicts belong to (P1-1, extended
+    // to the learning period 2026-09-11). Every re-measure that can change
+    // what serves is a test; a trigger every eight samples is a REPEATED
+    // look. The family = the strategies tested beside the reference in this
+    // run (serving vs incumbent; the challenger vs serving) + the earlier
+    // looks at this cluster since its last APPLIED promotion. computeRetention
+    // widens the interval by 1/family; the lower-bound law then tests the
+    // widened bound, so the gate gets deafer as looks accumulate — a trigger
+    // may update the estimate and drop losers, promotion still clears a
+    // corrected bound at the suite's pre-registered n.
+    const comparisons = (challenger !== null ? 2 : 1) + looksSinceLastApplied(priorProposals, clusterId);
+
+    // THE BUDGET (2026-09-11: covered by Potion, so bounded like cost of
+    // goods): a daily cap and a monthly ceiling sized to the org's serving
+    // spend, both read from the request log where the money lands.
+    const budget = await measurementBudgetFor(ctx.db, orgId, now);
+    if (budget.exhausted !== null) { report.skipped.push({ clusterId, why: budgetExhaustedReason(budget) }); continue; }
+    const capUsd = Math.min(budget.remainingUsd, deriveSuiteVerifyCapUsd(loaded.items.length, challenger !== null ? 3 : 2));
 
     const meter = providerMode === 'live' ? perCallRequestLogSink(ctx.db, { orgId, clusterId, status: 'eval_live' }) : null;
     let summary: RunSummary;
@@ -366,7 +460,7 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
         clusterId, candidateHash: challenger.hash, incumbentHash: serving.strategyHash,
         pricesVersion: prices.version, providerMode, orgId, itemIds: loaded.items.map((i) => i.id),
       });
-      const cVerdict = computeRetention(cPairs, { seedKey: `challenger|${orgId}|${clusterId}|${suiteId}`, floor: DEFAULT_RETENTION_FLOOR });
+      const cVerdict = computeRetention(cPairs, { seedKey: `challenger|${orgId}|${clusterId}|${suiteId}`, floor: DEFAULT_RETENTION_FLOOR, comparisons });
       if (cVerdict.retention === null || cVerdict.insufficient !== null) {
         report.skipped.push({ clusterId, why: `challenger ${challenger.shadow.model}: insufficient pairs (${cVerdict.insufficient ?? 'none'})` });
       } else if (cVerdict.retention.ci95[0] < DEFAULT_RETENTION_FLOOR) {
@@ -425,7 +519,7 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
       clusterId, candidateHash: serving.strategyHash, incumbentHash, pricesVersion: prices.version, providerMode, orgId,
       itemIds: loaded.items.map((i) => i.id),
     });
-    const { retention, insufficient } = computeRetention(pairs, { seedKey: `learning-period|${orgId}|${clusterId}|${suiteId}`, floor: DEFAULT_RETENTION_FLOOR });
+    const { retention, insufficient } = computeRetention(pairs, { seedKey: `learning-period|${orgId}|${clusterId}|${suiteId}`, floor: DEFAULT_RETENTION_FLOOR, comparisons });
     if (!retention || insufficient) { report.skipped.push({ clusterId, why: `insufficient pairs: ${insufficient ?? 'none'}` }); report.spendUsd += summary.spendUsd; continue; }
     const incumbentQuality = pairs.reduce((s, p) => s + p.incumbentQuality, 0) / pairs.length;
     const servingQuality = pairs.reduce((s, p) => s + p.candidateQuality, 0) / pairs.length;
@@ -452,6 +546,8 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
       incumbentModel, incumbentHash, incumbentQuality, incumbentCostPer1K,
       servingHash: serving.strategyHash, servingModel: pointLabel(serving), servingQuality, servingCostPer1K: serving.costPer1K,
       retention, suggestedFloor, projectedSaving, items: pairs.length, spendUsd: summary.spendUsd, status: 'proposed',
+      frontierVersion: frontier.version,
+      pricesVersion: prices.version,
     });
     report.proposals.push({ clusterId, id, suggestedFloor, spendUsd: summary.spendUsd });
     report.spendUsd += summary.spendUsd;

@@ -106,13 +106,13 @@ const HAIR = 'border-[#d9d5cb]';
  * a bare "FALLBACK" chip hid that 7 of 10 kinds of work were serving the
  * priciest point because nothing cleared an unreachable bar). */
 const FALLBACK_LABEL: Record<string, string> = {
-  policy_infeasible: 'bar unreachable · best point served',
+  policy_infeasible: 'bar unreachable · cheapest tied-with-best served',
   no_frontier: 'not measured yet',
   reasoning_budget: 'reasoning skipped',
   no_point_resolvable: 'no measured route',
 };
 const FALLBACK_TITLE: Record<string, string> = {
-  policy_infeasible: 'No measured point clears your quality bar for this kind of work, so the highest-quality point serves — usually the most expensive one. Relax the bar in Controls to let cheaper measured points serve.',
+  policy_infeasible: 'No measured point clears your quality bar for this kind of work. The cheapest point the evidence cannot rank below the best serves. Relax the bar in Controls to route on price again.',
   no_frontier: 'This kind of work has no measured frontier yet; the default strategy serves.',
   reasoning_budget: 'The measured pick is a reasoning model and your output budget is too small for it; the next measured point serves.',
   no_point_resolvable: 'No measured point is resolvable under your provider set; the default strategy serves.',

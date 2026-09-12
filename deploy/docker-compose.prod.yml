@@ -333,7 +333,7 @@ services:
     profiles: ["observatory"]
     image: deploy-server
     working_dir: /app
-    command: ["node_modules/.bin/tsx", "scripts/observatory-week.ts"]
+    command: ["node_modules/.bin/tsx", "scripts/drift-canary.ts"]
     environment:
       OBSERVATORY_DB: /research/store
       OBSERVATORY_ARTIFACTS: /research/artifacts
