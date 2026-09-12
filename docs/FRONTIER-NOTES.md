@@ -97,7 +97,9 @@ cheaper") and drops the cluster to its family ("structured-output work").
   citation.
 
 ## Pipeline
-`scripts/observatory-week.ts` → run JSON + replay findings →
+the week's run JSON — materialised by the server's Monday tick from
+`drift_canaries` + `learning_proposals` (2026-09-11; the weekly script is
+retired) — + replay findings →
 `frontier-notes/compose.ts` (deterministic fact sheet: only public names,
 only permitted fields) → `frontier-notes/write.ts` (LLM drafts from the fact
 sheet ONLY — it never sees raw artifacts) → `frontier-notes/redact.ts`

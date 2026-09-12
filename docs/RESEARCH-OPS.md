@@ -8,8 +8,9 @@ independently verifies, four deterministic guards screen every draft, and
 publication passes the Action Gateway — born supervised, earned per the
 grant ledger.
 
-> **2026-09-11 — the weekly full run is retired.** `scripts/observatory-week.ts`
-> (canaries + auditions + digest + the Monday artifact) is gone. The only
+> **2026-09-11 — the weekly full run is retired.** The weekly script
+> (`observatory-week`, deleted: canaries + auditions + digest + the Monday
+> artifact) is gone. The only
 > clocked measurement is now the provider-drift tripwire
 > (`packages/workers/src/drift-canary.ts`, scheduled weekly by the server as
 > the `drift:canary` job; `scripts/drift-canary.ts` runs it once from a shell
@@ -153,10 +154,11 @@ generation is promoted.
 
 ## The roadmap (operator-directed, 2026-09-03)
 
-- **F5 — automate Monday — SHIPPED (55076e7)**: the Monday tick RUNS the
-  proven `scripts/observatory-week.ts` inside the server container (the
-  runtime image carries the tree and tsx), so the money path is never
-  duplicated and its envelope belt is untouched. **DISARMED unless
+- **F5 — automate Monday — SHIPPED (55076e7), REWIRED 2026-09-11**: the
+  Monday tick used to RUN the weekly script inside the server container;
+  it now MATERIALISES the week's run record from the `drift_canaries` and
+  `learning_proposals` ledgers (the tripwire itself is the server's weekly
+  `drift:canary` job), so the money path is never duplicated. **DISARMED unless
   `POTION_OBSERVATORY_ARM=YYYY-MM-DD`** is set in `.env.prod` — the same
   dated risk-acceptance the script demands by hand, deliberately not
   defaulted in compose. One run per ISO week (exclusive `wx` marker +
