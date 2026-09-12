@@ -83,7 +83,12 @@ export function namesKnownToCode(root: string): Set<string> {
   const files = [
     ...walk(join(root, 'apps'), /\.(ts|tsx)$/),
     ...walk(join(root, 'packages'), /\.(ts|tsx)$/),
-    ...walk(join(root, 'scripts'), /\.(ts|mjs)$/),
+    // `.sh` included (2026-09-12): a shell script is code, and this guard did
+    // not think so. scripts/deploy-prod.sh reads POTION_DEPLOY_OFF_MAIN, so
+    // documenting it correctly was reported as naming a variable "nothing
+    // reads" — the guard calling a real reader invisible. Any operational
+    // knob whose only reader is a shell script had the same hole.
+    ...walk(join(root, 'scripts'), /\.(ts|mjs|sh)$/),
     ...walk(join(root, 'deploy'), /.*/),
     join(root, 'Dockerfile'),
     join(root, '.env.example'),
