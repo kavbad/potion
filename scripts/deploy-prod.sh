@@ -119,6 +119,41 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     say "      Not fatal — the host is fed by rsync, not by git pull — but"
     say "      an unpushed deploy is one laptop failure from unreproducible."
   fi
+
+  # DEPLOY TRACKS MAIN (2026-09-12). Production ships commits that are ON
+  # main, never commits main has not seen.
+  #
+  # It used to be the other way round: work landed on deploy/** and main
+  # caught up in batches, so the two were never briefly identical. That is not
+  # just untidy — CI reads .github/workflows/ci.yml from the BASE, so a PR
+  # into deploy was gated by whatever workflow deploy happened to have. #18
+  # got a two-job gate while main had three, because the third job existed
+  # only on main. Every PR was tested against whichever half its base held.
+  #
+  # So the direction is fixed here, where it is checkable: HEAD must be
+  # contained in origin/main. `deploy/**` becomes a RECORD of what production
+  # is running — a pointer fast-forwarded to a main commit — rather than a
+  # place work accumulates.
+  git fetch -q origin main 2>/dev/null || say "NOTE  could not fetch origin/main — checking against the local ref."
+  if git rev-parse --verify -q origin/main >/dev/null; then
+    if git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+      ok "HEAD is on main — $(git rev-list --count HEAD..origin/main) commit(s) behind origin/main"
+    elif [ "${POTION_DEPLOY_OFF_MAIN:-}" = "1" ]; then
+      say "NOTE  HEAD is NOT on origin/main, and POTION_DEPLOY_OFF_MAIN=1 allowed it."
+      say "      Deliberate hotfix. Get it onto main straight after, or the next"
+      say "      deploy from main silently reverts it — which is exactly how"
+      say "      27 files came to exist only on the production filesystem."
+    else
+      bad "HEAD is not contained in origin/main — deploy tracks main."
+      say "      $(git rev-list --count origin/main..HEAD) commit(s) here are not on main."
+      say "      Land them on main first (PR), then fast-forward this branch to"
+      say "      main and re-run. Production must never hold code the trunk has"
+      say "      not accepted: that is how work ends up existing only on a"
+      say "      server, recoverable from nowhere."
+      say "      Deliberate hotfix? POTION_DEPLOY_OFF_MAIN=1, and land it after."
+      FAIL=1
+    fi
+  fi
 else
   bad "not a git repository — refusing to deploy an unidentifiable tree"
   FAIL=1
