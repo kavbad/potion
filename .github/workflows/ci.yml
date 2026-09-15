@@ -16,9 +16,17 @@ name: ci
 # branch gives a PR into any other branch no CI and no error. Every pull
 # request runs it; `push` stays scoped to the branches worth the runner
 # minutes on every commit.
+# PUSH RUNS ON MAIN ONLY (2026-09-15). `deploy/**` was here because work
+# used to land there first. Now deploy tracks main — it is only ever
+# fast-forwarded to a commit main has already tested — so a push run on
+# deploy re-ran the full suite on a commit that had just passed. Each such
+# run is ~52 billed minutes for zero new information. The billing wall this
+# repo hit on 2026-09-11 was reached by run COUNT, not by any one workflow:
+# 68 ci runs in the seven days before it, ~52 minutes each, against a
+# 3,000-minute monthly allowance.
 on:
   push:
-    branches: [main, 'deploy/**']
+    branches: [main]
   pull_request:
 
 # Cancel superseded runs on the same ref (saves runner minutes on rapid pushes).
