@@ -1,8 +1,10 @@
 // /status (P2-10): "is it down?" answered self-serve, publicly. The
 // dashboard container probes the API server-side on every load — no cache,
 // no stored history, no green-by-default: if the probe fails, the page says
-// so. History lives in the uptime watch (GitHub Actions probes every 15
-// minutes); this page is the live answer.
+// so. History lives in the uptime watch (.github/workflows/uptime.yml, a
+// GitHub Actions schedule that in practice fires a few times a day — the cron
+// says 15 minutes, GitHub runs schedules best-effort and this one has averaged
+// 5–7 runs/day since 2026-08-24); this page is the live answer.
 import type { Metadata } from 'next';
 import { SiteShell } from '@/components/site-header';
 import { apiUrl } from '@/lib/api';
@@ -53,8 +55,8 @@ export default async function StatusPage() {
         </div>
 
         <p className="mt-6 text-[13px] leading-relaxed text-soft">
-          An independent watcher also probes both endpoints every 15 minutes from outside our
-          infrastructure and alerts us on failure. Seeing a problem this page doesn&rsquo;t?{' '}
+          An independent watcher also probes both endpoints several times a day from outside
+          our infrastructure and alerts us on failure. Seeing a problem this page doesn&rsquo;t?{' '}
           <a href="mailto:kavon@mutiny.ai" className="text-accent underline">kavon@mutiny.ai</a>.
         </p>
       </main>
