@@ -122,3 +122,70 @@ describe('internal policies never masquerade as the org rule', () => {
     expect(again.filter((r) => r.orgId === ORG2)).toHaveLength(0);
   });
 });
+
+// THE OLDEST RULE IS NOT THE CURRENT RULE (2026-09-16). Found live on the
+// production smoke test: a key minted that day bound to the org's OLDEST
+// serving policy — an August row with an unrounded floor of 0.978543771043771
+// that no classification point can clear — while the org's six other keys
+// were all on the September "your bar" at 0.84. Every request on the new key
+// served the platform fallback (fallback=1). The mint took `existing[0]` of a
+// createdAt-ascending list, i.e. whichever rule the org wrote FIRST. The
+// org's rule is the one its keys are on — the policy anchor — or, with no
+// keys yet, the newest rule it wrote.
+describe("a minted key binds the org's CURRENT rule, not its oldest", () => {
+  const ORG2 = 'org_current_rule';
+  const COOKIE2 = 'potion_session=ps_current_rule';
+  const ORG3 = 'org_current_rule_nokeys';
+  const COOKIE3 = 'potion_session=ps_current_rule_nokeys';
+  beforeAll(async () => {
+    for (const [org, user, ses, tok] of [
+      [ORG2, 'usr_cr', 'ses_cr', 'ps_current_rule'],
+      [ORG3, 'usr_cr3', 'ses_cr3', 'ps_current_rule_nokeys'],
+    ] as const) {
+      await createOrg(h.db, { id: org, name: org });
+      await createUser(h.db, { id: user, email: `${user}@x.dev`, name: user });
+      await createMembership(h.db, { orgId: org, userId: user, role: 'admin' });
+      await createSession(h.db, {
+        id: ses, userId: user, tokenHash: sha256(tok), orgId: org,
+        expiresAt: new Date(Date.now() + 3600_000),
+      });
+      // Written FIRST: the August trap, verbatim.
+      await insertPolicy(h.db, {
+        id: `pol-old-${org}`, orgId: org, name: 'min_cost-old',
+        config: { type: 'min_cost', qualityFloor: 0.978543771043771 },
+        createdAt: new Date('2026-08-22T07:00:02.033Z'),
+      });
+      // Written LATER: the rule the org actually chose.
+      await insertPolicy(h.db, {
+        id: `pol-current-${org}`, orgId: org, name: 'your bar · 1 kind of work',
+        config: { type: 'min_cost', qualityFloor: 0.84 },
+        createdAt: new Date('2026-09-11T19:27:11.189Z'),
+      });
+    }
+    // ORG2 has a key on the current rule (the anchor); ORG3 has no keys at all.
+    await insertApiKey(h.db, {
+      id: 'key-cr-anchor', keyHash: sha256('pk_cr_anchor'), name: 'serving-2026-08-22',
+      orgId: ORG2, policyId: `pol-current-${ORG2}`,
+    });
+  });
+
+  it('with keys: the new key joins the rule the existing keys are on', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/api-keys',
+      headers: { cookie: COOKIE2, 'content-type': 'application/json' },
+      payload: { name: 'serving-2026-09-16' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    expect((JSON.parse(res.body) as { policyId: string }).policyId).toBe(`pol-current-${ORG2}`);
+  });
+
+  it('with no keys yet: the new key takes the NEWEST rule, not the first one written', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/api-keys',
+      headers: { cookie: COOKIE3, 'content-type': 'application/json' },
+      payload: { name: 'first key' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    expect((JSON.parse(res.body) as { policyId: string }).policyId).toBe(`pol-current-${ORG3}`);
+  });
+});

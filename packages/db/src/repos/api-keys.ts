@@ -230,6 +230,32 @@ export async function getFirstServingApiKeyWithPolicy(
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null;
 }
 
+/**
+ * THE ORG'S CURRENT RULE (2026-09-16): the serving policy its keys are on —
+ * the policy anchor's — or, with no live keys yet, the NEWEST serving policy
+ * it wrote. Null only when the org has no serving policy at all.
+ *
+ * Before this, three call sites took `listServingPolicies(...)[0]` — the
+ * OLDEST row, since that list is createdAt-ascending. On production the
+ * operator's oldest row was an August policy with an unrounded floor
+ * (0.978543771043771) that no classification point can clear; the six keys
+ * the operator actually used had long since moved to a September rule at
+ * 0.84. A key minted 2026-09-16 was bound to the August row and served the
+ * platform fallback on every request. "First written" is not "in force".
+ */
+export async function getCurrentServingPolicy(db: PotionDb, orgId: string): Promise<PolicyRow | null> {
+  const serving = await listServingPolicies(db, orgId);
+  if (serving.length === 0) return null;
+  const anchor = await getFirstServingApiKeyWithPolicy(db, orgId);
+  const anchored = anchor?.policyId !== null && anchor?.policyId !== undefined
+    ? serving.find((p) => p.id === anchor.policyId)
+    : undefined;
+  if (anchored !== undefined) return anchored;
+  // `>=`: the list is createdAt-ascending, so on a same-instant tie the later
+  // row wins rather than the earlier one — the direction of the whole fix.
+  return serving.reduce((newest, p) => (p.createdAt.getTime() >= newest.createdAt.getTime() ? p : newest));
+}
+
 /** One-shot boot repair: CUSTOMER keys bound to an INTERNAL policy row —
  * the damage the discipline above prevents going forward — are rebound to
  * the org's first serving policy, minting the given default when the org
@@ -252,7 +278,8 @@ export async function repairInternalPolicyBindings(
     const internalIds = new Set(policyRows.filter(isInternalPolicyRow).map((p) => p.id));
     const damaged = keys.filter((k) => internalIds.has(k.policyId!));
     if (damaged.length === 0) continue;
-    let target = policyRows.find((p) => !isInternalPolicyRow(p)) ?? null;
+    // The org's CURRENT rule, not its oldest (see getCurrentServingPolicy).
+    let target = await getCurrentServingPolicy(db, orgId);
     if (target === null) {
       const id = `pol-${randomUUID().slice(0, 8)}`;
       await insertPolicy(db, { id, orgId, name: 'default', config: defaultPolicyConfig as PolicyRow['config'] });

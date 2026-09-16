@@ -66,7 +66,7 @@ import {
   rotateProviderKey,
   setProviderKeyStatus,
   touchProviderKeyValidation,
-  type ProviderKeyRow, listServingPolicies, insertPolicy, insertCustodyAudit, updateApiKeyLimits } from '@potion/db';
+  type ProviderKeyRow, getCurrentServingPolicy, insertPolicy, insertCustodyAudit, updateApiKeyLimits } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
 
@@ -416,9 +416,13 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
     if (boundPolicyId === undefined) {
       // Serving policies only (2026-08-28): the Lab's internal rows (lab-io
       // at floor ZERO, dial pins) must never become a customer key's rule.
-      const existing = await listServingPolicies(db, org.orgId);
-      if (existing.length > 0) {
-        boundPolicyId = existing[0]!.id;
+      // The CURRENT rule (2026-09-16), not the oldest: `[0]` of the
+      // createdAt-ascending list bound a fresh production key to an August
+      // row with an infeasible floor while every other key was on the
+      // September rule — fallback=1 on every request it served.
+      const current = await getCurrentServingPolicy(db, org.orgId);
+      if (current !== null) {
+        boundPolicyId = current.id;
       } else {
         boundPolicyId = `pol-${randomUUID().slice(0, 8)}`;
         await insertPolicy(db, {

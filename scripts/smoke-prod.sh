@@ -35,11 +35,19 @@ jget() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval
 code=$(post c1 -d "$BODY")
 trace=$(hdr c1 x-frontier-trace)
 missing=""
-for field in cluster= strategy= policy= provenance=live; do
+# fallback=0 is REQUIRED (2026-09-16). This check passed 6/6 on a day every
+# request was served by the platform default: the key's policy floor
+# (0.978543771043771, an August row) admitted no measured point, so the
+# server — correctly — declined to claim a measured pick and said so with
+# fallback=1. A smoke test that is green while nothing is routed proves
+# only that the fallback works. `traceWasRouted` in routes/chat.ts is the
+# server's own definition: frontier=v<n>, n>0, AND fallback=0.
+for field in cluster= strategy= policy= provenance=live 'fallback=0'; do
   case "$trace" in *"$field"*) ;; *) missing="$missing $field" ;; esac
 done
 if [ "$code" != 200 ]; then bad "chat completion" "HTTP $code (expected 200)"
 elif [ -z "$trace" ]; then bad "chat completion" "200 but no x-frontier-trace header"
+elif [[ "$trace" == *"fallback=1"* ]]; then bad "chat completion" "NOT ROUTED — fallback=1: this key's policy admitted no measured point, so the platform default served it. Bind the key to a feasible floor (Settings → your bar → apply to all keys). trace: $trace"
 elif [ -n "$missing" ]; then bad "chat completion" "trace missing:$missing (got: $trace)"
 else ok "chat completion" "200, x-frontier-trace: $trace"; fi
 
