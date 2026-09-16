@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { desc } from 'drizzle-orm';
 import { sha256, strategyHash, type Frontier, type FrontierPoint } from '@potion/core';
-import { createOrg, designateIncumbent, insertApiKey, insertPolicy, requestLogs, upsertOrgIncumbents, upsertStrategyConfig } from '@potion/db';
+import { createOrg, designateIncumbent, insertApiKey, insertPolicy, insertRequestLog, requestLogs, setOrgRouteAllModels, upsertOrgIncumbents, upsertStrategyConfig } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
 import { buildServer } from '../src/server.js';
 import { baselineCostUsd } from '../src/routes/chat.js';
@@ -55,12 +55,12 @@ afterAll(async () => {
   await app.close();
 });
 
-async function serve(prompt: string) {
+async function serve(prompt: string, model = 'potion-auto') {
   const res = await app.inject({
     method: 'POST',
     url: '/v1/chat/completions',
     headers: { authorization: `Bearer ${KEY}`, 'x-potion-cluster': 'code-gen' },
-    payload: { model: 'potion-auto', messages: [{ role: 'user', content: prompt }] },
+    payload: { model, messages: [{ role: 'user', content: prompt }] },
   });
   const [row] = await db().select().from(requestLogs).orderBy(desc(requestLogs.id)).limit(1);
   return { status: res.statusCode, model: res.headers['x-potion-model'], cost: row?.usage?.costUsd ?? null, baseline: row?.baselineCostUsd ?? null, basis: row?.baselineBasis ?? null };
@@ -99,6 +99,30 @@ describe('the baseline on a served request', () => {
     expect(r.basis).toBe('best-of-frontier'); // 0089: the silent fallback is now distinguishable on the row
     expectScaling(null, 4.0 / 0.2); // no named baseline → the frontier's best point
   });
+  // THE INCUMBENT, OBSERVED (2026-09-16). Nothing named anywhere — but this
+  // org's requests have been naming mock-mid on code-gen. That IS what they
+  // use; the receipt compares against it and says so.
+  it('with nothing named, the model this org’s requests NAMED MOST on this kind of work is the comparator', async () => {
+    for (let i = 0; i < 3; i++) {
+      await insertRequestLog(db(), { orgId: ORG, model: 'mock-mid', clusterId: 'code-gen', status: 'ok', apiKeyId: 'key-baseline' });
+    }
+    clearBaselineCache();
+    expect(await baselineFor(db(), ORG, 'code-gen', FRONTIER, Date.now(), { resolveAlias: (l) => l })).toEqual({ hash: H(MID), basis: 'observed-incumbent' });
+    const r = await serve('write a function that reverses a list — baseline observed');
+    expect(r.status).toBe(200);
+    expect(r.basis).toBe('observed-incumbent');
+    expectScaling(H(MID), 1.0 / 0.2);
+  });
+  it('GET /api/incumbents/observed ranks what the requests named, per kind of work', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/incumbents/observed', headers: { authorization: `Bearer ${KEY}` } });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { windowDays: number; clusters: Array<{ clusterId: string; namedRequests: number; models: Array<{ label: string; alias: string | null; requests: number; share: number }> }> };
+    expect(body.windowDays).toBe(30);
+    const c = body.clusters.find((x) => x.clusterId === 'code-gen');
+    expect(c, JSON.stringify(body)).toBeDefined();
+    expect(c!.models[0]).toMatchObject({ label: 'mock-mid', alias: 'mock-mid', share: 1 });
+    expect(c!.models[0]!.requests).toBeGreaterThanOrEqual(3);
+  });
   it('is the org’s named model from onboarding when it sits on the frontier', async () => {
     await upsertOrgIncumbents(db(), { orgId: ORG, models: ['mock-mid'], other: null, samplingConsent: false });
     clearBaselineCache();
@@ -115,6 +139,23 @@ describe('the baseline on a served request', () => {
     const r = await serve('write a function that reverses a list — baseline cluster');
     expect(r.basis).toBe('cluster-incumbent');
     expectScaling(H(TOP), 4.0 / 0.2); // the designated point — same ratio as best here, but a different hash
+  });
+  // THE EXACT COUNTERFACTUAL (2026-09-16): a request that NAMES a model
+  // (route-all mode routes past it by measurement) is compared to that
+  // model — what this very request would have cost on what its own code
+  // asked for. It outranks every designation: nothing is more specific.
+  it('a request that names a model is compared to THAT model — over the cluster designation', async () => {
+    await setOrgRouteAllModels(db(), ORG, true);
+    try {
+      expect(await baselineFor(db(), ORG, 'code-gen', FRONTIER, Date.now(), { requestModel: 'mock-mid' })).toEqual({ hash: H(MID), basis: 'request-incumbent' });
+      const r = await serve('write a function that reverses a list — baseline request', 'mock-mid');
+      expect(r.status).toBe(200);
+      expect(r.model, 'route-all routes by measurement, not by the label').toBe('mock-cheap');
+      expect(r.basis).toBe('request-incumbent');
+      expectScaling(H(MID), 1.0 / 0.2);
+    } finally {
+      await setOrgRouteAllModels(db(), ORG, false);
+    }
   });
 });
 

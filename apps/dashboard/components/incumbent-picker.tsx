@@ -18,6 +18,12 @@ function humanize(other: string): string {
   return SENTINELS[other] ?? other;
 }
 
+interface ObservedCluster {
+  clusterId: string;
+  namedRequests: number;
+  models: { label: string; alias: string | null; requests: number; share: number; lastSeen: string }[];
+}
+
 export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | null; onSaved?: (i: Incumbents) => void }) {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [chosen, setChosen] = useState<string[]>(initial?.models ?? []);
@@ -27,13 +33,27 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<Incumbents | null>(initial);
   const [error, setError] = useState<string | null>(null);
+  // SEEN ON YOUR TRAFFIC (2026-09-16): what the org's requests already
+  // named, per kind of work. Asking is the fallback; observing is the default.
+  const [observed, setObserved] = useState<ObservedCluster[]>([]);
 
   useEffect(() => {
     fetch('/api/incumbents/options', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : { roster: [] }))
       .then((b: { roster: RosterEntry[] }) => setRoster(b.roster ?? []))
       .catch(() => setRoster([]));
+    fetch('/api/incumbents/observed', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { clusters: [] }))
+      .then((b: { clusters: ObservedCluster[] }) => setObserved(b.clusters ?? []))
+      .catch(() => setObserved([]));
   }, []);
+
+  const observedAliases = Array.from(
+    new Set(observed.flatMap((c) => c.models.map((m) => m.alias).filter((a): a is string => a !== null))),
+  );
+  function useObserved() {
+    setChosen((prev) => Array.from(new Set([...prev, ...observedAliases])));
+  }
 
   async function save() {
     setBusy(true);
@@ -89,8 +109,41 @@ export function IncumbentPicker({ initial, onSaved }: { initial: Incumbents | nu
     </div>
   );
 
+  const observedBlock = observed.length > 0 && (
+    <div className="mb-4 rounded-md border border-line bg-paper px-4 py-3">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <div className="font-mono text-[11.5px] uppercase tracking-[0.13em] text-faint">Seen on your traffic · last 30 days</div>
+        {observedAliases.length > 0 && (
+          <button type="button" onClick={useObserved} className="rounded border border-line px-2 py-0.5 text-xs text-soft hover:text-ink">
+            Use these
+          </button>
+        )}
+      </div>
+      <ul className="space-y-1">
+        {observed.map((c) => (
+          <li key={c.clusterId} className="text-[12.5px] text-soft">
+            <span className="font-medium text-ink">{c.clusterId}</span>
+            {' — '}
+            {c.models.slice(0, 3).map((m, i) => (
+              <span key={m.label}>
+                {i > 0 ? ', ' : ''}
+                <span className={m.alias ? 'text-ink' : 'text-faint'}>{m.alias ?? m.label}</span> {Math.round(m.share * 100)}%
+                {m.alias ? '' : ' (not on the measured roster)'}
+              </span>
+            ))}
+            <span className="text-faint"> · {c.namedRequests} named request{c.namedRequests === 1 ? '' : 's'}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-[12px] leading-relaxed text-faint">
+        Your requests already name what you use, per kind of work. Receipts compare against these when nothing is named here.
+      </p>
+    </div>
+  );
+
   return (
     <div className="border border-[#d9d5cb] bg-[#fbfaf7] px-5 py-4">
+      {observedBlock}
       {/* The first-run gate exists so nobody reads 28 checkboxes; settings
           must not undo that. A designated org sees its state, and the full
           roster waits behind one disclosure. */}

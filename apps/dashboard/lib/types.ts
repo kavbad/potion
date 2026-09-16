@@ -610,7 +610,7 @@ export interface RoutingActivityRow {
   /** WHICH comparator produced baselineCostUsd; 'policy-infeasible' = the
    * bound floor admitted no point, the best measured point served, and the
    * counterfactual is that same point (never a saving). */
-  baselineBasis: 'cluster-incumbent' | 'org-incumbent' | 'best-of-frontier' | 'policy-infeasible' | null;
+  baselineBasis: 'request-incumbent' | 'cluster-incumbent' | 'org-incumbent' | 'observed-incumbent' | 'best-of-frontier' | 'policy-infeasible' | null;
   clusterId: string | null;
   strategy: string | null;
   frontierVersion: number | null;

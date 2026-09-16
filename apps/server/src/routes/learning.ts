@@ -35,6 +35,7 @@ import { floorFeasibility, infeasibleOnly } from '../routing/feasibility.js';
 import type { PotionContext } from '../context.js';
 import type { PotionQueue } from '@potion/queue';
 import { incumbentRoster, resolveTypedModel } from '../incumbents/roster.js';
+import { OBSERVED_WINDOW_DAYS, observedIncumbentsFor } from '../incumbents/observed.js';
 import { learningSampleCounts } from '../learning/sampling.js';
 
 const IncumbentsBody = z
@@ -70,6 +71,18 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     }
     await setOrgRouteAllModels(db, org.orgId, parsed.data.routeAllModels);
     return reply.send({ routeAllModels: parsed.data.routeAllModels });
+  });
+
+  // WHAT YOUR TRAFFIC SAYS YOU USE (2026-09-16): per kind of work, the model
+  // labels this org's requests named in the last 30 days, ranked by volume,
+  // resolved to the roster where possible. The picker shows it and offers
+  // it as the answer; the receipts already use it as the comparator when
+  // nothing was named.
+  app.get('/api/incumbents/observed', async (req, reply) => {
+    const org = req.potionOrg;
+    if (!org) return reply.code(401).send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
+    const clusters = await observedIncumbentsFor(db, ctx.prices, org.orgId);
+    return reply.send({ windowDays: OBSERVED_WINDOW_DAYS, clusters });
   });
 
   app.get('/api/incumbents', async (req, reply) => {

@@ -45,6 +45,7 @@ import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, in
 // G0 (0082): serve-time router-version stamping — appended import.
 import { stampedRouterVersion } from '../routing/router-stamp.js';
 import { alertFloorInfeasible } from '../routing/floor-alert.js';
+import { aliasResolver } from '../incumbents/observed.js';
 // G1 (0086): randomized incumbent holdout — appended import.
 import { resolveHoldout } from '../routing/holdout.js';
 import { resolveWorkloadSubAssignment } from '../routing/workload-assignment.js';
@@ -546,8 +547,13 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // (Settings · Controls, migration 0058); the recommended path
     // ('potion-auto') never pays the org-row read below.
     let pinnedModel: string | null = null;
+    // THE MODEL THIS REQUEST NAMED (2026-09-16): the exact counterfactual for
+    // its receipt, whether it pins or (route-all) routes past it. Null for
+    // 'potion-auto' and for the org's own potion/<slug> name.
+    let requestNamedModel: string | null = null;
     if (body.model !== 'potion-auto') {
       const entry = ctx.prices.entries.find((e) => e.alias === body.model || e.model === body.model);
+      if (entry !== undefined) requestNamedModel = entry.alias;
       const orgRow = await getOrgById(ctx.db.db, auth.org.orgId);
       // R1 (Router direction, 2026-08-27): `potion/<slug>` is the org's
       // NAMED model id — an exact alias of potion-auto, resolved only against
@@ -1118,7 +1124,12 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     logBase.servedModel = op.config === null ? null : strategyModelLabel(op.config);
     const servedInstrument = chosen.servedInstrument !== 'default' ? chosen.servedInstrument : null;
     if (skippedReasoning !== null && op.config !== null) app.log.warn({ orgId: auth.org.orgId, clusterId, skipped: skippedReasoning, served: strategyModelLabel(op.config), maxOutputTokens: execMaxOutputTokens }, 'reasoning model skipped under a small output budget');
-    const baseline = heldOut !== null ? null : await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier);
+    const baseline = heldOut !== null
+      ? null
+      : await baselineFor(ctx.db.db, auth.org.orgId, clusterId, op.frontier, Date.now(), {
+          requestModel: requestNamedModel,
+          resolveAlias: aliasResolver(ctx.prices),
+        });
     // 0089: the recorded savings number carries its comparator — a caption
     // saying "vs your incumbent" must be provable from the row, and the
     // silent best-of-frontier fallback must be distinguishable from it.

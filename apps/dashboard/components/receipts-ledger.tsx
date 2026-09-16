@@ -26,10 +26,14 @@ const FALLBACK_LABEL: Record<string, string> = {
  * may only name what the row proves (caption-vs-provenance). */
 function comparatorOf(basis: RoutingActivityRow['baselineBasis']): string {
   switch (basis) {
+    case 'request-incumbent':
+      return 'the model this request named';
     case 'org-incumbent':
       return 'the model you named';
     case 'cluster-incumbent':
       return 'the model you designated for this kind of work';
+    case 'observed-incumbent':
+      return 'the model your requests named most on this kind of work';
     default:
       return 'the best measured model';
   }
