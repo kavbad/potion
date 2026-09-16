@@ -17,6 +17,7 @@
 // opposite polarity of the dev bypass (which fails open outside
 // production); a deployment without the token has NO operator surface.
 // Paths live under /operator/* — the /api/* auth hook never sees them.
+import { ensureDefaultAlertRule } from '../default-alert-rule.js';
 import { timingSafeEqual } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -93,6 +94,8 @@ export function registerOperatorRoutes(
     }
     const email = body.data.adminEmail.trim().toLowerCase();
     await createOrg(db, { id: orgId, name: body.data.name });
+    // Operator-provisioned orgs hear about their first problem too (2026-09-16).
+    await ensureDefaultAlertRule(db, orgId, email).catch(() => undefined);
     const existing = await getUserByEmail(db, email);
     let userId: string;
     if (existing) {

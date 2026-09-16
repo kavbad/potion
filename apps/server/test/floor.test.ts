@@ -128,6 +128,42 @@ describe('policy apply with rebindKeys', () => {
     expect(stored!.config.type).toBe('max_quality');
   });
 
+  // PER-KIND FLOORS SURVIVE "Apply to my keys" (2026-09-16, customer-eyes
+  // review): the picker sends only the policy shape, and the rebind used to
+  // drop every measured per-kind bar — a code-review floor of 0.97 vanished
+  // without a word. The Quality floor card beside it always carried them.
+  it('rebinding from the picker carries the current per-kind floors; an explicit clusterFloors in the body wins', async () => {
+    const db = app.potion.db.db;
+    const { updateApiKeyPolicy } = await import('@potion/db');
+    await insertPolicy(db, {
+      id: 'pol-floor-kinds',
+      orgId: ORG,
+      name: 'with kinds',
+      config: { type: 'min_cost', qualityFloor: 0.9, clusterFloors: { 'code-review': 0.97 }, shadow: { sampleRate: 0.1, candidates: 'frontier' } },
+    });
+    await updateApiKeyPolicy(db, ORG, 'key-floor-admin', 'pol-floor-kinds');
+    await updateApiKeyPolicy(db, ORG, 'key-floor-serve', 'pol-floor-kinds');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/policies',
+      headers: { authorization: `Bearer ${ADMIN_KEY}`, 'content-type': 'application/json' },
+      payload: { policy: { type: 'min_cost', qualityFloor: 0.8 }, rebindKeys: true },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const stored = await getPolicyById(db, ORG, (res.json() as { policy: { id: string } }).policy.id);
+    expect(stored!.config).toMatchObject({ type: 'min_cost', qualityFloor: 0.8, clusterFloors: { 'code-review': 0.97 }, shadow: { sampleRate: 0.1 } });
+    // explicit wins
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/api/policies',
+      headers: { authorization: `Bearer ${ADMIN_KEY}`, 'content-type': 'application/json' },
+      payload: { policy: { type: 'min_cost', qualityFloor: 0.8, clusterFloors: { 'code-review': 0.9 } }, rebindKeys: true },
+    });
+    expect(res2.statusCode, res2.body).toBe(201);
+    const stored2 = await getPolicyById(db, ORG, (res2.json() as { policy: { id: string } }).policy.id);
+    expect((stored2!.config as { clusterFloors?: Record<string, number> }).clusterFloors).toEqual({ 'code-review': 0.9 });
+  });
+
   it('a serve-scoped key may not rebind', async () => {
     const res = await app.inject({
       method: 'POST',

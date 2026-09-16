@@ -508,6 +508,23 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
       const first = await getFirstServingApiKeyWithPolicy(db, org.orgId);
       const current = first?.policyId ? ((await getPolicyById(db, org.orgId, first.policyId))?.config ?? null) : null;
       effective = { ...policy, ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
+      // PER-KIND FLOORS SURVIVE TOO (2026-09-16, customer-eyes review): the
+      // picker rebuilds the policy SHAPE from its form and sent no
+      // clusterFloors, so "Apply to my keys" silently dropped every measured
+      // per-kind bar — the same org had a code-review floor of 0.97 vanish.
+      // The Quality floor card beside it (PUT /api/floor) already carried
+      // them. Carry when the new shape can hold them and the caller did not
+      // set its own; an explicit clusterFloors in the body wins.
+      if (
+        (effective.type === 'min_cost' || effective.type === 'compound') &&
+        effective.clusterFloors === undefined &&
+        current &&
+        (current.type === 'min_cost' || current.type === 'compound') &&
+        current.clusterFloors !== undefined &&
+        Object.keys(current.clusterFloors).length > 0
+      ) {
+        effective = { ...effective, clusterFloors: { ...current.clusterFloors } };
+      }
     }
     // Tenant scope (M2 #13): the policy row lives in the resolved org.
     await insertPolicy(db, { id, orgId: org.orgId, name: policyName, config: effective });
