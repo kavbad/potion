@@ -31,6 +31,7 @@ import {
 import { openAiError, requireRole } from '../auth.js';
 import type { Policy } from '@potion/core';
 import { floorFor, mintFloor, withClusterFloor } from '../routing/floors.js';
+import { floorFeasibility, infeasibleOnly } from '../routing/feasibility.js';
 import type { PotionContext } from '../context.js';
 import type { PotionQueue } from '@potion/queue';
 import { incumbentRoster, resolveTypedModel } from '../incumbents/roster.js';
@@ -166,6 +167,21 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
   // No invented lower bound: core PolicySchema allows 0-1, and an operator
   // explicitly setting a low bar is setting THEIR bar (same closure).
   const FloorBody = z.object({ qualityFloor: z.number().min(0).max(1) }).strict();
+  // FEASIBILITY BEFORE COMMITMENT (2026-09-16): what this floor would mean
+  // per kind of work, computed exactly as PUT /api/floor would bind it —
+  // per-kind floors carried, latency bound kept — so the card can warn
+  // before the click. Viewer-readable: it changes nothing.
+  app.get('/api/floor/feasibility', async (req, reply) => {
+    const org = req.potionOrg;
+    if (!org) return reply.code(401).send(openAiError('authentication required', 'invalid_request_error', 'authentication_required'));
+    const raw = Number((req.query as { floor?: string }).floor);
+    const parsed = FloorBody.safeParse({ qualityFloor: raw });
+    if (!parsed.success) return reply.code(400).send(openAiError('floor must be a number in [0, 1]', 'invalid_request_error'));
+    const next = await floorPolicyFor(org.orgId, mintFloor(parsed.data.qualityFloor));
+    const clusters = await floorFeasibility(db, org.orgId, next);
+    return reply.send({ floor: mintFloor(parsed.data.qualityFloor), clusters, infeasible: infeasibleOnly(clusters) });
+  });
+
   app.put('/api/floor', { preHandler: [requireRole('admin')] }, async (req, reply) => {
     const org = req.potionOrg!;
     const parsed = FloorBody.safeParse(req.body);
@@ -176,13 +192,12 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
     // One minting rule with apply and the plan binding (routing/floors.ts):
     // FLOOR to 2dp, never round up past what was asked for.
     const f = mintFloor(parsed.data.qualityFloor);
-    const first = await getFirstApiKeyWithPolicy(db, org.orgId);
-    const current = first?.policyId ? ((await getPolicyById(db, org.orgId, first.policyId))?.config ?? null) : null;
-    const carried = { ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
-    let next: Policy;
-    if (current && (current.type === 'min_cost' || current.type === 'compound')) next = { ...current, qualityFloor: f };
-    else if (current && current.type === 'latency_bound') next = { type: 'compound', qualityFloor: f, p95Ms: current.p95Ms, ...carried };
-    else next = { type: 'min_cost', qualityFloor: f, ...carried };
+    const next = await floorPolicyFor(org.orgId, f);
+    const current = await currentBoundPolicy(org.orgId);
+    // The warning rides the response too (2026-09-16): the card asked
+    // before saving, but an API caller did not — so the save names every
+    // kind of work where this floor admits no measured point.
+    const infeasible = infeasibleOnly(await floorFeasibility(db, org.orgId, next));
     const policyId = `pol-${randomUUID().slice(0, 8)}`;
     await insertPolicy(db, { id: policyId, orgId: org.orgId, name: `floor ${f.toFixed(2)}`, config: next });
     const keys = (await listApiKeys(db, org.orgId)).filter((k) => !k.revokedAt);
@@ -193,8 +208,26 @@ export function registerLearningRoutes(app: FastifyInstance, ctx: PotionContext,
       clusterFloors: clusterFloorsOf(next),
       keysRebound: keys.length,
       previousType: current?.type ?? null,
+      infeasible,
     });
   });
+
+  /** The org's bound policy config, resolved as PUT /api/floor always has. */
+  async function currentBoundPolicy(orgId: string): Promise<Policy | null> {
+    const first = await getFirstApiKeyWithPolicy(db, orgId);
+    return first?.policyId ? ((await getPolicyById(db, orgId, first.policyId))?.config ?? null) : null;
+  }
+
+  /** The policy PUT /api/floor would bind for floor `f`: per-kind floors
+   * carried, a latency bound kept as compound, riders carried. Shared with
+   * the feasibility read so the warning describes exactly what would bind. */
+  async function floorPolicyFor(orgId: string, f: number): Promise<Policy> {
+    const current = await currentBoundPolicy(orgId);
+    const carried = { ...(current?.shadow ? { shadow: current.shadow } : {}), ...(current?.guarantee ? { guarantee: current.guarantee } : {}) };
+    if (current && (current.type === 'min_cost' || current.type === 'compound')) return { ...current, qualityFloor: f };
+    if (current && current.type === 'latency_bound') return { type: 'compound', qualityFloor: f, p95Ms: current.p95Ms, ...carried };
+    return { type: 'min_cost', qualityFloor: f, ...carried };
+  }
 
   /** Merge the proposals' floors into the org's bound policy (routing/floors.ts)
    * as a NEW policy row — policies are immutable history — and rebind keys. */

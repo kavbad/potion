@@ -3,7 +3,8 @@
 // active key; per-kind floors and a latency bound survive the change.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { sha256 } from '@potion/core';
+import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
+import { saveFrontier } from '@potion/pareto';
 import { createOrg, getApiKeyById, getPolicyById, insertApiKey, insertPolicy } from '@potion/db';
 import { buildServer } from '../src/server.js';
 
@@ -24,6 +25,20 @@ beforeAll(async () => {
   });
   await insertApiKey(db, { id: 'key-floor-admin', keyHash: sha256(ADMIN_KEY), name: 'admin', orgId: ORG, scopes: 'serve+admin', policyId: 'pol-floor-old' });
   await insertApiKey(db, { id: 'key-floor-serve', keyHash: sha256(SERVE_KEY), name: 'serve', orgId: ORG, scopes: 'serve', policyId: 'pol-floor-old' });
+  // A measured kind of work for the feasibility read: the best point SCORES
+  // 0.97 but can only PROVE 0.91 (its lower bound). A floor of 0.95 is
+  // infeasible here; 0.9 is not.
+  const pt = (model: string, quality: number, costPer1K: number, evidence?: FrontierPoint['evidence']): FrontierPoint => {
+    const strategyConfig = { type: 'single', model } as FrontierPoint['strategyConfig'];
+    return { clusterId: 'classification', strategyHash: strategyHash(strategyConfig), strategyConfig, quality, costPer1K, latencyP95: 400, providerMode: 'mock', ...(evidence ? { evidence } : {}) } as FrontierPoint;
+  };
+  await saveFrontier(
+    db,
+    'classification',
+    [pt('mock-cheap', 0.8, 0.2), pt('mock-mid', 0.97, 1.0, { n: 20, qualityCi: [0.91, 0.99] } as FrontierPoint['evidence'])],
+    'manual',
+    'test-prices',
+  );
 });
 afterAll(async () => {
   await app.close();
@@ -121,5 +136,45 @@ describe('policy apply with rebindKeys', () => {
       payload: { policy: { type: 'min_cost', qualityFloor: 0.8 }, rebindKeys: true },
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+// FEASIBILITY BEFORE COMMITMENT (2026-09-16). Found live: a floor of
+// 0.978543771043771 on a kind of work whose highest provable quality is
+// 0.969 sat on a key for weeks and the card accepted it without a word.
+describe('floor feasibility — the card asks before the customer commits', () => {
+  it('GET /api/floor/feasibility names every kind of work where no measured point PROVES the floor', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/floor/feasibility?floor=0.95', headers: { authorization: `Bearer ${SERVE_KEY}` } });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { floor: number; infeasible: Array<{ clusterId: string; floor: number; highestProvable: number; bestModel: string }> };
+    expect(body.floor).toBe(0.95);
+    const c = body.infeasible.find((r) => r.clusterId === 'classification');
+    expect(c, JSON.stringify(body)).toBeDefined();
+    expect(c!.floor).toBe(0.95);
+    expect(c!.highestProvable).toBe(0.91);
+    expect(c!.bestModel).toBe('mock-mid');
+    // extraction carries a per-kind floor of 0.97 but has no frontier → nothing to warn from
+    expect(body.infeasible.some((r) => r.clusterId === 'extraction')).toBe(false);
+  });
+
+  it('a floor the evidence can prove is feasible', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/floor/feasibility?floor=0.9', headers: { authorization: `Bearer ${SERVE_KEY}` } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { infeasible: Array<{ clusterId: string }>; clusters: Array<{ clusterId: string; feasible: boolean }> };
+    expect(body.infeasible.some((r) => r.clusterId === 'classification')).toBe(false);
+    expect(body.clusters.find((r) => r.clusterId === 'classification')?.feasible).toBe(true);
+  });
+
+  it('rejects a floor outside [0, 1]', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/floor/feasibility?floor=1.5', headers: { authorization: `Bearer ${SERVE_KEY}` } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('PUT /api/floor names the infeasible kinds of work on the save itself — an API caller never saw the card', async () => {
+    const res = await app.inject({ method: 'PUT', url: '/api/floor', headers: { authorization: `Bearer ${ADMIN_KEY}` }, payload: { qualityFloor: 0.95 } });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { qualityFloor: number; infeasible: Array<{ clusterId: string; highestProvable: number }> };
+    expect(body.qualityFloor).toBe(0.95);
+    expect(body.infeasible.map((r) => r.clusterId)).toContain('classification');
   });
 });

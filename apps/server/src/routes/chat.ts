@@ -44,6 +44,7 @@ import {
 import { DEFAULT_ORG_ID, getClusterByIdForOrg, getLatestFrontier, getOrgById, insertRequestLog, resolvePolicyRef, type NewRequestLog, listPolicies } from '@potion/db';
 // G0 (0082): serve-time router-version stamping — appended import.
 import { stampedRouterVersion } from '../routing/router-stamp.js';
+import { alertFloorInfeasible } from '../routing/floor-alert.js';
 // G1 (0086): randomized incumbent holdout — appended import.
 import { resolveHoldout } from '../routing/holdout.js';
 import { resolveWorkloadSubAssignment } from '../routing/workload-assignment.js';
@@ -991,6 +992,21 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     const { frontier, provenance, latency } = chosen;
     let op = chosen.op;
     if (op.fallbackReason !== undefined) implicitSignals.push(`fallback_${op.fallbackReason}`);
+    // FLOOR INFEASIBLE → tell a human, once per episode (2026-09-16). Read
+    // HERE, before the reasoning-budget skip below can rewrite the reason:
+    // on the day this was found the receipt said reasoning_budget while the
+    // root cause was a floor nothing could clear. Never on the serve path's
+    // critical section — fire and forget, faults swallowed.
+    if (op.fallbackReason === 'policy_infeasible') {
+      void alertFloorInfeasible(ctx, {
+        orgId: auth.org.orgId,
+        policyId: auth.policyId ?? null,
+        clusterId,
+        policy,
+        frontier: chosen.frontier,
+        servedStrategy: op.config ? strategyModelLabel(op.config) : 'fallback',
+      }).catch((e: unknown) => app.log.warn(`floor-infeasible alert failed — swallowed: ${String(e)}`));
+    }
     // A known reasoning model under a small output budget is skipped BEFORE
     // the call (routing/reasoning.ts); the trace says so.
     //

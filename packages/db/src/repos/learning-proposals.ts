@@ -30,10 +30,17 @@ export async function latestProposalsByCluster(db: PotionDb, orgId: string): Pro
   return out;
 }
 
-export async function markProposalApplied(db: PotionDb, orgId: string, id: string, policyId: string): Promise<boolean> {
+export async function markProposalApplied(
+  db: PotionDb,
+  orgId: string,
+  id: string,
+  policyId: string,
+  /** Why it was applied when nobody clicked (the derived default); absent on a click. */
+  reason?: string,
+): Promise<boolean> {
   const res = await db
     .update(learningProposals)
-    .set({ status: 'applied', appliedAt: new Date(), appliedPolicyId: policyId })
+    .set({ status: 'applied', appliedAt: new Date(), appliedPolicyId: policyId, ...(reason !== undefined ? { statusReason: reason } : {}) })
     .where(and(eq(learningProposals.orgId, orgId), eq(learningProposals.id, id), eq(learningProposals.status, 'proposed')))
     .returning({ id: learningProposals.id });
   return res.length > 0;

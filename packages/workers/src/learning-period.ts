@@ -28,6 +28,12 @@ import {
   getStrategyConfigs,
   insertChallengerProposal,
   insertLearningProposal,
+  insertPolicy,
+  listServingApiKeys,
+  listServingPolicies,
+  markProposalApplied,
+  updateApiKeyPolicy,
+  type PotionDb,
   latestChallengerProposalsByCluster,
   latestProposalsByCluster,
   latestDriftAmong,
@@ -138,6 +144,12 @@ export interface LearningPeriodOrgReport {
   challengers: { clusterId: string; id: string; challengerModel: string }[];
   skipped: { clusterId: string; why: string }[];
   spendUsd: number;
+  /** THE DERIVED DEFAULT (2026-09-16): set when this run's proposals were
+   * applied without a click because the org was still on the signup guess
+   * (one policy row named 'default', config identical to DEFAULT_ORG_POLICY,
+   * chosen by nobody). Null on every other run — a bar someone chose is
+   * never replaced without a click. */
+  derivedDefault: { policyId: string; keysRebound: number; clusterFloors: Record<string, number> } | null;
 }
 
 function singleCfg(model: string): StrategyConfig {
@@ -281,7 +293,7 @@ export async function deriveLearningSuites(
 }
 
 export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, now = new Date()): Promise<LearningPeriodOrgReport> {
-  const report: LearningPeriodOrgReport = { orgId, outcome: 'ran', proposals: [], challengers: [], skipped: [], spendUsd: 0 };
+  const report: LearningPeriodOrgReport = { orgId, outcome: 'ran', proposals: [], challengers: [], skipped: [], spendUsd: 0, derivedDefault: null };
   const inc = await getOrgIncumbents(ctx.db, orgId);
   if (!inc || (inc.models.length === 0 && !inc.other)) return { ...report, outcome: 'no-incumbent' };
   if (!inc.samplingConsent) return { ...report, outcome: 'no-consent' };
@@ -553,7 +565,71 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     report.spendUsd += summary.spendUsd;
   }
   if (suites === 0) return { ...report, outcome: 'no-suites' };
+  // The derived default replaces a GUESS, never a choice (2026-09-16).
+  report.derivedDefault = await applyDerivedDefault(ctx.db, orgId, report.proposals);
+  if (report.derivedDefault !== null) {
+    try {
+      await emitAlertEvent(ctx, {
+        orgId,
+        event: 'evidence_ready',
+        detail: {
+          kind: 'derived_default_applied',
+          policyId: report.derivedDefault.policyId,
+          clusterFloors: report.derivedDefault.clusterFloors,
+          keysRebound: report.derivedDefault.keysRebound,
+          narrative:
+            'Your keys were on the signup default (a 0.95 floor nobody chose). Potion measured the model you named on ' +
+            'your own work and set your bar per kind of work from that measurement. Change it any time in Settings.',
+        },
+      });
+    } catch {
+      // swallowed: an alert fault must not undo a landed policy
+    }
+  }
   return report;
+}
+
+/**
+ * THE DERIVED STARTING FLOOR (2026-09-16, operator: "should Potion set the
+ * floor automatically?"). The floor is the customer's risk preference and
+ * stays theirs — a bar anyone CHOSE is never replaced without a click. But
+ * the signup floor was never chosen: the key mint binds a policy row named
+ * 'default' at DEFAULT_ORG_POLICY so the first request works. When the
+ * learning period has measured the org's own incumbent on its own work,
+ * the guess is replaced by the measurement — "at least as good as what you
+ * use today" becomes the default experience instead of a step to complete.
+ *
+ * Strictly gated: exactly ONE serving policy exists, it is the mint's
+ * 'default' row, and its config is byte-for-byte DEFAULT_ORG_POLICY. A
+ * customer who typed 0.95 into the floor card has a row named 'floor 0.95'
+ * and is untouched. An org with no policy at all has nothing to replace.
+ */
+export async function applyDerivedDefault(
+  db: PotionDb,
+  orgId: string,
+  proposals: { clusterId: string; id: string; suggestedFloor: number }[],
+): Promise<{ policyId: string; keysRebound: number; clusterFloors: Record<string, number> } | null> {
+  if (proposals.length === 0) return null;
+  const serving = await listServingPolicies(db, orgId);
+  if (serving.length !== 1) return null;
+  const current = serving[0]!;
+  if (current.name !== 'default') return null;
+  if (JSON.stringify(current.config) !== JSON.stringify(DEFAULT_ORG_POLICY)) return null;
+  const clusterFloors: Record<string, number> = {};
+  for (const p of proposals) {
+    // FLOOR to 2dp, never round up (routing/floors.ts mintFloor semantics).
+    clusterFloors[p.clusterId] = Math.max(0, Math.min(1, Math.floor(p.suggestedFloor * 100) / 100));
+  }
+  const n = Object.keys(clusterFloors).length;
+  const policyId = `pol-${randomUUID().slice(0, 8)}`;
+  const config = { ...DEFAULT_ORG_POLICY, clusterFloors } as Policy;
+  await insertPolicy(db, { id: policyId, orgId, name: `your bar · ${n} kind${n === 1 ? '' : 's'} of work · derived`, config });
+  const keys = (await listServingApiKeys(db, orgId)).filter((k) => !k.revokedAt);
+  for (const k of keys) await updateApiKeyPolicy(db, orgId, k.id, policyId);
+  for (const p of proposals) {
+    await markProposalApplied(db, orgId, p.id, policyId, 'derived default: replaced the signup floor, which nobody chose');
+  }
+  return { policyId, keysRebound: keys.length, clusterFloors };
 }
 
 /** The bar derivation, pure and pinned (2026-08-31): the proposed floor IS
