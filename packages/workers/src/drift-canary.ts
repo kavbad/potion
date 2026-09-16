@@ -51,9 +51,13 @@ export interface DriftCanaryResult {
   spendUsd: number;
 }
 
+/** What the tripwire reads from a sweep — narrow on purpose, so a test can
+ * hand it a plain object and the type checks it against something real. */
+export type CanarySweepReading = Pick<FrontierPlatformSweepResult, 'published' | 'sampled' | 'spendUsd'>;
+
 /** Seams for tests: the sweep and the clock. Production uses the real ones. */
 export interface DriftCanaryDeps {
-  sweep: (payload: FrontierPlatformSweepPayload, ctx: JobContext) => Promise<FrontierPlatformSweepResult>;
+  sweep: (payload: FrontierPlatformSweepPayload, ctx: JobContext) => Promise<CanarySweepReading>;
   now: () => Date;
 }
 

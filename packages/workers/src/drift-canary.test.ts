@@ -12,12 +12,33 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { strategyHash, type FrontierPoint } from '@potion/core';
+import { strategyHash, type EvalResult, type FrontierPoint } from '@potion/core';
 import { createDb, migrate, getLiveEvalResultByCacheKey, insertEvalResult, jobExecutions, listDriftCanariesForWeek, type DbHandle } from '@potion/db';
+import type { PotionQueue } from '@potion/queue';
 import { saveFrontier } from '@potion/pareto';
-import { createDriftCanaryHandler } from './drift-canary.js';
-import type { FrontierPlatformSweepResult, JobContext } from './handlers.js';
+import { createDriftCanaryHandler, type CanarySweepReading } from './drift-canary.js';
+import type { JobContext } from './handlers.js';
 import type { FrontierPlatformSweepPayload } from './jobs.js';
+
+/** A queue that only records what was enqueued — typed against the real
+ * interface, so a renamed method fails here instead of behind a cast. */
+function recordingQueue(enqueued: string[]): PotionQueue {
+  return {
+    enqueue: async (name) => { enqueued.push(name); return 'job-recorded'; },
+    registerHandler: () => undefined,
+    getJob: async () => null,
+    close: async () => undefined,
+  };
+}
+
+function liveCell(p: FrontierPoint, cacheKey: string): EvalResult {
+  return {
+    runId: 'run-old', itemId: 'it-1', clusterId: p.clusterId, strategyHash: p.strategyHash, strategyConfig: p.strategyConfig,
+    quality: p.quality, scorer: 'exact', usage: { inputTokens: 1, outputTokens: 1, costUsd: 0, latencyMs: 1 },
+    latencyMs: { p50: 1, p95: 1, mean: 1 }, modelVersions: {}, pricesVersion: 'v', providerMode: 'live', cacheKey,
+    createdAt: NOW.toISOString(),
+  };
+}
 
 const REPO_PRICES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../prices.json');
 let db: DbHandle;
@@ -52,26 +73,22 @@ describe('drift:canary', () => {
     await saveFrontier(db.db, 'classification', [cheapA, point('classification', 'mock-frontier', 0.99, 4)], 'manual', 'test-prices');
     await saveFrontier(db.db, 'code-gen', [cheapB, point('code-gen', 'mock-frontier', 0.95, 4)], 'manual', 'test-prices');
     // a live cell of the classification pick — the thing a drift must retire
-    await insertEvalResult(db.db, {
-      runId: 'run-old', itemId: 'it-1', clusterId: 'classification', strategyHash: cheapA.strategyHash, strategyConfig: cheapA.strategyConfig,
-      quality: 0.98, scorer: 'exact', usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 }, latencyMs: { total: 1 }, modelVersions: {},
-      pricesVersion: 'v', providerMode: 'live', cacheKey: 'ck-old', createdAt: NOW.toISOString(),
-    } as never);
+    await insertEvalResult(db.db, liveCell(cheapA, 'ck-old'));
 
     const seen: Array<{ clusterId: string; delivery: unknown; salt: string | undefined }> = [];
     const enqueued: string[] = [];
-    const sweep = async (payload: FrontierPlatformSweepPayload, ctx: JobContext): Promise<FrontierPlatformSweepResult> => {
+    const sweep = async (payload: FrontierPlatformSweepPayload, ctx: JobContext): Promise<CanarySweepReading> => {
       seen.push({ clusterId: payload.clusterId, delivery: ctx.delivery, salt: payload.cacheSalt });
       const target = payload.clusterId === 'classification' ? cheapA : cheapB;
       // classification collapsed to 0.5 (drift); code-gen reads as stored (ok)
       const meanQuality = payload.clusterId === 'classification' ? 0.5 : 0.9;
-      return { published: false, spendUsd: 0.05, sampled: [{ strategyHash: target.strategyHash, n: 4, meanQuality }] } as unknown as FrontierPlatformSweepResult;
+      return { published: false, spendUsd: 0.05, sampled: [{ strategyHash: target.strategyHash, n: 4, meanQuality }] };
     };
     const handler = createDriftCanaryHandler({ sweep, now: () => NOW });
     const ctx: JobContext = {
       db: db.db, dbHandle: db, pricesPath,
       delivery: { jobId: 'job-drift-1', attempt: 1 },
-      queue: { enqueue: async (kind: string) => { enqueued.push(kind); return 'j'; } } as never,
+      queue: recordingQueue(enqueued),
     };
 
     const res = await handler({}, ctx);
@@ -109,9 +126,9 @@ describe('drift:canary', () => {
   it('a retry of the SAME job replays its recorded result instead of spending again', async () => {
     await saveFrontier(db.db, 'classification', [point('classification', 'mock-cheap', 0.98, 0.1)], 'manual', 'test-prices');
     let calls = 0;
-    const sweep = async (_payload: FrontierPlatformSweepPayload): Promise<FrontierPlatformSweepResult> => {
+    const sweep = async (_payload: FrontierPlatformSweepPayload): Promise<CanarySweepReading> => {
       calls += 1;
-      return { published: false, spendUsd: 0.05, sampled: [{ strategyHash: strategyHash({ type: 'single', model: 'mock-cheap' }), n: 4, meanQuality: 0.98 }] } as unknown as FrontierPlatformSweepResult;
+      return { published: false, spendUsd: 0.05, sampled: [{ strategyHash: strategyHash({ type: 'single', model: 'mock-cheap' }), n: 4, meanQuality: 0.98 }] };
     };
     const handler = createDriftCanaryHandler({ sweep, now: () => NOW });
     const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath, delivery: { jobId: 'job-drift-9', attempt: 1 } };
