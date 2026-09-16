@@ -29,7 +29,7 @@ import {
   getRouterGeneration,
   insertRouterGeneration,
   listRouterGenerations,
-  listServingPolicies,
+  getCurrentServingPolicy,
   promoteGeneration,
   rollbackCandidates,
   rollbackTo,
@@ -56,8 +56,10 @@ import { generationVerdict } from '../routing/generation-verdict.js';
 
 /** The org's bound policy, resolved exactly as the compiler resolves it. */
 async function orgPolicy(ctx: PotionContext, orgId: string): Promise<Policy> {
-  const first = (await listServingPolicies(ctx.db.db, orgId))[0];
-  const parsed = first !== undefined ? PolicySchema.safeParse(first.config) : null;
+  // The org's CURRENT rule (2026-09-16) — the one its keys are on — not the
+  // oldest row it ever wrote. Same trap as the key mint; see @potion/db.
+  const current = await getCurrentServingPolicy(ctx.db.db, orgId);
+  const parsed = current !== null ? PolicySchema.safeParse(current.config) : null;
   return parsed?.success ? parsed.data : DEFAULT_ORG_POLICY;
 }
 

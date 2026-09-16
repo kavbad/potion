@@ -23,7 +23,7 @@ import type { FastifyInstance } from 'fastify';
 import { PolicySchema, strategyHash, type Policy, type StrategyConfig } from '@potion/core';
 import {
   listOrgWorkloads,
-  listServingPolicies,
+  getCurrentServingPolicy,
   setWorkloadStatus,
   strategiesMeasuredAt,
 } from '@potion/db';
@@ -135,8 +135,9 @@ export function registerDiscoveryRoutes(
 
     // What the workload NOW serves, through the one resolver — the honest
     // answer to "adopt" is what a matching request will get next.
-    const firstPolicy = (await listServingPolicies(db, orgId))[0];
-    const parsed = firstPolicy !== undefined ? PolicySchema.safeParse(firstPolicy.config) : null;
+    // The org's CURRENT rule, not its oldest (2026-09-16; see @potion/db).
+    const currentPolicy = await getCurrentServingPolicy(db, orgId);
+    const parsed = currentPolicy !== null ? PolicySchema.safeParse(currentPolicy.config) : null;
     const policy: Policy = parsed?.success ? parsed.data : DEFAULT_ORG_POLICY;
     const d = await servingDecisionFor(db, {
       orgId,

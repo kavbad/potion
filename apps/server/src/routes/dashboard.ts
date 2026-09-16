@@ -37,7 +37,7 @@ import {
   upsertRouterInterpretation,
   getRouterInterpretation,
   getOrgIncumbents,
-  listServingPolicies,
+  getCurrentServingPolicy,
   listServingApiKeys,
   getFirstServingApiKeyWithPolicy,
 } from '@potion/db';
@@ -715,7 +715,8 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: PotionContext
 
     // ---- the reveal: entirely from existing evidence, zero extra spend ----
     let policy: Policy | null = null;
-    const bound = (await listServingPolicies(db, orgId))[0];
+    // The org's CURRENT rule, not its oldest (2026-09-16; see @potion/db).
+    const bound = await getCurrentServingPolicy(db, orgId);
     if (bound) {
       const parsed = PolicySchema.safeParse(bound.config);
       if (parsed.success) policy = parsed.data;
