@@ -1,6 +1,17 @@
-# External uptime watch (2026-08-24): GitHub's runners hit production every
-# 15 minutes; a failed run emails the repo owner. Zero new services — this
-# is the watchfulness fix that needs no account.
+# External uptime watch (2026-08-24): GitHub's runners hit production on a
+# schedule; a failed run emails the repo owner. Zero new services — this is
+# the watchfulness fix that needs no account.
+#
+# HONEST CADENCE (2026-09-16): the cron says every 15 minutes. GitHub runs
+# schedules best-effort and this one has fired 5–7 times a day since it was
+# added — 213 runs in 23 days. Docs and the public /status page must say
+# "several times a day", not "every 15 minutes". A real 5-minute watch is
+# UptimeRobot (docs/specs/step-13a-deploy.md §1.6), not yet set up; when it
+# is, delete this file and rewrite the /status sentence.
+#
+# It has caught real trouble: 2026-08-26 04:02Z (/readyz) and 16:53Z (/home).
+# Every other failure in its history was GitHub refusing to START the job
+# during the 2026-09-12..16 Actions-minutes block — not the site.
 name: uptime
 on:
   schedule:
