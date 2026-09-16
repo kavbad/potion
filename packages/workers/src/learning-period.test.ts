@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
-import { createDb, migrate, orgs, getApiKeyById, getPolicyById, insertApiKey, insertPolicy, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
+import { createDb, migrate, orgs, getApiKeyById, getPolicyById, insertApiKey, insertPolicy, insertRequestLog, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
 import { DEFAULT_ORG_POLICY } from '@potion/pareto';
 import { saveFrontier } from '@potion/pareto';
 import { LEARNING_SPAN_NAME, runLearningPeriodForOrg } from './learning-period.js';
@@ -88,6 +88,31 @@ describe('learning:period', () => {
     // counterfactual the receipts already price, measured on THEIR prompts
     expect(rows[0]!.incumbentModel).toBe('mock-mid');
     expect(rows[0]!.suggestedFloor).toBeGreaterThan(0);
+  });
+
+  // THE OBSERVED REFERENCE (2026-09-16): consent given, nothing priced named
+  // ("several"). The org's own requests have been naming mock-cheap on
+  // classification. The greenfield fallback would measure against the
+  // premium single (mock-mid); the observed reference is what they use.
+  it('with consent but nothing priced named, the model the org’s requests NAMED MOST is the reference — not the premium single', async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await db.db.insert(orgs).values([{ id: 'org_obs', name: 'OBS' }]).onConflictDoNothing();
+    await saveFrontier(db.db, 'classification', [point('mock-cheap', 0.96, 0.4, 120), point('mock-mid', 0.98, 2.1, 340)], 'manual', 'test-prices');
+    await upsertOrgIncumbents(db.db, { orgId: 'org_obs', models: [], other: 'several', samplingConsent: true });
+    for (let i = 0; i < 5; i++) await insertRequestLog(db.db, { orgId: 'org_obs', model: 'mock-cheap', clusterId: 'classification', status: 'ok' });
+    await insertTraceSpans(
+      db.db,
+      Array.from({ length: 10 }, (_, i) => ({
+        orgId: 'org_obs', traceId: `obs-r${i}`, spanId: 'chat', parentId: null, name: LEARNING_SPAN_NAME, model: 'mock-cheap', usage: {}, costUsd: 0,
+        attrs: { 'gen_ai.operation.name': 'chat', 'gen_ai.prompt': `Is review ${i} positive, negative, or neutral?`, 'gen_ai.completion': 'negative', 'potion.cluster_id': 'classification' },
+        ts: new Date(),
+      })),
+    );
+    const report = await runLearningPeriodForOrg(ctx, 'org_obs');
+    expect(report.outcome).toBe('ran');
+    expect(report.proposals.map((p) => p.clusterId), JSON.stringify(report.skipped)).toEqual(['classification']);
+    const p = (await listLearningProposals(db.db, 'org_obs'))[0]!;
+    expect(p.incumbentModel, 'observed, not the greenfield premium single').toBe('mock-cheap');
   });
 
   it('refuses without consent or without an incumbent, spending nothing', async () => {

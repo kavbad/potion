@@ -175,6 +175,7 @@ export const ROUTE_INVENTORY: RouteInventoryRow[] = [
   // the learning period (2026-08-22): what the org uses today, consent, samples, proposals
   { method: 'GET', path: '/api/incumbents/options', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'shared-global', crossOrgProbe: { expect: 'skip', skipReason: 'the public price roster — the same list for every org' } },
   { method: 'GET', path: '/api/incumbents', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
+  { method: 'GET', path: '/api/incumbents/observed', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' }, notes: 'per-cluster model labels the CALLER\'s own request_logs named (2026-09-16); another org\'s traffic never appears' },
   { method: 'PUT', path: '/api/incumbents', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'GET', path: '/api/learning', surface: 'api', mutating: false, guard: 'viewer', tenancyClass: 'org-list', crossOrgProbe: { expect: 'org-list-absent' } },
   { method: 'POST', path: '/api/learning/run', surface: 'api', mutating: true, guard: 'admin', tenancyClass: 'self-scoped', crossOrgProbe: { expect: 'skip', skipReason: 'enqueues the learning period for the CALLER\'s org only — no parameter, nothing to cross' } },

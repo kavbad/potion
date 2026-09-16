@@ -396,3 +396,47 @@ export async function servingSpendSince(db: PotionDb, orgId: string, since: Date
   const r = (rows.rows as Array<{ cost_usd: number | string }>)[0];
   return Number(r?.cost_usd ?? 0);
 }
+
+export interface ObservedIncumbentRow {
+  clusterId: string;
+  /** The model label the customer's requests NAMED (request_logs.model), verbatim. */
+  model: string;
+  requests: number;
+  lastSeen: Date;
+}
+
+/**
+ * THE INCUMBENT, OBSERVED (2026-09-16, operator: "'name the model you use
+ * today' is the most amateurish part of this — a customer could be using
+ * dozens"). Every request already carries the answer in its `model` field:
+ * the label the customer's code sends is what they would otherwise use,
+ * per request, per kind of work, with volumes attached. This reads that
+ * back — named labels only ('potion-auto' and the org's potion/<slug> name
+ * are Potion, not an incumbent), served requests only — so nobody has to
+ * type into a picker what their traffic already says.
+ */
+export async function observedIncumbents(
+  db: PotionDb,
+  orgId: string,
+  since: Date,
+): Promise<ObservedIncumbentRow[]> {
+  const res = await db.execute(sql`
+    SELECT cluster_id, model, count(*)::int AS requests, max(ts) AS last_seen
+    FROM request_logs
+    WHERE org_id = ${orgId}
+      AND ts > ${since.toISOString()}::timestamptz
+      AND status = 'ok'
+      AND cluster_id IS NOT NULL
+      AND model IS NOT NULL
+      AND model <> 'potion-auto'
+      AND model NOT LIKE 'potion/%'
+    GROUP BY cluster_id, model
+    ORDER BY cluster_id ASC, requests DESC, max(ts) DESC
+  `);
+  return (res.rows as Array<{ cluster_id: string; model: string; requests: number; last_seen: string | Date }>).map((r) => ({
+    clusterId: r.cluster_id,
+    model: r.model,
+    requests: Number(r.requests),
+    lastSeen: r.last_seen instanceof Date ? r.last_seen : new Date(r.last_seen),
+  }));
+}

@@ -32,6 +32,7 @@ import {
   listServingApiKeys,
   listServingPolicies,
   markProposalApplied,
+  observedIncumbents,
   updateApiKeyPolicy,
   type PotionDb,
   latestChallengerProposalsByCluster,
@@ -307,6 +308,17 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   // every receipt already prices. It is a real, priced model measured on
   // THEIR prompts, so the proposal reads identically either way.
   const namedIncumbent = inc.models.find((m) => prices.entries.some((e) => e.alias === m));
+  // THE OBSERVED REFERENCE (2026-09-16): with consent but nothing priced
+  // named ("several", "not sure", a label off the roster), the model this
+  // org's own requests NAMED MOST on each kind of work — a priced roster
+  // model — is the measurement reference, before the greenfield premium
+  // single. It is what they actually use; nobody had to type it.
+  const observedRows = namedIncumbent ? [] : await observedIncumbents(ctx.db, orgId, new Date(now.getTime() - 30 * 24 * 3600 * 1000));
+  const observedReference = (clusterId: string): string | undefined =>
+    observedRows
+      .filter((r) => r.clusterId === clusterId)
+      .map((r) => prices.entries.find((e) => e.alias === r.model || e.model === r.model)?.alias)
+      .find((a): a is string => a !== undefined);
 
   const { providerMode, judgeModelOverride } = resolveEvalJudge(prices);
 
@@ -366,7 +378,7 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
     const topSingle = frontier.points
       .filter((p) => p.strategyConfig.type === 'single')
       .sort((a, b) => b.quality - a.quality || a.costPer1K - b.costPer1K)[0];
-    const incumbentModel = namedIncumbent ?? (topSingle?.strategyConfig as { model?: string } | undefined)?.model;
+    const incumbentModel = namedIncumbent ?? observedReference(clusterId) ?? (topSingle?.strategyConfig as { model?: string } | undefined)?.model;
     if (!incumbentModel) { report.skipped.push({ clusterId, why: 'no reference model (no named incumbent, no single on the frontier)' }); continue; }
     const incumbentCfg = singleCfg(incumbentModel);
     const incumbentHash = strategyHash(incumbentCfg);
