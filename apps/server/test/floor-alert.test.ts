@@ -93,26 +93,22 @@ describe('the serve path raises it', () => {
 });
 
 describe('the dedupe', () => {
-  const stub = (): { ctx: PotionContext; calls: unknown[] } => {
-    const calls: unknown[] = [];
-    const ctx = { queue: { enqueue: async (_n: string, p: unknown) => { calls.push(p); return 'j'; } } } as unknown as PotionContext;
-    return { ctx, calls };
-  };
+  // The real context (the server's, with the recording queue above) — a
+  // stub cast past the type would be checked against nothing.
+  const ctx = (): PotionContext => app.potion;
   const args = { orgId: 'o', policyId: 'p', clusterId: 'c', policy: { type: 'min_cost', qualityFloor: 0.95 } as const, frontier: null, servedStrategy: 'x' };
 
   it('same org+policy+cluster within the TTL: once; after the TTL: again; a different cluster: its own episode', async () => {
-    const { ctx, calls } = stub();
     const t0 = 1_000_000;
-    expect(await alertFloorInfeasible(ctx, args, t0)).toBe(true);
-    expect(await alertFloorInfeasible(ctx, args, t0 + 1000)).toBe(false);
-    expect(await alertFloorInfeasible(ctx, { ...args, clusterId: 'd' }, t0 + 1000)).toBe(true);
-    expect(await alertFloorInfeasible(ctx, args, t0 + 7 * 3600 * 1000)).toBe(true);
-    expect(calls).toHaveLength(3);
+    expect(await alertFloorInfeasible(ctx(), args, t0)).toBe(true);
+    expect(await alertFloorInfeasible(ctx(), args, t0 + 1000)).toBe(false);
+    expect(await alertFloorInfeasible(ctx(), { ...args, clusterId: 'd' }, t0 + 1000)).toBe(true);
+    expect(await alertFloorInfeasible(ctx(), args, t0 + 7 * 3600 * 1000)).toBe(true);
+    expect(infeasibleAlerts()).toHaveLength(3);
   });
 
   it('an inline override (no policy id) has nothing durable to alert about', async () => {
-    const { ctx, calls } = stub();
-    expect(await alertFloorInfeasible(ctx, { ...args, policyId: null })).toBe(false);
-    expect(calls).toHaveLength(0);
+    expect(await alertFloorInfeasible(ctx(), { ...args, policyId: null })).toBe(false);
+    expect(infeasibleAlerts()).toHaveLength(0);
   });
 });
