@@ -7,7 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
-import { createDb, migrate, orgs, insertApiKey, insertPolicy, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
+import { createDb, migrate, orgs, getApiKeyById, getPolicyById, insertApiKey, insertPolicy, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
+import { DEFAULT_ORG_POLICY } from '@potion/pareto';
 import { saveFrontier } from '@potion/pareto';
 import { LEARNING_SPAN_NAME, runLearningPeriodForOrg } from './learning-period.js';
 import type { JobContext } from './handlers.js';
@@ -206,5 +207,71 @@ describe('the bar derivation (2026-08-31 — the number IS the measurement)', ()
     // Near-zero is a problem to surface, not a bar to invent.
     expect(suggestedFloorFor(0.02)).toBeNull();
     expect(suggestedFloorFor(0)).toBeNull();
+  });
+});
+
+// THE DERIVED DEFAULT (2026-09-16). The first test in this file pins the
+// doctrine — "a proposal, and nothing is applied" — and it still holds for
+// every bar somebody chose. The one exception is the bar NOBODY chose: the
+// key mint's 'default' row at DEFAULT_ORG_POLICY, bound so a first request
+// works. Once the org's own incumbent is measured on its own work, that
+// guess is replaced by the measurement.
+describe('the derived default (2026-09-16) — a measurement replaces the signup guess, never a choice', () => {
+  async function seedMeasurableOrg(orgId: string, policy: { id: string; name: string; config: Policy }) {
+    await db.db.insert(orgs).values([{ id: orgId, name: orgId }]).onConflictDoNothing();
+    await saveFrontier(db.db, 'classification', [point('mock-cheap', 0.96, 0.4, 120), point('mock-mid', 0.98, 2.1, 340)], 'manual', 'test-prices');
+    await insertPolicy(db.db, { id: policy.id, orgId, name: policy.name, config: policy.config });
+    await insertApiKey(db.db, { id: `key-${orgId}`, keyHash: sha256(`pk_${orgId}`), name: 'first key', orgId, policyId: policy.id });
+    await upsertOrgIncumbents(db.db, { orgId, models: ['mock-mid'], other: null, samplingConsent: true });
+    await insertTraceSpans(
+      db.db,
+      Array.from({ length: 10 }, (_, i) => ({
+        orgId, traceId: `dd-${orgId}-${i}`, spanId: 'chat', parentId: null, name: LEARNING_SPAN_NAME, model: 'mock-cheap', usage: {}, costUsd: 0,
+        attrs: { 'gen_ai.operation.name': 'chat', 'gen_ai.prompt': `Is review ${i} positive, negative, or neutral?`, 'gen_ai.completion': 'negative', 'potion.cluster_id': 'classification' },
+        ts: new Date(),
+      })),
+    );
+  }
+
+  it("replaces the mint's 'default' row: proposals applied, keys rebound, per-kind floor = the measurement", async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await seedMeasurableOrg('org_dd_untouched', { id: 'pol-dd-default', name: 'default', config: DEFAULT_ORG_POLICY });
+    const report = await runLearningPeriodForOrg(ctx, 'org_dd_untouched');
+    expect(report.outcome).toBe('ran');
+    expect(report.proposals.map((p) => p.clusterId), JSON.stringify(report.skipped)).toEqual(['classification']);
+    expect(report.derivedDefault, 'the signup guess is replaced').not.toBeNull();
+    const { policyId, keysRebound, clusterFloors } = report.derivedDefault!;
+    expect(keysRebound).toBe(1);
+    expect(clusterFloors.classification).toBe(report.proposals[0]!.suggestedFloor);
+    const key = await getApiKeyById(db.db, 'org_dd_untouched', 'key-org_dd_untouched');
+    expect(key?.policyId).toBe(policyId);
+    const pol = await getPolicyById(db.db, 'org_dd_untouched', policyId);
+    expect(pol?.name).toContain('derived');
+    expect(pol?.config).toMatchObject({ type: 'min_cost', qualityFloor: DEFAULT_ORG_POLICY.type === 'min_cost' ? DEFAULT_ORG_POLICY.qualityFloor : 0.95, clusterFloors: { classification: clusterFloors.classification } });
+    const rows = await listLearningProposals(db.db, 'org_dd_untouched');
+    expect(rows[0]?.status).toBe('applied');
+    expect(rows[0]?.statusReason).toContain('nobody chose');
+  });
+
+  it('never replaces a bar somebody chose — same config under a chosen name stays a proposal', async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    // The customer typed 0.95 into the floor card: identical config, but a
+    // row named by the click. That is a choice.
+    await seedMeasurableOrg('org_dd_chosen', { id: 'pol-dd-chosen', name: 'floor 0.95', config: DEFAULT_ORG_POLICY });
+    const report = await runLearningPeriodForOrg(ctx, 'org_dd_chosen');
+    expect(report.proposals).toHaveLength(1);
+    expect(report.derivedDefault).toBeNull();
+    const key = await getApiKeyById(db.db, 'org_dd_chosen', 'key-org_dd_chosen');
+    expect(key?.policyId).toBe('pol-dd-chosen');
+    expect((await listLearningProposals(db.db, 'org_dd_chosen'))[0]?.status).toBe('proposed');
+  });
+
+  it("never replaces a 'default' row whose config was edited", async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await seedMeasurableOrg('org_dd_edited', { id: 'pol-dd-edited', name: 'default', config: { type: 'min_cost', qualityFloor: 0.9 } });
+    const report = await runLearningPeriodForOrg(ctx, 'org_dd_edited');
+    expect(report.proposals).toHaveLength(1);
+    expect(report.derivedDefault).toBeNull();
+    expect((await getApiKeyById(db.db, 'org_dd_edited', 'key-org_dd_edited'))?.policyId).toBe('pol-dd-edited');
   });
 });
