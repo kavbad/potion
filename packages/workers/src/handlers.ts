@@ -230,6 +230,7 @@ import {
   registryPrices,  AGENT_SUITE_ITEM_CAP_V2,
   LIVE_SWEEP_ANSWER_MAX_TOKENS, LIVE_SWEEP_JUDGE_MAX_TOKENS,
   type JobContext, type WorkerHandler,
+  PLATFORM_OPS_ORG_ID,
 } from './handler-shared.js';
 import { alertsDispatchHandler,  emitAlertEvent } from './alerts-job.js';
 import {
@@ -3287,7 +3288,7 @@ export const frontierLiveSweepHandler: WorkerHandler<'frontier:live-sweep', Fron
 // job caps and the org budget layer enforce independently).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const PLATFORM_OPS_ORG_ID = 'org_platform_ops';
+export { PLATFORM_OPS_ORG_ID } from './handler-shared.js';
 
 /** m1b live-sweep precedent: or-gpt-mini→or-sonnet escalated at 0.72. */
 export const PLATFORM_SWEEP_CASCADE_CONFIDENCE_BELOW = 0.72;
@@ -4377,6 +4378,8 @@ const LAB_RUN_TERMINAL_STATES = new Set(['completed', 'failed', 'killed-budget',
 export interface LabRunHandlerResult {
   state: string;
   noop?: boolean;
+  /** Why a noop was a noop (2026-09-16): 'terminal' | 'external-runtime'. */
+  reason?: string;
 }
 
 export interface LabRunHandlerDeps {
@@ -4433,7 +4436,16 @@ export function createLabRunHandler(deps: LabRunHandlerDeps = {}): WorkerHandler
     }
 
     if (LAB_RUN_TERMINAL_STATES.has(run.state)) {
-      return { state: run.state, noop: true };
+      return { state: run.state, noop: true, reason: 'terminal' };
+    }
+    // AN EXTERNAL SESSION IS NOT OURS TO RUN (2026-09-16). A runtime-gate
+    // session (spec.runtime 'external' | 'openclaw') has no brain slot —
+    // its legs execute in another process and only pass through the gate.
+    // Delivered here anyway (the reaper did, ~1000×/day for ten days) this
+    // crashed on spec.brain.policy. A typed noop, not a TypeError.
+    const runtime = (run.spec as { runtime?: unknown }).runtime;
+    if (runtime === 'external' || runtime === 'openclaw') {
+      return { state: run.state, noop: true, reason: 'external-runtime' };
     }
     const spec = run.spec as HarnessSpec;
     const specText = JSON.stringify({ ...spec, hash: run.harnessHash });

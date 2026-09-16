@@ -13,7 +13,7 @@
 //
 // Follows budget_events (0011): claim with ON CONFLICT DO NOTHING and act
 // only if you won the insert.
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { PotionDb } from '../db.js';
 import { jobExecutions, type JobExecutionRow } from '../schema.js';
 
@@ -73,16 +73,59 @@ export async function completeJobExecution(
   db: PotionDb,
   jobId: string,
   result: unknown,
-  outcome?: string,
+  // 'ok' BY DEFAULT (2026-09-16). Every completion for the ledger's first
+  // two months wrote no outcome at all, so "did this job succeed?" had no
+  // answer anywhere a human looks — 13,961 failures sat in Redis alone.
+  outcome: string = 'ok',
 ): Promise<void> {
   await db
     .update(jobExecutions)
     .set({
       completedAt: new Date(),
       result: result ?? null,
-      ...(outcome !== undefined ? { outcome } : {}),
+      outcome,
     })
     .where(eq(jobExecutions.jobId, jobId));
+}
+
+/**
+ * Record a delivery's FAILURE (2026-09-16). The row stays INCOMPLETE —
+ * completedAt null — so a redelivery is still refused (no double spend);
+ * what changes is that the failure is now legible: outcome 'failed' and
+ * the error on the row, where before it survived only as BullMQ's
+ * failedReason in Redis.
+ */
+export async function failJobExecution(
+  db: PotionDb,
+  jobId: string,
+  error: { name: string; message: string; stack?: string | undefined },
+): Promise<void> {
+  await db
+    .update(jobExecutions)
+    .set({
+      outcome: 'failed',
+      result: { error: { name: error.name, message: error.message.slice(0, 2000), ...(error.stack ? { stack: error.stack.slice(0, 4000) } : {}), at: new Date().toISOString() } },
+    })
+    .where(eq(jobExecutions.jobId, jobId));
+}
+
+/** Failures of one job kind for one org (null = platform scope) since `since`. */
+export async function countRecentJobFailures(
+  db: PotionDb,
+  input: { jobKind: string; orgId: string | null; since: Date },
+): Promise<number> {
+  const rows = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(jobExecutions)
+    .where(
+      and(
+        eq(jobExecutions.jobKind, input.jobKind),
+        input.orgId === null ? isNull(jobExecutions.orgId) : eq(jobExecutions.orgId, input.orgId),
+        eq(jobExecutions.outcome, 'failed'),
+        gt(jobExecutions.claimedAt, input.since),
+      ),
+    );
+  return Number(rows[0]?.n ?? 0);
 }
 
 export async function getJobExecution(

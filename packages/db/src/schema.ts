@@ -949,7 +949,10 @@ export type AlertEvent =
   // way to discover that was to visit the Compiler page. Same TS-only
   // widening as the events above (alert_rules.events is text[], no DB
   // CHECK), so no migration.
-  | 'evidence_ready';
+  | 'evidence_ready'
+  /** 2026-09-16: a job kind failed repeatedly for this org (the ledger's
+   * outcome column, finally written). Platform-scope jobs alert the ops org. */
+  | 'job_failed';
 export const ALERT_EVENTS: readonly AlertEvent[] = [
   'quality_breach',
   'rollback',
@@ -963,6 +966,7 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'policy_infeasible',
   'frontier_moved',
   'evidence_ready',
+  'job_failed',
 ];
 
 /** R0 (migration 0054): the org's payment identity. Card METADATA only —

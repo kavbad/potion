@@ -21,6 +21,8 @@ import {
 } from '@potion/db';
 import { seedFromString } from '@potion/core';
 import { MemoryQueue } from '@potion/queue';
+import { JOB_FAILURE_ALERT_AT, withDeliveryGuard } from './suite-verify-job.js';
+import type { JobContext } from './handler-shared.js';
 import { JobRedeliveryRefusedError } from './handlers.js';
 
 const REPO_PRICES = fileURLToPath(new URL('../../../prices.json', import.meta.url));
@@ -148,5 +150,71 @@ describe('F10: a retry must not re-execute spend or contractual effects', () => 
     await q.close();
     expect(runs).toHaveLength(2); // both ran — different job ids
     expect(new Set(runs).size).toBe(2);
+  });
+});
+
+// THE LEDGER SAYS WHAT HAPPENED (2026-09-16). For two months every
+// completion wrote no outcome and every throw wrote nothing at all: the row
+// stayed 'claimed, incomplete' and the error lived only in Redis. On
+// 2026-09-16 that was 13,961 failed jobs, 199 of the last 200 the same
+// TypeError, and nothing anywhere a human looks.
+describe('the ledger records outcomes; repeated failure is alerted once', () => {
+  function ctxWith(jobId: string, q: MemoryQueue): JobContext {
+    return { db: db.db, dbHandle: db, pricesPath: '', delivery: { jobId, attempt: 1 }, queue: q };
+  }
+  function recordingQueue(): { q: MemoryQueue; alerts: Array<{ orgId: string; event: string; detail?: Record<string, unknown> }> } {
+    const q = new MemoryQueue({ attempts: 1 });
+    const alerts: Array<{ orgId: string; event: string; detail?: Record<string, unknown> }> = [];
+    q.registerHandler('alerts:dispatch', async (payload: { orgId: string; event: string; detail?: Record<string, unknown> }) => { alerts.push(payload); });
+    return { q, alerts };
+  }
+
+  it("success writes outcome 'ok'", async () => {
+    const { q } = recordingQueue();
+    const out = await withDeliveryGuard('suite:certify', ctxWith('job-ok-1', q), 'org_ledger', async () => ({ fine: true }));
+    expect(out).toEqual({ fine: true });
+    const row = await getJobExecution(db.db, 'job-ok-1');
+    expect(row?.outcome).toBe('ok');
+    expect(row?.completedAt).not.toBeNull();
+    await q.close();
+  });
+
+  it("a throw writes outcome 'failed' + the error on the row, stays INCOMPLETE (redelivery still refused), and rethrows", async () => {
+    const { q } = recordingQueue();
+    await expect(
+      withDeliveryGuard('suite:certify', ctxWith('job-fail-1', q), 'org_ledger', async () => { throw new TypeError("Cannot read properties of undefined (reading 'policy')"); }),
+    ).rejects.toThrow(/reading 'policy'/);
+    const row = await getJobExecution(db.db, 'job-fail-1');
+    expect(row?.outcome).toBe('failed');
+    expect(row?.completedAt, 'incomplete: a retry must still be refused').toBeNull();
+    expect((row?.result as { error: { name: string; message: string } }).error).toMatchObject({ name: 'TypeError', message: expect.stringContaining("reading 'policy'") });
+    // the redelivery rule is unchanged
+    const claim = await claimJobExecution(db.db, { jobId: 'job-fail-1', jobKind: 'suite:certify', orgId: 'org_ledger', attempt: 2 });
+    expect(claim.decision).toBe('refuse-incomplete');
+    await q.close();
+  });
+
+  it(`the ${JOB_FAILURE_ALERT_AT}rd failure of one kind for one org in 24h emits ONE job_failed alert; the 4th is silent`, async () => {
+    const { q, alerts } = recordingQueue();
+    for (let i = 1; i <= JOB_FAILURE_ALERT_AT + 1; i++) {
+      await withDeliveryGuard('learning:period', ctxWith(`job-rep-${i}`, q), 'org_repeat', async () => { throw new Error(`boom ${i}`); }).catch(() => undefined);
+    }
+    await q.close(); // drains alerts:dispatch
+    const mine = alerts.filter((a) => a.event === 'job_failed' && a.orgId === 'org_repeat');
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.detail).toMatchObject({ jobKind: 'learning:period', failuresLast24h: JOB_FAILURE_ALERT_AT, lastJobId: `job-rep-${JOB_FAILURE_ALERT_AT}` });
+    expect(String(mine[0]!.detail!.narrative)).toContain(`boom ${JOB_FAILURE_ALERT_AT}`);
+  });
+
+  it('a platform-scope job (no org) alerts the ops org', async () => {
+    const { q, alerts } = recordingQueue();
+    for (let i = 1; i <= JOB_FAILURE_ALERT_AT; i++) {
+      await withDeliveryGuard('drift:canary', ctxWith(`job-plat-${i}`, q), undefined, async () => { throw new Error('platform boom'); }).catch(() => undefined);
+    }
+    await q.close();
+    const mine = alerts.filter((a) => a.event === 'job_failed' && a.detail?.jobKind === 'drift:canary');
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.orgId).toBe('org_platform_ops');
+    expect(mine[0]!.detail).toMatchObject({ scope: 'platform' });
   });
 });

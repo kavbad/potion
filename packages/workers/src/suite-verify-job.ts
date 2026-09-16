@@ -5,7 +5,7 @@
 // and the most self-contained region in it.
 
 import { BOOTSTRAP_RESAMPLES, bootstrapMeanCi, seedFromString, sha256,   type ProviderId, type StrategyConfig } from '@potion/core';
-import { approvedRubricForCluster, certificationStateForCluster, claimJobExecution, completeJobExecution, derivedSuiteIdFor, insertSuiteCertificationTx, loadDerivedSuite, computeSuiteContentHash, evalRuns, activeIncumbent, getPolicyById, insertIncidentRow, insertGuaranteeVerdict, pairedQualities, resolveAdvisoryWithEvidence, resolveIncidentWithEvidence, resolveRollbackTarget, appendIncidentVerifyAttempt, getIncidentByIdForOrg, markRecoveryUnconfirmed, openContractualIncidentForTuple, strategyConfigs, type UnpairableItem } from '@potion/db';
+import { approvedRubricForCluster, certificationStateForCluster, claimJobExecution, completeJobExecution, countRecentJobFailures, failJobExecution, derivedSuiteIdFor, insertSuiteCertificationTx, loadDerivedSuite, computeSuiteContentHash, evalRuns, activeIncumbent, getPolicyById, insertIncidentRow, insertGuaranteeVerdict, pairedQualities, resolveAdvisoryWithEvidence, resolveIncidentWithEvidence, resolveRollbackTarget, appendIncidentVerifyAttempt, getIncidentByIdForOrg, markRecoveryUnconfirmed, openContractualIncidentForTuple, strategyConfigs, type UnpairableItem } from '@potion/db';
 import { getBudget, mtdSpendUsd } from '@potion/db';
 import { BudgetCapError, runEval, type RunSummary } from '@potion/harness';
 import { perCallRequestLogSink, reconcileMetering } from './spend-sink.js';
@@ -22,6 +22,7 @@ import {
   registryPrices, RECOVERY_UNCONFIRMED_AFTER, AGENT_SUITE_ITEM_CAP_V2,
   LIVE_SWEEP_ANSWER_MAX_TOKENS, LIVE_SWEEP_JUDGE_MAX_TOKENS,
   type JobContext, type WorkerHandler,
+  PLATFORM_OPS_ORG_ID,
 } from './handler-shared.js';
 import { emitAlertEvent } from './alerts-job.js';
 
@@ -1144,9 +1145,58 @@ export async function withDeliveryGuard<T>(
   if (claim.decision === 'refuse-incomplete') {
     throw new JobRedeliveryRefusedError(delivery.jobId, kind);
   }
-  const result = await run();
-  await completeJobExecution(ctx.db, delivery.jobId, result);
+  let result: T;
+  try {
+    result = await run();
+  } catch (err) {
+    // THE FAILURE IS NOW A FACT ON THE LEDGER (2026-09-16). Before this a
+    // throw wrote nothing: the row stayed 'claimed, incomplete' forever and
+    // the error lived only in Redis. Recording it does not change the
+    // redelivery rule — the row stays incomplete, so a retry is still
+    // refused — it changes whether anyone can see it. Never masks the
+    // original error: every step here is best-effort.
+    const e = err instanceof Error ? err : new Error(String(err));
+    try {
+      await failJobExecution(ctx.db, delivery.jobId, { name: e.name, message: e.message, stack: e.stack });
+      await alertOnRepeatedFailure(ctx, kind, orgId ?? null, delivery.jobId, e.message);
+    } catch {
+      // swallowed: the ledger must never turn one failure into two
+    }
+    throw err;
+  }
+  await completeJobExecution(ctx.db, delivery.jobId, result, 'ok');
   return result;
+}
+
+/** The Nth failure of one kind for one org in 24h mints ONE alert — on the
+ * crossing, not on every failure after it. */
+export const JOB_FAILURE_ALERT_AT = 3;
+export const JOB_FAILURE_WINDOW_MS = 24 * 3600 * 1000;
+
+async function alertOnRepeatedFailure(
+  ctx: JobContext,
+  kind: JobKind,
+  orgId: string | null,
+  jobId: string,
+  lastError: string,
+): Promise<void> {
+  const failures = await countRecentJobFailures(ctx.db, { jobKind: kind, orgId, since: new Date(Date.now() - JOB_FAILURE_WINDOW_MS) });
+  if (failures !== JOB_FAILURE_ALERT_AT) return;
+  await emitAlertEvent(ctx, {
+    orgId: orgId ?? PLATFORM_OPS_ORG_ID,
+    event: 'job_failed',
+    detail: {
+      jobKind: kind,
+      scope: orgId ?? 'platform',
+      failuresLast24h: failures,
+      lastJobId: jobId,
+      lastError: lastError.slice(0, 500),
+      narrative:
+        `'${kind}' has failed ${failures} times in the last 24 hours` +
+        (orgId ? ` for ${orgId}` : ' at platform scope') +
+        `. Latest: ${lastError.slice(0, 200)}. Further failures in this window are recorded on job_executions but not re-alerted.`,
+    },
+  });
 }
 
 
