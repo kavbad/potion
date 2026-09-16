@@ -20,10 +20,10 @@ Every row here is **enforced by tests**, not asserted by prose:
 
 ## Summary
 
-- **183** routes classified.
+- **184** routes classified.
 - **55** org-scoped routes probed for the uniform no-existence-oracle 404.
-- **44** org-scoped collections probed for cross-tenant absence.
-- Tenancy classes: non-tenant 11, operator 5, org-list 43, org-param 59, platform-job 1, public 9, self-scoped 47, shared-global 8.
+- **45** org-scoped collections probed for cross-tenant absence.
+- Tenancy classes: non-tenant 11, operator 5, org-list 44, org-param 59, platform-job 1, public 9, self-scoped 47, shared-global 8.
 
 ### What the tenancy classes mean
 
@@ -98,6 +98,7 @@ Every row here is **enforced by tests**, not asserted by prose:
 | POST | `/api/incidents/:id/resolve` | yes | admin only (`serve+admin` key or admin session) | org-param | uniform 404 (probed) |
 | GET | `/api/incumbents` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | PUT | `/api/incumbents` | yes | admin only (`serve+admin` key or admin session) | org-list | absent from other orgs' responses (probed) |
+| GET | `/api/incumbents/observed` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/incumbents/options` | no | any org credential | shared-global | not applicable — the public price roster — the same list for every org |
 | GET | `/api/invites` | no | admin only (`serve+admin` key or admin session) | org-list | absent from other orgs' responses (probed) |
 | POST | `/api/invites` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — creates an invite in the CALLER's own org — no cross-org parameter exists |
