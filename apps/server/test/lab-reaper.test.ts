@@ -1,7 +1,7 @@
 // THE REAPER laws (2026-09-01): a stranded run is re-adopted; a live one
 // is left alone; the re-enqueue is idempotent against a held claim.
 import { describe, expect, it } from 'vitest';
-import { claimLabRun, createDb, createLabRun, listOrphanedLabRuns, migrate, seedIsolationOrgs, transitionLabRun, ORG_A } from '@potion/db';
+import { claimLabRun, createDb, createLabRun, ensureExternalSession, listOrphanedLabRuns, migrate, seedIsolationOrgs, transitionLabRun, ORG_A } from '@potion/db';
 import { harnessSpecHash, type HarnessSpec } from '@potion/lab-spec';
 import { reapTick } from '../src/lab-scheduler.js';
 
@@ -64,4 +64,28 @@ describe('the reaper', () => {
     expect(orphans.map((o) => o.id)).not.toContain('run-done');
     await h.close();
   }, 60_000);
+});
+
+// EXTERNAL SESSIONS ARE NOT ORPHANS (2026-09-16): a runtime-gate session is
+// legitimately 'running' for weeks with no claim. The reaper re-adopted one
+// every tick from 2026-09-06 — 13,974 deliveries in 14 days, all crashing.
+describe('the reaper never re-adopts an external-runtime session', () => {
+  it('external and openclaw sessions are excluded; a stranded internal run beside them is still found', async () => {
+    const h = await createDb();
+    await migrate(h.db);
+    await seedIsolationOrgs(h.db);
+    const hash = harnessSpecHash(SPEC);
+    for (const [id, runtime] of [['runx-ext', 'external'], ['runx-oc', 'openclaw']] as const) {
+      await ensureExternalSession(h.db, { id, orgId: ORG_A, harnessHash: 'b'.repeat(64), harnessName: 'gate', spec: { runtime, sessionKey: id, harnessHash: 'b'.repeat(64) } });
+    }
+    await createLabRun(h.db, { id: 'run-stranded-2', orgId: ORG_A, harnessHash: hash, harnessName: SPEC.name, spec: SPEC });
+    const claim = await claimLabRun(h.db, { runId: 'run-stranded-2', orgId: ORG_A, expectedHarnessHash: hash, leaseMs: 1 });
+    expect(claim.ok).toBe(true);
+    const future = new Date(Date.now() + 5 * 60_000);
+    const ids = (await listOrphanedLabRuns(h.db, future, 2 * 60_000)).map((o) => o.id);
+    expect(ids).toContain('run-stranded-2');
+    expect(ids).not.toContain('runx-ext');
+    expect(ids).not.toContain('runx-oc');
+    await h.close();
+  });
 });

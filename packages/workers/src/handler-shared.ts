@@ -107,6 +107,9 @@ export type WorkerHandler<K extends keyof JobPayloads = keyof JobPayloads, R = u
  * refinement: uncertainty never auto-restores and never silently persists). */
 export const RECOVERY_UNCONFIRMED_AFTER = 3;
 
+/** The reserved platform-ops org: platform-scope spend and alerts land here. */
+export const PLATFORM_OPS_ORG_ID = 'org_platform_ops';
+
 /**
  * Step items per cluster suite, filled session-ROUND-ROBIN in deterministic
  * session order so no long session monopolizes the suite. At the capstone

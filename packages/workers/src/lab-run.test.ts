@@ -10,6 +10,7 @@ import {
   apiKeys,
   createDb,
   createLabRun,
+  ensureExternalSession,
   getLabRun,
   insertApiKey,
   killLabRun,
@@ -261,7 +262,7 @@ describe('lab:run fence/reclaim — the zombie-key sweep', () => {
 
     const { factory, seen } = scriptedFactory([ok(), ok({ text: 'Wrap-up: done-definition met.' })]);
     const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'run-z3' }, ctx());
-    expect(res).toEqual({ state: 'killed-operator', noop: true });
+    expect(res).toEqual({ state: 'killed-operator', noop: true, reason: 'terminal' });
     expect(seen.requests).toHaveLength(0); // no serving traffic on a no-op
     await expectAllKeysDead('run-z3', 1); // the orphan died; nothing new minted
   });
@@ -1016,5 +1017,24 @@ describe('the judge retry (2026-08-31 — cheap routes truncate)', () => {
     expect(res.state).toBe('completed');
     const run = await getLabRun(db.db, runId, ORG);
     expect((run!.judge as { overall: number }).overall).toBe(9);
+  });
+});
+
+// AN EXTERNAL SESSION IS NOT OURS TO RUN (2026-09-16). A runtime-gate
+// session's spec has no brain slot; delivered to lab:run it crashed on
+// spec.brain.policy — ~1000×/day for ten days, re-adopted by the reaper.
+describe('lab:run refuses an external-runtime session with a typed noop', () => {
+  it('no crash, no key minted, state untouched, reason named', async () => {
+    const hash = 'a'.repeat(64);
+    await ensureExternalSession(db.db, {
+      id: 'runx-external-1', orgId: ORG, harnessHash: hash, harnessName: 'gate',
+      spec: { runtime: 'external', sessionKey: 'frontier-notes-publisher-w38', harnessHash: hash },
+    });
+    const { factory, seen } = scriptedFactory([]);
+    const res = await createLabRunHandler({ clientFactory: factory })({ orgId: ORG, runId: 'runx-external-1' }, ctx());
+    expect(res).toEqual({ state: 'running', noop: true, reason: 'external-runtime' });
+    expect(seen.requests).toHaveLength(0);
+    expect(await keysForRun('runx-external-1')).toHaveLength(0);
+    expect((await getLabRun(db.db, 'runx-external-1', ORG))!.state).toBe('running');
   });
 });

@@ -714,6 +714,13 @@ export async function listOrphanedLabRuns(
         sql`${labRuns.state} IN ('pending', 'running')`,
         sql`(${labRuns.claimExpiresAt} IS NULL OR ${labRuns.claimExpiresAt} < ${cutoff})`,
         sql`${labRuns.updatedAt} < ${cutoff}`,
+        // EXTERNAL SESSIONS ARE NOT ORPHANS (2026-09-16). A runtime-gate
+        // session (spec.runtime 'external' | 'openclaw') lives in another
+        // process and is legitimately 'running' for weeks with no claim.
+        // The reaper re-adopted one every tick from 2026-09-06: 13,974
+        // lab:run deliveries in 14 days, each crashing on spec.brain.policy
+        // (an external spec has no brain), none recorded anywhere but Redis.
+        sql`coalesce(${labRuns.spec}->>'runtime', '') NOT IN ('external', 'openclaw')`,
       ),
     )
     .orderBy(labRuns.updatedAt)
