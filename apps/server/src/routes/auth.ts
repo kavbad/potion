@@ -31,6 +31,7 @@
 // TODO — wire POTION_SMTP_HOST / POTION_SMTP_PORT / POTION_SMTP_USER /
 // POTION_SMTP_PASS / POTION_SMTP_FROM to a real transport (e.g. nodemailer)
 // outside the sandbox; there is NO live email in this build.
+import { ensureDefaultAlertRule } from '../default-alert-rule.js';
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -177,6 +178,9 @@ export async function provisionForEmail(
     const orgId = `org-${randomUUID().slice(0, 8)}`;
     await createOrg(db, { id: orgId, name: soloOrgName(email) });
     await createMembership(db, { orgId, userId: existing.id, role: 'admin' });
+    // A new org hears about its first problem (2026-09-16): an email rule
+    // to the address that signed up. Never fails provisioning.
+    await ensureDefaultAlertRule(db, orgId, email).catch(() => undefined);
     return { userId: existing.id, orgId };
   }
   const userId = `usr-${randomUUID().slice(0, 8)}`;
@@ -184,6 +188,7 @@ export async function provisionForEmail(
   await createUser(db, { id: userId, email, name: userNameFromEmail(email) });
   await createOrg(db, { id: orgId, name: soloOrgName(email) });
   await createMembership(db, { orgId, userId, role: 'admin' });
+  await ensureDefaultAlertRule(db, orgId, email).catch(() => undefined);
   return { userId, orgId };
 }
 
