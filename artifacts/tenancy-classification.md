@@ -20,10 +20,10 @@ Every row here is **enforced by tests**, not asserted by prose:
 
 ## Summary
 
-- **182** routes classified.
+- **183** routes classified.
 - **55** org-scoped routes probed for the uniform no-existence-oracle 404.
 - **44** org-scoped collections probed for cross-tenant absence.
-- Tenancy classes: non-tenant 11, operator 5, org-list 43, org-param 59, platform-job 1, public 9, self-scoped 46, shared-global 8.
+- Tenancy classes: non-tenant 11, operator 5, org-list 43, org-param 59, platform-job 1, public 9, self-scoped 47, shared-global 8.
 
 ### What the tenancy classes mean
 
@@ -84,6 +84,7 @@ Every row here is **enforced by tests**, not asserted by prose:
 | GET | `/api/endpoint-snippet` | no | any org credential | non-tenant | not applicable — pure snippet rendering; reads no tenant state |
 | POST | `/api/evals` | yes | member+ (serve key or member session) | self-scoped | not applicable — suiteIds resolve to PLATFORM suite files only; the job is stamped with the caller’s org |
 | PUT | `/api/floor` | yes | admin only (`serve+admin` key or admin session) | self-scoped | not applicable — sets the CALLER's own org-wide floor (new policy row, own keys rebound) — no cross-org parameter exists |
+| GET | `/api/floor/feasibility` | no | any org credential | self-scoped | not applicable — reads the CALLER's own bound policy against the org-preferred frontiers (2026-09-16 feasibility-before-commitment) — no cross-org parameter exists |
 | GET | `/api/frontier-changelog` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/frontiers` | no | any org credential | org-list | absent from other orgs' responses (probed) |
 | GET | `/api/frontiers/:clusterId` | no | any org credential | org-param | uniform 404 (probed) |
