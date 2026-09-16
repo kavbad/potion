@@ -25,7 +25,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Policy } from '@potion/core';
 import { PolicySchema } from '@potion/core';
-import { getOrgById, listApiKeys, listRequestLogs, listServingPolicies } from '@potion/db';
+import { getOrgById, listApiKeys, listRequestLogs, getCurrentServingPolicy } from '@potion/db';
 import { loadTaxonomy } from '@potion/cluster';
 import { loadCurrentFrontier } from '@potion/pareto';
 import type { PotionContext } from '../context.js';
@@ -124,15 +124,15 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
     const orgId = req.potionOrg!.orgId;
     const baseUrl = publicBaseUrl(req);
 
-    // The org's bound policy. listPolicies is creation-ordered; the first is
-    // what a self-serve signup bound, and it is what /api/endpoint-snippet
-    // falls back to, so both surfaces name the same policy.
+    // The org's CURRENT rule (2026-09-16) — the policy its keys are on — not
+    // the first row it ever wrote. This read fed the Settings floor card:
+    // after the operator set the floor to 0.84 and every key was rebound,
+    // the card still said 0.98, the August row that happened to be oldest.
     const connOrg = await getOrgById(db, orgId);
-    const policies = await listServingPolicies(db, orgId);
-    const firstPolicy = policies[0];
+    const currentPolicy = await getCurrentServingPolicy(db, orgId);
     let policy: Policy | null = null;
-    if (firstPolicy) {
-      const parsed = PolicySchema.safeParse(firstPolicy.config);
+    if (currentPolicy) {
+      const parsed = PolicySchema.safeParse(currentPolicy.config);
       if (parsed.success) policy = parsed.data;
     }
 
@@ -175,8 +175,8 @@ export function registerConnectionRoutes(app: FastifyInstance, ctx: PotionContex
         && process.env.POTION_PUBLIC_URL.trim() !== '',
       policy: policy
         ? {
-            id: firstPolicy!.id,
-            name: firstPolicy!.name,
+            id: currentPolicy!.id,
+            name: currentPolicy!.name,
             config: policy,
             description: describePolicy(policy),
           }

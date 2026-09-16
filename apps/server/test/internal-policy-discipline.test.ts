@@ -179,6 +179,16 @@ describe("a minted key binds the org's CURRENT rule, not its oldest", () => {
     expect((JSON.parse(res.body) as { policyId: string }).policyId).toBe(`pol-current-${ORG2}`);
   });
 
+  it('the connection read — what the Settings floor card shows — reports the CURRENT floor', async () => {
+    // Found live: the operator set the floor to 0.84, every key was rebound,
+    // and the card still said 0.98 — the August row, read as policies[0].
+    const res = await app.inject({ method: 'GET', url: '/api/connection', headers: { cookie: COOKIE2 } });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { policy: { id: string; config: { qualityFloor: number } } | null };
+    expect(body.policy?.id).toBe(`pol-current-${ORG2}`);
+    expect(body.policy?.config.qualityFloor).toBe(0.84);
+  });
+
   it('with no keys yet: the new key takes the NEWEST rule, not the first one written', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/api-keys',

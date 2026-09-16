@@ -22,7 +22,7 @@ import {
   getOrgIncumbents,
   getStrategyConfigs,
   listChallengerProposals,
-  listServingPolicies,
+  getCurrentServingPolicy,
   markChallengerApplied,
 } from '@potion/db';
 import {
@@ -118,8 +118,9 @@ export function registerChallengerRoutes(app: FastifyInstance, ctx: PotionContex
 
     // What NOW serves, through the one resolver — fallback flags included,
     // because the honest answer to "apply" is what production will do next.
-    const firstPolicy = (await listServingPolicies(db, orgId))[0];
-    const parsed = firstPolicy !== undefined ? PolicySchema.safeParse(firstPolicy.config) : null;
+    // The org's CURRENT rule, not its oldest (2026-09-16; see @potion/db).
+    const currentPolicy = await getCurrentServingPolicy(db, orgId);
+    const parsed = currentPolicy !== null ? PolicySchema.safeParse(currentPolicy.config) : null;
     const policy: Policy = parsed?.success ? parsed.data : DEFAULT_ORG_POLICY;
     const d = await servingDecisionFor(db, {
       orgId,

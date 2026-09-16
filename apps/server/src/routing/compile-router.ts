@@ -31,7 +31,7 @@ import {
   getRouterInterpretation,
   listAdoptedWorkloads,
   listClusters,
-  listServingPolicies,
+  getCurrentServingPolicy,
   listRequestLogs,
   listRouterVersions,
   type PotionDb,
@@ -147,13 +147,15 @@ export async function compileAndMintRouter(
   const orgRow = await getOrgById(db, orgId);
   const name = routerModelName(orgRow?.name ?? 'org');
 
-  // The org's bound policy — connection.ts's exact resolution.
+  // The org's CURRENT rule — connection.ts's exact resolution.
   let policy: Policy | null = null;
   // Serving policies only (2026-08-28): the operator's own router page read
   // the Lab's internal lab-io row — floor 0.00 — as the org's rule.
-  const firstPolicy = (await listServingPolicies(db, orgId))[0];
-  if (firstPolicy) {
-    const parsed = PolicySchema.safeParse(firstPolicy.config);
+  // The current rule, not the oldest (2026-09-16): `[0]` compiled the plan
+  // against an August row at floor 0.978… while every key served at 0.84.
+  const currentPolicy = await getCurrentServingPolicy(db, orgId);
+  if (currentPolicy) {
+    const parsed = PolicySchema.safeParse(currentPolicy.config);
     if (parsed.success) policy = parsed.data;
   }
 
