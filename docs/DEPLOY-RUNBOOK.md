@@ -3,6 +3,44 @@
 Stand up Potion for one partner, hand them a URL, and know how to take it
 down cleanly (that part is [ROLLBACK-RUNBOOK.md](ROLLBACK-RUNBOOK.md)).
 
+> ## 🧭 DEPLOY TRACKS MAIN (2026-09-12)
+>
+> `main` is the trunk. `deploy/**` is a **record of what production is
+> running** — a pointer fast-forwarded to a commit of `main` — never a place
+> work accumulates.
+>
+> ```
+> work → PR into main → merge → fast-forward deploy to main → deploy
+> ```
+>
+> ```bash
+> git push origin origin/main:refs/heads/deploy/2026-08-21-partner-ready
+> ```
+>
+> **It used to run the other way**, and that cost real things. Work landed on
+> `deploy/**` and `main` caught up in batches, so the two were never briefly
+> identical:
+>
+> - CI reads `.github/workflows/ci.yml` from the **base**, so a PR into
+>   `deploy` was gated by whatever workflow `deploy` happened to have. On
+>   2026-09-11 PR #18 got a two-job gate while `main` had three — the
+>   coverage job existed only on `main`. Every PR was tested against
+>   whichever half its base held, and one run pair showed both at once: the
+>   `pull_request` event ran three jobs off the merge ref, the `push` event
+>   two off the branch.
+> - The two heads drifted into 54 commits of divergence with *parallel
+>   implementations of the same fixes* — lint, NPROC, gitleaks, the vitest
+>   worktree multiplier — which took a nine-file semantic reconciliation to
+>   undo.
+> - Production ran 34 source files that existed in **no commit**, recoverable
+>   from nowhere but a running server's filesystem, because "deploy leads" made
+>   shipping-before-merging feel normal.
+>
+> `scripts/deploy-prod.sh` now refuses a HEAD that is not contained in
+> `origin/main`. A deliberate hotfix sets `POTION_DEPLOY_OFF_MAIN=1` and lands
+> on `main` straight after — otherwise the next deploy from `main` silently
+> reverts it, which is precisely how those 34 files happened.
+
 > ## ⛔ NEVER rsync `.env*` to the host
 >
 > The host's `/opt/potion/app/.env.prod` is the RUNTIME TRUTH for secrets
