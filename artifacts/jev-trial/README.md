@@ -32,7 +32,7 @@ question; for deterministic items (`exact`, `field-match`, `code-exec`) a
 | scorer | n | Pearson vs stored | mean abs diff | verdict |
 |---|---|---|---|---|
 | llm-judge (Sonnet) | 193 | 0.65 (0.44–0.94 by cluster) | 0.080 | second opinion, not a replacement |
-| exact | 227 | 0.66 | 0.131 | **Jev right, our scorer wrong** on 25/30 disagreements |
+| exact | 227 | 0.66 | 0.131 | **Jev right, our scorer wrong** on 25/30 disagreements (20 fixed by #44; 10 need a non-exact instrument) |
 | field-match | 60 | 0.61 | 0.535 | Jev wrong: cannot compare JSON fields (exh-01 exact match → 0.36) |
 | code-exec | 59 | 0.65 | 0.246 | Jev wrong: cannot run tests (passing solution → 0.16) |
 

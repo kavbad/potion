@@ -110,26 +110,31 @@ the cost-aware tiebreak keeps its gain. The 0.84 result from the #41 run
 (1.35x) is unchanged by #42 (the tie rule only fires when the floor is
 unreachable; 3.3% of items at 0.84).
 
-### The `exact` scorer zeroed 30 correct answers in this run
+### The `exact` scorer zeroed 20 correct answers in this run
 
 Running Jev as a second judge over the saved answers (see
 `artifacts/jev-trial/`) exposed it: `scoreExact` in
 `packages/harness/src/scorers.ts` compares the whole answer, case- and
 whitespace-folded, against the reference. So `18 days.` ≠ `18 days`
 (rag-answer-001), and a reasoning answer that shows its work and ends with
-`24` scores 0 against `24`. Jev marked 25 of those 30 as correct.
+`24` scores 0 against `24`. Jev marked 25 of the 30 zero-scored `exact`
+rows it disagreed on as correct.
 
-Re-scoring only the `exact` rows with a lenient match (trailing punctuation
-dropped, final line or whole answer must equal the reference):
+Re-scored with the fixed scorer (PR #44: trailing punctuation and emphasis
+dropped, then the final non-empty line must EQUAL the reference — never
+contains):
 
 | arm | stored quality | re-scored | rows flipped 0→1 |
 |---|---|---|---|
-| Potion | 0.892 | 0.914 | 4 (rag-answer) |
-| auto | 0.915 | 0.948 | 6 (5 rag-answer, 1 reasoning) |
-| incumbent | 0.850 | 0.960 | 20 (15 reasoning, 5 rag-answer) |
+| Potion | 0.892 | 0.897 | 1 (rag-answer) |
+| auto | 0.915 | 0.932 | 3 (2 rag-answer, 1 reasoning) |
+| incumbent | 0.850 | 0.938 | 16 (15 reasoning, 1 rag-answer) |
 
-multi-step-reasoning goes 1.00 / 0.95 / 0.25 → 1.00 / 1.00 / 1.00 and
-rag-answer 0.80 / 0.75 / 0.75 → 1.00 / 1.00 / 1.00. Two consequences:
+No wrong flips: the three genuinely wrong answers stay 0. Ten rag-answer
+rows also stay 0 because the answer adds words (`$4.50 per day`, `Up to 2
+hours.`, `42 minutes per charge.`) — correct answers the `exact` instrument
+cannot see. rag-answer wants field-contains or a judge; that is a separate
+change. Two consequences:
 
 - Every "Potion beats Sonnet on reasoning" number in this README is format
   obedience, not reasoning: the model Potion serves answers with the bare
@@ -138,9 +143,10 @@ rag-answer 0.80 / 0.75 / 0.75 → 1.00 / 1.00 / 1.00. Two consequences:
 - The platform measures the `multi-step-reasoning` and `rag-answer`
   frontiers with the same v1 suites and the same scorer
   (`PLATFORM_SUITE_BY_CLUSTER`), so those two frontiers rank models partly
-  by format obedience. Fixing the scorer changes what those frontiers mean
-  and needs a re-measure (cached cells store no answer text).
+  by format obedience. #44 keys `exact` cells as `exact@2` so the old zeros
+  cannot re-certify; merging it re-executes every exact cell once and may
+  re-rank those two frontiers.
 
-At the corrected numbers the 0.95 story is: Potion 0.914 vs the auto-router
-0.948 at 1.20x its cost, vs Sonnet 0.960 at 0.16x. The quality gap to the
+At the corrected numbers the 0.95 story is: Potion 0.897 vs the auto-router
+0.932 at 1.20x its cost, vs Sonnet 0.938 at 0.16x. The quality gap to the
 auto-router is coverage (unpublished auditions), not the tie rule.
