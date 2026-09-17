@@ -15,6 +15,7 @@
 // GET never returns it: `targetMasked` keeps only scheme+host so operators
 // can tell rules apart (same philosophy as share-token hash prefixes and
 // alert_deliveries never copying target_url).
+import { sendEmailFromEnv } from '../email.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
@@ -35,7 +36,29 @@ import {
 import type { PotionContext } from '../context.js';
 
 /** scheme://host/••• — never the path (Slack secrets live there). */
+/**
+ * MAILTO IS A TARGET TOO (2026-09-16). The dispatcher has delivered
+ * mailto: rules since 2026-08-24 and the only rule on production was one —
+ * but this validator predates that and refused every mailto: a customer
+ * tried to create ("must be an http(s) URL"), and the test endpoint tried
+ * an HTTP fetch on it ("fetch failed"). Email rules could exist only by
+ * direct insert. Accept a plausible address; the transport decides the rest.
+ */
+export function isMailtoTarget(v: string): boolean {
+  return /^mailto:[^\s@/]+@[^\s@/]+\.[^\s@/]+$/i.test(v);
+}
+function isAcceptableTarget(v: string): boolean {
+  if (isMailtoTarget(v)) return true;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 export function maskUrl(url: string): string {
+  if (isMailtoTarget(url)) return `mailto:•••@${url.slice(url.indexOf('@') + 1)}`;
   try {
     const u = new URL(url);
     return `${u.protocol}//${u.host}/•••`;
@@ -62,14 +85,7 @@ const CreateRuleSchema = z
       .string()
       .min(8)
       .max(2048)
-      .refine((v) => {
-        try {
-          const u = new URL(v);
-          return u.protocol === 'https:' || u.protocol === 'http:';
-        } catch {
-          return false;
-        }
-      }, 'targetUrl must be an http(s) URL'),
+      .refine(isAcceptableTarget, 'targetUrl must be an http(s) URL or mailto:<address>'),
     events: z
       .array(z.enum(ALERT_EVENTS as [AlertEvent, ...AlertEvent[]]))
       .min(1)
@@ -79,7 +95,7 @@ const CreateRuleSchema = z
 
 const TestRuleSchema = z
   .object({
-    url: z.string().min(8).max(2048),
+    url: z.string().min(8).max(2048).refine(isAcceptableTarget, 'url must be an http(s) URL or mailto:<address>'),
     kind: z.enum(ALERT_RULE_KINDS as [AlertRuleKind, ...AlertRuleKind[]]).optional(),
   })
   .strict();
@@ -237,6 +253,27 @@ export function registerAlertRoutes(app: FastifyInstance, ctx: PotionContext): v
       ts,
     );
     const t0 = performance.now();
+    // A mailto: target is tested through the email transport, exactly as the
+    // dispatcher delivers it — never an HTTP fetch. Delivered means a real
+    // transport accepted it; the log-only transport is reported as such.
+    if (isMailtoTarget(parsed.data.url)) {
+      const to = parsed.data.url.slice('mailto:'.length);
+      const { sendEmail, transport } = sendEmailFromEnv();
+      const targetMasked = maskUrl(parsed.data.url);
+      if (transport !== 'resend') {
+        return reply.send({ delivered: false, status: null, latencyMs: 0, targetMasked, transport, error: 'no email transport configured on this server (RESEND_API_KEY + POTION_EMAIL_FROM)' });
+      }
+      try {
+        await sendEmail({
+          to,
+          subject: `[potion alert] test — org ${org.orgId}`,
+          text: `Alert: test\nOrg: ${org.orgId}\nAt: ${ts}\n\n${body}\n`,
+        });
+        return reply.send({ delivered: true, status: null, latencyMs: Math.round((performance.now() - t0) * 100) / 100, targetMasked, transport });
+      } catch (err) {
+        return reply.send({ delivered: false, status: null, latencyMs: Math.round((performance.now() - t0) * 100) / 100, targetMasked, transport, error: redactUrl((err as Error).message) });
+      }
+    }
     try {
       const res = await fetch(parsed.data.url, {
         method: 'POST',
