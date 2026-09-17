@@ -1,0 +1,5526 @@
+{
+  "ranAt": "2026-09-17T22:02:48.737Z",
+  "model": "jev-latest",
+  "source": "/private/tmp/claude-501/-Users-kavonbadie-Downloads-potion/6c92defb-1964-42fb-8226-089f85fccb60/scratchpad/h2h-final/confirm-095-2026-09-17.answers.json",
+  "answers": 540,
+  "scored": 539,
+  "errored": 1,
+  "calls": 539,
+  "inputTokens": 369204,
+  "costUsd": 0.015506568,
+  "overall": {
+    "n": 539,
+    "pearson": 0.29051734414158503,
+    "meanAbsDiff": 0.17000371057513974,
+    "sonnetMean": 0.8951762523191078,
+    "jevMean": 0.8325120593692046
+  },
+  "byCluster": {
+    "code-gen": {
+      "n": 59,
+      "pearson": 0.6493045918823248,
+      "meanAbsDiff": 0.24567796610169496,
+      "sonnetMean": 0.9614406779661017,
+      "jevMean": 0.7171186440677967
+    },
+    "code-review": {
+      "n": 60,
+      "pearson": 0.9639258019179807,
+      "meanAbsDiff": 0.051500000000000025,
+      "sonnetMean": 0.93,
+      "jevMean": 0.9017
+    },
+    "extraction": {
+      "n": 60,
+      "pearson": 0.6111012736609229,
+      "meanAbsDiff": 0.5354166666666667,
+      "sonnetMean": 0.9479166666666666,
+      "jevMean": 0.41250000000000003
+    },
+    "summarization": {
+      "n": 42,
+      "pearson": 0.5744160019951347,
+      "meanAbsDiff": 0.10504761904761903,
+      "sonnetMean": 0.9428571428571424,
+      "jevMean": 0.8527619047619045
+    },
+    "classification": {
+      "n": 59,
+      "pearson": 0.9961012045924978,
+      "meanAbsDiff": 0.017288135593220354,
+      "sonnetMean": 0.9830508474576272,
+      "jevMean": 0.9667796610169493
+    },
+    "multi-step-reasoning": {
+      "n": 60,
+      "pearson": 0.6676452952451247,
+      "meanAbsDiff": 0.23849999999999988,
+      "sonnetMean": 0.7333333333333333,
+      "jevMean": 0.8771666666666669
+    },
+    "creative": {
+      "n": 39,
+      "pearson": 0.6231509945094442,
+      "meanAbsDiff": 0.09425641025641028,
+      "sonnetMean": 0.8435897435897434,
+      "jevMean": 0.8319999999999999
+    },
+    "rewrite-edit": {
+      "n": 60,
+      "pearson": 0.5761129530092582,
+      "meanAbsDiff": 0.0651,
+      "sonnetMean": 0.9116666666666664,
+      "jevMean": 0.9217666666666667
+    },
+    "rag-answer": {
+      "n": 60,
+      "pearson": 0.7753497071156513,
+      "meanAbsDiff": 0.20183333333333323,
+      "sonnetMean": 0.7666666666666667,
+      "jevMean": 0.9525000000000002
+    },
+    "agentic-tool-use": {
+      "n": 40,
+      "pearson": 0.4395829674898621,
+      "meanAbsDiff": 0.06219999999999998,
+      "sonnetMean": 0.9475,
+      "jevMean": 0.9293000000000001
+    }
+  },
+  "byScorer": {
+    "code-exec": {
+      "n": 59,
+      "pearson": 0.6493045918823248,
+      "meanAbsDiff": 0.24567796610169496,
+      "sonnetMean": 0.9614406779661017,
+      "jevMean": 0.7171186440677967
+    },
+    "field-match": {
+      "n": 60,
+      "pearson": 0.6111012736609229,
+      "meanAbsDiff": 0.5354166666666667,
+      "sonnetMean": 0.9479166666666666,
+      "jevMean": 0.41250000000000003
+    },
+    "exact": {
+      "n": 227,
+      "pearson": 0.6560927200659195,
+      "meanAbsDiff": 0.13057268722466991,
+      "sonnetMean": 0.8546255506607929,
+      "jevMean": 0.9285462555066081
+    },
+    "llm-judge": {
+      "n": 193,
+      "pearson": 0.6499370130312775,
+      "meanAbsDiff": 0.07964766839378239,
+      "sonnetMean": 0.906217616580312,
+      "jevMean": 0.8854093264248702
+    }
+  },
+  "armWinnerAgreement": {
+    "decidedItems": 31,
+    "sameWinner": 21,
+    "rate": 0.6774193548387096
+  },
+  "rows": [
+    {
+      "id": "cgh-c03",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 379
+    },
+    {
+      "id": "cgh-c03",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 293
+    },
+    {
+      "id": "cgh-c03",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.83,
+      "confidence": null,
+      "ms": 809
+    },
+    {
+      "id": "cgh-c02",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.16,
+      "confidence": null,
+      "ms": 289
+    },
+    {
+      "id": "cgh-c02",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.9,
+      "confidence": null,
+      "ms": 213
+    },
+    {
+      "id": "cgh-c02",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.84,
+      "confidence": null,
+      "ms": 116
+    },
+    {
+      "id": "cgh-c05",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 169
+    },
+    {
+      "id": "cgh-c05",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.91,
+      "confidence": null,
+      "ms": 231
+    },
+    {
+      "id": "cgh-c05",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.86,
+      "confidence": null,
+      "ms": 227
+    },
+    {
+      "id": "cgh-c01",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 96
+    },
+    {
+      "id": "cgh-c01",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 0,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 196
+    },
+    {
+      "id": "cgh-c01",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.86,
+      "confidence": null,
+      "ms": 110
+    },
+    {
+      "id": "cgh-c04",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.91,
+      "confidence": null,
+      "ms": 148
+    },
+    {
+      "id": "cgh-c04",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.93,
+      "confidence": null,
+      "ms": 131
+    },
+    {
+      "id": "cgh-c04",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.5,
+      "confidence": null,
+      "ms": 168
+    },
+    {
+      "id": "cgh-c06",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.87,
+      "confidence": null,
+      "ms": 137
+    },
+    {
+      "id": "cgh-c06",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.62,
+      "confidence": null,
+      "ms": 103
+    },
+    {
+      "id": "cgh-c06",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.82,
+      "confidence": null,
+      "ms": 150
+    },
+    {
+      "id": "cgh-c08",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.7,
+      "confidence": null,
+      "ms": 135
+    },
+    {
+      "id": "cgh-c08",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.6,
+      "confidence": null,
+      "ms": 95
+    },
+    {
+      "id": "cgh-c08",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.65,
+      "confidence": null,
+      "ms": 81
+    },
+    {
+      "id": "cgh-c07",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 0.625,
+      "jev": 0.24,
+      "confidence": null,
+      "ms": 111
+    },
+    {
+      "id": "cgh-c07",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.79,
+      "confidence": null,
+      "ms": 123
+    },
+    {
+      "id": "cgh-c07",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.78,
+      "confidence": null,
+      "ms": 180
+    },
+    {
+      "id": "cgh-c09",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.64,
+      "confidence": null,
+      "ms": 107
+    },
+    {
+      "id": "cgh-c09",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.52,
+      "confidence": null,
+      "ms": 206
+    },
+    {
+      "id": "cgh-c09",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.79,
+      "confidence": null,
+      "ms": 303
+    },
+    {
+      "id": "cgh-c11",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.83,
+      "confidence": null,
+      "ms": 186
+    },
+    {
+      "id": "cgh-c11",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.85,
+      "confidence": null,
+      "ms": 215
+    },
+    {
+      "id": "cgh-c11",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.75,
+      "confidence": null,
+      "ms": 142
+    },
+    {
+      "id": "cgh-c10",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.85,
+      "confidence": null,
+      "ms": 251
+    },
+    {
+      "id": "cgh-c10",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.6,
+      "confidence": null,
+      "ms": 133
+    },
+    {
+      "id": "cgh-c10",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.84,
+      "confidence": null,
+      "ms": 131
+    },
+    {
+      "id": "cgh-c12",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 139
+    },
+    {
+      "id": "cgh-c12",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 146
+    },
+    {
+      "id": "cgh-c12",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.84,
+      "confidence": null,
+      "ms": 166
+    },
+    {
+      "id": "cgh-f03",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.87,
+      "confidence": null,
+      "ms": 170
+    },
+    {
+      "id": "cgh-f03",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.74,
+      "confidence": null,
+      "ms": 147
+    },
+    {
+      "id": "cgh-f03",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.69,
+      "confidence": null,
+      "ms": 102
+    },
+    {
+      "id": "cgh-f02",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.65,
+      "confidence": null,
+      "ms": 145
+    },
+    {
+      "id": "cgh-f02",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.52,
+      "confidence": null,
+      "ms": 162
+    },
+    {
+      "id": "cgh-f02",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.8,
+      "confidence": null,
+      "ms": 127
+    },
+    {
+      "id": "cgh-f01",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.53,
+      "confidence": null,
+      "ms": 127
+    },
+    {
+      "id": "cgh-f01",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.36,
+      "confidence": null,
+      "ms": 160
+    },
+    {
+      "id": "cgh-f06",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 0.7,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 119
+    },
+    {
+      "id": "cgh-f06",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 135
+    },
+    {
+      "id": "cgh-f06",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.79,
+      "confidence": null,
+      "ms": 117
+    },
+    {
+      "id": "cgh-f05",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 0.9,
+      "jev": 0.45,
+      "confidence": null,
+      "ms": 163
+    },
+    {
+      "id": "cgh-f05",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.76,
+      "confidence": null,
+      "ms": 125
+    },
+    {
+      "id": "cgh-f05",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.71,
+      "confidence": null,
+      "ms": 161
+    },
+    {
+      "id": "cgh-f04",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 0.5,
+      "jev": 0.24,
+      "confidence": null,
+      "ms": 207
+    },
+    {
+      "id": "cgh-f04",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.64,
+      "confidence": null,
+      "ms": 163
+    },
+    {
+      "id": "cgh-f04",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.68,
+      "confidence": null,
+      "ms": 177
+    },
+    {
+      "id": "exh-01",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.72,
+      "confidence": null,
+      "ms": 97
+    },
+    {
+      "id": "exh-01",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 135
+    },
+    {
+      "id": "exh-01",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.36,
+      "confidence": null,
+      "ms": 152
+    },
+    {
+      "id": "cgh-f07",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.84,
+      "confidence": null,
+      "ms": 118
+    },
+    {
+      "id": "cgh-f07",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.91,
+      "confidence": null,
+      "ms": 129
+    },
+    {
+      "id": "cgh-f07",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.76,
+      "confidence": null,
+      "ms": 163
+    },
+    {
+      "id": "cgh-f08",
+      "cluster": "code-gen",
+      "arm": "potion",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 565
+    },
+    {
+      "id": "cgh-f08",
+      "cluster": "code-gen",
+      "arm": "auto",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.77,
+      "confidence": null,
+      "ms": 137
+    },
+    {
+      "id": "cgh-f08",
+      "cluster": "code-gen",
+      "arm": "incumbent",
+      "scorer": "code-exec",
+      "sonnet": 1,
+      "jev": 0.68,
+      "confidence": null,
+      "ms": 100
+    },
+    {
+      "id": "exh-02",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.16,
+      "confidence": null,
+      "ms": 496
+    },
+    {
+      "id": "exh-02",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.55,
+      "confidence": null,
+      "ms": 161
+    },
+    {
+      "id": "exh-02",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.09,
+      "confidence": null,
+      "ms": 123
+    },
+    {
+      "id": "exh-04",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.03,
+      "confidence": null,
+      "ms": 141
+    },
+    {
+      "id": "exh-04",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.9,
+      "confidence": null,
+      "ms": 198
+    },
+    {
+      "id": "exh-04",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.32,
+      "confidence": null,
+      "ms": 116
+    },
+    {
+      "id": "exh-03",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.03,
+      "confidence": null,
+      "ms": 246
+    },
+    {
+      "id": "exh-03",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.69,
+      "confidence": null,
+      "ms": 103
+    },
+    {
+      "id": "exh-03",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.27,
+      "confidence": null,
+      "ms": 168
+    },
+    {
+      "id": "exh-05",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.75,
+      "jev": 0.02,
+      "confidence": null,
+      "ms": 149
+    },
+    {
+      "id": "exh-05",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.2,
+      "confidence": null,
+      "ms": 127
+    },
+    {
+      "id": "exh-05",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.27,
+      "confidence": null,
+      "ms": 153
+    },
+    {
+      "id": "exh-06",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.02,
+      "confidence": null,
+      "ms": 227
+    },
+    {
+      "id": "exh-06",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 199
+    },
+    {
+      "id": "exh-06",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.31,
+      "confidence": null,
+      "ms": 284
+    },
+    {
+      "id": "exh-07r",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.03,
+      "confidence": null,
+      "ms": 123
+    },
+    {
+      "id": "exh-07r",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.66,
+      "confidence": null,
+      "ms": 170
+    },
+    {
+      "id": "exh-07r",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.2,
+      "confidence": null,
+      "ms": 171
+    },
+    {
+      "id": "exh-08",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.625,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 160
+    },
+    {
+      "id": "exh-08",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.79,
+      "confidence": null,
+      "ms": 168
+    },
+    {
+      "id": "exh-08",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.37,
+      "confidence": null,
+      "ms": 140
+    },
+    {
+      "id": "exh-10",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.1,
+      "confidence": null,
+      "ms": 165
+    },
+    {
+      "id": "exh-10",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.16,
+      "confidence": null,
+      "ms": 113
+    },
+    {
+      "id": "exh-10",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.06,
+      "confidence": null,
+      "ms": 205
+    },
+    {
+      "id": "exh-11",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.02,
+      "confidence": null,
+      "ms": 110
+    },
+    {
+      "id": "exh-11",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.9,
+      "confidence": null,
+      "ms": 90
+    },
+    {
+      "id": "exh-11",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.35,
+      "confidence": null,
+      "ms": 227
+    },
+    {
+      "id": "exh-09",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.62,
+      "confidence": null,
+      "ms": 175
+    },
+    {
+      "id": "exh-09",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.49,
+      "confidence": null,
+      "ms": 160
+    },
+    {
+      "id": "exh-09",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.13,
+      "confidence": null,
+      "ms": 110
+    },
+    {
+      "id": "exh-13",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.05,
+      "confidence": null,
+      "ms": 191
+    },
+    {
+      "id": "exh-13",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 157
+    },
+    {
+      "id": "exh-13",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.41,
+      "confidence": null,
+      "ms": 157
+    },
+    {
+      "id": "exh-12",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.66,
+      "confidence": null,
+      "ms": 114
+    },
+    {
+      "id": "exh-12",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.79,
+      "confidence": null,
+      "ms": 420
+    },
+    {
+      "id": "exh-12",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.18,
+      "confidence": null,
+      "ms": 99
+    },
+    {
+      "id": "exh-15",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.61,
+      "confidence": null,
+      "ms": 691
+    },
+    {
+      "id": "exh-15",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 147
+    },
+    {
+      "id": "exh-15",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.23,
+      "confidence": null,
+      "ms": 144
+    },
+    {
+      "id": "exh-16",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.62,
+      "confidence": null,
+      "ms": 98
+    },
+    {
+      "id": "exh-16",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.91,
+      "confidence": null,
+      "ms": 192
+    },
+    {
+      "id": "exh-16",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.38,
+      "confidence": null,
+      "ms": 156
+    },
+    {
+      "id": "exh-14",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.625,
+      "jev": 0.02,
+      "confidence": null,
+      "ms": 95
+    },
+    {
+      "id": "exh-14",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.53,
+      "confidence": null,
+      "ms": 164
+    },
+    {
+      "id": "exh-14",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.18,
+      "confidence": null,
+      "ms": 251
+    },
+    {
+      "id": "exh-18",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.73,
+      "confidence": null,
+      "ms": 113
+    },
+    {
+      "id": "exh-18",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 113
+    },
+    {
+      "id": "exh-18",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.31,
+      "confidence": null,
+      "ms": 164
+    },
+    {
+      "id": "exh-17",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 179
+    },
+    {
+      "id": "exh-17",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.88,
+      "confidence": null,
+      "ms": 388
+    },
+    {
+      "id": "exh-17",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.28,
+      "confidence": null,
+      "ms": 166
+    },
+    {
+      "id": "clh-a01",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 143
+    },
+    {
+      "id": "clh-a01",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 138
+    },
+    {
+      "id": "clh-a01",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 160
+    },
+    {
+      "id": "exh-19",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.625,
+      "jev": 0.03,
+      "confidence": null,
+      "ms": 101
+    },
+    {
+      "id": "exh-19",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.93,
+      "confidence": null,
+      "ms": 218
+    },
+    {
+      "id": "exh-19",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.42,
+      "confidence": null,
+      "ms": 139
+    },
+    {
+      "id": "exh-20",
+      "cluster": "extraction",
+      "arm": "potion",
+      "scorer": "field-match",
+      "sonnet": 0.875,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 149
+    },
+    {
+      "id": "exh-20",
+      "cluster": "extraction",
+      "arm": "auto",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.77,
+      "confidence": null,
+      "ms": 135
+    },
+    {
+      "id": "exh-20",
+      "cluster": "extraction",
+      "arm": "incumbent",
+      "scorer": "field-match",
+      "sonnet": 1,
+      "jev": 0.19,
+      "confidence": null,
+      "ms": 178
+    },
+    {
+      "id": "clh-a03",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 162
+    },
+    {
+      "id": "clh-a03",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 143
+    },
+    {
+      "id": "clh-a03",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 724
+    },
+    {
+      "id": "clh-a04",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 116
+    },
+    {
+      "id": "clh-a04",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 164
+    },
+    {
+      "id": "clh-a04",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 149
+    },
+    {
+      "id": "clh-a05",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 155
+    },
+    {
+      "id": "clh-a05",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 145
+    },
+    {
+      "id": "clh-a05",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 238
+    },
+    {
+      "id": "clh-b01",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 150
+    },
+    {
+      "id": "clh-b01",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 178
+    },
+    {
+      "id": "clh-b01",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 117
+    },
+    {
+      "id": "clh-a02",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 86
+    },
+    {
+      "id": "clh-a02",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 88
+    },
+    {
+      "id": "clh-a02",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 103
+    },
+    {
+      "id": "clh-b02",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 204
+    },
+    {
+      "id": "clh-b02",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 87
+    },
+    {
+      "id": "clh-b02",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 229
+    },
+    {
+      "id": "clh-b03",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 140
+    },
+    {
+      "id": "clh-b03",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 261
+    },
+    {
+      "id": "clh-b03",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 177
+    },
+    {
+      "id": "clh-b04",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 196
+    },
+    {
+      "id": "clh-b04",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 126
+    },
+    {
+      "id": "clh-b04",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 138
+    },
+    {
+      "id": "clh-c01",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 181
+    },
+    {
+      "id": "clh-c01",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 128
+    },
+    {
+      "id": "clh-c01",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 157
+    },
+    {
+      "id": "clh-b05",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 147
+    },
+    {
+      "id": "clh-b05",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 180
+    },
+    {
+      "id": "clh-b05",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.03,
+      "confidence": null,
+      "ms": 192
+    },
+    {
+      "id": "clh-c02",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 158
+    },
+    {
+      "id": "clh-c02",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 110
+    },
+    {
+      "id": "clh-c02",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 192
+    },
+    {
+      "id": "clh-c05",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 128
+    },
+    {
+      "id": "clh-c05",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 116
+    },
+    {
+      "id": "clh-c05",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 97
+    },
+    {
+      "id": "clh-c03",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 172
+    },
+    {
+      "id": "clh-c03",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 118
+    },
+    {
+      "id": "clh-c03",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 153
+    },
+    {
+      "id": "clh-c04",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 195
+    },
+    {
+      "id": "clh-c04",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 81
+    },
+    {
+      "id": "clh-c04",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 247
+    },
+    {
+      "id": "clh-d01",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 131
+    },
+    {
+      "id": "clh-d01",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 145
+    },
+    {
+      "id": "clh-d01",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "error": "jev 503: {}",
+      "ms": 92
+    },
+    {
+      "id": "clh-d02",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 190
+    },
+    {
+      "id": "clh-d02",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 91
+    },
+    {
+      "id": "clh-d02",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 122
+    },
+    {
+      "id": "clh-d03",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 177
+    },
+    {
+      "id": "clh-d03",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 107
+    },
+    {
+      "id": "clh-d03",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 115
+    },
+    {
+      "id": "clh-d05",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 113
+    },
+    {
+      "id": "clh-d05",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 146
+    },
+    {
+      "id": "clh-d05",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 136
+    },
+    {
+      "id": "clh-d04",
+      "cluster": "classification",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 108
+    },
+    {
+      "id": "clh-d04",
+      "cluster": "classification",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 512
+    },
+    {
+      "id": "clh-d04",
+      "cluster": "classification",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 130
+    },
+    {
+      "id": "multi-step-reasoning-001",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.85,
+      "confidence": null,
+      "ms": 128
+    },
+    {
+      "id": "multi-step-reasoning-001",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.83,
+      "confidence": null,
+      "ms": 120
+    },
+    {
+      "id": "multi-step-reasoning-001",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 143
+    },
+    {
+      "id": "multi-step-reasoning-002",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 133
+    },
+    {
+      "id": "multi-step-reasoning-002",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 125
+    },
+    {
+      "id": "multi-step-reasoning-002",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.81,
+      "confidence": null,
+      "ms": 134
+    },
+    {
+      "id": "multi-step-reasoning-003",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.67,
+      "confidence": null,
+      "ms": 108
+    },
+    {
+      "id": "multi-step-reasoning-003",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.59,
+      "confidence": null,
+      "ms": 148
+    },
+    {
+      "id": "multi-step-reasoning-003",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.54,
+      "confidence": null,
+      "ms": 113
+    },
+    {
+      "id": "multi-step-reasoning-005",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 156
+    },
+    {
+      "id": "multi-step-reasoning-005",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 124
+    },
+    {
+      "id": "multi-step-reasoning-005",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.8,
+      "confidence": null,
+      "ms": 147
+    },
+    {
+      "id": "multi-step-reasoning-004",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 146
+    },
+    {
+      "id": "multi-step-reasoning-004",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 108
+    },
+    {
+      "id": "multi-step-reasoning-004",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.57,
+      "confidence": null,
+      "ms": 201
+    },
+    {
+      "id": "multi-step-reasoning-006",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 91
+    },
+    {
+      "id": "multi-step-reasoning-006",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 116
+    },
+    {
+      "id": "multi-step-reasoning-006",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.64,
+      "confidence": null,
+      "ms": 140
+    },
+    {
+      "id": "multi-step-reasoning-007",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 119
+    },
+    {
+      "id": "multi-step-reasoning-007",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 147
+    },
+    {
+      "id": "multi-step-reasoning-007",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.87,
+      "confidence": null,
+      "ms": 82
+    },
+    {
+      "id": "multi-step-reasoning-008",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.82,
+      "confidence": null,
+      "ms": 146
+    },
+    {
+      "id": "multi-step-reasoning-008",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.84,
+      "confidence": null,
+      "ms": 211
+    },
+    {
+      "id": "multi-step-reasoning-008",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.56,
+      "confidence": null,
+      "ms": 82
+    },
+    {
+      "id": "multi-step-reasoning-010",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 108
+    },
+    {
+      "id": "multi-step-reasoning-010",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 235
+    },
+    {
+      "id": "multi-step-reasoning-010",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.8,
+      "confidence": null,
+      "ms": 114
+    },
+    {
+      "id": "multi-step-reasoning-009",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 114
+    },
+    {
+      "id": "multi-step-reasoning-009",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.93,
+      "confidence": null,
+      "ms": 123
+    },
+    {
+      "id": "multi-step-reasoning-009",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.68,
+      "confidence": null,
+      "ms": 155
+    },
+    {
+      "id": "multi-step-reasoning-011",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 125
+    },
+    {
+      "id": "multi-step-reasoning-011",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 125
+    },
+    {
+      "id": "multi-step-reasoning-011",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.72,
+      "confidence": null,
+      "ms": 114
+    },
+    {
+      "id": "multi-step-reasoning-012",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 150
+    },
+    {
+      "id": "multi-step-reasoning-012",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 88
+    },
+    {
+      "id": "multi-step-reasoning-012",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.72,
+      "confidence": null,
+      "ms": 118
+    },
+    {
+      "id": "multi-step-reasoning-014",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 137
+    },
+    {
+      "id": "multi-step-reasoning-014",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 106
+    },
+    {
+      "id": "multi-step-reasoning-014",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.73,
+      "confidence": null,
+      "ms": 157
+    },
+    {
+      "id": "multi-step-reasoning-015",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 153
+    },
+    {
+      "id": "multi-step-reasoning-015",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 129
+    },
+    {
+      "id": "multi-step-reasoning-015",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 156
+    },
+    {
+      "id": "multi-step-reasoning-016",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 125
+    },
+    {
+      "id": "multi-step-reasoning-016",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 173
+    },
+    {
+      "id": "multi-step-reasoning-016",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.72,
+      "confidence": null,
+      "ms": 161
+    },
+    {
+      "id": "multi-step-reasoning-017",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 88
+    },
+    {
+      "id": "multi-step-reasoning-017",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 143
+    },
+    {
+      "id": "multi-step-reasoning-017",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.5,
+      "confidence": null,
+      "ms": 103
+    },
+    {
+      "id": "multi-step-reasoning-019",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 126
+    },
+    {
+      "id": "multi-step-reasoning-019",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 120
+    },
+    {
+      "id": "multi-step-reasoning-019",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 107
+    },
+    {
+      "id": "multi-step-reasoning-018",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 107
+    },
+    {
+      "id": "multi-step-reasoning-018",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 401
+    },
+    {
+      "id": "multi-step-reasoning-018",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.58,
+      "confidence": null,
+      "ms": 89
+    },
+    {
+      "id": "multi-step-reasoning-020",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 99
+    },
+    {
+      "id": "multi-step-reasoning-020",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 105
+    },
+    {
+      "id": "multi-step-reasoning-020",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 108
+    },
+    {
+      "id": "rag-answer-001",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 288
+    },
+    {
+      "id": "rag-answer-001",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 98
+    },
+    {
+      "id": "rag-answer-001",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 119
+    },
+    {
+      "id": "rag-answer-002",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.82,
+      "confidence": null,
+      "ms": 154
+    },
+    {
+      "id": "rag-answer-002",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.83,
+      "confidence": null,
+      "ms": 153
+    },
+    {
+      "id": "rag-answer-002",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.83,
+      "confidence": null,
+      "ms": 173
+    },
+    {
+      "id": "rag-answer-003",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 158
+    },
+    {
+      "id": "rag-answer-003",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 145
+    },
+    {
+      "id": "rag-answer-003",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 131
+    },
+    {
+      "id": "rag-answer-004",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 103
+    },
+    {
+      "id": "rag-answer-004",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 144
+    },
+    {
+      "id": "rag-answer-004",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 161
+    },
+    {
+      "id": "multi-step-reasoning-013",
+      "cluster": "multi-step-reasoning",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.88,
+      "confidence": null,
+      "ms": 122
+    },
+    {
+      "id": "multi-step-reasoning-013",
+      "cluster": "multi-step-reasoning",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 721
+    },
+    {
+      "id": "multi-step-reasoning-013",
+      "cluster": "multi-step-reasoning",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.81,
+      "confidence": null,
+      "ms": 232
+    },
+    {
+      "id": "rag-answer-005",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 106
+    },
+    {
+      "id": "rag-answer-005",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 94
+    },
+    {
+      "id": "rag-answer-005",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 87
+    },
+    {
+      "id": "rag-answer-006",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.9,
+      "confidence": null,
+      "ms": 155
+    },
+    {
+      "id": "rag-answer-006",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.85,
+      "confidence": null,
+      "ms": 107
+    },
+    {
+      "id": "rag-answer-006",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.84,
+      "confidence": null,
+      "ms": 119
+    },
+    {
+      "id": "rag-answer-007",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 127
+    },
+    {
+      "id": "rag-answer-007",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 87
+    },
+    {
+      "id": "rag-answer-007",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 97
+    },
+    {
+      "id": "rag-answer-008",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 205
+    },
+    {
+      "id": "rag-answer-008",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 192
+    },
+    {
+      "id": "rag-answer-008",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 132
+    },
+    {
+      "id": "rag-answer-009",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 528
+    },
+    {
+      "id": "rag-answer-009",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 110
+    },
+    {
+      "id": "rag-answer-009",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 123
+    },
+    {
+      "id": "rag-answer-010",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 215
+    },
+    {
+      "id": "rag-answer-010",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 131
+    },
+    {
+      "id": "rag-answer-010",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 107
+    },
+    {
+      "id": "rag-answer-011",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 148
+    },
+    {
+      "id": "rag-answer-011",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 109
+    },
+    {
+      "id": "rag-answer-011",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 132
+    },
+    {
+      "id": "rag-answer-012",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 130
+    },
+    {
+      "id": "rag-answer-012",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 134
+    },
+    {
+      "id": "rag-answer-012",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 106
+    },
+    {
+      "id": "rag-answer-013",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 129
+    },
+    {
+      "id": "rag-answer-013",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.88,
+      "confidence": null,
+      "ms": 143
+    },
+    {
+      "id": "rag-answer-013",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.89,
+      "confidence": null,
+      "ms": 93
+    },
+    {
+      "id": "rag-answer-014",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 183
+    },
+    {
+      "id": "rag-answer-014",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 102
+    },
+    {
+      "id": "rag-answer-014",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 100
+    },
+    {
+      "id": "rag-answer-015",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 156
+    },
+    {
+      "id": "rag-answer-015",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 315
+    },
+    {
+      "id": "rag-answer-015",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.58,
+      "confidence": null,
+      "ms": 250
+    },
+    {
+      "id": "rag-answer-016",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 476
+    },
+    {
+      "id": "rag-answer-016",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 202
+    },
+    {
+      "id": "rag-answer-016",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 111
+    },
+    {
+      "id": "rag-answer-018",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 121
+    },
+    {
+      "id": "rag-answer-018",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 195
+    },
+    {
+      "id": "rag-answer-018",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 167
+    },
+    {
+      "id": "rag-answer-017",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 127
+    },
+    {
+      "id": "rag-answer-017",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 212
+    },
+    {
+      "id": "rag-answer-017",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 262
+    },
+    {
+      "id": "rag-answer-019",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.67,
+      "confidence": null,
+      "ms": 102
+    },
+    {
+      "id": "rag-answer-019",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 117
+    },
+    {
+      "id": "rag-answer-019",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.66,
+      "confidence": null,
+      "ms": 136
+    },
+    {
+      "id": "rag-answer-020",
+      "cluster": "rag-answer",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 164
+    },
+    {
+      "id": "rag-answer-020",
+      "cluster": "rag-answer",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 192
+    },
+    {
+      "id": "rag-answer-020",
+      "cluster": "rag-answer",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": null,
+      "ms": 102
+    },
+    {
+      "id": "agentic-tool-use-002",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.984,
+      "confidence": 0.95,
+      "ms": 102
+    },
+    {
+      "id": "agentic-tool-use-002",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.982,
+      "confidence": 0.94,
+      "ms": 128
+    },
+    {
+      "id": "agentic-tool-use-001",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9640000000000001,
+      "confidence": 0.88,
+      "ms": 182
+    },
+    {
+      "id": "agentic-tool-use-002",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9720000000000001,
+      "confidence": 0.91,
+      "ms": 113
+    },
+    {
+      "id": "agentic-tool-use-001",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9640000000000001,
+      "confidence": 0.88,
+      "ms": 139
+    },
+    {
+      "id": "agentic-tool-use-003",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9800000000000001,
+      "confidence": 0.93,
+      "ms": 235
+    },
+    {
+      "id": "agentic-tool-use-003",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.958,
+      "confidence": 0.86,
+      "ms": 138
+    },
+    {
+      "id": "agentic-tool-use-001",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.984,
+      "confidence": 0.94,
+      "ms": 127
+    },
+    {
+      "id": "agentic-tool-use-003",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.8720000000000001,
+      "confidence": 0.7,
+      "ms": 108
+    },
+    {
+      "id": "agentic-tool-use-004",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9279999999999999,
+      "confidence": 0.76,
+      "ms": 187
+    },
+    {
+      "id": "agentic-tool-use-005",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.958,
+      "confidence": 0.86,
+      "ms": 154
+    },
+    {
+      "id": "agentic-tool-use-005",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9460000000000001,
+      "confidence": 0.82,
+      "ms": 125
+    },
+    {
+      "id": "agentic-tool-use-005",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": 0.87,
+      "ms": 105
+    },
+    {
+      "id": "agentic-tool-use-004",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9380000000000001,
+      "confidence": 0.8,
+      "ms": 148
+    },
+    {
+      "id": "agentic-tool-use-006",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9279999999999999,
+      "confidence": 0.76,
+      "ms": 147
+    },
+    {
+      "id": "agentic-tool-use-006",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.97,
+      "confidence": 0.9,
+      "ms": 95
+    },
+    {
+      "id": "agentic-tool-use-004",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.8779999999999999,
+      "confidence": 0.65,
+      "ms": 184
+    },
+    {
+      "id": "agentic-tool-use-006",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.908,
+      "confidence": 0.69,
+      "ms": 154
+    },
+    {
+      "id": "agentic-tool-use-007",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9380000000000001,
+      "confidence": 0.8,
+      "ms": 120
+    },
+    {
+      "id": "agentic-tool-use-007",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.942,
+      "confidence": 0.81,
+      "ms": 342
+    },
+    {
+      "id": "agentic-tool-use-007",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.876,
+      "confidence": 0.65,
+      "ms": 506
+    },
+    {
+      "id": "agentic-tool-use-009",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.8460000000000001,
+      "confidence": 0.63,
+      "ms": 114
+    },
+    {
+      "id": "agentic-tool-use-010",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.976,
+      "confidence": 0.92,
+      "ms": 88
+    },
+    {
+      "id": "agentic-tool-use-009",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": 0.87,
+      "ms": 215
+    },
+    {
+      "id": "agentic-tool-use-010",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 137
+    },
+    {
+      "id": "agentic-tool-use-010",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.992,
+      "confidence": 0.97,
+      "ms": 173
+    },
+    {
+      "id": "agentic-tool-use-009",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8800000000000001,
+      "confidence": 0.6,
+      "ms": 110
+    },
+    {
+      "id": "agentic-tool-use-008",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.766,
+      "confidence": 0.82,
+      "ms": 169
+    },
+    {
+      "id": "agentic-tool-use-008",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.8140000000000001,
+      "confidence": 0.9,
+      "ms": 117
+    },
+    {
+      "id": "agentic-tool-use-012",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.47400000000000003,
+      "confidence": 0.34,
+      "ms": 148
+    },
+    {
+      "id": "agentic-tool-use-011",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.95,
+      "ms": 172
+    },
+    {
+      "id": "agentic-tool-use-011",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.982,
+      "confidence": 0.94,
+      "ms": 211
+    },
+    {
+      "id": "agentic-tool-use-012",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9720000000000001,
+      "confidence": 0.91,
+      "ms": 202
+    },
+    {
+      "id": "agentic-tool-use-012",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9800000000000001,
+      "confidence": 0.93,
+      "ms": 203
+    },
+    {
+      "id": "agentic-tool-use-013",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9279999999999999,
+      "confidence": 0.76,
+      "ms": 111
+    },
+    {
+      "id": "crh-l01",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 167
+    },
+    {
+      "id": "crh-l01",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.95,
+      "confidence": null,
+      "ms": 164
+    },
+    {
+      "id": "crh-l01",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.93,
+      "confidence": null,
+      "ms": 136
+    },
+    {
+      "id": "agentic-tool-use-013",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9119999999999999,
+      "confidence": 0.71,
+      "ms": 143
+    },
+    {
+      "id": "crh-l02",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 201
+    },
+    {
+      "id": "crh-l02",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 115
+    },
+    {
+      "id": "crh-l02",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.92,
+      "confidence": null,
+      "ms": 140
+    },
+    {
+      "id": "agentic-tool-use-014",
+      "cluster": "agentic-tool-use",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9960000000000001,
+      "confidence": 0.99,
+      "ms": 142
+    },
+    {
+      "id": "agentic-tool-use-013",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.93,
+      "confidence": 0.77,
+      "ms": 136
+    },
+    {
+      "id": "crh-l03",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.82,
+      "confidence": null,
+      "ms": 91
+    },
+    {
+      "id": "crh-l03",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.85,
+      "confidence": null,
+      "ms": 627
+    },
+    {
+      "id": "crh-l03",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.86,
+      "confidence": null,
+      "ms": 111
+    },
+    {
+      "id": "agentic-tool-use-014",
+      "cluster": "agentic-tool-use",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.976,
+      "confidence": 0.92,
+      "ms": 129
+    },
+    {
+      "id": "agentic-tool-use-014",
+      "cluster": "agentic-tool-use",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.984,
+      "confidence": 0.95,
+      "ms": 126
+    },
+    {
+      "id": "crh-l04",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 125
+    },
+    {
+      "id": "crh-l04",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 98
+    },
+    {
+      "id": "crh-l04",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 106
+    },
+    {
+      "id": "crh-l05",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 97
+    },
+    {
+      "id": "crh-l05",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 122
+    },
+    {
+      "id": "crh-l05",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 154
+    },
+    {
+      "id": "crh-l08",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 87
+    },
+    {
+      "id": "crh-l08",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 104
+    },
+    {
+      "id": "crh-l08",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 99
+    },
+    {
+      "id": "crh-l06",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 132
+    },
+    {
+      "id": "crh-l06",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 157
+    },
+    {
+      "id": "crh-l06",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 419
+    },
+    {
+      "id": "crh-l07",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 129
+    },
+    {
+      "id": "crh-l07",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 114
+    },
+    {
+      "id": "crh-l07",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 90
+    },
+    {
+      "id": "crh-l10",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 152
+    },
+    {
+      "id": "crh-l10",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 149
+    },
+    {
+      "id": "crh-l10",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 195
+    },
+    {
+      "id": "crh-l11",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.94,
+      "confidence": null,
+      "ms": 86
+    },
+    {
+      "id": "crh-l11",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.91,
+      "confidence": null,
+      "ms": 114
+    },
+    {
+      "id": "crh-l11",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.93,
+      "confidence": null,
+      "ms": 230
+    },
+    {
+      "id": "crh-l12",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 139
+    },
+    {
+      "id": "crh-l12",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 150
+    },
+    {
+      "id": "crh-l12",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 124
+    },
+    {
+      "id": "crh-l14",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 124
+    },
+    {
+      "id": "crh-l14",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 182
+    },
+    {
+      "id": "crh-l14",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.98,
+      "confidence": null,
+      "ms": 117
+    },
+    {
+      "id": "crh-l09",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 224
+    },
+    {
+      "id": "crh-l09",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 0,
+      "jev": 0.04,
+      "confidence": null,
+      "ms": 117
+    },
+    {
+      "id": "crh-l09",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 183
+    },
+    {
+      "id": "crh-l15",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 160
+    },
+    {
+      "id": "crh-l15",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 130
+    },
+    {
+      "id": "crh-l15",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.96,
+      "confidence": null,
+      "ms": 158
+    },
+    {
+      "id": "crh-l16",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 206
+    },
+    {
+      "id": "crh-l16",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 110
+    },
+    {
+      "id": "crh-l16",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 123
+    },
+    {
+      "id": "crh-l13",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 100
+    },
+    {
+      "id": "crh-l13",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 140
+    },
+    {
+      "id": "crh-l13",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "exact",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": null,
+      "ms": 120
+    },
+    {
+      "id": "crh-p01",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.998,
+      "confidence": 0.99,
+      "ms": 128
+    },
+    {
+      "id": "crh-p01",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9960000000000001,
+      "confidence": 0.99,
+      "ms": 164
+    },
+    {
+      "id": "crh-p01",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9960000000000001,
+      "confidence": 0.99,
+      "ms": 148
+    },
+    {
+      "id": "crh-p03",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.2,
+      "jev": 0.172,
+      "confidence": 0.7,
+      "ms": 116
+    },
+    {
+      "id": "crh-p02",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.962,
+      "confidence": 0.88,
+      "ms": 129
+    },
+    {
+      "id": "crh-p03",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.2,
+      "jev": 0.384,
+      "confidence": 0.24,
+      "ms": 171
+    },
+    {
+      "id": "crh-p04",
+      "cluster": "code-review",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.982,
+      "confidence": 0.94,
+      "ms": 99
+    },
+    {
+      "id": "crh-p02",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.898,
+      "confidence": 0.66,
+      "ms": 183
+    },
+    {
+      "id": "crh-p03",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.9640000000000001,
+      "confidence": 0.88,
+      "ms": 110
+    },
+    {
+      "id": "crh-p02",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.982,
+      "confidence": 0.94,
+      "ms": 177
+    },
+    {
+      "id": "crh-p04",
+      "cluster": "code-review",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.7,
+      "jev": 0.906,
+      "confidence": 0.68,
+      "ms": 171
+    },
+    {
+      "id": "creative-001",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.932,
+      "confidence": 0.78,
+      "ms": 125
+    },
+    {
+      "id": "creative-001",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.95,
+      "confidence": 0.83,
+      "ms": 150
+    },
+    {
+      "id": "crh-p04",
+      "cluster": "code-review",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9019999999999999,
+      "confidence": 0.68,
+      "ms": 97
+    },
+    {
+      "id": "creative-001",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.932,
+      "confidence": 0.77,
+      "ms": 112
+    },
+    {
+      "id": "creative-002",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9039999999999999,
+      "confidence": 0.68,
+      "ms": 165
+    },
+    {
+      "id": "creative-002",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8939999999999999,
+      "confidence": 0.65,
+      "ms": 87
+    },
+    {
+      "id": "creative-004",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.7,
+      "jev": 0.752,
+      "confidence": 0.7,
+      "ms": 120
+    },
+    {
+      "id": "creative-002",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.952,
+      "confidence": 0.84,
+      "ms": 114
+    },
+    {
+      "id": "creative-003",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.77,
+      "confidence": 0.73,
+      "ms": 121
+    },
+    {
+      "id": "creative-004",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9339999999999999,
+      "confidence": 0.78,
+      "ms": 664
+    },
+    {
+      "id": "creative-003",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8619999999999999,
+      "confidence": 0.68,
+      "ms": 140
+    },
+    {
+      "id": "creative-005",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.882,
+      "confidence": 0.61,
+      "ms": 167
+    },
+    {
+      "id": "creative-004",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.8380000000000001,
+      "confidence": 0.72,
+      "ms": 104
+    },
+    {
+      "id": "creative-005",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.86,
+      "confidence": 0.66,
+      "ms": 255
+    },
+    {
+      "id": "creative-005",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.826,
+      "confidence": 0.65,
+      "ms": 152
+    },
+    {
+      "id": "creative-003",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.8560000000000001,
+      "confidence": 0.72,
+      "ms": 137
+    },
+    {
+      "id": "creative-006",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.752,
+      "confidence": 0.66,
+      "ms": 87
+    },
+    {
+      "id": "creative-006",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.75,
+      "confidence": 0.41,
+      "ms": 84
+    },
+    {
+      "id": "creative-006",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.906,
+      "confidence": 0.69,
+      "ms": 156
+    },
+    {
+      "id": "creative-008",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.78,
+      "confidence": 0.72,
+      "ms": 157
+    },
+    {
+      "id": "creative-008",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8480000000000001,
+      "confidence": 0.61,
+      "ms": 545
+    },
+    {
+      "id": "creative-008",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.772,
+      "confidence": 0.59,
+      "ms": 128
+    },
+    {
+      "id": "creative-010",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.3,
+      "jev": 0.476,
+      "confidence": 0.65,
+      "ms": 201
+    },
+    {
+      "id": "creative-009",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9179999999999999,
+      "confidence": 0.72,
+      "ms": 204
+    },
+    {
+      "id": "creative-009",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9400000000000001,
+      "confidence": 0.8,
+      "ms": 174
+    },
+    {
+      "id": "creative-007",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.732,
+      "confidence": 0.62,
+      "ms": 115
+    },
+    {
+      "id": "creative-010",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.852,
+      "confidence": 0.73,
+      "ms": 149
+    },
+    {
+      "id": "creative-009",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.866,
+      "confidence": 0.55,
+      "ms": 132
+    },
+    {
+      "id": "creative-007",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.71,
+      "confidence": 0.55,
+      "ms": 113
+    },
+    {
+      "id": "creative-010",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.784,
+      "confidence": 0.68,
+      "ms": 128
+    },
+    {
+      "id": "creative-012",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8220000000000001,
+      "confidence": 0.55,
+      "ms": 119
+    },
+    {
+      "id": "creative-012",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.844,
+      "confidence": 0.48,
+      "ms": 148
+    },
+    {
+      "id": "creative-012",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.764,
+      "confidence": 0.56,
+      "ms": 168
+    },
+    {
+      "id": "creative-011",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8039999999999999,
+      "confidence": 0.58,
+      "ms": 148
+    },
+    {
+      "id": "creative-011",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.794,
+      "confidence": 0.59,
+      "ms": 589
+    },
+    {
+      "id": "creative-014",
+      "cluster": "creative",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.5,
+      "jev": 0.9019999999999999,
+      "confidence": 0.67,
+      "ms": 111
+    },
+    {
+      "id": "creative-013",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.79,
+      "confidence": 0.63,
+      "ms": 169
+    },
+    {
+      "id": "creative-014",
+      "cluster": "creative",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 130
+    },
+    {
+      "id": "creative-013",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.7,
+      "jev": 0.6799999999999999,
+      "confidence": 0.46,
+      "ms": 131
+    },
+    {
+      "id": "rewrite-edit-001",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.944,
+      "confidence": 0.82,
+      "ms": 137
+    },
+    {
+      "id": "rewrite-edit-002",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.874,
+      "confidence": 0.68,
+      "ms": 123
+    },
+    {
+      "id": "creative-014",
+      "cluster": "creative",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.8300000000000001,
+      "confidence": 0.43,
+      "ms": 138
+    },
+    {
+      "id": "rewrite-edit-001",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9480000000000001,
+      "confidence": 0.82,
+      "ms": 177
+    },
+    {
+      "id": "rewrite-edit-002",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 89
+    },
+    {
+      "id": "rewrite-edit-001",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9339999999999999,
+      "confidence": 0.78,
+      "ms": 132
+    },
+    {
+      "id": "rewrite-edit-002",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.914,
+      "confidence": 0.71,
+      "ms": 112
+    },
+    {
+      "id": "rewrite-edit-003",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.95,
+      "ms": 134
+    },
+    {
+      "id": "rewrite-edit-003",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.976,
+      "confidence": 0.92,
+      "ms": 136
+    },
+    {
+      "id": "rewrite-edit-005",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.8960000000000001,
+      "confidence": 0.65,
+      "ms": 130
+    },
+    {
+      "id": "rewrite-edit-003",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.96,
+      "ms": 137
+    },
+    {
+      "id": "rewrite-edit-005",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9279999999999999,
+      "confidence": 0.76,
+      "ms": 176
+    },
+    {
+      "id": "rewrite-edit-004",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": 0.97,
+      "ms": 172
+    },
+    {
+      "id": "rewrite-edit-005",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.922,
+      "confidence": 0.74,
+      "ms": 175
+    },
+    {
+      "id": "rewrite-edit-006",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8539999999999999,
+      "confidence": 0.51,
+      "ms": 180
+    },
+    {
+      "id": "rewrite-edit-006",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8240000000000001,
+      "confidence": 0.41,
+      "ms": 111
+    },
+    {
+      "id": "rewrite-edit-007",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9480000000000001,
+      "confidence": 0.83,
+      "ms": 108
+    },
+    {
+      "id": "rewrite-edit-004",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.992,
+      "confidence": 0.97,
+      "ms": 129
+    },
+    {
+      "id": "rewrite-edit-006",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.954,
+      "confidence": 0.84,
+      "ms": 82
+    },
+    {
+      "id": "rewrite-edit-007",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": 0.9,
+      "ms": 128
+    },
+    {
+      "id": "rewrite-edit-004",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.992,
+      "confidence": 0.97,
+      "ms": 229
+    },
+    {
+      "id": "rewrite-edit-007",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9480000000000001,
+      "confidence": 0.82,
+      "ms": 126
+    },
+    {
+      "id": "rewrite-edit-008",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.708,
+      "confidence": 0.66,
+      "ms": 166
+    },
+    {
+      "id": "rewrite-edit-009",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.966,
+      "confidence": 0.88,
+      "ms": 641
+    },
+    {
+      "id": "rewrite-edit-008",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.7,
+      "jev": 0.722,
+      "confidence": 0.7,
+      "ms": 167
+    },
+    {
+      "id": "rewrite-edit-009",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.834,
+      "confidence": 0.78,
+      "ms": 190
+    },
+    {
+      "id": "rewrite-edit-008",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8619999999999999,
+      "confidence": 0.72,
+      "ms": 125
+    },
+    {
+      "id": "rewrite-edit-010",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.966,
+      "confidence": 0.89,
+      "ms": 170
+    },
+    {
+      "id": "rewrite-edit-009",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.966,
+      "confidence": 0.89,
+      "ms": 102
+    },
+    {
+      "id": "rewrite-edit-010",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.974,
+      "confidence": 0.91,
+      "ms": 112
+    },
+    {
+      "id": "rewrite-edit-010",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.842,
+      "confidence": 0.74,
+      "ms": 153
+    },
+    {
+      "id": "rewrite-edit-012",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.96,
+      "ms": 156
+    },
+    {
+      "id": "rewrite-edit-011",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.968,
+      "confidence": 0.89,
+      "ms": 131
+    },
+    {
+      "id": "rewrite-edit-012",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.95,
+      "ms": 246
+    },
+    {
+      "id": "rewrite-edit-013",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.772,
+      "confidence": 0.74,
+      "ms": 224
+    },
+    {
+      "id": "rewrite-edit-012",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": 0.97,
+      "ms": 136
+    },
+    {
+      "id": "rewrite-edit-013",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9800000000000001,
+      "confidence": 0.93,
+      "ms": 161
+    },
+    {
+      "id": "rewrite-edit-011",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.914,
+      "confidence": 0.71,
+      "ms": 136
+    },
+    {
+      "id": "rewrite-edit-013",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.8119999999999999,
+      "confidence": 0.76,
+      "ms": 86
+    },
+    {
+      "id": "rewrite-edit-011",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8560000000000001,
+      "confidence": 0.77,
+      "ms": 96
+    },
+    {
+      "id": "rwh-01",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.968,
+      "confidence": 0.89,
+      "ms": 108
+    },
+    {
+      "id": "rwh-01",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 224
+    },
+    {
+      "id": "rewrite-edit-014",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.9,
+      "confidence": 0.66,
+      "ms": 168
+    },
+    {
+      "id": "rwh-01",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.954,
+      "confidence": 0.85,
+      "ms": 121
+    },
+    {
+      "id": "rewrite-edit-014",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.774,
+      "confidence": 0.82,
+      "ms": 177
+    },
+    {
+      "id": "rwh-02",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.696,
+      "confidence": 0.44,
+      "ms": 330
+    },
+    {
+      "id": "rwh-02",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.868,
+      "confidence": 0.56,
+      "ms": 148
+    },
+    {
+      "id": "rwh-02",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.71,
+      "confidence": 0.45,
+      "ms": 82
+    },
+    {
+      "id": "rwh-03",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9960000000000001,
+      "confidence": 0.98,
+      "ms": 92
+    },
+    {
+      "id": "rewrite-edit-014",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.778,
+      "confidence": 0.81,
+      "ms": 82
+    },
+    {
+      "id": "rwh-03",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.994,
+      "confidence": 0.98,
+      "ms": 192
+    },
+    {
+      "id": "rwh-03",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9960000000000001,
+      "confidence": 0.99,
+      "ms": 160
+    },
+    {
+      "id": "rwh-04",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.976,
+      "confidence": 0.92,
+      "ms": 137
+    },
+    {
+      "id": "rwh-04",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.97,
+      "confidence": 0.9,
+      "ms": 125
+    },
+    {
+      "id": "rwh-04",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9800000000000001,
+      "confidence": 0.93,
+      "ms": 98
+    },
+    {
+      "id": "rwh-05",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": 0.97,
+      "ms": 140
+    },
+    {
+      "id": "rwh-05",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.992,
+      "confidence": 0.97,
+      "ms": 132
+    },
+    {
+      "id": "rwh-05",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": 0.96,
+      "ms": 123
+    },
+    {
+      "id": "rwh-06",
+      "cluster": "rewrite-edit",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.962,
+      "confidence": 0.87,
+      "ms": 130
+    },
+    {
+      "id": "rwh-06",
+      "cluster": "rewrite-edit",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.992,
+      "confidence": 0.97,
+      "ms": 219
+    },
+    {
+      "id": "rwh-06",
+      "cluster": "rewrite-edit",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.96,
+      "confidence": 0.87,
+      "ms": 147
+    },
+    {
+      "id": "summarization-001",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.95,
+      "ms": 104
+    },
+    {
+      "id": "summarization-002",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.764,
+      "confidence": 0.83,
+      "ms": 190
+    },
+    {
+      "id": "summarization-001",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 228
+    },
+    {
+      "id": "summarization-001",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.776,
+      "confidence": 0.78,
+      "ms": 344
+    },
+    {
+      "id": "summarization-002",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.922,
+      "confidence": 0.74,
+      "ms": 125
+    },
+    {
+      "id": "summarization-002",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.736,
+      "confidence": 0.77,
+      "ms": 102
+    },
+    {
+      "id": "summarization-003",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9800000000000001,
+      "confidence": 0.94,
+      "ms": 109
+    },
+    {
+      "id": "summarization-003",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.842,
+      "confidence": 0.74,
+      "ms": 142
+    },
+    {
+      "id": "summarization-004",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.968,
+      "confidence": 0.9,
+      "ms": 108
+    },
+    {
+      "id": "summarization-003",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.6,
+      "jev": 0.584,
+      "confidence": 0.77,
+      "ms": 135
+    },
+    {
+      "id": "summarization-004",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.71,
+      "confidence": 0.68,
+      "ms": 128
+    },
+    {
+      "id": "summarization-005",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.9560000000000001,
+      "confidence": 0.86,
+      "ms": 87
+    },
+    {
+      "id": "summarization-004",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.638,
+      "confidence": 0.65,
+      "ms": 171
+    },
+    {
+      "id": "summarization-005",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.986,
+      "confidence": 0.96,
+      "ms": 109
+    },
+    {
+      "id": "summarization-005",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 131
+    },
+    {
+      "id": "summarization-006",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.82,
+      "confidence": 0.86,
+      "ms": 158
+    },
+    {
+      "id": "summarization-008",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 158
+    },
+    {
+      "id": "summarization-006",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.6980000000000001,
+      "confidence": 0.66,
+      "ms": 97
+    },
+    {
+      "id": "summarization-008",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9960000000000001,
+      "confidence": 0.98,
+      "ms": 189
+    },
+    {
+      "id": "summarization-006",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.796,
+      "confidence": 0.95,
+      "ms": 149
+    },
+    {
+      "id": "summarization-008",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": 0.97,
+      "ms": 155
+    },
+    {
+      "id": "summarization-007",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.984,
+      "confidence": 0.95,
+      "ms": 105
+    },
+    {
+      "id": "summarization-009",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.734,
+      "confidence": 0.77,
+      "ms": 215
+    },
+    {
+      "id": "summarization-007",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.982,
+      "confidence": 0.94,
+      "ms": 82
+    },
+    {
+      "id": "summarization-009",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.768,
+      "confidence": 0.77,
+      "ms": 177
+    },
+    {
+      "id": "summarization-007",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.992,
+      "confidence": 0.97,
+      "ms": 193
+    },
+    {
+      "id": "summarization-009",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.724,
+      "confidence": 0.74,
+      "ms": 104
+    },
+    {
+      "id": "summarization-010",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.714,
+      "confidence": 0.43,
+      "ms": 557
+    },
+    {
+      "id": "summarization-010",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.8,
+      "jev": 0.644,
+      "confidence": 0.68,
+      "ms": 100
+    },
+    {
+      "id": "summarization-011",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.97,
+      "confidence": 0.9,
+      "ms": 156
+    },
+    {
+      "id": "summarization-010",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8140000000000001,
+      "confidence": 0.65,
+      "ms": 102
+    },
+    {
+      "id": "summarization-011",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.79,
+      "confidence": 0.93,
+      "ms": 100
+    },
+    {
+      "id": "summarization-012",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9880000000000001,
+      "confidence": 0.96,
+      "ms": 121
+    },
+    {
+      "id": "summarization-011",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.79,
+      "confidence": 0.93,
+      "ms": 150
+    },
+    {
+      "id": "summarization-012",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.99,
+      "confidence": 0.97,
+      "ms": 132
+    },
+    {
+      "id": "summarization-012",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.9720000000000001,
+      "confidence": 0.91,
+      "ms": 159
+    },
+    {
+      "id": "summarization-014",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.9,
+      "confidence": 0.67,
+      "ms": 107
+    },
+    {
+      "id": "summarization-014",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8220000000000001,
+      "confidence": 0.82,
+      "ms": 108
+    },
+    {
+      "id": "summarization-013",
+      "cluster": "summarization",
+      "arm": "potion",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.8560000000000001,
+      "confidence": 0.64,
+      "ms": 130
+    },
+    {
+      "id": "summarization-014",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.782,
+      "confidence": 0.91,
+      "ms": 141
+    },
+    {
+      "id": "summarization-013",
+      "cluster": "summarization",
+      "arm": "auto",
+      "scorer": "llm-judge",
+      "sonnet": 0.9,
+      "jev": 0.71,
+      "confidence": 0.7,
+      "ms": 128
+    },
+    {
+      "id": "summarization-013",
+      "cluster": "summarization",
+      "arm": "incumbent",
+      "scorer": "llm-judge",
+      "sonnet": 1,
+      "jev": 0.778,
+      "confidence": 0.88,
+      "ms": 111
+    }
+  ]
+}

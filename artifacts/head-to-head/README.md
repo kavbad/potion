@@ -93,3 +93,54 @@ Files `2026-09-17-after-41-floor-*.{md,json}`. Same 182 items and judge.
   headline collapses with it. Likewise summarization (glm-5.3-flash 0.986
   at $0.24 vs kimi-k3 0.983 at $10.26) and code-review (gpt-mini 0.950 at
   $0.13 vs gpt-full 0.960 at $0.60). Publishing is the operator's call.
+
+## 2026-09-17 — after #42 (original tie rule restored; tiebreak + 0.05 window kept)
+
+Files `2026-09-17-after-42-floor-0.95.{md,json}` plus
+`2026-09-17-after-42-floor-0.95.answers.json` — the answer text of all 546
+answers (`H2H_SAVE_ANSWERS`), so a second judge can be run over exactly these
+answers without re-spending on models.
+
+| floor | Potion q | auto q | incumbent q | Potion ÷ auto | Potion cost | fallback |
+|---|---|---|---|---|---|---|
+| 0.95 | 0.892 | 0.915 | 0.850 | **1.20x** [0.67–2.05] | $0.083 (morning $0.081) | 48.9% |
+
+The restore holds: the two rewritten tie rules (8.95x, 6.79x) are gone and
+the cost-aware tiebreak keeps its gain. The 0.84 result from the #41 run
+(1.35x) is unchanged by #42 (the tie rule only fires when the floor is
+unreachable; 3.3% of items at 0.84).
+
+### The `exact` scorer zeroed 30 correct answers in this run
+
+Running Jev as a second judge over the saved answers (see
+`artifacts/jev-trial/`) exposed it: `scoreExact` in
+`packages/harness/src/scorers.ts` compares the whole answer, case- and
+whitespace-folded, against the reference. So `18 days.` ≠ `18 days`
+(rag-answer-001), and a reasoning answer that shows its work and ends with
+`24` scores 0 against `24`. Jev marked 25 of those 30 as correct.
+
+Re-scoring only the `exact` rows with a lenient match (trailing punctuation
+dropped, final line or whole answer must equal the reference):
+
+| arm | stored quality | re-scored | rows flipped 0→1 |
+|---|---|---|---|
+| Potion | 0.892 | 0.914 | 4 (rag-answer) |
+| auto | 0.915 | 0.948 | 6 (5 rag-answer, 1 reasoning) |
+| incumbent | 0.850 | 0.960 | 20 (15 reasoning, 5 rag-answer) |
+
+multi-step-reasoning goes 1.00 / 0.95 / 0.25 → 1.00 / 1.00 / 1.00 and
+rag-answer 0.80 / 0.75 / 0.75 → 1.00 / 1.00 / 1.00. Two consequences:
+
+- Every "Potion beats Sonnet on reasoning" number in this README is format
+  obedience, not reasoning: the model Potion serves answers with the bare
+  number, Sonnet shows its work first. The suite prompt does ask for "just
+  the final number", but the platform routes on correctness.
+- The platform measures the `multi-step-reasoning` and `rag-answer`
+  frontiers with the same v1 suites and the same scorer
+  (`PLATFORM_SUITE_BY_CLUSTER`), so those two frontiers rank models partly
+  by format obedience. Fixing the scorer changes what those frontiers mean
+  and needs a re-measure (cached cells store no answer text).
+
+At the corrected numbers the 0.95 story is: Potion 0.914 vs the auto-router
+0.948 at 1.20x its cost, vs Sonnet 0.960 at 0.16x. The quality gap to the
+auto-router is coverage (unpublished auditions), not the tie rule.
