@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sha256, strategyHash, type FrontierPoint, type Policy } from '@potion/core';
 import { createDb, migrate, orgs, getApiKeyById, getPolicyById, insertApiKey, insertPolicy, insertRequestLog, insertTraceSpans, upsertOrgIncumbents, listLearningProposals, type DbHandle } from '@potion/db';
 import { DEFAULT_ORG_POLICY } from '@potion/pareto';
+import { seedModelRegistry } from '@potion/db';
+import { loadPrices } from '@potion/providers';
 import { saveFrontier } from '@potion/pareto';
 import { LEARNING_SPAN_NAME, runLearningPeriodForOrg } from './learning-period.js';
 import type { JobContext } from './handlers.js';
@@ -113,6 +115,40 @@ describe('learning:period', () => {
     expect(report.proposals.map((p) => p.clusterId), JSON.stringify(report.skipped)).toEqual(['classification']);
     const p = (await listLearningProposals(db.db, 'org_obs'))[0]!;
     expect(p.incumbentModel, 'observed, not the greenfield premium single').toBe('mock-cheap');
+  });
+
+  // THE REGISTRY, NOT THE FILE (2026-09-17). Found live: classification v8
+  // serves or-glm-5-3-flash, which entered via the registry; the learning
+  // period priced from prices.json alone and refused the customer's
+  // classification measurement — "unknown model" — on every run.
+  it('a serving model known only to the registry is measurable — no "unknown model" refusal', async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    await db.db.insert(orgs).values([{ id: 'org_reg', name: 'REG' }]).onConflictDoNothing();
+    // The registry REPLACES the file once present (registryPrices), so seed it
+    // the way production was seeded — from the file — plus one alias the
+    // file has never heard of.
+    const file = loadPrices(pricesPath).table;
+    const seeded = await seedModelRegistry(db.db, {
+      version: 'registry-test',
+      updatedAt: new Date().toISOString(),
+      entries: [...file.entries, { alias: 'mock-registry-only', provider: 'mock', model: 'mock-registry-only', inputPer1M: 0, outputPer1M: 0 }],
+    });
+    expect(seeded.inserted).toContain('mock-registry-only');
+    // The frontier's serving pick is the registry-only model.
+    await saveFrontier(db.db, 'classification', [point('mock-registry-only', 0.96, 0.4, 120), point('mock-mid', 0.98, 2.1, 340)], 'manual', 'test-prices');
+    await upsertOrgIncumbents(db.db, { orgId: 'org_reg', models: ['mock-mid'], other: null, samplingConsent: true });
+    await insertTraceSpans(
+      db.db,
+      Array.from({ length: 10 }, (_, i) => ({
+        orgId: 'org_reg', traceId: `reg-r${i}`, spanId: 'chat', parentId: null, name: LEARNING_SPAN_NAME, model: 'mock-cheap', usage: {}, costUsd: 0,
+        attrs: { 'gen_ai.operation.name': 'chat', 'gen_ai.prompt': `Is review ${i} positive, negative, or neutral?`, 'gen_ai.completion': 'negative', 'potion.cluster_id': 'classification' },
+        ts: new Date(),
+      })),
+    );
+    const report = await runLearningPeriodForOrg(ctx, 'org_reg');
+    expect(report.outcome).toBe('ran');
+    expect(report.skipped.map((x) => x.why).join(' | ')).not.toMatch(/unknown model/);
+    expect(report.proposals.map((p) => p.clusterId), JSON.stringify(report.skipped)).toEqual(['classification']);
   });
 
   it('refuses without consent or without an incumbent, spending nothing', async () => {
