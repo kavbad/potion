@@ -34,7 +34,7 @@ import {
   type ProviderMode,
   type ServingLatencySample,
   type StrategyConfig,
-  qualityLowerBound,
+  qualityLowerBound, qualityUpperBound,
   type FrontierPoint,
 } from '@potion/core';
 import { servingDegenerateCounts, servingDegenerateCountsPlatform, servingLatencyP95, type PotionDb } from '@potion/db';
@@ -289,9 +289,9 @@ export function resolveOperatingPoint(
 }
 
 /**
- * QUALITY-INFEASIBLE FALLBACK (2026-09-11; tightened 2026-09-17 — see the
- * function body): the cheapest point whose mean the evidence cannot rank
- * below the best.
+ * QUALITY-INFEASIBLE FALLBACK: the cheapest point statistically tied with
+ * the best (2026-09-11; two tightenings tried and reverted 2026-09-17 — see
+ * the function body).
  *
  * When no point clears the bound floor, this used to serve the
  * highest-quality point outright. On a design partner's agentic-tool-use
@@ -310,23 +310,24 @@ export function resolveOperatingPoint(
  * resolve is.
  */
 export function infeasibleFallbackPoint(points: readonly FrontierPoint[], best: FrontierPoint): FrontierPoint {
-  // The cheapest point the evidence cannot rank below the best — judged by
-  // the point's OWN MEAN against the best's lower bound, not its upper
-  // bound (2026-09-17). The upper-bound test admitted almost everything on a
-  // 15–40-item frontier: the head-to-head served granite-micro on extraction
-  // 20/20 (0.869 against the auto-router's 0.988) because a wide interval
-  // reached the bar its mean was nowhere near. A mean inside the best's
-  // interval is a claim the evidence actually supports.
-  //
-  // NOT "the cheapest point that MEASURED at the bar" (tried and removed the
-  // same day, #39 → #41). Honouring an unprovable bar literally put
-  // rewrite-edit on claude-opus-5-fast (measured 0.950, $29.93/1K) for 13 of
-  // 20 items — $0.032 → $0.360 on one cluster, 1.33x → 8.95x against the
-  // auto-router overall — to buy a difference the evidence cannot show.
-  // The receipt already says fallback=1; the bar is not ignored, it is
-  // unprovable, and paying the most for it is the wrong answer.
+  // THE 2026-09-11 RULE, RESTORED (2026-09-17, #39 → #41 → #42). Two
+  // tightenings were tried the same day and both lost on the head-to-head:
+  //   (a) "cheapest point that MEASURED at the bar" — put rewrite-edit on
+  //       claude-opus-5-fast ($29.93/1K) for 13/20 items; 1.33x → 8.95x.
+  //   (b) "cheapest point whose MEAN reaches the best's lower bound" — is
+  //       STRICTER than this rule when the best point's interval is tight:
+  //       on rewrite-edit nothing cheaper than opus-fast reached its lower
+  //       bound, so opus served again (6.79x); on extraction granite-micro's
+  //       mean (0.904) was admitted anyway, so the quality gain (b) was
+  //       meant to buy never came.
+  // The upper-bound test below admitted the cheaper points the evidence
+  // cannot distinguish from the best, and the morning run under it was the
+  // best 0.95 result of the day (1.33x, quality 0.899). What that run got
+  // wrong (granite-micro at 0.869 on extraction) is the FRONTIER's number
+  // for granite (0.904 on the suite), not this rule — fix the measurement,
+  // not the tie.
   const bar = qualityLowerBound(best);
-  const tied = points.filter((p) => p.quality >= bar);
+  const tied = points.filter((p) => qualityUpperBound(p) >= bar);
   const cheapest = [...tied].sort((a, b) => a.costPer1K - b.costPer1K || b.quality - a.quality)[0];
   return cheapest ?? best;
 }
