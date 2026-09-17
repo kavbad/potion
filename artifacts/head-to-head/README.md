@@ -38,3 +38,29 @@ What decided the numbers (full attribution in the dated .md/.json files):
   quality, 0.4–0.6x cost), multi-step-reasoning (1.000 at 0.1–0.2x; the
   incumbent scored 0.25 — format obedience, see memory), code-gen 0.2–0.3x,
   extraction 0.1–0.5x, summarization 0.19x at 0.84.
+
+## 2026-09-17 — after #39 (fallback clauses a+b, cost-aware tiebreak, 0.05 window)
+
+Same 182 items, same judge. Files `2026-09-17-after-fixes-floor-*.{md,json}`.
+
+| floor | Potion q | auto q | Potion ÷ auto (cost) | Potion cost before → after | fallback |
+|---|---|---|---|---|---|
+| 0.95 | 0.916 (was 0.899) | 0.924 | **8.95x** [5.38–13.24] (was 1.33x) | $0.081 → **$0.481** | 48.9% |
+| 0.84 | 0.916 (was 0.924) | 0.917 | **1.72x** [1.24–2.30] (was 2.04x) | $0.108 → $0.095 | 3.3% |
+
+- **0.84 is the tiebreak working:** 20 items flipped to the cheaper of two
+  floor-clearing points; rewrite-edit $0.037 → $0.027; quality −0.008 overall
+  (agentic +0.07, code-review −0.03).
+- **0.95 is clause (a) failing:** "the cheapest point that MEASURED at the
+  bar" put rewrite-edit on claude-opus-5-fast (measured 0.950, $29.93/1K) for
+  13 of 20 items — $0.032 → $0.360 on that cluster alone. An unprovable bar
+  honoured literally buys the priciest point for a difference the evidence
+  cannot show. Clause (b) alone — the cheapest point whose MEAN reaches the
+  best's lower bound — carried the quality gains (extraction 0.869 → 0.931
+  via deepseek instead of granite; rag-answer 0.800 → 0.900). Clause (a) is
+  removed in the follow-up; the rerun after that is the honest "after".
+- Auditions so far (unpublished): summarization — glm-5.3-flash 0.986 at
+  $0.24/1K vs today's top kimi-k3 0.983 at $10.26/1K; gpt-5.6-luna 0.964 at
+  $0.19. Agentic — luna 0.950 (already on the frontier); deepseek-v4-flash
+  0.49 and glm 0.46 are not agentic models. Creative — none of the four
+  beats what serves (best of them 0.73 vs Sonnet 0.85).
