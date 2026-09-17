@@ -356,6 +356,12 @@ function modelVersionsFor(strategy: StrategyConfig, prices: PriceTable): Record<
  * judged under the old wording. One-time llm-judge cache invalidation on
  * upgrade is deliberate; deterministic-scorer keys are unchanged. */
 function judgeVersionOf(scoring: ScoringMethod, prices: PriceTable): string {
+  // The deterministic scorers are part of the instrument too: when their
+  // rule changes, cells scored under the old rule must not re-certify as
+  // cache hits (evalResults keeps no answer text to re-score). `exact@2` =
+  // scoreExact tolerates sentence-final punctuation and a shown-work final
+  // line (2026-09-17); every exact cell re-executes once on the next sweep.
+  if (scoring.kind === 'exact') return 'exact@2';
   if (scoring.kind !== 'llm-judge') return 'none';
   const entry = prices.entries.find(
     (e) => e.alias === scoring.judgeModel || e.model === scoring.judgeModel,

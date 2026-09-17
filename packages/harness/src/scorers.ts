@@ -51,6 +51,28 @@ export function normalizeText(s: string): string {
   return s.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/**
+ * Fold an answer (or reference) down to what was actually answered: after
+ * normalizeText, drop a leading "answer:" / "final answer:" label, wrapping
+ * quotes and markdown emphasis, and sentence-final punctuation. Inner
+ * punctuation is kept — '2.4.0', '$4.50' and '12:40' stay distinct from
+ * '2.4', '4.50' and '1240'.
+ *
+ * Why (2026-09-17, head-to-head vs a second judge): the whole-answer
+ * compare scored `18 days.` as 0 against `18 days`, and every reasoning
+ * answer that showed its work before the number as 0 — 30 correct answers
+ * in one 546-answer run, 15 of them the incumbent's. The platform routes on
+ * correctness, not on whether a model writes a bare token.
+ */
+export function normalizeFinalAnswer(s: string): string {
+  return normalizeText(s)
+    .replace(/^(?:final answer|answer)\s*[:=]\s*/, '')
+    .replace(/^[\s"'\u201c\u201d\u2018\u2019`*_]+|[\s"'\u201c\u201d\u2018\u2019`*_]+$/g, '')
+    .replace(/[.!?\u3002]+$/, '')
+    .replace(/[\s"'\u201c\u201d\u2018\u2019`*_]+$/, '')
+    .trim();
+}
+
 export function scoreExact(
   answer: string,
   reference: unknown,
@@ -60,7 +82,16 @@ export function scoreExact(
   if (scoring.field && ref !== null && typeof ref === 'object') {
     ref = (ref as Record<string, unknown>)[scoring.field];
   }
-  return normalizeText(String(ref ?? '')) === normalizeText(answer) ? 1 : 0;
+  const refText = String(ref ?? '');
+  if (normalizeText(refText) === normalizeText(answer)) return 1;
+  const want = normalizeFinalAnswer(refText);
+  if (want === '') return 0;
+  if (normalizeFinalAnswer(answer) === want) return 1;
+  // Shown work: the last non-empty line is the answer the model committed to.
+  // Equality only — an answer that merely CONTAINS the reference still fails.
+  const lines = answer.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const last = lines[lines.length - 1];
+  return last !== undefined && normalizeFinalAnswer(last) === want ? 1 : 0;
 }
 
 // ---- field-match --------------------------------------------------------------
