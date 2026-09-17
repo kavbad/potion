@@ -132,6 +132,24 @@ describe('runEval', () => {
     expect(row!.scorer).toBe('field-match');
   });
 
+  it('exact cells carry the scorer version in the cache key (2026-09-17: exact@2)', () => {
+    const sh = strategyHash({ type: 'single', model: 'mock-frontier' });
+    const det = suiteItem('ex-01');
+    const exact = { ...det, scoring: { kind: 'exact' as const } };
+    // an exact cell must NOT share a key with a same-item cell under the
+    // versionless rule — old zeros would re-certify as $0 cache hits
+    expect(cacheKeyOf(sh, exact, exact.scoring, prices)).not.toBe(
+      sha256(`${sh}|${det.id}|none|${prices.version}`),
+    );
+    expect(cacheKeyOf(sh, exact, exact.scoring, prices)).toBe(
+      sha256(`${sh}|${det.id}|exact@2|${prices.version}`),
+    );
+    // other deterministic scorers keep their byte-identical keys
+    expect(cacheKeyOf(sh, det, det.scoring, prices)).toBe(
+      sha256(`${sh}|${det.id}|none|${prices.version}`),
+    );
+  });
+
   it('G1.5: rubric text is part of the llm-judge cache key; deterministic keys unchanged', () => {
     const sh = strategyHash({ type: 'single', model: 'mock-frontier' });
     const judgeScoring = (rubric: string) => ({

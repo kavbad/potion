@@ -53,6 +53,28 @@ describe('exact scorer', () => {
   it('normalizeText collapses all whitespace runs', () => {
     expect(normalizeText(' a\t b\n\n c ')).toBe('a b c');
   });
+  // 2026-09-17: a second judge over the head-to-head answers found 30
+  // correct answers scored 0 by the whole-answer compare.
+  it('accepts sentence-final punctuation, quotes and emphasis around the reference', () => {
+    expect(scoreExact('18 days.', '18 days', scoring)).toBe(1);
+    expect(scoreExact('**Sunday**', 'Sunday', scoring)).toBe(1);
+    expect(scoreExact('"m.vasquez".', 'm.vasquez', scoring)).toBe(1);
+    expect(scoreExact('Answer: 210', '210', scoring)).toBe(1);
+  });
+  it('accepts the final line of a shown-work answer, equality only', () => {
+    const shown = 'Half of 48 is 24.\n24 + 12 = 36.\n36 − 12 = 24.\n\n**24**';
+    expect(scoreExact(shown, '24', scoring)).toBe(1);
+    expect(scoreExact(shown, '36', scoring)).toBe(0);
+    expect(scoreExact('So there are 24 apples left.', '24', scoring)).toBe(0);
+    expect(scoreExact('24 apples', '24', scoring)).toBe(0);
+  });
+  it('keeps inner punctuation strict', () => {
+    expect(scoreExact('2.4', '2.4.0', scoring)).toBe(0);
+    expect(scoreExact('4.50', '$4.50', scoring)).toBe(0);
+    expect(scoreExact('12:40.', '12:40', scoring)).toBe(1);
+    expect(scoreExact('', '', scoring)).toBe(1);
+    expect(scoreExact('x', '', scoring)).toBe(0);
+  });
 });
 
 describe('field-match scorer', () => {
