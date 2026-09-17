@@ -60,3 +60,9 @@ invoices/
 
 # coverage output (P1.4) — the ratchet reads it, git does not carry it
 coverage-artifacts/
+
+# HEAD-TO-HEAD RESULTS ARE EVIDENCE, NOT BUILD OUTPUT (2026-09-17). The
+# 2026-09-07 head-to-head lived outside the repo and is gone; these dated
+# runs and their README stay with the script that produced them.
+!/artifacts/head-to-head/
+!/artifacts/head-to-head/**
