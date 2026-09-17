@@ -156,3 +156,40 @@ describe('self-serve gate (G2.7)', () => {
     expect(await getUserByEmail(app.potion.db.db, 'stranger@nowhere.dev')).not.toBeNull();
   });
 });
+
+// THE WIDTH KNOBS REACH THE JOB (2026-09-17). POST /operator/frontiers/
+// platform-sweep dropped maxAnswerers/auditionModels on the floor (zod
+// strips unknown keys), so every sweep against the live registry was
+// refused with pool-exceeds-ceiling. The payload the queue receives must
+// carry what the operator sent.
+describe('POST /operator/frontiers/platform-sweep carries the width knobs', () => {
+  it('maxAnswerers, auditionModels, publish and instrument reach the enqueued payload; unknown instrument is 400', async () => {
+    const seen: Array<{ name: string; payload: Record<string, unknown> }> = [];
+    const original = app.potion.queue!.enqueue.bind(app.potion.queue!);
+    app.potion.queue!.enqueue = async (name: string, payload: unknown) => {
+      seen.push({ name, payload: payload as Record<string, unknown> });
+      return 'job-captured';
+    };
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/operator/frontiers/platform-sweep',
+        headers: { ...OP, 'content-type': 'application/json' },
+        payload: { clusterId: 'rewrite-edit', capUsd: 12, sampleN: 28, maxAnswerers: 7, auditionModels: ['or-sonnet', 'or-gpt-mini'], publish: false, instrument: 'default' },
+      });
+      expect(res.statusCode, res.body).toBe(202);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.name).toBe('frontier:platform-sweep');
+      expect(seen[0]!.payload).toMatchObject({ clusterId: 'rewrite-edit', capUsd: 12, sampleN: 28, maxAnswerers: 7, auditionModels: ['or-sonnet', 'or-gpt-mini'], publish: false, instrument: 'default' });
+      const bad = await app.inject({
+        method: 'POST',
+        url: '/operator/frontiers/platform-sweep',
+        headers: { ...OP, 'content-type': 'application/json' },
+        payload: { clusterId: 'rewrite-edit', capUsd: 12, instrument: 'smell' },
+      });
+      expect(bad.statusCode).toBe(400);
+    } finally {
+      app.potion.queue!.enqueue = original;
+    }
+  });
+});

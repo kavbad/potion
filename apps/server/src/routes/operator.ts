@@ -187,6 +187,16 @@ export function registerOperatorRoutes(
       sampleN: z.number().int().positive().max(500).optional(),
       judgeMaxTokens: z.number().int().positive().max(4096).optional(),
       maxOutputTokens: z.number().int().positive().max(8192).optional(),
+      // THE WIDTH KNOBS (2026-09-17). The handler refuses a pool wider than
+      // its ceiling unless maxAnswerers is passed explicitly — and this
+      // route silently dropped it (zod strips unknown keys), so every sweep
+      // started here with a 389-model registry was refused with
+      // 'pool-exceeds-ceiling'. Prior sweeps named their models in scripts;
+      // the route now takes the same acknowledgement and the same list.
+      maxAnswerers: z.number().int().positive().max(500).optional(),
+      auditionModels: z.array(z.string().min(1)).min(1).max(60).optional(),
+      publish: z.boolean().optional(),
+      instrument: z.enum(['default', 'tools', 'vision', 'audio']).optional(),
     });
     const parsed = Body.safeParse(req.body);
     if (!parsed.success) {

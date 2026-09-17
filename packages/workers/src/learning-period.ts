@@ -48,7 +48,8 @@ import {
 import { and, eq } from 'drizzle-orm';
 import type { ChatMessage, EvalItem } from '@potion/core';
 import { runEval, type RunSummary } from '@potion/harness';
-import { ENV_VAR_BY_PROVIDER, loadPrices } from '@potion/providers';
+import { ENV_VAR_BY_PROVIDER } from '@potion/providers';
+import { registryPrices } from './handler-shared.js';
 import { buildRegistry, classRepresentative } from '@potion/researcher';
 import type { ProviderId, ProviderMode } from '@potion/core';
 import {
@@ -298,7 +299,13 @@ export async function runLearningPeriodForOrg(ctx: JobContext, orgId: string, no
   const inc = await getOrgIncumbents(ctx.db, orgId);
   if (!inc || (inc.models.length === 0 && !inc.other)) return { ...report, outcome: 'no-incumbent' };
   if (!inc.samplingConsent) return { ...report, outcome: 'no-consent' };
-  const { table: prices } = loadPrices(ctx.pricesPath);
+  // THE REGISTRY, NOT THE FILE (2026-09-17). Every other handler prices
+  // through registryPrices — the live model catalog with the seed file as
+  // fallback. This one read the file alone, so a frontier point that
+  // entered via the registry (classification v8's or-glm-5-3-flash) was
+  // "unknown model … not in prices.json" and the customer's classification
+  // measurement was refused on every run.
+  const prices = await registryPrices(ctx);
   // GREENFIELD FALLBACK (2026-08-24, operator's from-scratch question): an
   // org with consent but NO priced named incumbent — building from scratch,
   // or "several / not sure" — used to dead-end here with samples
