@@ -321,3 +321,51 @@ describe('end-to-end: serving-path hard stop emits budget_exceeded', () => {
     clearBudgetHardStopCache();
   });
 });
+
+// MAILTO IS A TARGET TOO (2026-09-16). The only alert rule on production
+// was a mailto: rule the validator would not let anyone create, and the
+// test endpoint answered "fetch failed" for the address it should have
+// mailed.
+describe('mailto: rules', () => {
+  it('POST /api/alerts accepts mailto:<address>, masks the local part, stores the full target', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      headers: ADMIN_A,
+      payload: { kind: 'webhook', targetUrl: 'mailto:Founder@Example.com', events: ['policy_infeasible', 'job_failed'] },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    expect(res.json().rule.targetMasked).toBe('mailto:•••@Example.com');
+    const rows = await listAlertRules(db(), ORG_A);
+    expect(rows.some((r) => r.targetUrl === 'mailto:Founder@Example.com')).toBe(true);
+  });
+
+  it('rejects a mailto: that is not an address', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      headers: ADMIN_A,
+      payload: { kind: 'webhook', targetUrl: 'mailto:not-an-address', events: ['job_failed'] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /api/alerts/test on a mailto: goes through the email transport, never an HTTP fetch — and says so when there is none', async () => {
+    const before = received.length;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/alerts/test',
+      headers: ADMIN_A,
+      payload: { url: 'mailto:founder@example.com' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as { delivered: boolean; transport?: string; error?: string; targetMasked: string };
+    expect(body.targetMasked).toBe('mailto:•••@example.com');
+    expect(body.error ?? '').not.toContain('fetch failed');
+    // this test server has no Resend env: honest about it
+    expect(body.transport).toBe('log');
+    expect(body.delivered).toBe(false);
+    expect(body.error).toContain('no email transport');
+    expect(received.length, 'no webhook sink call for a mailto target').toBe(before);
+  });
+});
