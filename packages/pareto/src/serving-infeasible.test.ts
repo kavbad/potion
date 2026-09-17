@@ -49,3 +49,37 @@ describe('infeasibleFallbackPoint', () => {
     expect((op.config as { model?: string } | null)?.model).toBe('solar-pro4');
   });
 });
+
+// 2026-09-17, from the head-to-head: two ways the tie rule misread thin
+// evidence, and the two clauses that fix them.
+describe('infeasibleFallbackPoint, tightened 2026-09-17', () => {
+  // rewrite-edit v5 in production: opus-fast measured 0.950 ($29.9/1K),
+  // sonnet 0.906 ($3.65/1K), both n=32 (±~0.05). Floor 0.95.
+  const opus = pt('opus-fast', 0.95, 29.9265, 0.05);
+  const sonnet = pt('sonnet', 0.90625, 3.6515, 0.05);
+  const gptMini = pt('gpt-mini', 0.8656, 1.7076, 0.05);
+  it('(a) a point that MEASURED at the bar is served — the ask, unproven — over a cheaper point the interval merely cannot separate', () => {
+    expect(infeasibleFallbackPoint([opus, sonnet, gptMini], opus, 0.95).strategyHash).toBe('opus-fast');
+    // and the cheapest such point, when several measured at the bar
+    const cheaperAtBar = pt('cheap-at-bar', 0.951, 0.5, 0.05);
+    expect(infeasibleFallbackPoint([opus, sonnet, cheaperAtBar], opus, 0.95).strategyHash).toBe('cheap-at-bar');
+  });
+  // extraction v5 in production: best inkling-small ~0.93 (lower ~0.89),
+  // granite-micro 0.775 with an interval wide enough (±0.10) to REACH 0.89
+  // from below. The old rule served granite 20/20 in the head-to-head.
+  const inkling = pt('inkling-small', 0.93, 0.35, 0.04);
+  const granite = pt('granite-micro', 0.775, 0.0027, 0.1);
+  const solar = pt('solar-pro4', 0.90, 0.02, 0.04);
+  it('(b) with nothing measured at the bar, the tie is judged by the point’s MEAN against the best’s lower bound — a wide interval no longer admits a weak point', () => {
+    const served = infeasibleFallbackPoint([inkling, granite, solar], inkling, 0.95);
+    expect(served.strategyHash, 'granite: mean 0.775 < best lower 0.89 — excluded even though its upper bound 0.875… and old rule reached').toBe('solar-pro4');
+    // and the old semantics (upper-bound tie) would have served granite:
+    expect(granite.quality + (granite.evidence?.qualityCi95 ?? 0)).toBeLessThan(inkling.quality - (inkling.evidence?.qualityCi95 ?? 0) + 0.02);
+  });
+  it('rides resolveOperatingPoint with the policy floor: the measured-at-bar point serves under policy_infeasible', () => {
+    const op = resolveOperatingPoint({ type: 'min_cost', qualityFloor: 0.95 }, frontierOf([opus, sonnet, gptMini]), null, {});
+    expect(op.fallback).toBe(1);
+    expect(op.fallbackReason).toBe('policy_infeasible');
+    expect((op.config as { model?: string } | null)?.model).toBe('opus-fast');
+  });
+});

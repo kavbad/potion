@@ -35,7 +35,6 @@ import {
   type ServingLatencySample,
   type StrategyConfig,
   qualityLowerBound,
-  qualityUpperBound,
   type FrontierPoint,
 } from '@potion/core';
 import { servingDegenerateCounts, servingDegenerateCountsPlatform, servingLatencyP95, type PotionDb } from '@potion/db';
@@ -285,13 +284,15 @@ export function resolveOperatingPoint(
   if (!best) {
     return { config: fallbackStrategy, fallback: 1, fallbackReason: 'no_point_resolvable', frontierVersion: frontier.version, frontier };
   }
-  const served = infeasibleFallbackPoint(frontier.points, best);
+  const floor = policy.type === 'min_cost' || policy.type === 'compound' ? policy.qualityFloor : undefined;
+  const served = infeasibleFallbackPoint(frontier.points, best, floor);
   return { config: served.strategyConfig, fallback: 1, fallbackReason: 'policy_infeasible', frontierVersion: frontier.version, frontier };
 }
 
 /**
- * QUALITY-INFEASIBLE FALLBACK: the cheapest point statistically tied with
- * the best (2026-09-11).
+ * QUALITY-INFEASIBLE FALLBACK (2026-09-11; tightened 2026-09-17 — see the
+ * function body): the cheapest point that measured at the bar, else the
+ * cheapest whose mean the evidence cannot rank below the best.
  *
  * When no point clears the bound floor, this used to serve the
  * highest-quality point outright. On a design partner's agentic-tool-use
@@ -309,10 +310,30 @@ export function resolveOperatingPoint(
  * worse than the best is admitted; only the spread the evidence cannot
  * resolve is.
  */
-export function infeasibleFallbackPoint(points: readonly FrontierPoint[], best: FrontierPoint): FrontierPoint {
+export function infeasibleFallbackPoint(points: readonly FrontierPoint[], best: FrontierPoint, floor?: number): FrontierPoint {
+  const byCost = (a: FrontierPoint, b: FrontierPoint) => a.costPer1K - b.costPer1K || b.quality - a.quality;
+  // (a) THE ASK, UNPROVEN (2026-09-17). The customer set a bar; nothing can
+  // PROVE it, but a point that MEASURED at or above it is the honest answer
+  // to "serve the cheapest at my bar" — the receipt says fallback=1 because
+  // the proof is missing, not because the bar was ignored. Before this, a
+  // 0.95 floor on rewrite-edit served Sonnet (0.906) beside a point that
+  // measured 0.950, on the strength of an interval that could not tell them
+  // apart.
+  if (floor !== undefined) {
+    const measuredAtBar = points.filter((p) => p.quality >= floor);
+    const cheapestAtBar = [...measuredAtBar].sort(byCost)[0];
+    if (cheapestAtBar) return cheapestAtBar;
+  }
+  // (b) Otherwise the cheapest point the evidence cannot rank below the best
+  // — judged by the point's OWN MEAN against the best's lower bound, not its
+  // upper bound. The upper-bound test admitted almost everything on a
+  // 15–40-item frontier: the head-to-head of 2026-09-17 served granite-micro
+  // on extraction 20/20 (0.869 against the auto-router's 0.988) because a
+  // wide interval reached the bar its mean was nowhere near. A mean inside
+  // the best's interval is a claim the evidence actually supports.
   const bar = qualityLowerBound(best);
-  const tied = points.filter((p) => qualityUpperBound(p) >= bar);
-  const cheapest = [...tied].sort((a, b) => a.costPer1K - b.costPer1K || b.quality - a.quality)[0];
+  const tied = points.filter((p) => p.quality >= bar);
+  const cheapest = [...tied].sort(byCost)[0];
   return cheapest ?? best;
 }
 

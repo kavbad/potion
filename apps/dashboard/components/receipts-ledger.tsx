@@ -17,7 +17,7 @@ const POLL_MS = 4000;
  * its priciest point). */
 const FALLBACK_LABEL: Record<string, string> = {
   no_frontier: 'default (not measured yet)',
-  policy_infeasible: 'your bar is unreachable here — served the cheapest point tied with the best',
+  policy_infeasible: 'your bar is unreachable here — served the cheapest point that measured at it, or the cheapest the evidence cannot rank below the best',
   reasoning_budget: 'reasoning model skipped under your output budget',
   no_point_resolvable: 'no measured route resolvable — served the default',
 };
@@ -166,7 +166,7 @@ export function ReceiptsLedger() {
                   <ReceiptCard r={rowToReceipt(r)} subtitle={`${new Date(r.ts).toLocaleString()} · from your request log`} />
                   {r.baselineBasis === 'policy-infeasible' && r.baselineCostUsd !== null ? (
                     <p className="mt-2 max-w-md font-mono text-[12px] leading-relaxed text-warn">
-                      your bar is unreachable for this kind of work: nothing measured clears it, so the cheapest point the evidence cannot rank below the best served. The best measured point would have cost ${r.baselineCostUsd.toFixed(5)}; no saving is claimed against a bar you cannot reach. Relax it in Controls to route on price again.
+                      your bar is unreachable for this kind of work: nothing PROVES it, so the cheapest point that measured at it served — or, with none, the cheapest the evidence cannot rank below the best. The best measured point would have cost ${r.baselineCostUsd.toFixed(5)}; no saving is claimed against a bar you cannot reach. Relax it in Controls to route on price again.
                     </p>
                   ) : kept !== null && r.baselineCostUsd !== null ? (
                     <p className="mt-2 max-w-md font-mono text-[12px] leading-relaxed text-faint">
