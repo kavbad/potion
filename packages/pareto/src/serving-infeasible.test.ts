@@ -50,35 +50,26 @@ describe('infeasibleFallbackPoint', () => {
   });
 });
 
-// 2026-09-17, from the head-to-head: the tie rule misread thin evidence one
-// way, and my first fix misread it the other way. Both pinned here.
-describe('infeasibleFallbackPoint, tightened 2026-09-17', () => {
-  // rewrite-edit v5 in production: opus-fast measured 0.950 ($29.9/1K),
-  // sonnet 0.906 ($3.65/1K), gpt-mini 0.866, all n=32 (±~0.05). Floor 0.95.
-  const opus = pt('opus-fast', 0.95, 29.9265, 0.05);
-  const sonnet = pt('sonnet', 0.90625, 3.6515, 0.05);
-  const gptMini = pt('gpt-mini', 0.8656, 1.7076, 0.05);
-  it('a point that merely MEASURED at the bar does NOT override the tie — the cheapest point inside the best’s interval serves', () => {
-    // Removed clause (a) (#39 → #41): "cheapest point that measured at the
-    // bar" served opus-fast on 13/20 rewrite-edit items in the head-to-head,
-    // $0.032 → $0.360 on the cluster, 1.33x → 8.95x overall.
+// 2026-09-17: two tightenings of the tie rule were tried on the head-to-head
+// and both lost. Pinned so the third attempt starts from the numbers.
+describe('the tie rule stays the upper-bound tie (2026-09-17, #42)', () => {
+  // rewrite-edit v5 in production, intervals verbatim: opus-fast 0.950 ±0.022
+  // ($29.9/1K), sonnet 0.906 ±0.044 ($3.65/1K), gpt-mini 0.866 ±0.046, n=32.
+  // Floor 0.95 is unreachable. opus lower = 0.928; sonnet upper = 0.950.
+  const opus = pt('opus-fast', 0.95, 29.9265, 0.022);
+  const sonnet = pt('sonnet', 0.90625, 3.6515, 0.044);
+  const gptMini = pt('gpt-mini', 0.8656, 1.7076, 0.046);
+  it('serves sonnet: its interval reaches opus’s lower bound, so the evidence cannot rank it below — 8x cheaper', () => {
     expect(infeasibleFallbackPoint([opus, sonnet, gptMini], opus).strategyHash).toBe('sonnet');
-    // gpt-mini: mean 0.866 < opus lower 0.90 — excluded even though cheapest
   });
-  // extraction v5 in production: best inkling-small ~0.93 (lower ~0.89),
-  // granite-micro 0.775 with an interval wide enough (±0.10) to REACH 0.89
-  // from below. The old rule served granite 20/20 in the head-to-head.
-  const inkling = pt('inkling-small', 0.93, 0.35, 0.04);
-  const granite = pt('granite-micro', 0.775, 0.0027, 0.1);
-  const solar = pt('solar-pro4', 0.90, 0.02, 0.04);
-  it('the tie is judged by the point’s MEAN against the best’s lower bound — a wide interval no longer admits a weak point', () => {
-    const served = infeasibleFallbackPoint([inkling, granite, solar], inkling);
-    expect(served.strategyHash, 'granite: mean 0.775 < best lower 0.89 — excluded even though its upper bound reached').toBe('solar-pro4');
+  it('a MEAN-vs-lower-bound tie (tried as clause b) would have served opus-fast here — 6.79x against the auto-router — and is not the rule', () => {
+    // sonnet mean 0.906 < opus lower 0.928: (b) excluded it; sonnet upper 0.950 ≥ 0.928: the upper-bound tie does not.
+    expect(sonnet.quality).toBeLessThan(opus.quality - (opus.evidence?.qualityCi95 ?? 0));
+    expect(infeasibleFallbackPoint([opus, sonnet, gptMini], opus).strategyHash).toBe('sonnet');
   });
-  it('rides resolveOperatingPoint: an unreachable floor serves the cheapest point inside the best’s interval, flagged policy_infeasible', () => {
-    const op = resolveOperatingPoint({ type: 'min_cost', qualityFloor: 0.95 }, frontierOf([opus, sonnet, gptMini]), null, {});
-    expect(op.fallback).toBe(1);
-    expect(op.fallbackReason).toBe('policy_infeasible');
-    expect((op.config as { model?: string } | null)?.model).toBe('sonnet');
+  it('a MEASURED-at-bar clause (tried as clause a) would have served opus-fast too — 8.95x — and is not the rule', () => {
+    const measuredAtBar = [opus, sonnet, gptMini].filter((p) => p.quality >= 0.95);
+    expect(measuredAtBar.map((p) => p.strategyHash)).toEqual(['opus-fast']);
+    expect(infeasibleFallbackPoint([opus, sonnet, gptMini], opus).strategyHash).toBe('sonnet');
   });
 });

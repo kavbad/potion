@@ -64,3 +64,32 @@ Same 182 items, same judge. Files `2026-09-17-after-fixes-floor-*.{md,json}`.
   $0.19. Agentic — luna 0.950 (already on the frontier); deepseek-v4-flash
   0.49 and glm 0.46 are not agentic models. Creative — none of the four
   beats what serves (best of them 0.73 vs Sonnet 0.85).
+
+## 2026-09-17 — after #41 (clause (a) removed; clause (b) + tiebreak + 0.05 window)
+
+Files `2026-09-17-after-41-floor-*.{md,json}`. Same 182 items and judge.
+
+| floor | Potion q | auto q | Potion ÷ auto | Potion cost (morning → #39 → #41) | fallback |
+|---|---|---|---|---|---|
+| 0.95 | 0.893 | 0.900 | **6.79x** [3.82–10.48] | $0.081 → $0.481 → $0.477 | 48.9% |
+| 0.84 | 0.926 | 0.915 | **1.35x** [0.98–1.77] | $0.108 → $0.095 → $0.091 | 3.3% |
+
+- **0.84 is settled:** 2.04x → 1.35x at quality 0.926 vs the auto-router's
+  0.915, interval touching parity. That is the cost-aware tiebreak and the
+  0.05 window. Potion ÷ Sonnet 0.18x at +0.08 quality.
+- **0.95 exposes clause (b):** rewrite-edit still $0.372. On the live
+  frontier opus-fast is 0.950 ±0.022 (lower 0.928) and Sonnet 0.906 ±0.044
+  (upper 0.950): the September-11 upper-bound tie admits Sonnet (0.950 ≥
+  0.928); the mean-vs-lower-bound tie does not (0.906 < 0.928), so opus
+  serves. And on extraction granite-micro's mean (0.904) reaches the best's
+  lower bound (0.893) anyway, so (b) bought no quality there. Both
+  tightenings lose to the original rule; #42 restores it and keeps the
+  tiebreak. The morning's 0.95 result (1.33x, quality 0.899) is the best
+  the rules can do on today's frontiers.
+- **What actually fixes 0.95 is coverage, not a rule.** The audition
+  re-measured rewrite-edit on 28 items: opus-fast 0.906, solar-pro4 0.906
+  at $0.04/1K, gpt-5.6-luna 0.911 at $0.25. Published, opus is no longer
+  "best", the tie resolves to solar-pro4 under any rule, and the 0.95
+  headline collapses with it. Likewise summarization (glm-5.3-flash 0.986
+  at $0.24 vs kimi-k3 0.983 at $10.26) and code-review (gpt-mini 0.950 at
+  $0.13 vs gpt-full 0.960 at $0.60). Publishing is the operator's call.
