@@ -66,3 +66,7 @@ coverage-artifacts/
 # runs and their README stay with the script that produced them.
 !/artifacts/head-to-head/
 !/artifacts/head-to-head/**
+
+# Jev (TypeSafe) trials — 2026-09-17, scripts/jev-trial.mjs
+!/artifacts/jev-trial/
+!/artifacts/jev-trial/**

@@ -93,3 +93,60 @@ Files `2026-09-17-after-41-floor-*.{md,json}`. Same 182 items and judge.
   headline collapses with it. Likewise summarization (glm-5.3-flash 0.986
   at $0.24 vs kimi-k3 0.983 at $10.26) and code-review (gpt-mini 0.950 at
   $0.13 vs gpt-full 0.960 at $0.60). Publishing is the operator's call.
+
+## 2026-09-17 — after #42 (original tie rule restored; tiebreak + 0.05 window kept)
+
+Files `2026-09-17-after-42-floor-0.95.{md,json}` plus
+`2026-09-17-after-42-floor-0.95.answers.json` — the answer text of all 546
+answers (`H2H_SAVE_ANSWERS`), so a second judge can be run over exactly these
+answers without re-spending on models.
+
+| floor | Potion q | auto q | incumbent q | Potion ÷ auto | Potion cost | fallback |
+|---|---|---|---|---|---|---|
+| 0.95 | 0.892 | 0.915 | 0.850 | **1.20x** [0.67–2.05] | $0.083 (morning $0.081) | 48.9% |
+
+The restore holds: the two rewritten tie rules (8.95x, 6.79x) are gone and
+the cost-aware tiebreak keeps its gain. The 0.84 result from the #41 run
+(1.35x) is unchanged by #42 (the tie rule only fires when the floor is
+unreachable; 3.3% of items at 0.84).
+
+### The `exact` scorer zeroed 20 correct answers in this run
+
+Running Jev as a second judge over the saved answers (see
+`artifacts/jev-trial/`) exposed it: `scoreExact` in
+`packages/harness/src/scorers.ts` compares the whole answer, case- and
+whitespace-folded, against the reference. So `18 days.` ≠ `18 days`
+(rag-answer-001), and a reasoning answer that shows its work and ends with
+`24` scores 0 against `24`. Jev marked 25 of the 30 zero-scored `exact`
+rows it disagreed on as correct.
+
+Re-scored with the fixed scorer (PR #44: trailing punctuation and emphasis
+dropped, then the final non-empty line must EQUAL the reference — never
+contains):
+
+| arm | stored quality | re-scored | rows flipped 0→1 |
+|---|---|---|---|
+| Potion | 0.892 | 0.897 | 1 (rag-answer) |
+| auto | 0.915 | 0.932 | 3 (2 rag-answer, 1 reasoning) |
+| incumbent | 0.850 | 0.938 | 16 (15 reasoning, 1 rag-answer) |
+
+No wrong flips: the three genuinely wrong answers stay 0. Ten rag-answer
+rows also stay 0 because the answer adds words (`$4.50 per day`, `Up to 2
+hours.`, `42 minutes per charge.`) — correct answers the `exact` instrument
+cannot see. rag-answer wants field-contains or a judge; that is a separate
+change. Two consequences:
+
+- Every "Potion beats Sonnet on reasoning" number in this README is format
+  obedience, not reasoning: the model Potion serves answers with the bare
+  number, Sonnet shows its work first. The suite prompt does ask for "just
+  the final number", but the platform routes on correctness.
+- The platform measures the `multi-step-reasoning` and `rag-answer`
+  frontiers with the same v1 suites and the same scorer
+  (`PLATFORM_SUITE_BY_CLUSTER`), so those two frontiers rank models partly
+  by format obedience. #44 keys `exact` cells as `exact@2` so the old zeros
+  cannot re-certify; merging it re-executes every exact cell once and may
+  re-rank those two frontiers.
+
+At the corrected numbers the 0.95 story is: Potion 0.897 vs the auto-router
+0.932 at 1.20x its cost, vs Sonnet 0.938 at 0.16x. The quality gap to the
+auto-router is coverage (unpublished auditions), not the tie rule.

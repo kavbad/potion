@@ -57,6 +57,8 @@ const INCUMBENT = process.env.H2H_INCUMBENT ?? 'anthropic/claude-sonnet-4.5';
 const OUT = process.env.H2H_OUT ?? '/app/h2h-out';
 const JUDGE_MAX_TOKENS = 768;
 const CONCURRENCY = 3;
+const SAVE_ANSWERS = process.env.H2H_SAVE_ANSWERS !== '0';
+const answers = [];
 if (!KEY) throw new Error('POTION_API_KEY is required');
 if (!OR_KEY) throw new Error('OPENROUTER_API_KEY is required');
 
@@ -186,6 +188,9 @@ async function worker() {
         charge(arm.costUsd, `${name} ${item.id}`);
         const sc = await score(item, arm);
         charge(sc.judgeCostUsd, `judge ${name} ${item.id}`);
+        // Sidecar: the answer text itself, so a SECOND judge (e.g. Jev) can be
+        // run over exactly these answers later without re-spending on models.
+        if (SAVE_ANSWERS) answers.push({ id: item.id, cluster: item.labelCluster, arm: name, answer: arm.answer ?? null, toolCalls: arm.toolCalls ?? null, quality: sc.quality, scorer: sc.scorer });
         row.arms[name] = { ok: arm.ok, error: arm.error ?? null, costUsd: arm.costUsd, latencyMs: arm.latencyMs, model: arm.model ?? null, quality: sc.quality, scorer: sc.scorer, judgeCostUsd: sc.judgeCostUsd,
           ...(name === 'potion' ? { resolvedCluster: arm.resolvedCluster ?? null, fallback: arm.fallback ?? null, fallbackReason: arm.fallbackReason ?? null, trace: arm.trace ?? null } : {}) };
       }
@@ -254,6 +259,7 @@ const result = {
 mkdirSync(OUT, { recursive: true });
 const stamp = result.ranAt.slice(0, 10);
 writeFileSync(join(OUT, `${stamp}.json`), JSON.stringify(result, null, 2));
+if (SAVE_ANSWERS) writeFileSync(join(OUT, `${stamp}.answers.json`), JSON.stringify({ ranAt: result.ranAt, policy: POLICY, judge: judgeAlias, answers }, null, 0));
 
 const f4 = (x) => (x === null || x === undefined ? '—' : `$${x.toFixed(4)}`);
 const q = (x) => (x === null || x === undefined ? '—' : x.toFixed(3));
