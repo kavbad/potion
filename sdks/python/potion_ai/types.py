@@ -63,3 +63,10 @@ class FrontierTrace(Dict[str, str]):
     @property
     def upgraded(self) -> Optional[str]:
         return self.get("upgraded")
+
+    @property
+    def underpowered(self) -> Optional[str]:
+        """Present only when the floor excluded points on EVIDENCE WIDTH rather
+        than measured quality: how many models scored at or above the bar but
+        whose confidence interval dips below it. Not a verdict on the model."""
+        return self.get("underpowered")

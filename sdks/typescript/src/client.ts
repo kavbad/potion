@@ -17,7 +17,7 @@ export interface PotionRequestOptions {
 }
 
 import { mapError, type PotionErrorBody } from './errors.js';
-import { FrontierTrace } from './types.js';
+import { FrontierTrace, type PotionRouting } from './types.js';
 
 /** Wire params for chat.completions.create plus the Potion `policy` override. */
 export type PotionChatCompletionCreateParams = ChatCompletionCreateParams & {
@@ -36,17 +36,24 @@ export type PotionChatCompletionCreateParams = ChatCompletionCreateParams & {
  *   `x-frontier-trace` response header (`null` when the header is absent,
  *   e.g. a non-Potion backend);
  * - {@link PotionChatCompletion.cost} — `usage.cost` (USD) when the server
- *   reports one, else `null`.
+ *   reports one, else `null`;
+ * - {@link PotionChatCompletion.routing} — the top-level `potion` routing
+ *   object (requested vs resolved cluster and policy, the model that
+ *   answered, `fallback` + `fallback_reason`), `null` when absent.
  */
 export class PotionChatCompletion {
   /** The raw completion as returned by the openai client. */
   readonly completion: ChatCompletion;
   readonly frontierTrace: FrontierTrace | null;
   readonly cost: number | null;
+  /** The top-level `potion` routing object (`null` on a non-Potion backend or a stream). */
+  readonly routing: PotionRouting | null;
 
   constructor(completion: ChatCompletion, headers: Headers) {
     this.completion = completion;
     this.frontierTrace = FrontierTrace.parse(headers.get('x-frontier-trace'));
+    const withRouting = completion as ChatCompletion & { potion?: PotionRouting };
+    this.routing = withRouting.potion && typeof withRouting.potion === 'object' ? withRouting.potion : null;
     const usage = completion.usage as (ChatCompletion['usage'] & { cost?: number }) | undefined;
     this.cost = typeof usage?.cost === 'number' ? usage.cost : null;
   }

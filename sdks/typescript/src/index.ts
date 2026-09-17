@@ -29,5 +29,6 @@ export {
 } from './errors.js';
 export type { PotionErrorBody, PotionErrorOptions } from './errors.js';
 export { FrontierTrace } from './types.js';
+export type { PotionRouting } from './types.js';
 
 export const VERSION = '0.1.0';

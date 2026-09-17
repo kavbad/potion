@@ -17,6 +17,7 @@ import {
   Potion,
   PotionChatCompletion,
   PotionError,
+  type PotionRouting,
   RateLimitExceededError,
 } from '../src/index.js';
 
@@ -30,6 +31,8 @@ const TRACE =
  */
 type PotionWireCompletion = Omit<ChatCompletion, 'usage'> & {
   usage?: ChatCompletion['usage'] & { cost?: number };
+  /** The typed routing object the server attaches to every non-streaming answer. */
+  potion?: PotionRouting;
 };
 
 // TYPED, not cast (2026-09-11). This fixture reached
@@ -54,6 +57,17 @@ const COMPLETION: PotionWireCompletion = {
     },
   ],
   usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5, cost: 0.00042 },
+  potion: {
+    requested_cluster: 'auto',
+    resolved_cluster: 'code-gen',
+    requested_policy: 'quality-first',
+    policy_source: 'override',
+    resolved_policy_type: 'min_cost',
+    model: 'mock-cheap',
+    fallback: false,
+    cost_usd: 0.00042,
+    provenance: 'mock',
+  },
 };
 
 /** Capture of the last request for assertions. */
@@ -302,5 +316,24 @@ describe('outcome (G1 Outcome API)', () => {
     expect(e.statusCode).toBe(404);
     expect(e.code).toBe('unknown_request');
     expect(e.message).toContain('outcomes attach to requests Potion served');
+  });
+});
+
+describe('typed routing on the response (2026-09-16)', () => {
+  it('.routing exposes the top-level potion object verbatim; null when a backend sends none', () => {
+    const headers = new Headers({ 'x-frontier-trace': TRACE });
+    const withRouting = new PotionChatCompletion(COMPLETION, headers);
+    expect(withRouting.routing).toEqual(COMPLETION.potion);
+    expect(withRouting.routing?.fallback).toBe(false);
+    expect(withRouting.routing?.resolved_cluster).toBe('code-gen');
+    const { potion: _dropped, ...plain } = COMPLETION;
+    const without = new PotionChatCompletion(plain, headers);
+    expect(without.routing).toBeNull();
+  });
+
+  it('the trace exposes underpowered when the server stamps it', () => {
+    const t = new PotionChatCompletion(COMPLETION, new Headers({ 'x-frontier-trace': `${TRACE};underpowered=2` })).frontierTrace;
+    expect(t?.underpowered).toBe('2');
+    expect(new PotionChatCompletion(COMPLETION, new Headers({ 'x-frontier-trace': TRACE })).frontierTrace?.underpowered).toBeUndefined();
   });
 });
