@@ -984,8 +984,12 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // different instruments.
         quality: r.served !== undefined && r.served !== null ? qualityLowerBound(r.served) : null,
         costPer1K: r.served?.costPer1K ?? null,
+        fallback: r.op.fallback,
       });
-      const winner = pickSafer(asCandidate(chosen), asCandidate(other));
+      // min_cost/compound: both floors cleared → the cheaper point serves
+      // (routing/ambiguity.ts, 2026-09-17). max_quality keeps quality-first.
+      const objective = policy.type === 'min_cost' || policy.type === 'compound' ? 'cost' : 'quality';
+      const winner = pickSafer(asCandidate(chosen), asCandidate(other), objective);
       logBase.clusterTiebreak = winner.clusterId !== clusterId;
       if (winner.clusterId !== clusterId) {
         clusterId = winner.clusterId;

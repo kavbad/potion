@@ -112,7 +112,7 @@ const FALLBACK_LABEL: Record<string, string> = {
   no_point_resolvable: 'no measured route',
 };
 const FALLBACK_TITLE: Record<string, string> = {
-  policy_infeasible: 'No measured point clears your quality bar for this kind of work. The cheapest point the evidence cannot rank below the best serves. Relax the bar in Controls to route on price again.',
+  policy_infeasible: 'Nothing measured can PROVE your quality bar for this kind of work. The cheapest point that measured at the bar serves — or, with none, the cheapest the evidence cannot rank below the best. Relax the bar in Controls to route on price again.',
   no_frontier: 'This kind of work has no measured frontier yet; the default strategy serves.',
   reasoning_budget: 'The measured pick is a reasoning model and your output budget is too small for it; the next measured point serves.',
   no_point_resolvable: 'No measured point is resolvable under your provider set; the default strategy serves.',

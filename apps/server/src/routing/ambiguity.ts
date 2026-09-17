@@ -15,7 +15,12 @@
 import type { RankedAssignment } from '@potion/cluster';
 
 /** Cosine gap under which the best and runner-up are treated as a pair. */
-export const DEFAULT_AMBIGUITY_MARGIN = 0.03;
+// 0.05, up from 0.03 (2026-09-17). In the head-to-head the costliest item
+// of the whole run — 30% of Potion's bill — was an agentic-tool-use item
+// classified summarization at confidence 0.406 with a 0.047 margin: a coin
+// flip the tiebreak never saw. On the same 182 items, 28 fell inside 0.03
+// and 44 inside 0.05; on real traffic 34% sit below 0.55 confidence.
+export const DEFAULT_AMBIGUITY_MARGIN = 0.05;
 
 /** POTION_CLUSTER_AMBIGUITY overrides the margin; 0 disables the tiebreak. */
 export function ambiguityMargin(env: NodeJS.ProcessEnv = process.env): number {
@@ -43,6 +48,9 @@ export function ambiguousRunnerUp(ranked: RankedAssignment, margin: number): str
 
 export interface TiebreakCandidate {
   clusterId: string;
+  /** 0 when the policy selected a measured point (the floor was cleared),
+   * 1 when a fallback served. Absent = unknown (legacy callers). */
+  fallback?: 0 | 1;
   /** Measured quality of the point the policy resolves to; null when the
    * cluster has no serving frontier (the resolution is a fallback). */
   quality: number | null;
@@ -53,7 +61,16 @@ export interface TiebreakCandidate {
  * Which of two candidates to serve. Measured beats unmeasured; then higher
  * quality; then lower cost; then the original best (stable on a true tie).
  */
-export function pickSafer<T extends TiebreakCandidate>(best: T, runnerUp: T): T {
+export function pickSafer<T extends TiebreakCandidate>(best: T, runnerUp: T, objective: 'quality' | 'cost' = 'quality'): T {
+  // DON'T PAY FOR THE DOUBT (2026-09-17). When the classifier cannot tell
+  // two kinds of work apart and BOTH candidate points cleared their floor,
+  // the floor is the quality contract and the policy's objective decides:
+  // under min_cost, the cheaper point. Quality-first remains the rule when
+  // either side is a fallback (its floor was NOT met) or under a
+  // quality-objective policy.
+  if (objective === 'cost' && best.fallback === 0 && runnerUp.fallback === 0 && best.costPer1K !== null && runnerUp.costPer1K !== null) {
+    return runnerUp.costPer1K < best.costPer1K ? runnerUp : best;
+  }
   if (best.quality === null && runnerUp.quality === null) return best;
   if (best.quality === null) return runnerUp;
   if (runnerUp.quality === null) return best;
