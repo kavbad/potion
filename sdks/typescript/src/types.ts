@@ -69,6 +69,16 @@ export class FrontierTrace {
     return this.entries['provenance'];
   }
 
+  /**
+   * Present only when the policy floor excluded points on EVIDENCE WIDTH
+   * rather than measured quality: the count of models that scored at or
+   * above the bar but whose confidence interval dips below it. Not a
+   * verdict on the model — the evidence is too thin to prove the number.
+   */
+  get underpowered(): string | undefined {
+    return this.entries['underpowered'];
+  }
+
   get upgraded(): string | undefined {
     return this.entries['upgraded'];
   }
@@ -76,4 +86,33 @@ export class FrontierTrace {
   toJSON(): Record<string, string> {
     return { ...this.entries };
   }
+}
+
+/**
+ * The typed routing object every non-streaming answer carries at the top
+ * level as `potion` (the `x-frontier-trace` header stays the source record).
+ * Field names are the wire's, verbatim.
+ */
+export interface PotionRouting {
+  /** The cluster the request asked for via `x-potion-cluster`, or `'auto'`. */
+  requested_cluster: string;
+  /** The cluster the request was actually served under. */
+  resolved_cluster: string;
+  /** The `x-potion-policy` override name, or `null`. */
+  requested_policy: string | null;
+  policy_source: 'override' | 'key_default';
+  resolved_policy_type: string;
+  /** The model that answered. */
+  model: string;
+  /** `true` when NO measured point satisfied the policy and a fallback served — the receipt's "not routed". */
+  fallback: boolean;
+  /** Why, when `fallback` is true: `policy_infeasible`, `reasoning_budget`, `no_frontier`, `no_point_resolvable`. */
+  fallback_reason?: string;
+  /** Metered charge for this request in USD, when the server reports one. */
+  cost_usd?: number;
+  /** `tools` | `vision` | `audio` when a non-default instrument's frontier served. */
+  instrument?: string;
+  /** `empty_answer` | `provider_error` when a second attempt answered. */
+  retry?: string;
+  provenance: string;
 }

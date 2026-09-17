@@ -23,7 +23,10 @@ class PotionChatCompletion:
       ``x-frontier-trace`` response header (``None`` when the header is
       absent, e.g. a non-Potion backend);
     * ``.cost`` — ``usage.cost`` (USD) when the server reports one, else
-      ``None``.
+      ``None``;
+    * ``.routing`` — the top-level ``potion`` routing object as a dict
+      (requested vs resolved cluster and policy, the model that answered,
+      ``fallback`` + ``fallback_reason``), ``None`` when absent.
     """
 
     def __init__(self, completion: ChatCompletion, headers: Mapping[str, str]) -> None:
@@ -32,6 +35,17 @@ class PotionChatCompletion:
             headers.get("x-frontier-trace")
         )
         self.cost: Optional[float] = self._extract_cost(completion)
+        self.routing: Optional[Dict[str, Any]] = self._extract_routing(completion)
+
+    @staticmethod
+    def _extract_routing(completion: ChatCompletion) -> Optional[Dict[str, Any]]:
+        routing = getattr(completion, "potion", None)
+        if routing is None and hasattr(completion, "model_dump"):
+            routing = completion.model_dump().get("potion")
+        if routing is None:
+            extra = getattr(completion, "model_extra", None) or {}
+            routing = extra.get("potion")
+        return dict(routing) if isinstance(routing, dict) else None
 
     @staticmethod
     def _extract_cost(completion: ChatCompletion) -> Optional[float]:

@@ -39,6 +39,17 @@ COMPLETION = {
         }
     ],
     "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5, "cost": 0.00042},
+    "potion": {
+        "requested_cluster": "auto",
+        "resolved_cluster": "code-gen",
+        "requested_policy": "quality-first",
+        "policy_source": "override",
+        "resolved_policy_type": "min_cost",
+        "model": "mock-cheap",
+        "fallback": False,
+        "cost_usd": 0.00042,
+        "provenance": "mock",
+    },
 }
 
 
@@ -285,3 +296,13 @@ class TestOutcome:
         assert exc.value.status_code == 404
         assert exc.value.code == "unknown_request"
         assert "outcomes attach to requests Potion served" in str(exc.value)
+
+
+def test_typed_routing_on_the_response(server):
+    """2026-09-16: the top-level ``potion`` object rides the completion; the SDK exposes it."""
+    client = make_client(server)
+    res = client.chat.completions.create(model="potion-auto", messages=[{"role": "user", "content": "hi"}])
+    assert res.routing == COMPLETION["potion"]
+    assert res.routing["fallback"] is False
+    assert res.routing["resolved_cluster"] == "code-gen"
+    assert res.frontier_trace.underpowered is None
