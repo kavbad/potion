@@ -1,0 +1,17 @@
+{
+ "suiteId": "summarization-hard-v1",
+ "clusterId": "summarization",
+ "version": "1.0.0",
+ "source": {
+  "kind": "authored",
+  "name": "The 14 flat summarization items ported verbatim plus a 36-item FIDELITY tier (sum-h01..36) targeting the measured failure modes: invented facts, dropped numbers, collapsed conditionals, missed decisions, ignored caps; rubric-anchored judging — the judge sees the answer key.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "llm-judge"
+  ]
+ },
+ "createdAt": "2026-09-17T16:30:00.000-07:00"
+}

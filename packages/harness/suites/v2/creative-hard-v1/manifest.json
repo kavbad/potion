@@ -1,0 +1,17 @@
+{
+ "suiteId": "creative-hard-v1",
+ "clusterId": "creative",
+ "version": "1.0.0",
+ "source": {
+  "kind": "authored",
+  "name": "The 14 flat creative items ported verbatim plus a 36-item CONSTRAINT-ADHERENCE tier (cre-h01..36) targeting the measured failure mode of creative work: silently dropping an explicit constraint (line counts, word/character caps, forbidden words, required inclusions, form, ending rule, audience, speaker rules). Each new prompt carries 3-6 explicit, mechanically checkable constraints and its rubric enumerates every one as a numbered criterion plus one craft criterion; where facts must appear, the rubric restates them verbatim so the judge holds the answer key. Forms span haiku sequences, 14-line and free-verse poems, acrostics, micro-fiction under word caps, naming and taglines, dialogue with speaker rules, letters/toasts/speeches, original song structures, riddles with fixed answers, children's openings, mood rewrites, second-person and no-adjective prose, and long flash fiction. All names, places and brands are invented.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "llm-judge"
+  ]
+ },
+ "createdAt": "2026-09-17T16:30:00.000-07:00"
+}
