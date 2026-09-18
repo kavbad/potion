@@ -37,7 +37,7 @@ import {
   qualityLowerBound, qualityUpperBound,
   type FrontierPoint,
 } from '@potion/core';
-import { servingDegenerateCounts, servingDegenerateCountsPlatform, servingLatencyP95, type PotionDb } from '@potion/db';
+import { listServedClusterIds, servingDegenerateCounts, servingDegenerateCountsPlatform, servingLatencyP95, type PotionDb } from '@potion/db';
 import { strategyCapabilities } from '@potion/strategies';
 import { loadCurrentFrontier } from './persistence.js';
 
@@ -50,6 +50,71 @@ import { loadCurrentFrontier } from './persistence.js';
  * reveal, the key mint, and the learning period, so no surface can drift:
  * quality-first, cheapest point that clears the bar. */
 export const DEFAULT_ORG_POLICY: Policy = { type: 'min_cost', qualityFloor: 0.95 };
+
+// ---------------------------------------------------------------------------
+// THE SIGNUP FLOOR (2026-09-18). DEFAULT_ORG_POLICY's 0.95 was a bar no
+// measured kind of work could prove: on the sized head-to-head 44% of
+// requests under it hit `policy_infeasible`, and the unreachable-floor rule
+// served summarization on $10/1K models at 9x the auto-router's cost for
+// LOWER quality. A signup should start on the highest bar EVERY kind of work
+// can honour today — the minimum over the served clusters of the highest
+// provable quality (max lower bound), floored to 2dp, capped by the constant
+// above. The learning period still replaces it with the customer's own
+// measured bar (applyDerivedDefault); this only changes what the first week
+// looks like.
+// ---------------------------------------------------------------------------
+
+/** A cluster proving less than this does not drag every other kind of work
+ * down with it: that is a coverage gap to fix by measurement, and the cluster
+ * runs infeasible (fallback=1, alerted) until it is. */
+export const SIGNUP_FLOOR_MIN = 0.75;
+
+export interface SignupFloor {
+  floor: number;
+  ceiling: number;
+  /** The kind of work that set the floor, when one did (null = the ceiling held). */
+  limiting: { clusterId: string; highestProvable: number } | null;
+  /** Clusters below SIGNUP_FLOOR_MIN, excluded from the minimum. */
+  excluded: { clusterId: string; highestProvable: number }[];
+  clusters: number;
+}
+
+export async function signupQualityFloor(db: PotionDb, orgId: string): Promise<SignupFloor> {
+  const ceiling = DEFAULT_ORG_POLICY.type === 'min_cost' ? DEFAULT_ORG_POLICY.qualityFloor : 0.95;
+  let floor = ceiling;
+  let limiting: SignupFloor['limiting'] = null;
+  const excluded: SignupFloor['excluded'] = [];
+  let clusters = 0;
+  for (const clusterId of await listServedClusterIds(db)) {
+    const frontier = await loadCurrentFrontier(db, clusterId, orgId);
+    if (!frontier || frontier.points.length === 0) continue;
+    clusters++;
+    let highest = -1;
+    for (const p of frontier.points) highest = Math.max(highest, qualityLowerBound(p));
+    // FLOOR to 2dp, never round up (routing/floors.ts mintFloor semantics).
+    const minted = Math.floor(highest * 100) / 100;
+    if (minted < SIGNUP_FLOOR_MIN) { excluded.push({ clusterId, highestProvable: highest }); continue; }
+    if (minted < floor) { floor = minted; limiting = { clusterId, highestProvable: highest }; }
+  }
+  return { floor, ceiling, limiting, excluded, clusters };
+}
+
+/** The rule a fresh org is bound to: min_cost at the signup floor. */
+export async function signupPolicyFor(db: PotionDb, orgId: string): Promise<Policy> {
+  const { floor } = await signupQualityFloor(db, orgId);
+  return { type: 'min_cost', qualityFloor: floor };
+}
+
+/** TRUE for a 'default' row nobody chose: the mint's shape (min_cost, no
+ * per-kind floors) at the signup floor of its day — today's derived value
+ * or the retired 0.95 constant. An edited floor, a per-kind floor, or any
+ * other name is a choice, and choices are never replaced. */
+export function isUnchosenSignupPolicy(name: string, config: Policy, signupFloor: number): boolean {
+  if (name !== 'default' || config.type !== 'min_cost') return false;
+  if (config.clusterFloors !== undefined && Object.keys(config.clusterFloors).length > 0) return false;
+  const legacy = DEFAULT_ORG_POLICY.type === 'min_cost' ? DEFAULT_ORG_POLICY.qualityFloor : 0.95;
+  return config.qualityFloor === signupFloor || config.qualityFloor === legacy;
+}
 
 /** Strategy used when the assigned cluster has NO frontier yet (e.g.
  * 'general') on a MOCK server: a plain mid-tier single. Documented

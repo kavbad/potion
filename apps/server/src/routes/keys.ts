@@ -46,7 +46,6 @@
 // api-key credentials additionally need the 'admin' scope); POST /api/keys
 // stays member+ per the Wave-2 RBAC matrix (connecting a key is a member
 // action); reads are viewer+ via the dashboard auth hook.
-import { DEFAULT_ORG_POLICY } from '../routing/default-policy.js';
 import {
   randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -69,6 +68,7 @@ import {
   type ProviderKeyRow, getCurrentServingPolicy, insertPolicy, insertCustodyAudit, updateApiKeyLimits } from '@potion/db';
 import { openAiError, requireRole } from '../auth.js';
 import type { PotionContext } from '../context.js';
+import { signupPolicyFor } from '@potion/pareto';
 
 // ---------- shared helpers ----------
 
@@ -410,8 +410,8 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
     // Every serving key is bound to a rule, so the first request on a new
     // org works instead of refusing with 'no policy bound' (found by walking
     // the journey as a brand-new org, 2026-08-22). No rule given: bind the
-    // org's existing one, or create the default — cheapest model that scores
-    // at least 0.95 — which the dashboard lets them change later.
+    // org's existing one, or create the default — cheapest model that clears
+    // the signup floor — which the dashboard lets them change later.
     let boundPolicyId = policyId;
     if (boundPolicyId === undefined) {
       // Serving policies only (2026-08-28): the Lab's internal rows (lab-io
@@ -425,11 +425,15 @@ export function registerKeyRoutes(app: FastifyInstance, ctx: PotionContext): voi
         boundPolicyId = current.id;
       } else {
         boundPolicyId = `pol-${randomUUID().slice(0, 8)}`;
+        // The signup floor (2026-09-18): the highest bar every measured kind
+        // of work can prove today, capped by DEFAULT_ORG_POLICY — never the
+        // constant itself, which no frontier could honour (see @potion/pareto
+        // signupQualityFloor).
         await insertPolicy(db, {
           id: boundPolicyId,
           orgId: org.orgId,
           name: 'default',
-          config: DEFAULT_ORG_POLICY,
+          config: await signupPolicyFor(db, org.orgId),
         });
       }
     }

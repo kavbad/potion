@@ -136,6 +136,37 @@ export async function insertPolicy(db: PotionDb, policy: NewPolicy): Promise<voi
   await db.insert(policies).values(policy);
 }
 
+/** Rewrite one policy's config in place (2026-09-18: the boot repair that
+ * lowers an unchosen signup floor). Bindings and the name are untouched. */
+export async function updatePolicyConfig(db: PotionDb, orgId: string, id: string, config: PolicyRow['config']): Promise<void> {
+  await db.update(policies).set({ config }).where(and(eq(policies.orgId, orgId), eq(policies.id, id)));
+}
+
+/**
+ * Lower every UNCHOSEN signup floor to today's signup floor (2026-09-18).
+ * A row qualifies when it is the mint's own shape — named 'default',
+ * min_cost, no per-kind floors — at one of the floors the mint has ever
+ * written (`legacyFloors`), and that floor is above `floor`. An edited row
+ * is a choice and is left alone. Returns what changed; idempotent.
+ */
+export async function repairSignupDefaultFloors(
+  db: PotionDb,
+  floor: number,
+  legacyFloors: readonly number[],
+): Promise<Array<{ orgId: string; policyId: string; from: number; to: number }>> {
+  const repaired: Array<{ orgId: string; policyId: string; from: number; to: number }> = [];
+  const rows = (await db.select().from(policies).where(eq(policies.name, 'default'))) as PolicyRow[];
+  for (const row of rows) {
+    const cfg = row.config as { type?: string; qualityFloor?: number; clusterFloors?: Record<string, number> };
+    if (cfg.type !== 'min_cost' || typeof cfg.qualityFloor !== 'number') continue;
+    if (cfg.clusterFloors !== undefined && Object.keys(cfg.clusterFloors).length > 0) continue;
+    if (!legacyFloors.includes(cfg.qualityFloor) || cfg.qualityFloor <= floor) continue;
+    await updatePolicyConfig(db, row.orgId, row.id, { type: 'min_cost', qualityFloor: floor } as PolicyRow['config']);
+    repaired.push({ orgId: row.orgId, policyId: row.id, from: cfg.qualityFloor, to: floor });
+  }
+  return repaired;
+}
+
 export async function getPolicyById(
   db: PotionDb,
   orgId: string,

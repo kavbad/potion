@@ -3,6 +3,7 @@
 // the policy admits; finish_reason 'length' surfaces when nothing else can.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { RankedAssignment } from '@potion/cluster';
 import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
 import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
@@ -31,6 +32,8 @@ beforeAll(async () => {
   // extraction: thinker (cheap, picked first) + another point; code-gen: thinker alone.
   await saveFrontier(db, 'extraction', [point('extraction', THINKER, 0.9, 0.2), point('extraction', OTHER, 0.88, 1.0)], 'manual', 'test-prices');
   await saveFrontier(db, 'code-gen', [point('code-gen', THINKER, 0.9, 0.2)], 'manual', 'test-prices');
+  await saveFrontier(db, 'summarization', [point('summarization', THINKER, 0.9, 0.2)], 'manual', 'test-prices');
+  await saveFrontier(db, 'rewrite-edit', [point('rewrite-edit', OTHER, 0.9, 1.0)], 'manual', 'test-prices');
   const real = app.potion.providersForOrg;
   app.potion.providersForOrg = async (orgId: string) => {
     const set = await real(orgId);
@@ -52,6 +55,17 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close();
 });
+
+// The runner-up CLUSTER retry (2026-09-18): summarization's only point is
+// the thinker (answers nothing); rewrite-edit has a point that answers.
+const RANKED_CLOSE: RankedAssignment = { assignment: { clusterId: 'summarization', confidence: 0.6 }, ranking: [{ clusterId: 'summarization', confidence: 0.6 }, { clusterId: 'rewrite-edit', confidence: 0.55 }], fellBack: false, embedding: [] };
+const RANKED_WIDE: RankedAssignment = { ...RANKED_CLOSE, assignment: { clusterId: 'summarization', confidence: 0.8 }, ranking: [{ clusterId: 'summarization', confidence: 0.8 }, { clusterId: 'rewrite-edit', confidence: 0.4 }] };
+// One prompt per case: the assignment cache is keyed on the prompt text, so
+// a second case reusing the first's prompt would read the first's ranking.
+const postRanked = (r: RankedAssignment, prompt: string) => {
+  app.potion.assigner = { ...app.potion.assigner, assignRanked: async () => r };
+  return app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}` }, payload: { model: 'potion-auto', max_tokens: 300, messages: [{ role: 'user', content: prompt }] } });
+};
 
 const post = (cluster: string, extra: Record<string, unknown> = {}) =>
   app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}`, 'x-potion-cluster': cluster }, payload: { model: 'potion-auto', max_tokens: 300, messages: [{ role: 'user', content: 'Extract the capital and population of France as JSON.' }], ...extra } });
@@ -155,5 +169,25 @@ describe('serving', () => {
     expect(res.statusCode).toBe(200);
     expect(calls).toEqual(['mock-cheap']);
     expect(res.headers['x-potion-model']).toBe('mock-cheap');
+  });
+});
+
+describe('empty answer → the runner-up cluster first (2026-09-18)', () => {
+  it('a close classification retries on the runner-up cluster\'s point and the receipt names the cluster', async () => {
+    calls.length = 0; thinkerMode = 'empty'; clearReasoningMarks();
+    const res = await postRanked(RANKED_CLOSE, 'Summarize this: the quick brown fox.');
+    expect(res.statusCode).toBe(200);
+    expect(calls).toEqual(['mock-cheap', 'mock-mid']);
+    expect(res.headers['x-potion-model']).toBe('mock-mid');
+    const trace = String(res.headers['x-frontier-trace']);
+    expect(trace).toContain('retry=empty_answer');
+    expect(trace).toContain('retry_cluster=rewrite-edit');
+  });
+  it('a wide margin keeps the same-cluster retry (nothing else there → the platform fallback, no retry_cluster)', async () => {
+    calls.length = 0; thinkerMode = 'empty'; clearReasoningMarks();
+    const res = await postRanked(RANKED_WIDE, 'Summarize this: a lazy dog slept all afternoon.');
+    expect(res.statusCode).toBe(200);
+    expect(calls[0]).toBe('mock-cheap');
+    expect(String(res.headers['x-frontier-trace'])).not.toContain('retry_cluster=');
   });
 });

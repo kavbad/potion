@@ -327,6 +327,19 @@ describe('the derived default (2026-09-16) — a measurement replaces the signup
     expect((await listLearningProposals(db.db, 'org_dd_chosen'))[0]?.status).toBe('proposed');
   });
 
+  it("replaces a 'default' row minted at the SIGNUP floor of its day (2026-09-18), keeping that floor for unmeasured kinds of work", async () => {
+    const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
+    // The seeded classification frontier proves 0.96+ → the signup floor is the 0.95 ceiling here,
+    // so a row minted today carries 0.95 too; pin the derived config keeps the ROW's floor.
+    await seedMeasurableOrg('org_dd_signup', { id: 'pol-dd-signup', name: 'default', config: { type: 'min_cost', qualityFloor: 0.95 } });
+    const report = await runLearningPeriodForOrg(ctx, 'org_dd_signup');
+    expect(report.derivedDefault).not.toBeNull();
+    const key = await getApiKeyById(db.db, 'org_dd_signup', 'key-org_dd_signup');
+    expect(key?.policyId).toBe(report.derivedDefault!.policyId);
+    const pol = await getPolicyById(db.db, 'org_dd_signup', report.derivedDefault!.policyId);
+    expect(pol?.config).toMatchObject({ type: 'min_cost', qualityFloor: 0.95, clusterFloors: { classification: expect.any(Number) } });
+  });
+
   it("never replaces a 'default' row whose config was edited", async () => {
     const ctx: JobContext = { db: db.db, dbHandle: db, pricesPath };
     await seedMeasurableOrg('org_dd_edited', { id: 'pol-dd-edited', name: 'default', config: { type: 'min_cost', qualityFloor: 0.9 } });
