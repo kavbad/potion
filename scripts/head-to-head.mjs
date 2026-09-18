@@ -244,6 +244,11 @@ async function worker() {
       continue;
     }
     rows.push(row);
+    // Fail fast: a wrong key or policy name rejects EVERY Potion call, and a
+    // run that keeps going spends the whole cap on the other arm and the judge
+    // (2026-09-18: 'h2h-floor-0.084', $2.93 for nothing). Five units in with
+    // zero Potion answers is not a head-to-head.
+    if (rows.length === 5 && rows.every((r) => r.arms.potion && !r.arms.potion.ok)) throw new Error(`potion answered 0 of the first 5 units: ${rows[0].arms.potion.error}`);
     if (rows.length % 10 === 0) log(`${rows.length}/${units.length} units, spent $${spent.toFixed(3)}`);
   }
 }

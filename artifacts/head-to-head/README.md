@@ -150,3 +150,58 @@ change. Two consequences:
 At the corrected numbers the 0.95 story is: Potion 0.897 vs the auto-router
 0.932 at 1.20x its cost, vs Sonnet 0.938 at 0.16x. The quality gap to the
 auto-router is coverage (unpublished auditions), not the tie rule.
+
+## 2026-09-18 — the sized run (every text item, 3 repeats, two arms)
+
+Files `2026-09-18-sized-{084,095}.{md,json,answers.json}`. 658 unique items
+(every text suite per cluster, de-duplicated by id; the new
+`creative-hard-v1` and `summarization-hard-v1` included), 3 repeats each,
+paired on the per-item mean, Potion vs `openrouter/auto` only. $6.5 per
+floor. Per-cluster n: code-gen 114, extraction 128, classification 90,
+agentic 50, creative 50, summarization 50, reasoning 50, rag-answer 50,
+rewrite-edit 34, code-review 42.
+
+| floor | Potion q | auto q | Potion − auto q (95% CI) | Potion ÷ auto cost | Potion p50 / p95 | auto p50 / p95 | fallback |
+|---|---|---|---|---|---|---|---|
+| 0.84 | 0.937 | 0.920 | +0.017 [−0.002, +0.034] | 1.15x [0.97–1.35] | 2.1s / 9.8s | 1.1s / 3.5s | 0.9% |
+| 0.95 | 0.900 | 0.923 | −0.023 [−0.042, −0.005] | 1.61x [1.16–2.09] | 2.9s / 16.0s | 2.1s / 3.4s | 44.4% |
+
+**0.84 (the bar the product recommends after measurement):** quality at
+parity or better, cost at parity, latency 2x. Potion wins outright on
+agentic (+0.19, 0.35x), rag-answer (+0.08, 0.20x), and is 4–10x cheaper at
+equal quality on classification, reasoning, extraction, summarization.
+It loses on cost where it serves Sonnet: creative 3.74x (49% of Potion's
+bill), code-review 3.67x, rewrite-edit 2.94x — the three clusters whose
+cheaper audition frontiers are unpublished. It loses on quality on
+code-gen (−0.06): 90 of 114 code-gen items were routed off-label (51 to
+reasoning, 39 to classification), whose cheap point ling-3.0-flash returns
+an EMPTY answer on code prompts; the retry lands on nemotron/deepseek at
+12.6s median and quality 0.49. All 68 retries in the run were
+`empty_answer`, 39 of them code-gen. That is a classifier defect on the
+hard code-gen prompts (they read as word problems to the centroid), not a
+frontier defect — the 24 code-gen items sent to extraction scored 0.98.
+
+**0.95 (the signup default):** 44% of units hit `policy_infeasible` and
+the unreachable-floor rule served summarization on kimi-k3 and friends at
+$0.203 for 50 items — 59% of Potion's bill, 9.07x the auto-router, quality
+0.72 vs 0.80, p95 78s. Rewrite-edit 5.06x. Everywhere else Potion is
+cheaper (code-review 0.14x, extraction 0.28x, code-gen 0.48x) at a 0–4
+point quality deficit. 0.95 is not a floor any frontier can honour on
+these suites, and what the rule does when it cannot is the whole 0.95
+story. The signup default is the decision.
+
+**Latency:** model choice explains most of the 2x (solar-pro4 2.0s and
+Sonnet 5.5s median vs luna 0.5s and deepseek-flash 1.3s); empty-answer
+retries set the p95 (code-gen 17s, agentic 14s); Potion's own overhead is
+small (ling-3.0-flash 1.6s median both server-side and end-to-end).
+`underpowered=N` appears on 80% of units — informational (points excluded
+by interval width), but at that frequency it reads as a warning.
+
+**Not comparable to the 2026-09-17 runs:** different item set (658 vs
+182), three repeats, and the two new hard suites, whose fidelity/constraint
+items score lower for every arm (summarization auto 0.79 vs 0.96 on the
+flat 14).
+
+The wrong-policy launch earlier the same night (`h2h-floor-0.084`, every
+Potion call rejected, $3.10) is discarded; the harness now aborts when
+Potion answers none of the first five units.
