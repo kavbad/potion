@@ -171,3 +171,25 @@ describe('reliability is deliberately NOT a dominance axis', () => {
     expect(isDominated(worse, [flaky])).toBe(flaky);
   });
 });
+
+describe('provability is an objective (2026-09-18)', () => {
+  const withEvidence = (p: FrontierPoint, n: number, half: number): FrontierPoint => ({ ...p, evidence: { cacheKeys: [], runIds: [], n, qualityCi95: half } });
+  it('a cheaper point with a higher MEAN but a lower LOWER BOUND does not dominate the provable one', () => {
+    const sonnet = withEvidence(point('h-sonnet', 0.906, 3.651, 6010), 32, 0.044); // lower 0.862
+    const luna = withEvidence(point('h-luna', 0.911, 0.252, 5000), 28, 0.146); // lower 0.765
+    expect(isDominated(sonnet, [luna])).toBeNull();
+    expect(isDominated(luna, [sonnet])).toBeNull(); // a genuine trade-off: cheaper vs provable
+  });
+  it('a cheaper point that is ALSO at least as provable still dominates', () => {
+    const pricey = withEvidence(point('h-pricey', 0.90, 3.0, 5000), 30, 0.05); // lower 0.85
+    const cheap = withEvidence(point('h-cheap', 0.91, 0.3, 4000), 30, 0.05); // lower 0.86
+    expect(isDominated(pricey, [cheap])?.strategyHash).toBe('h-cheap');
+  });
+  it('computeFrontier keeps the provable anchor beside the cheaper wide-interval point', () => {
+    const aggs = [
+      { ...agg('h-sonnet', 0.906, 3.651, 6010), qualityCi95: 0.044, evidence: { cacheKeys: [], runIds: [], n: 32, qualityCi95: 0.044 } },
+      { ...agg('h-luna', 0.911, 0.252, 5000), qualityCi95: 0.146, evidence: { cacheKeys: [], runIds: [], n: 28, qualityCi95: 0.146 } },
+    ] as StrategyAggregate[];
+    expect(computeFrontier(aggs).map((p) => p.strategyHash)).toEqual(['h-luna', 'h-sonnet']);
+  });
+});

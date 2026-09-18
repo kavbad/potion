@@ -9,7 +9,7 @@
 // more than epsilon on at least one axis (and may not be worse by more than
 // epsilon on any axis). This keeps float noise (e.g. aggregated cost means)
 // from creating or destroying domination relationships.
-import { SELECTION_EPSILON, type FrontierPoint, type StrategyAggregate } from '@potion/core';
+import { SELECTION_EPSILON, qualityLowerBound, type FrontierPoint, type StrategyAggregate } from '@potion/core';
 
 /** Epsilon band for near-tie handling in all dominance comparisons. G2.6
  * moved the value to @potion/core (SELECTION_EPSILON) so the frontier's
@@ -26,22 +26,36 @@ export const DOMINANCE_EPSILON = SELECTION_EPSILON;
  * q dominates p iff (within DOMINANCE_EPSILON):
  *   q.quality   >= p.quality   AND
  *   q.costPer1K <= p.costPer1K AND
- *   q.latencyP95 <= p.latencyP95
+ *   q.latencyP95 <= p.latencyP95 AND
+ *   lower(q)    >= lower(p)        (qualityLowerBound — PROVABILITY, 2026-09-18)
  * with at least one comparison strict (q better by more than epsilon).
+ *
+ * The fourth axis: serving proves a floor with the LOWER BOUND, not the
+ * mean (the lower-bound law). A point whose mean is edged out by a cheaper
+ * point with a wide interval is still the only point that can honour a bar
+ * the wide one cannot. Publishing rewrite-edit v6 dropped Sonnet (0.906,
+ * lower 0.862, n=32) for luna (0.911, lower 0.765, n=28) and made every
+ * floor above 0.77 infeasible on the cluster — cheaper, and unprovable.
+ * A point with no evidence has lower == mean, so pre-provenance points
+ * compare exactly as before.
  */
 export function isDominated(p: FrontierPoint, others: FrontierPoint[]): FrontierPoint | null {
   const eps = DOMINANCE_EPSILON;
+  const pLower = qualityLowerBound(p);
   for (const q of others) {
     if (q.strategyHash === p.strategyHash) continue;
+    const qLower = qualityLowerBound(q);
     const noWorse =
       q.quality >= p.quality - eps &&
       q.costPer1K <= p.costPer1K + eps &&
-      q.latencyP95 <= p.latencyP95 + eps;
+      q.latencyP95 <= p.latencyP95 + eps &&
+      qLower >= pLower - eps;
     if (!noWorse) continue;
     const strictlyBetter =
       q.quality > p.quality + eps ||
       q.costPer1K < p.costPer1K - eps ||
-      q.latencyP95 < p.latencyP95 - eps;
+      q.latencyP95 < p.latencyP95 - eps ||
+      qLower > pLower + eps;
     if (strictlyBetter) return q;
   }
   return null;
