@@ -1,0 +1,18 @@
+{
+  "suiteId": "code-review-hard-v2",
+  "clusterId": "code-review",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "name": "The 28 code-review-hard-v1 items ported verbatim plus 72 authored items: 42 exact-scored defect-localisation items (14 no-bug controls) and 30 judge-scored prose reviews (10 no-bug controls) at the same difficulty, so a 100-item Jeffreys interval can prove a floor a 28-item one cannot.",
+    "license": "Proprietary (Potion-authored)"
+  },
+  "items": "items.jsonl",
+  "scoring": {
+    "allowed": [
+      "exact",
+      "llm-judge"
+    ]
+  },
+  "createdAt": "2026-09-18T15:00:00.000-07:00"
+}
