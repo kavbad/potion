@@ -7,7 +7,7 @@
 import {
   BOOTSTRAP_RESAMPLES,
   bootstrapCi,
-  jeffreysCi,
+  qualityIntervalCi,
   quantileNearestRank,
   seedFromString,
   sha256,
@@ -66,13 +66,13 @@ export function aggregateResults(
   const sliced = bySlice.size >= 2;
   const sliceStats = sliced
     ? [...bySlice.entries()].map(([name, qs]) => {
-        const ci = jeffreysCi(qs);
+        const ci = qualityIntervalCi(qs);
         const m = mean(qs);
         return { name, n: qs.length, quality: m, ci, half: Math.max(m - ci[0], ci[1] - m) };
       })
     : [];
   const weakest = sliced ? sliceStats.reduce((a, b) => (b.quality < a.quality ? b : a)) : null;
-  const qCi = weakest ? weakest.ci : jeffreysCi(qualities);
+  const qCi = weakest ? weakest.ci : qualityIntervalCi(qualities);
   const qMean = weakest ? weakest.quality : mean(qualities);
   const qHalf = n > 0 ? Math.max(qMean - qCi[0], qCi[1] - qMean) : 0;
   // G2.6 provenance parity: a latency-driven selection must be as auditable as
