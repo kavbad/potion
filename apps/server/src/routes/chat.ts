@@ -219,6 +219,12 @@ export function isEmptyAnswer(result: { text: string; toolCalls?: unknown[]; fin
   return maxOutputTokens !== undefined && result.usage.outputTokens >= maxOutputTokens;
 }
 
+/** Classification margin (best cosine minus runner-up) under which an empty
+ * answer retries on the RUNNER-UP CLUSTER's point instead of the next point
+ * in the same cluster. Sized head-to-head 2026-09-18: retried requests had
+ * margins of 0.02–0.07 (p90 0.13); ordinary requests 0.06–0.12. */
+export const EMPTY_RETRY_MARGIN = 0.1;
+
 export function nextPointExcluding(
   policy: Policy,
   frontier: Frontier | null,
@@ -1001,6 +1007,33 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     }
     const { frontier, provenance, latency } = chosen;
     let op = chosen.op;
+    // ---- Empty answer → the runner-up CLUSTER first (2026-09-18) ----
+    // An empty answer under the output budget is evidence about the
+    // CLUSTER, not only the point. The sized head-to-head found every one of
+    // its 68 retries was a cheap point answering nothing to a prompt from
+    // the wrong kind of work (code-gen prompts classified as reasoning or
+    // classification, served on a model that returns nothing to code), and
+    // the retry — "the next point the policy admits" in the SAME cluster —
+    // landed on a slow reasoning model at 12.6s median and quality 0.49.
+    // When the classification was close (margin under EMPTY_RETRY_MARGIN),
+    // the runner-up cluster's own operating point is the better second try:
+    // it is the point that would have served had the coin landed the other
+    // way. A wide margin means the cluster was not in doubt, and the
+    // same-cluster retry stands.
+    let emptyRetryCluster: string | null = null;
+    const runnerUpRetryPoint = async (servedHash: string, execMax: number | undefined): Promise<StrategyConfig | null> => {
+      if (ranked === undefined || ranked.fellBack || workloadParent !== null) return null;
+      const top = ranked.ranking[0];
+      const alt = ranked.ranking.find((r) => r.clusterId !== clusterId && r.clusterId !== 'general');
+      if (top === undefined || alt === undefined) return null;
+      if (top.confidence - alt.confidence > EMPTY_RETRY_MARGIN) return null;
+      const other = await resolveFor(alt.clusterId).catch(() => null);
+      const cfg = other?.op.config ?? null;
+      if (other === null || cfg === null || other.op.fallback === 1 || cfg.type !== 'single') return null;
+      if (strategyHash(cfg) === servedHash || tooSmallForReasoning(cfg.model, execMax)) return null;
+      emptyRetryCluster = alt.clusterId;
+      return cfg;
+    };
     if (op.fallbackReason !== undefined) implicitSignals.push(`fallback_${op.fallbackReason}`);
     // FLOOR INFEASIBLE → tell a human, once per episode (2026-09-16). Read
     // HERE, before the reasoning-budget skip below can rewrite the reason:
@@ -1523,13 +1556,14 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         }
         if (streamServed.type === 'single') learnFromAnswer(streamServed.model, result, execBase.maxOutputTokens);
         if (!providerFailover && streamServed.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
-          const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
+          const alt = await runnerUpRetryPoint(sh, execBase.maxOutputTokens);
+          const next = alt !== null ? { config: alt } : nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
           if (next?.config) {
-            app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget (stream) — served once more on the next point');
+            app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config), retryCluster: emptyRetryCluster }, 'empty answer under the output budget (stream) — served once more on the next point');
             result = await execute(next.config, messages, sseCtx);
             if (next.config.type === 'single') learnFromAnswer(next.config.model, result, execBase.maxOutputTokens);
             emptyAnswerRetry = true;
-            implicitSignals.push('retry_empty_answer');
+            implicitSignals.push(emptyRetryCluster !== null ? 'retry_runner_up_cluster' : 'retry_empty_answer');
           }
         }
       } catch (err) {
@@ -1750,14 +1784,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       if (servedConfig.type === 'single') learnFromAnswer(servedConfig.model, result, execBase.maxOutputTokens);
       if (!providerFailover && servedConfig.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
-        const next = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
+        const alt = await runnerUpRetryPoint(sh, execBase.maxOutputTokens);
+        const next = alt !== null ? { config: alt } : nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
         if (next?.config) {
-          app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config) }, 'empty answer under the output budget — served once more on the next point');
+          app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config), retryCluster: emptyRetryCluster }, 'empty answer under the output budget — served once more on the next point');
           result = await execute(next.config, messages, execBase);
           if (next.config.type === 'single') learnFromAnswer(next.config.model, result, execBase.maxOutputTokens);
           servedConfig = next.config;
           emptyAnswerRetry = true;
-          implicitSignals.push('retry_empty_answer');
+          implicitSignals.push(emptyRetryCluster !== null ? 'retry_runner_up_cluster' : 'retry_empty_answer');
         }
       }
       // JSON mode honored at the edge (routing/json-mode.ts): a fenced object
@@ -1806,7 +1841,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       // The point that answered (a single point may have been served once
       // more on the next point after an empty answer — routing/empty answer).
       if (emptyAnswerRetry) {
-        logBase.trace = `${trace};retry=empty_answer`;
+        logBase.trace = `${trace};retry=empty_answer${emptyRetryCluster !== null ? `;retry_cluster=${emptyRetryCluster}` : ''}`;
         void reply.header('x-frontier-trace', logBase.trace);
       }
       // A point that threw and was replaced is on the receipt for the same

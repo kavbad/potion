@@ -37,13 +37,22 @@ installShutdownSignalHandlers(app, app.potion, { log: (msg) => console.log(`[pot
 // policy, minting the default when none exists. Logged per key; a clean
 // fleet logs nothing.
 {
-  const { repairInternalPolicyBindings } = await import('@potion/db');
+  const { repairInternalPolicyBindings, repairSignupDefaultFloors } = await import('@potion/db');
   const { DEFAULT_ORG_POLICY } = await import('./routing/default-policy.js');
-  const repaired = await repairInternalPolicyBindings(app.potion.db.db, DEFAULT_ORG_POLICY);
+  const { signupQualityFloor } = await import('@potion/pareto');
+  const signup = await signupQualityFloor(app.potion.db.db, 'platform');
+  console.log(`[potion] signup floor: ${signup.floor} (ceiling ${signup.ceiling}, ${signup.clusters} kinds of work measured${signup.limiting ? `, limited by ${signup.limiting.clusterId} at ${signup.limiting.highestProvable.toFixed(3)}` : ''}${signup.excluded.length ? `, below the minimum: ${signup.excluded.map((e) => `${e.clusterId}@${e.highestProvable.toFixed(2)}`).join(' ')}` : ''})`);
+  const repaired = await repairInternalPolicyBindings(app.potion.db.db, { type: 'min_cost', qualityFloor: signup.floor });
   for (const r of repaired) {
     console.log(`[potion] policy repair: org ${r.orgId} key ${r.keyId} rebound ${r.from} → ${r.to}`);
   }
   if (repaired.length > 0) console.log(`[potion] policy repair: ${repaired.length} key(s) rebound off internal policies`);
+  // Unchosen signup floors (2026-09-18): a 'default' row still at the retired
+  // 0.95 constant is lowered to today's signup floor. Edited rows are choices
+  // and are left alone.
+  const legacy = DEFAULT_ORG_POLICY.type === 'min_cost' ? DEFAULT_ORG_POLICY.qualityFloor : 0.95;
+  const lowered = await repairSignupDefaultFloors(app.potion.db.db, signup.floor, [legacy]);
+  for (const r of lowered) console.log(`[potion] signup floor repair: org ${r.orgId} policy ${r.policyId} ${r.from} → ${r.to}`);
 }
 
 // P1 (the clock): armed standing missions start their own checks. Gated by

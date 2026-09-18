@@ -19,6 +19,8 @@ import {
   orgShadowEvidenceInputs,
   servingDecisionFor,
   type ShadowChallenger,
+  isUnchosenSignupPolicy,
+  signupQualityFloor,
 } from '@potion/pareto';
 import {
   evalRuns,
@@ -632,8 +634,10 @@ export async function applyDerivedDefault(
   const serving = await listServingPolicies(db, orgId);
   if (serving.length !== 1) return null;
   const current = serving[0]!;
-  if (current.name !== 'default') return null;
-  if (JSON.stringify(current.config) !== JSON.stringify(DEFAULT_ORG_POLICY)) return null;
+  // An unchosen signup row: the mint's shape at the signup floor of its day
+  // (2026-09-18: derived from the frontiers, or the retired 0.95 constant).
+  const { floor: signupFloor } = await signupQualityFloor(db, orgId);
+  if (!isUnchosenSignupPolicy(current.name, current.config as Policy, signupFloor)) return null;
   const clusterFloors: Record<string, number> = {};
   for (const p of proposals) {
     // FLOOR to 2dp, never round up (routing/floors.ts mintFloor semantics).
@@ -641,7 +645,8 @@ export async function applyDerivedDefault(
   }
   const n = Object.keys(clusterFloors).length;
   const policyId = `pol-${randomUUID().slice(0, 8)}`;
-  const config = { ...DEFAULT_ORG_POLICY, clusterFloors } as Policy;
+  // Kinds of work without a proposal keep the signup row's own floor.
+  const config = { ...(current.config as Policy), clusterFloors } as Policy;
   await insertPolicy(db, { id: policyId, orgId, name: `your bar · ${n} kind${n === 1 ? '' : 's'} of work · derived`, config });
   const keys = (await listServingApiKeys(db, orgId)).filter((k) => !k.revokedAt);
   for (const k of keys) await updateApiKeyPolicy(db, orgId, k.id, policyId);

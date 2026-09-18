@@ -69,7 +69,7 @@ export function ServingKeys({ initial }: { initial: ServingKeyDto[] }) {
 
       {keys.length === 0 ? (
         <p className="text-sm text-faint">
-          No serving key yet. Issue one; it comes with a default rule (cheapest model scoring at least 0.95) that you can change later.
+          No serving key yet. Issue one; it comes with a default rule (the cheapest model that clears the highest bar every kind of work can prove today) that you can change later.
         </p>
       ) : (
         <ul className="divide-y divide-line border border-[#d9d5cb] bg-[#fbfaf7]">
