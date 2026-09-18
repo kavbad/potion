@@ -1,0 +1,17 @@
+{
+ "suiteId": "rewrite-edit-hard-v2",
+ "clusterId": "rewrite-edit",
+ "version": "1.0.0",
+ "source": {
+  "kind": "authored",
+  "name": "The 28 rewrite-edit-hard-v1 items ported verbatim plus 72 authored items (rwh-v2-01..72): 36 instruction-following rewrites and 36 constraint-preservation rewrites at the same difficulty, so a 100-item Jeffreys interval can prove a floor a 28-item one cannot.",
+  "license": "Proprietary (Potion-authored)"
+ },
+ "items": "items.jsonl",
+ "scoring": {
+  "allowed": [
+   "llm-judge"
+  ]
+ },
+ "createdAt": "2026-09-18T15:00:00.000-07:00"
+}

@@ -3371,8 +3371,11 @@ export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   classification: { kind: 'v2', suiteId: 'classification-hard-v2' },
   'multi-step-reasoning': { kind: 'v1', suiteId: 'multi-step-reasoning' },
   'rag-answer': { kind: 'v1', suiteId: 'rag-answer' },
-  'agentic-tool-use': { kind: 'v1', suiteId: 'agentic-tool-use' },
-  'code-review': { kind: 'v2', suiteId: 'code-review-hard-v1' },
+  // 2026-09-18: item VOLUME is a provability lever — the frontier interval is
+  // a Jeffreys bound, so a 0.90 model proves ~0.77 on 14–28 items and ~0.84
+  // on 100. agentic 14 → 50, rewrite-edit and code-review 28 → 100.
+  'agentic-tool-use': { kind: 'v2', suiteId: 'agentic-tool-use-hard-v1' },
+  'code-review': { kind: 'v2', suiteId: 'code-review-hard-v2' },
   // 2026-09-18: the 14-item flat suites cannot resolve a quality gap under
   // ~0.16; the hard suites port them verbatim and add 36 authored items
   // (creative: constraint adherence; summarization: fidelity traps). Same
@@ -3383,7 +3386,7 @@ export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   // flat items and adds a 14-item constraint-preservation tier (silent
   // constraint-dropping is the measured failure mode). Evidence re-measures
   // from zero at the next sweep. rewrite-confirm-v1 (LOCKED) sits beside it.
-  'rewrite-edit': { kind: 'v2', suiteId: 'rewrite-edit-hard-v1' },
+  'rewrite-edit': { kind: 'v2', suiteId: 'rewrite-edit-hard-v2' },
   summarization: { kind: 'v2', suiteId: 'summarization-hard-v1' },
 };
 
