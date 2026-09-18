@@ -12,6 +12,7 @@ import {
   quantileNearestRank,
   regularizedIncompleteBeta,
   seedFromString,
+  qualityIntervalCi,
 } from './stats.js';
 
 /**
@@ -410,3 +411,33 @@ describe('P2: clustered evidence, where jeffreysCi is blind', () => {
   });
 });
 
+
+describe('qualityIntervalCi (2026-09-18) — the interval matches the scores', () => {
+  it('all-binary scores: exactly the Jeffreys binomial interval', () => {
+    const bits = [1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1];
+    expect(qualityIntervalCi(bits)).toEqual(jeffreysCi(bits));
+  });
+  it('fractional judge scores: a bootstrap over items, narrower than the binomial bound and above its lower end', () => {
+    // 28 rubric scores like a real rewrite-edit run: mean 0.906, most items 0.8–1.0
+    const scores = [1, 0.9, 1, 0.8, 1, 0.9, 1, 1, 0.9, 0.8, 1, 0.9, 1, 1, 0.7, 1, 0.9, 1, 0.9, 1, 0.8, 1, 0.9, 1, 1, 0.9, 0.8, 1];
+    const [lo, hi] = qualityIntervalCi(scores);
+    const [jlo, jhi] = jeffreysCi(scores);
+    expect(lo).toBeGreaterThan(jlo + 0.05);
+    expect(hi - lo).toBeLessThan(jhi - jlo);
+    expect(lo).toBeLessThan(0.906);
+    expect(hi).toBeGreaterThan(0.906);
+  });
+  it('is deterministic: the seed comes from the scores', () => {
+    const scores = [0.9, 0.8, 1, 0.7, 0.95, 0.85, 1, 0.9];
+    expect(qualityIntervalCi(scores)).toEqual(qualityIntervalCi([...scores]));
+  });
+  it('a constant fractional sample keeps the boundary-honest Jeffreys width (no three-decimal certainty)', () => {
+    const same = new Array(20).fill(0.9);
+    expect(qualityIntervalCi(same)).toEqual(jeffreysCi(same));
+    expect(qualityIntervalCi(same)[0]).toBeLessThan(0.9);
+  });
+  it('empty → [0, 1]; a single fractional score is not a spread → Jeffreys', () => {
+    expect(qualityIntervalCi([])).toEqual([0, 1]);
+    expect(qualityIntervalCi([0.9])).toEqual(jeffreysCi([0.9]));
+  });
+});

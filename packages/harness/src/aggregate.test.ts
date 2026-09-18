@@ -1,6 +1,6 @@
 // Aggregation math tests (SPEC §5 StrategyAggregate): hand-computed values.
 import { describe, expect, it } from 'vitest';
-import type { EvalResult } from '@potion/core';
+import { jeffreysCi, type EvalResult } from '@potion/core';
 import { aggregateResults, mean, percentileNearestRank, sampleStd } from './aggregate.js';
 
 function fakeResult(quality: number, costUsd: number, latencyMs: number): EvalResult {
@@ -171,5 +171,16 @@ describe('evidence.toolsMeasured derivation (MIXING M3, instrument-keyed 2026-09
       withMeta({ scorer: 'field-contains' }), // no instrument, non-tool scorer ⇒ default
     ], 'v1');
     expect(agg.evidence?.toolsMeasured).toBeUndefined();
+  });
+});
+
+describe('quality interval on judge-scored aggregates (2026-09-18)', () => {
+  it('fractional scores get the item bootstrap, not the binomial bound — the lower bound rises', () => {
+    const scores = [1, 0.9, 1, 0.8, 1, 0.9, 1, 1, 0.9, 0.8, 1, 0.9, 1, 1, 0.7, 1, 0.9, 1, 0.9, 1, 0.8, 1, 0.9, 1, 1, 0.9, 0.8, 1];
+    const rows = scores.map((q, i) => ({ ...fakeResult(q, 0.001, 500), itemId: `it-${i}`, clusterId: 'rewrite-edit', scorer: 'llm-judge:judge-class' }));
+    const agg = aggregateResults('rewrite-edit', 'sh', { type: 'single', model: 'mock-cheap' }, rows, 'p');
+    expect(agg.qualityMean).toBeCloseTo(0.932, 2);
+    // The binomial bound on these scores sits ~0.10 lower; the item bootstrap does not.
+    expect(agg.evidence?.qualityCi?.[0]).toBeGreaterThan(jeffreysCi(scores)[0] + 0.05);
   });
 });

@@ -246,6 +246,43 @@ export function jeffreysCi(scores: number[]): [number, number] {
 }
 
 /**
+ * The 95% interval on a quality MEAN that matches the scores it is given
+ * (2026-09-18).
+ *
+ * `jeffreysCi` is the Jeffreys BINOMIAL interval: exactly right when every
+ * score is 0 or 1 (exact, code-exec, tool-call scorers), and a worst-case
+ * bound otherwise — it treats a rubric score of 0.9 as "90% of a success",
+ * i.e. as if the item's variance were Bernoulli p(1−p), which is 5–10x the
+ * variance judge scores actually show. Measured on 2026-09-18 across three
+ * clusters (n = 28–54): the Jeffreys lower bound sat 0.09–0.13 BELOW the
+ * bootstrap lower bound on the same rows. That gap is what made every cheap
+ * point unprovable at a 0.82 floor on a 28-item suite (solar-pro4 on
+ * rewrite-edit: mean 0.906, Jeffreys lower 0.770, bootstrap lower 0.859) —
+ * the floor was refusing a point the evidence supported.
+ *
+ * RULE: all-binary scores → Jeffreys (unchanged, boundary-honest at 0 and
+ * n). Any fractional score → percentile bootstrap of the mean over ITEMS,
+ * seeded from the scores themselves so the interval is re-derivable from the
+ * stored evidence; a constant sample (zero spread) falls back to Jeffreys,
+ * because "every item scored 0.9" is evidence about the mean, not a licence
+ * to claim it to three decimals — the 42/42 lesson in continuous form.
+ * Independence caveat identical to jeffreysCi.
+ */
+export function qualityIntervalCi(scores: number[]): [number, number] {
+  const n = scores.length;
+  if (n === 0) return [0, 1];
+  const clamped = scores.map((q) => Math.min(1, Math.max(0, q)));
+  const binary = clamped.every((q) => q === 0 || q === 1);
+  if (binary) return jeffreysCi(clamped);
+  const m = clamped.reduce((a, q) => a + q, 0) / n;
+  const spread = clamped.some((q) => Math.abs(q - m) > 1e-9);
+  if (!spread) return jeffreysCi(clamped);
+  const seed = seedFromString(`quality|${n}|${sha256(JSON.stringify(clamped))}`);
+  const { ci95 } = bootstrapMeanCi(clamped, seed);
+  return [Math.max(0, ci95[0]), Math.min(1, ci95[1])];
+}
+
+/**
  * The same boundary-honest interval, for scores that are NOT independent —
  * the task-family bootstrap `jeffreysCi` names as its own missing follow-up.
  *
