@@ -224,6 +224,11 @@ export function isEmptyAnswer(result: { text: string; toolCalls?: unknown[]; fin
  * in the same cluster. Sized head-to-head 2026-09-18: retried requests had
  * margins of 0.02–0.07 (p90 0.13); ordinary requests 0.06–0.12. */
 export const EMPTY_RETRY_MARGIN = 0.1;
+/** The runner-up cluster's point may cost at most this many times the
+ * same-cluster alternative. Rerun after the retry shipped (2026-09-18): 11 of
+ * 27 runner-up retries landed on Sonnet through rewrite-edit — $0.067 on a
+ * $0.30 bill — for prompts whose own cluster had a cheap second point. */
+export const EMPTY_RETRY_COST_RATIO = 10;
 
 export function nextPointExcluding(
   policy: Policy,
@@ -1021,7 +1026,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
     // way. A wide margin means the cluster was not in doubt, and the
     // same-cluster retry stands.
     let emptyRetryCluster: string | null = null;
-    const runnerUpRetryPoint = async (servedHash: string, execMax: number | undefined): Promise<StrategyConfig | null> => {
+    const runnerUpRetryPoint = async (servedHash: string, execMax: number | undefined, sameNext: OperatingPoint | null): Promise<StrategyConfig | null> => {
       if (ranked === undefined || ranked.fellBack || workloadParent !== null) return null;
       const top = ranked.ranking[0];
       const alt = ranked.ranking.find((r) => r.clusterId !== clusterId && r.clusterId !== 'general');
@@ -1031,6 +1036,11 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       const cfg = other?.op.config ?? null;
       if (other === null || cfg === null || other.op.fallback === 1 || cfg.type !== 'single') return null;
       if (strategyHash(cfg) === servedHash || tooSmallForReasoning(cfg.model, execMax)) return null;
+      // Not at any price: when the prompt's own cluster has a second point,
+      // the runner-up's point must be within EMPTY_RETRY_COST_RATIO of it.
+      const altCost = other.served?.costPer1K ?? null;
+      const sameCost = sameNext?.config ? (op.frontier?.points.find((pt) => pt.strategyHash === strategyHash(sameNext.config as StrategyConfig))?.costPer1K ?? null) : null;
+      if (altCost !== null && sameCost !== null && altCost > EMPTY_RETRY_COST_RATIO * sameCost) return null;
       emptyRetryCluster = alt.clusterId;
       return cfg;
     };
@@ -1556,8 +1566,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         }
         if (streamServed.type === 'single') learnFromAnswer(streamServed.model, result, execBase.maxOutputTokens);
         if (!providerFailover && streamServed.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
-          const alt = await runnerUpRetryPoint(sh, execBase.maxOutputTokens);
-          const next = alt !== null ? { config: alt } : nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
+          const sameNext = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
+          const alt = await runnerUpRetryPoint(sh, execBase.maxOutputTokens, sameNext);
+          const next = alt !== null ? { config: alt } : sameNext;
           if (next?.config) {
             app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config), retryCluster: emptyRetryCluster }, 'empty answer under the output budget (stream) — served once more on the next point');
             result = await execute(next.config, messages, sseCtx);
@@ -1784,8 +1795,9 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       if (servedConfig.type === 'single') learnFromAnswer(servedConfig.model, result, execBase.maxOutputTokens);
       if (!providerFailover && servedConfig.type === 'single' && isEmptyAnswer(result, execBase.maxOutputTokens)) {
-        const alt = await runnerUpRetryPoint(sh, execBase.maxOutputTokens);
-        const next = alt !== null ? { config: alt } : nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
+        const sameNext = nextPointExcluding(policy, op.frontier, sh, fallbackStrategyFor(ctx.providerMode, ctx.prices), { toolCapableOnly: body.tools !== undefined || body.response_format !== undefined || body.stop !== undefined, maxOutputTokens: execBase.maxOutputTokens });
+        const alt = await runnerUpRetryPoint(sh, execBase.maxOutputTokens, sameNext);
+        const next = alt !== null ? { config: alt } : sameNext;
         if (next?.config) {
           app.log.warn({ orgId: auth.org.orgId, clusterId, served: strategyModelLabel(op.config), next: strategyModelLabel(next.config), retryCluster: emptyRetryCluster }, 'empty answer under the output budget — served once more on the next point');
           result = await execute(next.config, messages, execBase);

@@ -15,6 +15,7 @@ const ORG = 'org-empty';
 const KEY = 'pk_empty';
 const THINKER = { type: 'single', model: 'mock-cheap' } as const; // plays the reasoning model
 const OTHER = { type: 'single', model: 'mock-mid' } as const;
+const PRICEY = { type: 'single', model: 'mock-frontier' } as const;
 let app: FastifyInstance;
 const calls: string[] = [];
 let thinkerMode: 'empty' | 'answer' = 'empty';
@@ -34,6 +35,9 @@ beforeAll(async () => {
   await saveFrontier(db, 'code-gen', [point('code-gen', THINKER, 0.9, 0.2)], 'manual', 'test-prices');
   await saveFrontier(db, 'summarization', [point('summarization', THINKER, 0.9, 0.2)], 'manual', 'test-prices');
   await saveFrontier(db, 'rewrite-edit', [point('rewrite-edit', OTHER, 0.9, 1.0)], 'manual', 'test-prices');
+  // cost guard: code-review has the thinker AND a cheap second point; rag-answer's point is 50x pricier.
+  await saveFrontier(db, 'code-review', [point('code-review', THINKER, 0.9, 0.2), point('code-review', OTHER, 0.88, 1.0)], 'manual', 'test-prices');
+  await saveFrontier(db, 'rag-answer', [point('rag-answer', PRICEY, 0.95, 50.0)], 'manual', 'test-prices');
   const real = app.potion.providersForOrg;
   app.potion.providersForOrg = async (orgId: string) => {
     const set = await real(orgId);
@@ -189,5 +193,18 @@ describe('empty answer → the runner-up cluster first (2026-09-18)', () => {
     expect(res.statusCode).toBe(200);
     expect(calls[0]).toBe('mock-cheap');
     expect(String(res.headers['x-frontier-trace'])).not.toContain('retry_cluster=');
+  });
+});
+
+describe('runner-up cluster retry — not at any price (2026-09-18 rerun)', () => {
+  it("a runner-up point 50x the prompt's own second point loses to the same-cluster retry", async () => {
+    calls.length = 0; thinkerMode = 'empty'; clearReasoningMarks();
+    const ranked: RankedAssignment = { assignment: { clusterId: 'code-review', confidence: 0.6 }, ranking: [{ clusterId: 'code-review', confidence: 0.6 }, { clusterId: 'rag-answer', confidence: 0.57 }], fellBack: false, embedding: [] };
+    const res = await postRanked(ranked, 'Review this diff: it renames a variable.');
+    expect(res.statusCode).toBe(200);
+    expect(calls).toEqual(['mock-cheap', 'mock-mid']);
+    const trace = String(res.headers['x-frontier-trace']);
+    expect(trace).toContain('retry=empty_answer');
+    expect(trace).not.toContain('retry_cluster=');
   });
 });

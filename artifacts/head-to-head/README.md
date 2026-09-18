@@ -205,3 +205,40 @@ flat 14).
 The wrong-policy launch earlier the same night (`h2h-floor-0.084`, every
 Potion call rejected, $3.10) is discarded; the harness now aborts when
 Potion answers none of the first five units.
+
+## 2026-09-18 — after levers 5, 4, 3 (#46: runner-up-cluster retry, code-gen exemplars, signup floor 0.82)
+
+File `2026-09-18-after-5-4-3-084.*`. Same 658 items × 3 repeats, 0.84 floor,
+run on the deployed build (c251e54).
+
+| | before (#45 build) | after (#46 build) |
+|---|---|---|
+| quality, Potion − auto | +0.017 [−0.002, +0.034] | **+0.035 [+0.019, +0.052]** |
+| Potion quality / auto quality | 0.937 / 0.920 | 0.948 / 0.912 |
+| code-gen: Potion q, Potion ÷ auto $ | 0.899, 0.22x | **0.966, 0.14x** |
+| empty-answer retries | 68 | 46 (27 on the runner-up cluster) |
+| Potion cost | $0.284 | $0.303 |
+| auto cost | $0.246 | $0.199 |
+| cost ratio | 1.15x [0.97–1.35] | 1.52x [1.27–1.79] |
+| latency p50 / p95 | 2.1s / 9.8s | 2.4s / 9.6s |
+
+- **Code-gen is fixed.** Classified correctly it scores 0.966 against the
+  auto-router's 0.945 at a seventh of the cost; retries fell 68 → 46 and
+  the ones that remain no longer land on 16–39s reasoning models.
+- **Quality is now a significant win** (+0.035, interval clear of zero),
+  with rag-answer +0.12 and agentic +0.18.
+- **The cost ratio got WORSE, for two reasons that are not the same.**
+  (1) The auto arm's bill fell 19% between two runs with the same model
+  mix (deepseek-flash / luna / glm at the same counts): extraction
+  $0.030→$0.018, classification $0.010→$0.005. Both arms are metered on
+  OpenRouter's billed `usage.cost`, so this is provider-side variance
+  (per-call provider routing and prompt caching on repeated prompts).
+  **Run-to-run noise on the auto arm's cost is ~20%; cost ratios inside
+  that band are not evidence.** (2) Potion's own bill rose 7%: 11 of the 27
+  runner-up retries went to Sonnet through rewrite-edit (summarization,
+  creative and agentic prompts with a close rewrite-edit runner-up), $0.067
+  for 11 answers. The fix (#47) caps a runner-up point at 10x the prompt's
+  own cluster's second point.
+- Signup floor: boot logged 0.82 (limited by agentic-tool-use at 0.823) and
+  lowered three orgs' unchosen 0.95 rows; this run used the named 0.84
+  policy so it does not show here.
