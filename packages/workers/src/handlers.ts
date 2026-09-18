@@ -3369,13 +3369,18 @@ export const PLATFORM_SUITE_BY_CLUSTER: Readonly<
   'rag-answer': { kind: 'v1', suiteId: 'rag-answer' },
   'agentic-tool-use': { kind: 'v1', suiteId: 'agentic-tool-use' },
   'code-review': { kind: 'v2', suiteId: 'code-review-hard-v1' },
-  creative: { kind: 'v1', suiteId: 'creative' },
+  // 2026-09-18: the 14-item flat suites cannot resolve a quality gap under
+  // ~0.16; the hard suites port them verbatim and add 36 authored items
+  // (creative: constraint adherence; summarization: fidelity traps). Same
+  // suites the sized head-to-head measures on, so a published point means
+  // what the benchmark means.
+  creative: { kind: 'v2', suiteId: 'creative-hard-v1' },
   // 2026-08-26 (instrument campaign): rewrite-edit-hard-v1 ports the 14
   // flat items and adds a 14-item constraint-preservation tier (silent
   // constraint-dropping is the measured failure mode). Evidence re-measures
   // from zero at the next sweep. rewrite-confirm-v1 (LOCKED) sits beside it.
   'rewrite-edit': { kind: 'v2', suiteId: 'rewrite-edit-hard-v1' },
-  summarization: { kind: 'v1', suiteId: 'summarization' },
+  summarization: { kind: 'v2', suiteId: 'summarization-hard-v1' },
 };
 
 /** Referenced model aliases of a strategy config, every shape. */
