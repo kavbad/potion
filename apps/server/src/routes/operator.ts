@@ -195,6 +195,7 @@ export function registerOperatorRoutes(
       // the route now takes the same acknowledgement and the same list.
       maxAnswerers: z.number().int().positive().max(500).optional(),
       auditionModels: z.array(z.string().min(1)).min(1).max(60).optional(),
+      cellConcurrency: z.number().int().positive().max(16).optional(),
       publish: z.boolean().optional(),
       instrument: z.enum(['default', 'tools', 'vision', 'audio']).optional(),
     });

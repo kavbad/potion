@@ -3326,6 +3326,10 @@ export const PLATFORM_SWEEP_TIMEOUT_MS = 180_000;
  * cheap against a leg that costs hours.
  */
 export const PLATFORM_SWEEP_MAX_RETRIES = 8;
+/** Cells per strategy in flight at once (2026-09-18). A 37-candidate leg at
+ * ~19s per cell (answer + live judge) took five hours serially; four keeps
+ * well inside every provider's rate limit and cuts that to ~75 minutes. */
+export const PLATFORM_SWEEP_CELL_CONCURRENCY = 4;
 
 /**
  * The committed platform suite for each taxonomy cluster. v1 ids resolve to
@@ -4119,6 +4123,7 @@ export const frontierPlatformSweepHandler: WorkerHandler<'frontier:platform-swee
         // measurement we paid for.
         providerTimeoutMs: payload.providerTimeoutMs ?? PLATFORM_SWEEP_TIMEOUT_MS,
         providerMaxRetries: payload.providerMaxRetries ?? PLATFORM_SWEEP_MAX_RETRIES,
+        cellConcurrency: payload.cellConcurrency ?? PLATFORM_SWEEP_CELL_CONCURRENCY,
         judgeModelOverride: judgeEntry.alias,
         judgeMaxTokens: payload.judgeMaxTokens ?? LIVE_SWEEP_JUDGE_MAX_TOKENS,
         maxOutputTokens: payload.maxOutputTokens ?? LIVE_SWEEP_ANSWER_MAX_TOKENS,

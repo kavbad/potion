@@ -682,6 +682,26 @@ describe('containStrategyFailures — one flaky candidate must not void the leg'
     expect(summary.aggregates.some((a) => a.strategyHash === strategyHash({ type: 'single', model: 'mock-frontier' }))).toBe(true);
   });
 
+  it('under cellConcurrency the failing strategy is still dropped whole and the rest complete', async () => {
+    const summary = await runEval(
+      {
+        suiteIds: ['extraction'],
+        strategies: [
+          { type: 'single', model: 'mock-frontier' },
+          { type: 'single', model: 'mock-cheap' },
+        ],
+        budgetCapUsd: 25,
+        containStrategyFailures: true,
+        cellConcurrency: 3,
+      },
+      { ...{ db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH }, providers: flaky('mock-cheap') },
+    );
+    expect(summary.results.filter((r) => r.strategyHash === strategyHash({ type: 'single', model: 'mock-frontier' })).length).toBe(2);
+    expect(summary.failedStrategies).toHaveLength(1);
+    expect(summary.results.some((r) => r.strategyHash === strategyHash({ type: 'single', model: 'mock-cheap' }))).toBe(false);
+    expect(summary.aggregates.some((a) => a.strategyHash === strategyHash({ type: 'single', model: 'mock-cheap' }))).toBe(false);
+  });
+
   it('default semantics unchanged: without the flag, the failure still throws', async () => {
     await expect(
       runEval(
@@ -762,5 +782,51 @@ describe('cacheKeyOf — Observatory canary salt', () => {
     expect(again).toBe(base);
     expect(w1).not.toBe(base);
     expect(w2).not.toBe(w1);
+  });
+});
+
+describe('cellConcurrency (2026-09-18) — a strategy\'s cells run in a bounded pool', () => {
+  let handle: DbHandle;
+  beforeAll(async () => {
+    handle = await createDb('pglite://');
+    await migrate(handle.db);
+  });
+  afterAll(async () => {
+    await handle.close();
+  });
+  /** Mock providers whose complete() records how many calls are in flight at once. */
+  const counting = (): { providers: Record<ProviderId, Provider>; peak: { value: number } } => {
+    const mock = createMockProvider(loadPrices(PRICES_PATH).table);
+    let inFlight = 0;
+    const peak = { value: 0 };
+    const slow: Provider = {
+      id: 'mock',
+      complete: async (req) => {
+        inFlight++;
+        peak.value = Math.max(peak.value, inFlight);
+        await new Promise((r) => setTimeout(r, 25));
+        try {
+          return await mock.complete(req);
+        } finally {
+          inFlight--;
+        }
+      },
+      ...(mock.embed ? { embed: mock.embed.bind(mock) } : {}),
+    };
+    return { providers: { anthropic: slow, openai: slow, google: slow, openrouter: slow, mock: slow }, peak };
+  };
+
+  it('runs cells concurrently when asked, serially by default, with identical results either way', async () => {
+    const opts = { suiteIds: ['extraction'], strategies: [{ type: 'single' as const, model: 'mock-frontier' }, { type: 'single' as const, model: 'mock-cheap' }], budgetCapUsd: 25 };
+    const serial = counting();
+    const one = await runEval(opts, { db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH, providers: serial.providers });
+    expect(serial.peak.value).toBe(1);
+    const parallel = counting();
+    const four = await runEval({ ...opts, cellConcurrency: 4 }, { db: handle, suitesDir: suiteDir, pricesPath: PRICES_PATH, providers: parallel.providers });
+    expect(parallel.peak.value).toBeGreaterThanOrEqual(2);
+    // Same rows, same order, same aggregates: only the wall clock changed.
+    expect(four.results.map((r) => [r.strategyHash, r.itemId, r.quality])).toEqual(one.results.map((r) => [r.strategyHash, r.itemId, r.quality]));
+    expect(four.aggregates.map((a) => [a.strategyHash, a.clusterId, a.qualityMean])).toEqual(one.aggregates.map((a) => [a.strategyHash, a.clusterId, a.qualityMean]));
+    expect(four.executed + four.cacheHits).toBe(one.executed + one.cacheHits);
   });
 });

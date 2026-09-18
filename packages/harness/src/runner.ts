@@ -122,6 +122,16 @@ export interface RunOptions {
    * moment.
    */
   providerMaxRetries?: number;
+  /**
+   * Cells of ONE strategy executed concurrently (2026-09-18). Default 1 —
+   * the serial loop every existing run and test is measured under. The
+   * platform sweep runs 4: a 37-candidate leg at ~19s per cell (answer +
+   * live judge) took five hours serially. Strategies stay sequential, results
+   * keep item order, and containment still drops the whole strategy — the
+   * only visible difference is wall clock and that the spend belt can
+   * overshoot by at most (concurrency − 1) cells past the cap.
+   */
+  cellConcurrency?: number;
   /** Explicit acknowledgement required to run suites from suites/simulated/. */
   simulatedOk?: boolean;
   /** Explicit provenance override (tests). Default: detected from the
@@ -588,11 +598,13 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
 
     const failedStrategies: FailedStrategy[] = [];
     let abandonedSpendUsd = 0;
+    const cellConcurrency = Math.max(1, Math.floor(opts.cellConcurrency ?? 1));
     for (const strategy of opts.strategies) {
       const sh = strategyHash(strategy);
       const modelVersions = modelVersionsFor(strategy, prices);
-      const strategyStartIdx = results.length;
-      for (const item of runItems) {
+      // One cell: cache hit or a fresh answer + score, persisted. Returns the
+      // row; throws what the provider or scorer threw.
+      const runCell = async (item: EvalItem): Promise<EvalResult> => {
         const saltApplies =
           opts.cacheSalt !== undefined &&
           (opts.cacheSaltStrategies === undefined || opts.cacheSaltStrategies.includes(sh));
@@ -620,11 +632,10 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
           // boundary frontiers published on partial unions for every cached
           // model). The cluster is the suite's grouping, not part of the
           // evidence; the row in the table is untouched.
-          results.push({ ...cached, clusterId: item.clusterId });
-          continue;
+          return { ...cached, clusterId: item.clusterId };
         }
         let outcome, quality, scorer, scorerUsage;
-        try {
+        {
           const stepCtx = item.tools !== undefined ? { ...ctx, params: { tools: item.tools } } : ctx;
           // JOURNEY items (2026-08-25): the same strategy answers every
           // step; only the final artifact is scored; usage sums over steps
@@ -648,26 +659,6 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
             opts.judgeMaxTokens,
             outcome.toolCalls,
           ));
-        } catch (err) {
-          if (!opts.containStrategyFailures) throw err;
-          // Drop the WHOLE strategy: partial aggregates are biased (see the
-          // option's doc), so its completed rows leave this run's results —
-          // but their SPEND does not leave the books. Over-counting a cached
-          // row's historical cost here is deliberate: the belt must err
-          // toward "we spent more", never "less".
-          const removed = results.splice(strategyStartIdx);
-          abandonedSpendUsd += removed.reduce((a, r) => a + r.usage.costUsd, 0);
-          failedStrategies.push({
-            strategyHash: sh,
-            itemId: item.id,
-            error: err instanceof Error ? err.message : String(err),
-            completedCells: removed.length,
-          });
-          console.warn(
-            `[harness] CONTAINED strategy ${sh.slice(0, 8)} after ${removed.length} cell(s): ` +
-              `${err instanceof Error ? err.message : String(err)} — run continues without it`,
-          );
-          break;
         }
         // usage = strategy usage + scoring overhead (llm-judge call), summed
         // over tokens and cost — the judge call is real provider spend and
@@ -715,8 +706,56 @@ export async function runEval(opts: RunOptions, deps: RunDeps = {}): Promise<Run
         executed++;
         judgeSpendUsd += scorerUsage?.costUsd ?? 0;
         executedSpendUsd += usage.costUsd + (scorerUsage?.costUsd ?? 0);
-        results.push(result);
+        return result;
+      };
+
+      // The pool: `cellConcurrency` workers pull items in order; each cell's
+      // row lands in its item's slot so the strategy's rows enter `results`
+      // in item order, exactly as the serial loop pushed them.
+      const slots: (EvalResult | undefined)[] = new Array<EvalResult | undefined>(runItems.length);
+      // Boxed so the read after the pool settles keeps the declared union:
+      // TS does not see assignments made inside the workers' closures.
+      const failure: { value: { item: EvalItem; err: unknown } | null } = { value: null };
+      let cursor = 0;
+      const pull = async (): Promise<void> => {
+        for (;;) {
+          if (failure.value !== null) return;
+          const idx = cursor++;
+          if (idx >= runItems.length) return;
+          const item = runItems[idx]!;
+          try {
+            slots[idx] = await runCell(item);
+          } catch (err) {
+            if (failure.value === null) failure.value = { item, err };
+            return;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(cellConcurrency, Math.max(1, runItems.length)) }, pull));
+      if (failure.value !== null) {
+        const { item, err } = failure.value;
+        if (!opts.containStrategyFailures) throw err;
+        // Drop the WHOLE strategy: partial aggregates are biased (see the
+        // option's doc), so its completed rows leave this run's results —
+        // but their SPEND does not leave the books. Over-counting a cached
+        // row's historical cost here is deliberate: the belt must err
+        // toward "we spent more", never "less". Cells that were in flight
+        // when the failure landed finish and stay cached for a cheap retry.
+        const removed = slots.filter((r): r is EvalResult => r !== undefined);
+        abandonedSpendUsd += removed.reduce((a, r) => a + r.usage.costUsd, 0);
+        failedStrategies.push({
+          strategyHash: sh,
+          itemId: item.id,
+          error: err instanceof Error ? err.message : String(err),
+          completedCells: removed.length,
+        });
+        console.warn(
+          `[harness] CONTAINED strategy ${sh.slice(0, 8)} after ${removed.length} cell(s): ` +
+            `${err instanceof Error ? err.message : String(err)} — run continues without it`,
+        );
+        continue;
       }
+      for (const r of slots) if (r !== undefined) results.push(r);
     }
 
     // ---- aggregate per (strategy × cluster) ----
