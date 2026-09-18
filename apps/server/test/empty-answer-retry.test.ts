@@ -3,6 +3,7 @@
 // the policy admits; finish_reason 'length' surfaces when nothing else can.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { RankedAssignment } from '@potion/cluster';
 import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
 import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
@@ -57,11 +58,11 @@ afterAll(async () => {
 
 // The runner-up CLUSTER retry (2026-09-18): summarization's only point is
 // the thinker (answers nothing); rewrite-edit has a point that answers.
-const RANKED_CLOSE = { assignment: { clusterId: 'summarization', confidence: 0.6 }, ranking: [{ clusterId: 'summarization', confidence: 0.6 }, { clusterId: 'rewrite-edit', confidence: 0.55 }], fellBack: false, embedding: [] } as unknown as import('@potion/cluster').RankedAssignment;
-const RANKED_WIDE = { ...RANKED_CLOSE, ranking: [{ clusterId: 'summarization', confidence: 0.8 }, { clusterId: 'rewrite-edit', confidence: 0.4 }] } as typeof RANKED_CLOSE;
+const RANKED_CLOSE: RankedAssignment = { assignment: { clusterId: 'summarization', confidence: 0.6 }, ranking: [{ clusterId: 'summarization', confidence: 0.6 }, { clusterId: 'rewrite-edit', confidence: 0.55 }], fellBack: false, embedding: [] };
+const RANKED_WIDE: RankedAssignment = { ...RANKED_CLOSE, assignment: { clusterId: 'summarization', confidence: 0.8 }, ranking: [{ clusterId: 'summarization', confidence: 0.8 }, { clusterId: 'rewrite-edit', confidence: 0.4 }] };
 // One prompt per case: the assignment cache is keyed on the prompt text, so
 // a second case reusing the first's prompt would read the first's ranking.
-const postRanked = (r: typeof RANKED_CLOSE, prompt: string) => {
+const postRanked = (r: RankedAssignment, prompt: string) => {
   app.potion.assigner = { ...app.potion.assigner, assignRanked: async () => r };
   return app.inject({ method: 'POST', url: '/v1/chat/completions', headers: { authorization: `Bearer ${KEY}` }, payload: { model: 'potion-auto', max_tokens: 300, messages: [{ role: 'user', content: prompt }] } });
 };

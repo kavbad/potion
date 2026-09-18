@@ -1,7 +1,7 @@
 // The signup floor (2026-09-18): the highest bar every measured kind of work
 // can prove, never the 0.95 constant no frontier could honour.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FrontierPoint } from '@potion/core';
+import type { FrontierPoint, Policy } from '@potion/core';
 import { createDb, migrate, type DbHandle } from '@potion/db';
 import { saveFrontier } from './persistence.js';
 import { DEFAULT_ORG_POLICY, SIGNUP_FLOOR_MIN, isUnchosenSignupPolicy, signupPolicyFor, signupQualityFloor } from './serving.js';
@@ -57,6 +57,7 @@ describe('isUnchosenSignupPolicy', () => {
     expect(isUnchosenSignupPolicy('default', { type: 'min_cost', qualityFloor: 0.9 }, 0.82)).toBe(false);
     expect(isUnchosenSignupPolicy('default', { type: 'min_cost', qualityFloor: 0.82, clusterFloors: { creative: 0.8 } }, 0.82)).toBe(false);
     expect(isUnchosenSignupPolicy('your bar', { type: 'min_cost', qualityFloor: 0.82 }, 0.82)).toBe(false);
-    expect(isUnchosenSignupPolicy('default', { type: 'max_quality', costCeilingPer1K: 1 } as never, 0.82)).toBe(false);
+    const maxQuality: Policy = { type: 'max_quality', costCeilingPer1K: 1 };
+    expect(isUnchosenSignupPolicy('default', maxQuality, 0.82)).toBe(false);
   });
 });
