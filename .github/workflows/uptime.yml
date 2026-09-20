@@ -30,3 +30,18 @@ jobs:
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://withpotion.com/home)
           echo "home: $code"; test "$code" = "200"
+      # A real completion (2026-09-19). /readyz stayed 200 for ~23 hours while
+      # every chat completion returned 503 (the provider key's spend limit was
+      # hit by a measurement sweep). Only a request that reaches a model sees
+      # that. Needs the POTION_SMOKE_KEY repo secret (a serving key on the
+      # potion org); until it is set this step reports and passes.
+      - name: Chat completion
+        env:
+          POTION_SMOKE_KEY: ${{ secrets.POTION_SMOKE_KEY }}
+        run: |
+          if [ -z "$POTION_SMOKE_KEY" ]; then echo "POTION_SMOKE_KEY secret not set — completion probe skipped"; exit 0; fi
+          code=$(curl -s -o /tmp/out.json -w '%{http_code}' --max-time 60 \
+            -H "authorization: Bearer $POTION_SMOKE_KEY" -H 'content-type: application/json' \
+            -d '{"model":"potion-auto","max_tokens":8,"messages":[{"role":"user","content":"Reply with the single word ok."}]}' \
+            https://api.withpotion.com/v1/chat/completions)
+          echo "completion: $code"; head -c 300 /tmp/out.json; echo; test "$code" = "200"

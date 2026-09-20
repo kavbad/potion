@@ -2928,7 +2928,7 @@ export const rubricGenerateHandler: WorkerHandler<'rubric:generate', RubricGener
         })
       : null;
   const liveProviders =
-    meter !== null ? meteredProviders(createProviders({ prices }), prices, meter.sink) : null;
+    meter !== null ? meteredProviders(createProviders({ prices, purpose: 'measurement' }), prices, meter.sink) : null;
 
   let rubricText: string;
   let generatorModel: string;

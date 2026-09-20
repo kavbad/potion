@@ -952,7 +952,11 @@ export type AlertEvent =
   | 'evidence_ready'
   /** 2026-09-16: a job kind failed repeatedly for this org (the ledger's
    * outcome column, finally written). Platform-scope jobs alert the ops org. */
-  | 'job_failed';
+  | 'job_failed'
+  /** 2026-09-19: a provider rejected our credentials (key limit, revoked
+   * key) on the SERVING path — every completion on that provider fails
+   * until someone acts, and no health probe sees it. */
+  | 'provider_auth';
 export const ALERT_EVENTS: readonly AlertEvent[] = [
   'quality_breach',
   'rollback',
@@ -967,6 +971,7 @@ export const ALERT_EVENTS: readonly AlertEvent[] = [
   'frontier_moved',
   'evidence_ready',
   'job_failed',
+  'provider_auth',
 ];
 
 /** R0 (migration 0054): the org's payment identity. Card METADATA only —

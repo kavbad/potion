@@ -18,6 +18,7 @@ export const DEFAULT_ALERT_EVENTS: readonly AlertEvent[] = [
   'rollback',
   'policy_infeasible',
   'job_failed',
+  'provider_auth',
 ];
 
 export async function ensureDefaultAlertRule(

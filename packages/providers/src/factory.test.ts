@@ -17,10 +17,11 @@
 // Neither could fail if the clamp came back. The chain has two links, so it
 // is pinned in two places: the factory must HAND the wrapper a timeout
 // derived from the declared value, and that policy must GOVERN the abort.
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import type { PriceTable } from '@potion/core';
 import type { CompleteRequest, CompleteResponse, Provider } from './types.js';
 import type { ResiliencePolicy } from './resilience.js';
+import { measurementEnvVarFor, resolveEnvKey } from './factory.js';
 
 // Captures every policy the factory hands to `resilient`. Hoisted because
 // vi.mock is hoisted above ordinary declarations.
@@ -120,5 +121,26 @@ describe('that policy actually governs the abort', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('measurement keys never share the serving key by accident (2026-09-19)', () => {
+  const saved = { serving: process.env.OPENROUTER_API_KEY, measurement: process.env.OPENROUTER_API_KEY_MEASUREMENT };
+  afterEach(() => {
+    if (saved.serving === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = saved.serving;
+    if (saved.measurement === undefined) delete process.env.OPENROUTER_API_KEY_MEASUREMENT; else process.env.OPENROUTER_API_KEY_MEASUREMENT = saved.measurement;
+  });
+  it('measurement prefers its dedicated key; serving never reads it', () => {
+    process.env.OPENROUTER_API_KEY = 'serve-key';
+    process.env.OPENROUTER_API_KEY_MEASUREMENT = 'measure-key';
+    expect(resolveEnvKey('openrouter', 'measurement')).toBe('measure-key');
+    expect(resolveEnvKey('openrouter', 'serving')).toBe('serve-key');
+    expect(resolveEnvKey('openrouter', undefined)).toBe('serve-key');
+    expect(measurementEnvVarFor('openrouter')).toBe('OPENROUTER_API_KEY_MEASUREMENT');
+  });
+  it('without a dedicated key, measurement falls back to the serving key (unchanged behaviour)', () => {
+    process.env.OPENROUTER_API_KEY = 'serve-key';
+    delete process.env.OPENROUTER_API_KEY_MEASUREMENT;
+    expect(resolveEnvKey('openrouter', 'measurement')).toBe('serve-key');
   });
 });

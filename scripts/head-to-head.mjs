@@ -83,7 +83,7 @@ const log = (...a) => console.error(new Date().toISOString().slice(11, 19), ...a
 const handle = await createDb();
 let prices = await loadModelRegistry(handle.db).catch(() => null);
 if (!prices) prices = loadPrices('/app/prices.json').table;
-const providers = createProviders({ prices });
+const providers = createProviders({ prices, purpose: 'measurement' });
 // The platform's live judge: registry filtered to REACHABLE live providers
 // (the mock provider and any provider without a key are not candidates —
 // resolveEvalJudge does exactly this; without the filter the dry run picked

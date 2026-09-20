@@ -110,4 +110,13 @@ export interface ProviderFactoryOptions {
    * disable it explicitly — tests that assert the pre-F19 behavior, and
    * anything that must not carry breaker state across cases, use that. */
   breaker?: BreakerPolicy | null;
+  /**
+   * What these providers are for (2026-09-19). 'measurement' looks for a
+   * dedicated key first — `<PROVIDER>_API_KEY_MEASUREMENT` — and falls back to
+   * the serving key when none is set. A sweep exhausting its own key must
+   * never take serving down: on 2026-09-19 a round of audition sweeps hit the
+   * shared OpenRouter key's total spend limit and every customer completion
+   * returned 503 for ~23 hours. Default 'serving' (unchanged behaviour).
+   */
+  purpose?: 'serving' | 'measurement';
 }
