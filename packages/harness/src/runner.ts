@@ -330,6 +330,10 @@ export function createRunProviders(
     // reading the chain explained it. A declared value cannot go missing.
     return createProviders({
       prices,
+      // The harness measures; it never serves. A dedicated measurement key
+      // (OPENROUTER_API_KEY_MEASUREMENT etc.) keeps a sweep's spend off the
+      // key customers are served from.
+      purpose: 'measurement',
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       ...(maxRetries !== undefined ? { maxRetries } : {}),
     });

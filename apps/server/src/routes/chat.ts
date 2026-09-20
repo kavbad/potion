@@ -86,7 +86,7 @@ import {
   maintainPolicyCondition,
 } from '../latency-policy.js';
 import { enforceBudgetHardStop } from './budgets.js';
-import { ProviderError, breakerStates } from '@potion/providers';
+import { ProviderAuthError, ProviderError, breakerStates } from '@potion/providers';
 // ---- end M4 #33/#35 imports ----
 
 // ---- M4 #33 breaker_open alerts (m4-alerts-budget) ----
@@ -120,6 +120,37 @@ function notifyBreakerOpen(
   }).catch((e: unknown) => warn(`breaker_open alert emit failed — swallowed: ${(e as Error).message}`));
 }
 // ---- end M4 #33 breaker_open alerts ----
+
+// ---- provider_auth alerts (2026-09-19) ----
+// A provider refusing our credentials on the serving path — "Key limit
+// exceeded", a revoked key — fails EVERY completion on that provider until a
+// person acts, and /readyz stays green throughout (it did for ~23 hours on
+// 2026-09-19). Emit once per provider per PROVIDER_AUTH_REARM_MS, not per
+// request: the first refusal is the incident, the rest are the same incident.
+export const PROVIDER_AUTH_REARM_MS = 60 * 60 * 1000;
+const providerAuthAlertedAt = new Map<string, number>();
+export function isProviderAuthFailure(err: unknown): err is ProviderError {
+  if (!(err instanceof ProviderError)) return false;
+  if (err instanceof ProviderAuthError) return true;
+  return /authentication failed|key limit exceeded|invalid api key|unauthorized/i.test(err.message);
+}
+function notifyProviderAuth(ctx: PotionContext, orgId: string, err: unknown, warn: (msg: string) => void, now: number = Date.now()): void {
+  if (!isProviderAuthFailure(err)) return;
+  const key = err.provider;
+  const last = providerAuthAlertedAt.get(key);
+  if (last !== undefined && now - last < PROVIDER_AUTH_REARM_MS) return;
+  providerAuthAlertedAt.set(key, now);
+  emitAlert(ctx, {
+    orgId,
+    event: 'provider_auth',
+    detail: { provider: key, model: err.model ?? null, message: err.message },
+  }).catch((e: unknown) => warn(`provider_auth alert emit failed — swallowed: ${(e as Error).message}`));
+}
+/** Test seam: forget every provider_auth edge. */
+export function resetProviderAuthAlerts(): void {
+  providerAuthAlertedAt.clear();
+}
+// ---- end provider_auth alerts ----
 
 /** zod-validated OpenAI subset; unknown fields are stripped (ignored).
  * M3 #25: tools / tool_choice (function-calling passthrough — 'single'
@@ -1581,6 +1612,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
         // M3 #25: mid-stream provider failure → OpenAI error parity shape.
         // M4 #33: breaker fast-reject → breaker_open alert (edge-deduped).
         notifyBreakerOpen(ctx, auth.org.orgId, err, (m) => app.log.warn(m));
+        notifyProviderAuth(ctx, auth.org.orgId, err, (m) => app.log.warn(m));
         writeData(openAiError((err as Error).message, 'service_unavailable', 'service_unavailable'));
         reply.raw.write('data: [DONE]\n\n');
         reply.raw.end();
@@ -1980,6 +2012,7 @@ export function registerChatRoutes(app: FastifyInstance, ctx: PotionContext): vo
       }
       // M4 #33: breaker fast-reject → breaker_open alert (edge-deduped).
       notifyBreakerOpen(ctx, auth.org.orgId, err, (m) => app.log.warn(m));
+      notifyProviderAuth(ctx, auth.org.orgId, err, (m) => app.log.warn(m));
       // M3 #25: provider down mid-execution → 503 service_unavailable
       // (OpenAI parity; was 502 upstream_error).
       return reply

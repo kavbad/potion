@@ -35,6 +35,24 @@ export const ENV_VAR_BY_PROVIDER: Record<Exclude<ProviderId, 'mock'>, string> = 
   openrouter: 'OPENROUTER_API_KEY',
 };
 
+/** Env var holding a provider's MEASUREMENT key (sweeps, benchmarks, judges);
+ * absent → the serving key. Exported so preflights can say which key a run
+ * will actually use. */
+export function measurementEnvVarFor(id: Exclude<ProviderId, 'mock'>): string {
+  return `${ENV_VAR_BY_PROVIDER[id]}_MEASUREMENT`;
+}
+
+/** The key a provider set of the given purpose resolves to from the
+ * environment: measurement prefers its own key and falls back to serving's;
+ * serving never reads the measurement key. */
+export function resolveEnvKey(id: Exclude<ProviderId, 'mock'>, purpose: 'serving' | 'measurement' | undefined): string | undefined {
+  if (purpose === 'measurement') {
+    const dedicated = process.env[measurementEnvVarFor(id)];
+    if (dedicated !== undefined && dedicated !== '') return dedicated;
+  }
+  return process.env[ENV_VAR_BY_PROVIDER[id]];
+}
+
 /** Providers with a live `embed` in v1 (see live/*.ts header comments). */
 /** Transports with a real SSE path (live/openai.ts). */
 const HAS_STREAM: ReadonlySet<ProviderId> = new Set(['openai', 'openrouter']);
@@ -49,7 +67,7 @@ const HAS_EMBED: ReadonlySet<ProviderId> = new Set<ProviderId>(['mock', 'openai'
 function lazyLiveProvider(id: Exclude<ProviderId, 'mock'>, opts: ProviderFactoryOptions): Provider {
   let real: Provider | undefined;
   const requireReal = (): Provider => {
-    const apiKey = opts.apiKeys?.[id] ?? process.env[ENV_VAR_BY_PROVIDER[id]];
+    const apiKey = opts.apiKeys?.[id] ?? resolveEnvKey(id, opts.purpose);
     if (!apiKey) {
       throw new ProviderAuthError(
         id,
