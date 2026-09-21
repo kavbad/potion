@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { sha256, strategyHash, type FrontierPoint } from '@potion/core';
 import { createOrg, insertApiKey, insertPolicy } from '@potion/db';
 import { saveFrontier } from '@potion/pareto';
-import { ProviderAuthError } from '@potion/providers';
+import { ProviderAuthError, ProviderError } from '@potion/providers';
 import { buildServer } from '../src/server.js';
 import { isProviderAuthFailure, resetProviderAuthAlerts } from '../src/routes/chat.js';
 
@@ -56,6 +56,9 @@ describe('isProviderAuthFailure', () => {
     expect(isProviderAuthFailure(new ProviderAuthError('openrouter', 'no key'))).toBe(true);
     expect(isProviderAuthFailure(new Error('provider \'openrouter\': authentication failed: Key limit exceeded (total limit)'))).toBe(false); // not a ProviderError
     expect(isProviderAuthFailure(null)).toBe(false);
+    // the account-balance refusal (2026-09-20), which is a plain ProviderError, not an auth class
+    expect(isProviderAuthFailure(new ProviderError('openrouter', "provider 'openrouter': request failed: This request would exceed your available credits given your current in-flight requests. Retry after in-flight requests settle, or add credits.", { kind: 'client_4xx' }))).toBe(true);
+    expect(isProviderAuthFailure(new ProviderError('openrouter', "provider 'openrouter': request timed out after 60000ms", { kind: 'timeout' }))).toBe(false);
   });
 });
 

@@ -132,7 +132,11 @@ const providerAuthAlertedAt = new Map<string, number>();
 export function isProviderAuthFailure(err: unknown): err is ProviderError {
   if (!(err instanceof ProviderError)) return false;
   if (err instanceof ProviderAuthError) return true;
-  return /authentication failed|key limit exceeded|invalid api key|unauthorized/i.test(err.message);
+  // 2026-09-20: OpenRouter's other way of saying "no more money" — the
+  // ACCOUNT balance, not the key limit: "This request would exceed your
+  // available credits given your current in-flight requests". Same incident
+  // class: every completion fails until a person adds funds.
+  return /authentication failed|key limit exceeded|invalid api key|unauthorized|exceed your available credits|insufficient credits|payment required/i.test(err.message);
 }
 function notifyProviderAuth(ctx: PotionContext, orgId: string, err: unknown, warn: (msg: string) => void, now: number = Date.now()): void {
   if (!isProviderAuthFailure(err)) return;
