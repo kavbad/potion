@@ -25,9 +25,9 @@ jobs:
     # Only main pushes and manual dispatches reach this job.
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Build the server image (Dockerfile at repo root — node 20 slim,
       # corepack pnpm 9.15.9, workspace build, apps/server runtime).
